@@ -1,3 +1,5 @@
+import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
+
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
   if (nodeEnv === "development" || nodeEnv === "test") return false;
@@ -83,4 +85,8 @@ export function validateProductionEnv() {
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
   ]);
+  const haiConnectorError = validateHaiConnectorConfig(defaultHaiConnectorConfig());
+  if (haiConnectorError) {
+    throw new Error(haiConnectorError);
+  }
 }

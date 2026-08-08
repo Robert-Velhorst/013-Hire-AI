@@ -8,4 +8,6 @@
 | Stripe, S3, Forge and malware-scanner production verification | Blocked | Production credentials and test accounts. |
 | Legal/privacy/retention approval and erasure execution | Partial | Intake, cancellation, review, exhaustive record/object mapping, and count preview exist; approved periods/legal bases, provider revocation, transactional scrubbing, and verified execution remain. |
 | Backup/restore and deployment drill | Partial | A provisioned database, object storage, and deployment environment. |
+| Windows/ngrok hosted acceptance | Partial | Native and tunnel launchers exist; production credentials, a reserved HTTPS hostname, and public health/callback evidence are required. |
+| External HAI peer acceptance | Partial | The read-only A2A 1.0 status contract is locally verified; configure a shared token and private peer URL in a controlled environment. |
 | Team/workspace permissions and localization | Missing | Product decision and schema/UI implementation. |

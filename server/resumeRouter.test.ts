@@ -10,16 +10,14 @@ const mocks = vi.hoisted(() => ({
   uploadResume: vi.fn(),
 }));
 
-vi.mock("./resumeStorage", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./resumeStorage")>()),
+vi.mock("./resumeStorage", () => ({
   uploadResume: mocks.uploadResume,
   getActiveResume: mocks.getActiveResume,
   setActiveVersion: mocks.setActiveVersion,
   deleteResumeVersion: mocks.deleteResumeVersion,
 }));
 
-vi.mock("./resumeParser", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./resumeParser")>()),
+vi.mock("./resumeParser", () => ({
   parseResumeFromFile: mocks.parseResumeFromFile,
   resumeToProfileData: mocks.resumeToProfileData,
 }));

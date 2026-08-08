@@ -18,6 +18,8 @@ The repository contains useful foundations for:
 
 The current baseline also includes a versioned privacy metadata export, a user-owned account-deletion review and cancellation workflow, operator retention decisions, an exhaustive retention-policy registry, an admin-only record-count preview, a production-readiness endpoint, response security headers, an environment doctor command, and a container build definition. Review resolution and previewing do not execute erasure, and these improvements do not remove the external authorization, legal, data-retention, or provider-integration gates described below.
 
+Windows-native startup now performs a production audit and health check, server binding defaults to loopback, a reserved ngrok tunnel can be health-verified, and an optional local/private HAI A2A connector exposes aggregate read-only status. These controls are implemented contracts, not evidence that a specific Windows host, ngrok domain, or HAI deployment has passed live acceptance.
+
 However, several public-facing claims and status documents previously described features as complete even when the implementation was still partial, simulated, untested, or framework-level only.
 
 ## Important limitations

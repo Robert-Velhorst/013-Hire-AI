@@ -15,13 +15,14 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 - Added the goal traceability, safety, operator, API, UI, technical-audit, and acceptance-test documents linked from the README.
 - Marked historical reports and planning files so their old percentages cannot be read as current release certification.
 - Added an idempotent, user-owned account-deletion review with cancellation, high-priority admin routing, bounded user-visible status, and affected-user audit attribution. Operator resolution explicitly records that no data was deleted.
+- Added loopback-first Windows hosting, a health-gated native launcher, a reserved-domain ngrok launcher, and a read-only HAI A2A 1.0 aggregate-status connector.
 
 ## Automated evidence
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 156 files, 793 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 158 files, 800 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
@@ -35,10 +36,16 @@ The Settings page was opened through development authentication. The Export cont
 
 The same fallback verified the account-deletion review on desktop and a 390 x 844 mobile viewport: request confirmation, explicit no-deletion status, cancellation confirmation, and closed status all rendered and changed correctly. A regular user visiting `/admin` initially triggered privileged queries before rendering Access Denied; those queries are now role-gated, and a clean reload produced no new authorization errors.
 
+The HAI connector was enabled temporarily on loopback port 3040 with an ephemeral test token. Health returned `ok`, Agent Card discovery succeeded, an unauthenticated status request returned 404, and an authenticated A2A 1.0 `SendMessage` request completed. The connector returned aggregate operating state only and did not execute an action. Temporary processes were stopped and the port was verified closed afterward.
+
+ngrok 3.39.8 is installed and `ngrok config check` reports a valid local configuration. No reserved HTTPS hostname was supplied, so a public tunnel and public callback path were not claimed as accepted.
+
 ## Release blockers and scope boundaries
 
 - A production database, migration run, backups, restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment.
 - Gmail, Google Drive, Dropbox, Microsoft, LinkedIn, and GitHub integrations require user-owned OAuth applications, credentials, redirect configuration, consent, and live acceptance testing.
+- The HAI connector contract is locally verified, but acceptance against an independently running HAI peer is still required.
+- Public ngrok health and OAuth callback verification require an operator-owned reserved HTTPS hostname.
 - Only sources with compliant, configured adapters are eligible for discovery. Account-only, blocked, unsafe, or ambiguous sources remain unavailable or review-only.
 - Applications are prepared, reviewed, and handed off to the employer destination. There is no verified unattended cross-platform application submission system.
 - Retention/deletion policy approval, a verified erasure executor, security/legal review, accessibility review, penetration testing, and a formal incident response exercise require operator decisions and external evidence.

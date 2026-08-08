@@ -8,6 +8,7 @@ All application API calls use `/api/trpc`. Public procedures are limited to unau
 - `GET /readyz`: configuration/readiness status. Development explicitly reports `development_memory` when no database is configured. Production returns `503` when required runtime readiness is false.
 - `/api/oauth/callback` and `/api/connectors/oauth/callback`: provider callback boundaries.
 - `/api/stripe/webhook`: registered before JSON parsing to preserve signed raw request bodies.
+- `/.well-known/agent-card.json`, `/api/hai/status`, and `/api/hai/a2a`: disabled-by-default HAI bridge. Status and JSON-RPC require a separate bearer token; the route uses its own 16 KiB parser before the general 50 MiB upload parser.
 
 ## High-risk action controls
 
@@ -17,3 +18,4 @@ All application API calls use `/api/trpc`. Public procedures are limited to unau
 - Privacy exports are owned by the current session and exclude OAuth grants, private object keys, signed download URLs, and document bytes.
 - Privacy deletion requests are session-owned and expose only bounded status fields. Operator descriptions, assignments, and resolution text do not cross the user API or exported audit-event boundary.
 - Privacy erasure previews are admin-only, require a privacy review, classify every known user-owned table, expose counts rather than record contents, and remain non-executable until legal retention and provider/object deletion controls are approved.
+- HAI receives only bounded aggregate status for one configured user. Unsupported fields, files, URLs, metadata, oversized input, invalid versions, disabled state, and bad tokens are rejected before any application state read.

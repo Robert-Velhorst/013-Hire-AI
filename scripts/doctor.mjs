@@ -1,4 +1,6 @@
+import "dotenv/config";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 
 const root = process.cwd();
@@ -44,6 +46,33 @@ check(
   isProduction && !String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "fail" : !String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "warn" : "pass",
   String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "scanner endpoint configured" : "required before production document uploads"
 );
+
+const haiEnabled = String(process.env.HAI_CONNECTOR_ENABLED || "").trim().toLowerCase() === "true";
+const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "").trim();
+const haiUserId = Number.parseInt(String(process.env.HAI_CONNECTOR_USER_ID || "").trim(), 10);
+const haiUrl = String(process.env.HAI_CONNECTOR_URL || "").trim();
+let haiDetail = "disabled";
+let haiStatus = "pass";
+if (haiEnabled) {
+  const errors = [];
+  if (haiToken.length < 32 || /[\r\n]/.test(haiToken)) errors.push("32+ character token");
+  if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
+  try {
+    const parsed = new URL(haiUrl);
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const parsedIp = net.isIP(host) ? host : null;
+    const localHost = ["localhost", "host.docker.internal", "gateway"].includes(host)
+      || (parsedIp && /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i.test(parsedIp));
+    if (!["http:", "https:"].includes(parsed.protocol) || !localHost || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      errors.push("plain local/private connector URL");
+    }
+  } catch {
+    errors.push("valid connector URL");
+  }
+  haiStatus = errors.length > 0 ? "fail" : "pass";
+  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured read-only local bridge";
+}
+check("HAI connector", haiStatus, haiDetail);
 
 for (const result of checks) {
   console.log(`${result.status.toUpperCase().padEnd(4)} ${result.name}: ${result.detail}`);

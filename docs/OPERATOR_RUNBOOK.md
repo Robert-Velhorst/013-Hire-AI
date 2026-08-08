@@ -13,6 +13,8 @@ pnpm dev
 
 The server exposes `/healthz` and `/readyz`. Development can use in-memory persistence for review, but it is not durable and must not be treated as production data.
 
+For native production startup on Windows 11, use `npm.cmd run start:windows`. It builds, runs the production doctor, binds to loopback by default, and waits for local health. For a reserved ngrok origin and the local/private HAI A2A connector, follow `docs/WINDOWS_NGROK_HAI.md`; public health and Agent Card availability are necessary checks, not provider acceptance evidence.
+
 ## Database and workers
 
 Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default; enable only approved sources and set an explicit source allowlist where needed.

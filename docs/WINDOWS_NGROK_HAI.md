@@ -1,0 +1,53 @@
+# Windows, ngrok, and HAI operation
+
+## Windows 11 native runtime
+
+Hire.AI runs as a native Node.js process; Docker is not required. Production operation still requires the services and credentials reported by `npm.cmd run doctor`, including a reachable MySQL-compatible database.
+
+1. Install Node.js 22 and a MySQL-compatible database.
+2. Copy `.env.example` to `.env` and replace every required production value.
+3. Apply migrations with `npm.cmd run db:migrate`.
+4. Start the checked and built service:
+
+```powershell
+npm.cmd run start:windows -- -Port 3000
+```
+
+The script builds the app, runs the production doctor, starts a hidden child process, and reports success only after `/healthz` passes. It binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
+
+## ngrok tunnel
+
+Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Start the Windows runtime first, then open a second PowerShell terminal:
+
+```powershell
+npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3000
+```
+
+The tunnel script requires an installed and authenticated ngrok CLI, verifies local health before launch, and verifies public `/healthz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
+
+- Main sign-in: `https://hire-ai.example.ngrok.app/api/oauth/callback`
+- Account connectors: `https://hire-ai.example.ngrok.app/api/connectors/oauth/callback`
+- Stripe webhook: `https://hire-ai.example.ngrok.app/api/stripe/webhook`
+
+Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact connector callback. The script rejects a conflicting configured callback. A green public health check does not prove OAuth, Stripe, storage, email, or provider acceptance; test each with an authorized sandbox account.
+
+## HAI A2A connector
+
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
+
+```dotenv
+HAI_CONNECTOR_ENABLED=true
+HAI_CONNECTOR_TOKEN=replace-with-at-least-32-random-characters
+HAI_CONNECTOR_USER_ID=123
+HAI_CONNECTOR_URL=http://127.0.0.1:3000/api/hai/a2a
+```
+
+Endpoints:
+
+- `GET /.well-known/agent-card.json`: available only when configuration is valid.
+- `GET /api/hai/status`: bearer-authenticated connector configuration status.
+- `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
+
+The response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. It cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
+
+HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured.

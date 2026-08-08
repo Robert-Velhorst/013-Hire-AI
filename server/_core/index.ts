@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
-import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerDevAuthRoutes } from "./devAuth";
 import { registerOAuthRoutes } from "./oauth";
@@ -14,25 +13,8 @@ import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
 import { ensureScraperPlatformCatalog } from "../db";
 import { logOperationalFailure } from "../operationalFailureLog";
-
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
+import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
+import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
 
 async function startServer() {
   validateProductionEnv();
@@ -58,6 +40,9 @@ async function startServer() {
   });
   // Stripe webhook MUST be registered before express.json() to preserve raw body for signature verification
   registerStripeWebhook(app);
+  // The HAI bridge owns its bounded JSON parser and must be registered before
+  // the general application parser can accept a larger request body.
+  registerHaiConnectorRoutes(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -82,8 +67,9 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const bindHost = resolveBindHost(process.env.HOST);
+  const preferredPort = resolvePreferredPort(process.env.PORT);
+  const port = await resolveAvailablePort(preferredPort, bindHost, !ENV.isProduction);
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
@@ -107,7 +93,7 @@ async function startServer() {
   await new Promise<void>((resolve, reject) => {
     const handleError = (error: Error) => reject(error);
     server.once("error", handleError);
-    server.listen(port, () => {
+    server.listen(port, bindHost, () => {
       server.off("error", handleError);
       resolve();
     });
@@ -142,7 +128,7 @@ async function startServer() {
   process.once("SIGINT", () => void shutdown("SIGINT"));
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
-  console.log(`Server running on http://localhost:${port}/`);
+  console.log(`Server running on http://${displayHost(bindHost)}:${port}/ (bound to ${bindHost})`);
 }
 
 startServer().catch(() => {

@@ -24,3 +24,13 @@
 - Added privacy policy `2026-08-09.v1` covering the identity row, every direct user-owned table, four application-linked child tables, five private-object fields, and connector revocation requirements.
 - Added an admin-only, count-only erasure preview to Review Evidence. It fails closed without a persistent database and explicitly cannot execute deletion.
 - Added a schema-source regression so newly introduced direct user-owned tables fail tests until a retention action is assigned.
+
+## 2026-08-09 - Windows, ngrok, and HAI interoperability pass
+
+- Added an explicit loopback-first network configuration with fixed production ports and bounded development fallback.
+- Added native Windows and ngrok launchers that fail closed and report availability only after health verification.
+- Added a disabled-by-default, token-protected HAI A2A 1.0 status connector. It exposes bounded aggregate operational state only and cannot execute applications, send messages, or return user content.
+- Verified local Agent Card discovery, unauthenticated endpoint concealment, authenticated aggregate status, and an A2A completed task on port 3040.
+- Confirmed ngrok 3.39.8 is installed and configured; public tunnel acceptance remains pending an operator-owned reserved HTTPS hostname.
+- Removed unnecessary real resume parser/storage initialization from router tests and capped Vitest at four workers to avoid resource-driven false timeouts.
+- Passed TypeScript, the production build, and the full regression suite: 158 files and 800 tests.

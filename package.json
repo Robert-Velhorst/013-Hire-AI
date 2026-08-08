@@ -7,6 +7,8 @@
     "dev": "tsx watch server/_core/index.ts",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "node dist/index.js",
+    "start:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
+    "start:ngrok": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ngrok.ps1",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",

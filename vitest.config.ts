@@ -14,6 +14,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    maxWorkers: 4,
+    minWorkers: 1,
     include: [
       "server/**/*.test.ts",
       "server/**/*.spec.ts",
