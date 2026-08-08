@@ -20,6 +20,10 @@
 - [Testing](#testing)
 - [Deployment](#deployment)
 
+## Operational Evidence
+
+The current audited status is maintained in [CURRENT_STATUS.md](./CURRENT_STATUS.md). The production-readiness evidence set is in [`docs/`](./docs), including the [critical path](./docs/CRITICAL_PATH.md), [security boundary](./docs/SECURITY.md), [operator runbook](./docs/OPERATOR_RUNBOOK.md), and [completion matrix](./docs/GOAL_COMPLETION_MATRIX.md). These documents describe the review-first product as it exists; they do not imply that unconfigured providers are live.
+
 ---
 
 ## Overview

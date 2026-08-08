@@ -1,4 +1,6 @@
 # Hire.AI V2 - Master TODO List
+
+> Historical planning snapshot. This list predates the current review-first source policy and does not prove present feature availability. Use `CURRENT_STATUS.md`, `docs/CRITICAL_PATH.md`, and `docs/GOAL_COMPLETION_MATRIX.md` for current work.
 ## Complete Implementation Roadmap
 
 This document outlines ALL remaining tasks to make Hire.AI V2 fully featured and production-ready.

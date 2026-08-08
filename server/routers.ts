@@ -260,6 +260,24 @@ export const appRouter = router({
       return { success: true };
     }),
   }),
+  privacy: router({
+    exportData: protectedProcedure.query(async ({ ctx }) => {
+      const { buildPrivacyDataExport } = await import("./privacyData");
+      const { createAuditEvent } = await import("./db");
+      const data = await buildPrivacyDataExport(ctx.user.id);
+      await createAuditEvent({
+        userId: ctx.user.id,
+        entityType: "user",
+        entityId: ctx.user.id,
+        action: "privacy_data_exported",
+        actor: "user",
+        source: "privacy.exportData",
+        afterState: JSON.stringify({ schemaVersion: data.schemaVersion }),
+        riskLevel: "low",
+      });
+      return data;
+    }),
+  }),
 
   audit: router({
     getForUser: protectedProcedure

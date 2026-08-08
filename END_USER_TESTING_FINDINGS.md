@@ -1,5 +1,7 @@
 # Hire.AI V2 - End User Testing Findings
 
+> Historical testing snapshot from January 2026. It is retained as design input, not as a statement of the current product state. See `docs/FINAL_VERIFICATION_REPORT.md` for current automated and runtime verification.
+
 ## Testing Date: January 7, 2026
 
 ---

@@ -1,5 +1,7 @@
 # Hire.AI V2 - API Reference
 
+> Contract note: this is a high-level integration guide. The checked-in tRPC router is the implementation source of truth; provider credentials and production authorization remain deployment prerequisites. The `privacy.exportData` protected query exports user-owned metadata while excluding credentials and private document bytes.
+
 ## Overview
 
 Hire.AI V2 uses tRPC for type-safe API communication. All endpoints are available under `/api/trpc`.

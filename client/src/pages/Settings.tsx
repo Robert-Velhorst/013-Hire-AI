@@ -29,8 +29,8 @@ export default function Settings() {
   const { data: profile } = trpc.profile.get.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: applications } = trpc.applications.list.useQuery(undefined, {
-    enabled: isAuthenticated,
+  const privacyExport = trpc.privacy.exportData.useQuery(undefined, {
+    enabled: false,
   });
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => toast.success("Settings saved"),
@@ -80,16 +80,19 @@ export default function Settings() {
     });
   };
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
+    const result = await privacyExport.refetch();
+    if (!result.data) {
+      toast.error("Unable to create the data export. Try again shortly.");
+      return;
+    }
     const exportData = {
-      exportedAt: new Date().toISOString(),
       account: {
         id: user?.id,
         name: user?.name,
         email: user?.email,
       },
-      profile: profile || null,
-      applications: applications || [],
+      ...result.data,
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -98,7 +101,7 @@ export default function Settings() {
     anchor.download = `hire-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    toast.success("Data export created");
+    toast.success("Data export created. Sensitive document bytes and connector credentials are excluded.");
   };
 
   if (loading) {
@@ -292,13 +295,15 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg">
                 <div>
                   <p className="text-white font-medium">Export Your Data</p>
-                  <p className="text-sm text-slate-400">Download all your data in JSON format</p>
+                  <p className="text-sm text-slate-400">Download your profile, records, preferences, and audit history. Private file bytes and connector credentials remain excluded.</p>
                 </div>
                 <Button
                   variant="outline"
                   className="border-slate-700 text-slate-300"
                   onClick={handleExportData}
+                  disabled={privacyExport.isFetching}
                 >
+                  {privacyExport.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Export
                 </Button>
               </div>

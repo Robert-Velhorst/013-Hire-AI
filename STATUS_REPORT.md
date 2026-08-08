@@ -1,5 +1,7 @@
 # Hire.AI V2 - Implementation Status Report
 
+> Historical snapshot. The percentages and platform counts below are not current release evidence. For the current implementation state and verified limitations, use `CURRENT_STATUS.md` and `docs/FINAL_VERIFICATION_REPORT.md`.
+
 ## Summary
 
 | Category | Completed | Remaining | Percentage |

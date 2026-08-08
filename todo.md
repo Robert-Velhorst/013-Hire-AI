@@ -1,5 +1,7 @@
 # Hire.AI V2 - Project TODO
 
+> Historical implementation checklist. Checked items are not release certification; current controls, gaps, and operational gates are documented in `CURRENT_STATUS.md` and `docs/GOAL_COMPLETION_MATRIX.md`.
+
 ## Phase 1: Database Schema & Core Structure
 - [x] Design and implement job listings table schema
 - [x] Design and implement user profiles table with skills and preferences
