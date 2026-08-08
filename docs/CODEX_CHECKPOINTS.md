@@ -17,4 +17,5 @@
 | Windows runtime contract | Explicit host/port selection, native launcher, doctor integration, and network tests | Complete locally; credential-complete production launch pending |
 | HAI interoperability | Agent Card, concealed bearer auth, aggregate status, and read-only A2A 1.0 smoke | Complete locally; external HAI peer acceptance pending |
 | ngrok readiness | ngrok 3.39.8 installed; configuration valid; fail-closed reserved-domain launcher | Partial: reserved HTTPS hostname and public health acceptance pending |
+| Frontend delivery efficiency | Production-only bundle gate; 487-byte HTML shell; lazy route chunks retained | Complete for current production build |
 | Hosted deployment and provider acceptance | Requires credentials, a production database, and operator-owned external accounts | Partial |

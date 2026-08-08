@@ -34,3 +34,10 @@
 - Confirmed ngrok 3.39.8 is installed and configured; public tunnel acceptance remains pending an operator-owned reserved HTTPS hostname.
 - Removed unnecessary real resume parser/storage initialization from router tests and capped Vitest at four workers to avoid resource-driven false timeouts.
 - Passed TypeScript, the production build, and the full regression suite: 158 files and 800 tests.
+
+## 2026-08-09 - Production bundle efficiency pass
+
+- Measured a 367,750-byte production HTML shell and traced it to development-only Manus and JSX-location instrumentation.
+- Limited both plugins to the Vite development server. The production shell is now 487 bytes, a 99.9% reduction, while route-level lazy loading remains intact.
+- Added a build-time regression gate that rejects Manus/JSX-location markers and HTML shells larger than 25 KiB.
+- Rendered the production output at 1440 x 900 and 390 x 844. The landing page remained correctly framed and the workflow-scroll interaction worked. The in-app browser timed out, so the recorded fallback used the bundled Playwright runtime; the static-only preview predictably could not serve tRPC requests.

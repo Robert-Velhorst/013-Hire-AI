@@ -16,6 +16,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 - Marked historical reports and planning files so their old percentages cannot be read as current release certification.
 - Added an idempotent, user-owned account-deletion review with cancellation, high-priority admin routing, bounded user-visible status, and affected-user audit attribution. Operator resolution explicitly records that no data was deleted.
 - Added loopback-first Windows hosting, a health-gated native launcher, a reserved-domain ngrok launcher, and a read-only HAI A2A 1.0 aggregate-status connector.
+- Removed development instrumentation from production delivery and added a bundle gate; the generated HTML shell decreased from 367,750 bytes to 487 bytes.
 
 ## Automated evidence
 
@@ -24,6 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Type check | `npm.cmd run check` | Passed |
 | Unit and integration tests | `npm.cmd test -- --run` | Passed: 158 files, 800 tests |
 | Production build | `npm.cmd run build` | Passed |
+| Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
 | Diff whitespace audit | `git diff --check` | Passed |
@@ -39,6 +41,8 @@ The same fallback verified the account-deletion review on desktop and a 390 x 84
 The HAI connector was enabled temporarily on loopback port 3040 with an ephemeral test token. Health returned `ok`, Agent Card discovery succeeded, an unauthenticated status request returned 404, and an authenticated A2A 1.0 `SendMessage` request completed. The connector returned aggregate operating state only and did not execute an action. Temporary processes were stopped and the port was verified closed afterward.
 
 ngrok 3.39.8 is installed and `ngrok config check` reports a valid local configuration. No reserved HTTPS hostname was supplied, so a public tunnel and public callback path were not claimed as accepted.
+
+The production frontend output rendered at desktop (1440 x 900) and mobile (390 x 844), and the landing-page workflow-scroll control moved to the intended section. The in-app browser connection timed out, so this check used the bundled Playwright runtime. Because Vite preview serves static output only, its console contained the expected failed API query; this is not evidence of a credential-complete production full-stack session.
 
 ## Release blockers and scope boundaries
 

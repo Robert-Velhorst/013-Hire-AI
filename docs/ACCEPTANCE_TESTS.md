@@ -15,5 +15,6 @@
 | Windows runtime | `server/_core/network.test.ts`; PowerShell parser checks | The native launcher builds, audits configuration, binds explicitly, and reports success only after `/healthz` responds. A credential-complete production launch remains operator acceptance. |
 | HAI status connector | `server/haiConnector.test.ts` | Verified locally on port 3040: Agent Card discovery, concealed unauthenticated status, and authenticated A2A 1.0 aggregate status completed without exposing user content or executing actions. |
 | ngrok exposure | `scripts/start-ngrok.ps1`; ngrok configuration check | ngrok 3.39.8 and its local configuration were verified. Public health and callback acceptance remain pending a reserved HTTPS hostname. |
+| Production bundle | `scripts/check-production-bundle.mjs`; `npm.cmd run build` | Production HTML must remain below 25 KiB and exclude Manus/JSX-location development instrumentation. Current shell: 487 bytes, down from 367,750 bytes. |
 
 Expected outcomes are enforced through tests where practical. Provider callbacks, real S3 objects, Stripe webhook delivery, and legal/compliance flows require credentials and controlled external verification.

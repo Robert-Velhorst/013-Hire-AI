@@ -19,6 +19,7 @@ Audit date: 2026-08-08
 | No baseline HTTP response hardening. | The server disables `X-Powered-By` and applies anti-framing, MIME, referrer, permissions, cross-origin, production CSP, and HSTS headers. |
 | No local self-diagnostic command. | `pnpm doctor` checks runtime files, migration inventory, production-required configuration, and the malware-scanner gate without printing values. |
 | No container build definition. | `Dockerfile` and `.dockerignore` provide a production Node 22 build path. |
+| Production HTML embedded the Manus development runtime and a second React runtime. | Manus and JSX-location plugins now run only for the Vite development server. The production shell fell from 367,750 bytes to 487 bytes, and the build fails if development markers return or the shell exceeds 25 KiB. |
 
 ## Material unresolved risks
 
