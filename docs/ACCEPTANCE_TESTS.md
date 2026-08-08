@@ -8,6 +8,8 @@
 | Review and handoff | application approval, submission evidence, and autonomous execution-guard tests | Approve a prepared record and confirm the UI directs the user to complete the employer handoff. |
 | Interview/offer tracking | response, interview notification, and success-fee tests | Record an employer response with source evidence and confirm interview notification behavior. |
 | Privacy export | `server/privacyData.test.ts` | Verified locally through Settings: versioned export downloaded without private file bytes, credential fields, or a resume file URL. |
+| Privacy deletion review | `server/privacyDeletionReview.test.ts`; `client/src/lib/adminReviewEvidence.test.ts` | Verified locally through Settings: request, no-deletion status, cancellation, and closed status; operator resolution remains a decision, not erasure execution. |
+| Admin denial | `client/src/lib/adminQueryAuthorization.test.ts` | A regular user receives Access Denied without firing privileged admin queries or producing new authorization errors. |
 | Runtime operations | `server/_core/httpSafety.test.ts`; `npm.cmd run doctor` | Verified locally: `/healthz` and `/readyz` returned 200; production doctor fails with incomplete configuration. |
 
 Expected outcomes are enforced through tests where practical. Provider callbacks, real S3 objects, Stripe webhook delivery, and legal/compliance flows require credentials and controlled external verification.

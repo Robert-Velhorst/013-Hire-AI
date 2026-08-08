@@ -45,6 +45,28 @@ Log out the current user.
 
 ---
 
+## Privacy Router
+
+All privacy procedures require an authenticated session and operate only on the current user.
+
+### `privacy.exportData`
+
+Returns a versioned portable metadata export. Connector grants, private object keys, signed URLs, and document bytes are excluded.
+
+### `privacy.getDeletionRequest`
+
+Returns the current user's latest bounded deletion-review status or `null`. Internal descriptions, assignments, and admin resolution notes are not exposed.
+
+### `privacy.requestDeletion`
+
+Creates or reuses one open high-priority operator review. The optional reason is limited to 1,000 characters. This mutation records an audit event and does not delete data.
+
+### `privacy.cancelDeletionRequest`
+
+Cancels the current user's open request and records the cancellation. It cannot target another user's review and fails when no open request exists.
+
+---
+
 ## Jobs Router
 
 ### `jobs.list`

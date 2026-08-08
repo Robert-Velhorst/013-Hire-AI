@@ -157,6 +157,21 @@ export function getAdminReviewEvidenceSummary(
         risk: risk === "low" || risk === "medium" ? "high" : risk,
         requiresManualDecision: true,
       };
+    case "privacy_deletion":
+      return {
+        label: "Privacy deletion review",
+        headline: "Decide what can be erased and what must remain under a documented hold.",
+        detail: "Resolving this review records an operator decision only. It does not delete account data or override active billing, dispute, verification, or legal retention obligations.",
+        checklist: [
+          "Confirm the request belongs to the account holder.",
+          "Review active billing, employment, dispute, and legal-hold records.",
+          "Identify provider grants and private files eligible for revocation or deletion.",
+          "Record the retention basis and the separate execution work still required.",
+        ],
+        route,
+        risk: "high",
+        requiresManualDecision: true,
+      };
     default:
       return {
         label: "Review evidence",

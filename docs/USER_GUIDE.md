@@ -213,6 +213,8 @@ Use this information to:
 - Uploads are limited to 10 MiB, checked against allowed MIME types and file signatures before storage, and require a configured malware scanner in production. A scanner failure rejects the upload.
 - Deleting a resume version first removes its private storage object. Its ledger record is removed only after that cleanup succeeds; a failed deletion leaves the record intact so the user can retry.
 - Offer and quarterly-verification documents are compliance evidence. They remain retained while the associated success-fee obligation, verification review, payment recovery, dispute, or legal review is open. They require an operator-controlled retention decision once those obligations are closed.
+- Settings can open one idempotent account-deletion review at a time. The request can be cancelled while open and remains visible as a status; submitting it does not immediately erase data.
+- An admin resolution records the retention decision and audit trail only. Provider revocation, private-object deletion, database erasure, and any legally required retained evidence remain separate execution work.
 
 ---
 

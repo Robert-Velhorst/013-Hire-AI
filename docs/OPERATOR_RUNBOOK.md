@@ -25,6 +25,14 @@ Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` c
 4. Investigate with admin source health and review queues.
 5. Resume only after the provider policy, credentials, and test evidence are verified.
 
+## Privacy deletion review
+
+1. Confirm the request belongs to the account holder and inspect the user audit trail.
+2. Identify active billing, employment verification, payment recovery, disputes, and legal holds.
+3. Record which data is eligible for erasure and the retention basis for everything that must remain.
+4. Treat resolving the review as a decision record only; it does not revoke providers, delete objects, or erase database records.
+5. Do not report completion until a separately approved executor produces itemized deletion and revocation evidence.
+
 ## Deployment
 
 Build with `docker build -t hire-ai .` when Docker is available. The container will fail startup in production if the core required environment variables are absent. Do not deploy until `pnpm doctor` passes with production configuration and malware scanning configured.

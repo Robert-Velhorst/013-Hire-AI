@@ -241,6 +241,23 @@ export function safeExternalConnectorErrorMessage(_error: unknown, fallback: str
   return fallback;
 }
 
+function toPrivacyDeletionRequestView(review: {
+  id: number;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  resolvedAt: Date | null;
+} | null) {
+  if (!review) return null;
+  return {
+    id: review.id,
+    status: review.status,
+    createdAt: review.createdAt,
+    updatedAt: review.updatedAt,
+    resolvedAt: review.resolvedAt,
+  };
+}
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -261,6 +278,44 @@ export const appRouter = router({
     }),
   }),
   privacy: router({
+    getDeletionRequest: protectedProcedure.query(async ({ ctx }) => {
+      const { getLatestPrivacyDeletionReview } = await import("./db");
+      return toPrivacyDeletionRequestView(await getLatestPrivacyDeletionReview(ctx.user.id));
+    }),
+    requestDeletion: protectedProcedure
+      .input(z.object({
+        reason: z.string().trim().min(1).max(1000).optional(),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        const { createAuditEvent, requestPrivacyDeletionReview } = await import("./db");
+        const review = await requestPrivacyDeletionReview(ctx.user.id, input?.reason);
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "privacy_deletion_requested",
+          actor: "user",
+          source: "privacy.requestDeletion",
+          afterState: JSON.stringify({ reviewItemId: review?.id ?? null, status: review?.status ?? "open" }),
+          riskLevel: "high",
+        });
+        return toPrivacyDeletionRequestView(review);
+      }),
+    cancelDeletionRequest: protectedProcedure.mutation(async ({ ctx }) => {
+      const { cancelPrivacyDeletionReview, createAuditEvent } = await import("./db");
+      const review = await cancelPrivacyDeletionReview(ctx.user.id);
+      await createAuditEvent({
+        userId: ctx.user.id,
+        entityType: "user",
+        entityId: ctx.user.id,
+        action: "privacy_deletion_cancelled",
+        actor: "user",
+        source: "privacy.cancelDeletionRequest",
+        afterState: JSON.stringify({ reviewItemId: review.id, status: review.status }),
+        riskLevel: "medium",
+      });
+      return toPrivacyDeletionRequestView(review);
+    }),
     exportData: protectedProcedure.query(async ({ ctx }) => {
       const { buildPrivacyDataExport } = await import("./privacyData");
       const { createAuditEvent } = await import("./db");

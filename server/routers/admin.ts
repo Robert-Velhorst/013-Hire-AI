@@ -132,21 +132,29 @@ export const adminRouter = router({
       resolution: z.string().trim().min(1).max(5000),
     }))
     .mutation(async ({ ctx, input }) => {
+      const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
       const result = await resolveAdminReviewItem(
         input.reviewItemId,
         ctx.user.id,
         input.status,
         input.resolution
       );
+      const isPrivacyDeletion = evidence.reviewItem.category === "privacy_deletion";
       await createAuditEvent({
-        userId: ctx.user.id,
-        entityType: "admin_review",
-        entityId: input.reviewItemId,
-        action: "admin_review_item_resolved",
+        userId: evidence.reviewItem.userId,
+        entityType: isPrivacyDeletion ? "user" : "admin_review",
+        entityId: isPrivacyDeletion ? evidence.reviewItem.userId : input.reviewItemId,
+        action: isPrivacyDeletion ? "privacy_deletion_review_recorded" : "admin_review_item_resolved",
         actor: "admin",
         source: "admin.resolveReviewItem",
-        afterState: JSON.stringify({ status: input.status, resolution: input.resolution }),
-        riskLevel: input.status === "resolved" ? "medium" : "low",
+        afterState: JSON.stringify({
+          reviewItemId: input.reviewItemId,
+          status: input.status,
+          resolutionRecorded: true,
+          adminUserId: ctx.user.id,
+          dataDeleted: false,
+        }),
+        riskLevel: isPrivacyDeletion ? "high" : input.status === "resolved" ? "medium" : "low",
       });
       return result;
     }),

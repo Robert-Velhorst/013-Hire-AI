@@ -62,6 +62,22 @@ describe("admin review evidence summary", () => {
     ]));
   });
 
+  it("keeps privacy deletion as a high-risk decision without claiming erasure", () => {
+    const summary = getAdminReviewEvidenceSummary({
+      category: "privacy_deletion",
+      entityType: "user",
+      entityId: 81,
+      priority: "medium",
+    });
+
+    expect(summary.label).toBe("Privacy deletion review");
+    expect(summary.risk).toBe("high");
+    expect(summary.detail).toContain("does not delete account data");
+    expect(summary.checklist).toContain(
+      "Record the retention basis and the separate execution work still required."
+    );
+  });
+
   it("falls back to generic linked-record review copy", () => {
     const summary = getAdminReviewEvidenceSummary({
       category: "unknown",

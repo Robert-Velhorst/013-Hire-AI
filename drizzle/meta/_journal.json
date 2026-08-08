@@ -246,6 +246,13 @@
       "when": 1784563200000,
       "tag": "0034_autonomous_run_skipped",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1786150800000,
+      "tag": "0035_privacy_deletion_review",
+      "breakpoints": true
     }
   ]
 }

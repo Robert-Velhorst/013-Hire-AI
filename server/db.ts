@@ -2824,6 +2824,72 @@ export async function listAdminReviewItems(status: AdminReviewItem["status"] | "
     .orderBy(desc(adminReviewItems.createdAt));
 }
 
+export async function getLatestPrivacyDeletionReview(userId: number) {
+  const reviews = await listAdminReviewItems("all");
+  return reviews
+    .filter((item) =>
+      item.userId === userId &&
+      item.entityType === "user" &&
+      item.entityId === userId &&
+      item.category === "privacy_deletion"
+    )
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+}
+
+export async function requestPrivacyDeletionReview(userId: number, reason?: string) {
+  await createAdminReviewItem({
+    userId,
+    entityType: "user",
+    entityId: userId,
+    category: "privacy_deletion",
+    priority: "high",
+    title: "User requested account data deletion review",
+    description: reason
+      ? `The user requested account erasure. User note: ${reason}`
+      : "The user requested account erasure. Review active billing, employment verification, disputes, legal holds, provider records, and document retention before recording a decision. Resolving this item does not itself delete data.",
+  });
+  return await getLatestPrivacyDeletionReview(userId);
+}
+
+export async function cancelPrivacyDeletionReview(userId: number) {
+  const current = await getLatestPrivacyDeletionReview(userId);
+  if (!current || (current.status !== "open" && current.status !== "in_progress")) {
+    throw new Error("No open deletion request was found.");
+  }
+
+  const cancelledAt = new Date();
+  const db = await getDb();
+  if (!db) {
+    const item = memoryAdminReviewItems.find((review) => review.id === current.id);
+    if (!item || item.userId !== userId || item.category !== "privacy_deletion") {
+      throw new Error("Deletion request not found.");
+    }
+    item.status = "dismissed";
+    item.resolution = "Cancelled by the user before operator review was completed.";
+    item.resolvedAt = cancelledAt;
+    item.updatedAt = cancelledAt;
+    return item as AdminReviewItem;
+  }
+
+  const result = await db
+    .update(adminReviewItems)
+    .set({
+      status: "dismissed",
+      resolution: "Cancelled by the user before operator review was completed.",
+      resolvedAt: cancelledAt,
+    })
+    .where(and(
+      eq(adminReviewItems.id, current.id),
+      eq(adminReviewItems.userId, userId),
+      eq(adminReviewItems.category, "privacy_deletion"),
+      inArray(adminReviewItems.status, ["open", "in_progress"])
+    ));
+  if (Number(result[0].affectedRows) === 0) {
+    throw new Error("Deletion request changed before it could be cancelled.");
+  }
+  return await getLatestPrivacyDeletionReview(userId);
+}
+
 export async function dismissOfferAttributionAdminReviews(
   userId: number,
   applicationId: number,
@@ -2916,6 +2982,12 @@ export async function getAdminReviewEvidenceSnapshot(reviewItemId: number) {
     }
   }
 
+  const reviewAuditEvents = reviewItem.entityType === "application"
+    ? artifacts?.auditEvents ?? []
+    : reviewItem.entityType === "user"
+      ? await getAuditEventsForUser(reviewItem.userId, 100)
+      : [];
+
   return {
     reviewItem,
     user: user
@@ -2936,7 +3008,7 @@ export async function getAdminReviewEvidenceSnapshot(reviewItemId: number) {
     attempts: artifacts?.attempts ?? [],
     employerResponses: artifacts?.employerResponses ?? [],
     approvals,
-    auditEvents: artifacts?.auditEvents ?? [],
+    auditEvents: reviewAuditEvents,
   };
 }
 

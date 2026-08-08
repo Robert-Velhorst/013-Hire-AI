@@ -390,7 +390,8 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
     "verification_overdue",
     "payment_failed",
     "legal_escalation",
-    "employment_ended"
+    "employment_ended",
+    "privacy_deletion"
   ]).notNull(),
   status: mysqlEnum("status", ["open", "in_progress", "resolved", "dismissed"]).default("open").notNull(),
   priority: mysqlEnum("priority", ["low", "medium", "high", "critical"]).default("medium").notNull(),

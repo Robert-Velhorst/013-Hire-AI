@@ -10,3 +10,11 @@
 - Ran the full regression suite successfully: 153 test files and 783 tests.
 - Built the application successfully, verified the doctor command fails closed for incomplete production configuration, and checked the local `/healthz` and `/readyz` routes on port 3040.
 - Exercised the Settings data export through Playwright; the generated file excluded connector credentials, private document bytes, and resume file URLs.
+
+## 2026-08-09 - Privacy lifecycle and authorization pass
+
+- Added one-at-a-time account-deletion review requests with user cancellation, bounded status responses, migration `0035`, and affected-user audit attribution.
+- Reused the admin operating-review queue with privacy-specific evidence and language that resolving a review does not execute deletion.
+- Fixed AdminPanel so privileged queries remain disabled until the authenticated user is known to be an admin; regular-user Access Denied no longer generates authorization errors.
+- Verified the Settings request/cancel flow on desktop and 390 x 844 mobile with Playwright after the in-app browser connection timed out.
+- Passed TypeScript, the production build, 155 test files / 788 tests, and the focused resume-import stability check.

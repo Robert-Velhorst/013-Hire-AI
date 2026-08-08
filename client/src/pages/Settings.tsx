@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, Shield, Zap, Globe, Settings as SettingsIcon, LogOut, User, ChevronLeft, Loader2 } from "lucide-react";
+import { Activity, Shield, Zap, Globe, Settings as SettingsIcon, LogOut, User, ChevronLeft, Loader2, Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
@@ -17,10 +17,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Settings() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
   
   // Settings state
   const [autoApply, setAutoApply] = useState(false);
@@ -31,6 +43,23 @@ export default function Settings() {
   });
   const privacyExport = trpc.privacy.exportData.useQuery(undefined, {
     enabled: false,
+  });
+  const { data: deletionRequest } = trpc.privacy.getDeletionRequest.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const requestDeletion = trpc.privacy.requestDeletion.useMutation({
+    onSuccess: () => {
+      toast.success("Deletion review requested");
+      utils.privacy.getDeletionRequest.invalidate();
+    },
+    onError: (error) => toast.error(error.message || "Unable to request deletion review"),
+  });
+  const cancelDeletionRequest = trpc.privacy.cancelDeletionRequest.useMutation({
+    onSuccess: () => {
+      toast.success("Deletion request cancelled");
+      utils.privacy.getDeletionRequest.invalidate();
+    },
+    onError: (error) => toast.error(error.message || "Unable to cancel deletion request"),
   });
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => toast.success("Settings saved"),
@@ -103,6 +132,15 @@ export default function Settings() {
     URL.revokeObjectURL(url);
     toast.success("Data export created. Sensitive document bytes and connector credentials are excluded.");
   };
+
+  const deletionRequestActive = deletionRequest?.status === "open" || deletionRequest?.status === "in_progress";
+  const deletionStatusText = deletionRequestActive
+    ? "Your request is awaiting operator review. No data has been deleted."
+    : deletionRequest?.status === "resolved"
+      ? "An operator recorded a retention decision. This status does not mean that data was deleted."
+      : deletionRequest?.status === "dismissed"
+        ? "The previous deletion request was cancelled or closed without deletion."
+        : "No account deletion review is currently open.";
 
   if (loading) {
     return (
@@ -292,8 +330,8 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg">
-                <div>
+              <div className="flex flex-col gap-4 rounded-lg bg-slate-800/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <p className="text-white font-medium">Export Your Data</p>
                   <p className="text-sm text-slate-400">Download your profile, records, preferences, and audit history. Private file bytes and connector credentials remain excluded.</p>
                 </div>
@@ -306,6 +344,78 @@ export default function Settings() {
                   {privacyExport.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Export
                 </Button>
+              </div>
+              <div className="flex flex-col gap-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium text-white">Account deletion review</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Request an operator review of account erasure and legal retention. Active billing, disputes, verification records, or legal holds may require limited evidence to remain.
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500" data-testid="privacy-deletion-status">
+                    {deletionStatusText}
+                  </p>
+                </div>
+                {deletionRequestActive ? (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="shrink-0 border-slate-700 text-slate-300"
+                        disabled={cancelDeletionRequest.isPending}
+                      >
+                        {cancelDeletionRequest.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Cancel request
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="border-slate-800 bg-slate-900 text-white">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel the deletion review?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-400">
+                          This closes the open request. It does not change any existing retention or account records.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">Keep request</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-slate-700 text-white hover:bg-slate-600"
+                          onClick={() => cancelDeletionRequest.mutate()}
+                        >
+                          Cancel request
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="shrink-0 border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                        disabled={requestDeletion.isPending}
+                      >
+                        {requestDeletion.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        Request review
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="border-slate-800 bg-slate-900 text-white">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Request account deletion review?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-400">
+                          Hire.AI will open a high-priority operator review. This does not immediately delete data or override active payment, dispute, verification, or legal retention obligations.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-red-600 text-white hover:bg-red-700"
+                          onClick={() => requestDeletion.mutate({})}
+                        >
+                          Request review
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </CardContent>
           </Card>

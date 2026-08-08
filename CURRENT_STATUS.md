@@ -16,7 +16,7 @@ The repository contains useful foundations for:
 - admin review and compliance workflows;
 - controlled job discovery, approval, and manual-handoff flows.
 
-The current baseline also includes a versioned privacy metadata export, a production-readiness endpoint, response security headers, an environment doctor command, and a container build definition. These improvements do not remove the external authorization, legal, data-retention, or provider-integration gates described below.
+The current baseline also includes a versioned privacy metadata export, a user-owned account-deletion review and cancellation workflow, operator retention decisions, a production-readiness endpoint, response security headers, an environment doctor command, and a container build definition. Review resolution does not execute erasure, and these improvements do not remove the external authorization, legal, data-retention, or provider-integration gates described below.
 
 However, several public-facing claims and status documents previously described features as complete even when the implementation was still partial, simulated, untested, or framework-level only.
 

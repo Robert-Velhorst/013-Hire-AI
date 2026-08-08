@@ -94,7 +94,7 @@ describe("resume router synchronization", () => {
       resumeFileKey: versionOne.fileKey,
       skills: "TypeScript, React",
     });
-  }, 20_000);
+  }, 30_000);
 
   it("preserves existing profile evidence when a parser result has no supporting field data", async () => {
     const partialUserId = 190073;

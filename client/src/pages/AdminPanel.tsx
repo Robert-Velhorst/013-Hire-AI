@@ -87,6 +87,7 @@ function StatusBadge({ status }: { status: string }) {
     payment_failed: "bg-red-500/20 text-red-400 border-red-500/30",
     legal_escalation: "bg-red-500/20 text-red-400 border-red-500/30",
     employment_ended: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    privacy_deletion: "bg-red-500/20 text-red-300 border-red-500/30",
     apply: "bg-green-500/20 text-green-400 border-green-500/30",
     save: "bg-blue-500/20 text-blue-400 border-blue-500/30",
     ignore: "bg-slate-500/20 text-slate-400 border-slate-500/30",
@@ -114,6 +115,7 @@ function ScraperRunOutcomeBadge({ outcome }: { outcome: "success" | "partial" | 
 
 export default function AdminPanel() {
   const { user, loading } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -135,25 +137,36 @@ export default function AdminPanel() {
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
-  const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery();
-  const { data: fees, refetch: refetchFees } = trpc.admin.listFees.useQuery({ status: "all", limit: 100, offset: 0 });
-  const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery();
-  const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery();
-  const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery({ status: "open" });
+  const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
+  const { data: fees, refetch: refetchFees } = trpc.admin.listFees.useQuery(
+    { status: "all", limit: 100, offset: 0 },
+    { enabled: isAdmin }
+  );
+  const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(undefined, { enabled: isAdmin });
+  const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(undefined, { enabled: isAdmin });
+  const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
+    { status: "open" },
+    { enabled: isAdmin }
+  );
+  const reviewDialogItem = reviewQueue?.find((item) => item.id === reviewDialog.itemId);
+  const isPrivacyDeletionDialog = reviewDialogItem?.category === "privacy_deletion";
   const {
     data: reviewEvidence,
     isLoading: reviewEvidenceLoading,
     error: reviewEvidenceError,
   } = trpc.admin.getReviewEvidence.useQuery(
     { reviewItemId: evidenceDialog.itemId ?? 0 },
-    { enabled: evidenceDialog.open && evidenceDialog.itemId !== null }
+    { enabled: isAdmin && evidenceDialog.open && evidenceDialog.itemId !== null }
   );
-  const { data: payments } = trpc.admin.listPayments.useQuery({ limit: 50, offset: 0 });
+  const { data: payments } = trpc.admin.listPayments.useQuery(
+    { limit: 50, offset: 0 },
+    { enabled: isAdmin }
+  );
   const {
     data: scrapingStatus,
     refetch: refetchScrapingStatus,
   } = trpc.scraping.status.useQuery(undefined, {
-    enabled: user?.role === "admin",
+    enabled: isAdmin,
     refetchInterval: 30_000,
   });
   const scraperSourceOutcomes = getScraperSourceOutcomeCounts(scrapingStatus?.platforms);
@@ -1150,7 +1163,7 @@ export default function AdminPanel() {
                                 }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                Resolve
+                                {item.category === "privacy_deletion" ? "Record review" : "Resolve"}
                               </Button>
                               <Button
                                 size="sm"
@@ -1161,7 +1174,7 @@ export default function AdminPanel() {
                                   setReviewResolution("");
                                 }}
                               >
-                                Dismiss
+                                {item.category === "privacy_deletion" ? "Close request" : "Dismiss"}
                               </Button>
                             </div>
                           </div>
@@ -1503,14 +1516,25 @@ export default function AdminPanel() {
       <Dialog open={reviewDialog.open} onOpenChange={(o) => !o && setReviewDialog({ open: false, itemId: null, status: "resolved" })}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white">
           <DialogHeader>
-            <DialogTitle>{reviewDialog.status === "resolved" ? "Resolve Review Item" : "Dismiss Review Item"}</DialogTitle>
+            <DialogTitle>
+              {isPrivacyDeletionDialog
+                ? reviewDialog.status === "resolved" ? "Record Privacy Review" : "Close Privacy Request"
+                : reviewDialog.status === "resolved" ? "Resolve Review Item" : "Dismiss Review Item"}
+            </DialogTitle>
           </DialogHeader>
+          {isPrivacyDeletionDialog ? (
+            <p className="text-sm text-amber-200/80">
+              This records a retention decision only. It does not delete account data, revoke providers, or override an active legal hold.
+            </p>
+          ) : null}
           <div>
             <Label className="text-slate-300">Resolution Note</Label>
             <Textarea
               value={reviewResolution}
               onChange={(e) => setReviewResolution(e.target.value)}
-              placeholder="Describe what was reviewed and why this item can be closed..."
+              placeholder={isPrivacyDeletionDialog
+                ? "Record the retention basis, data eligible for erasure, and the separate execution work required..."
+                : "Describe what was reviewed and why this item can be closed..."}
               className="bg-slate-800 border-slate-700 text-white mt-1"
               rows={4}
             />
@@ -1530,7 +1554,9 @@ export default function AdminPanel() {
                 }
               }}
             >
-              {reviewDialog.status === "resolved" ? "Resolve" : "Dismiss"}
+              {isPrivacyDeletionDialog
+                ? reviewDialog.status === "resolved" ? "Record review" : "Close request"
+                : reviewDialog.status === "resolved" ? "Resolve" : "Dismiss"}
             </Button>
           </DialogFooter>
         </DialogContent>
