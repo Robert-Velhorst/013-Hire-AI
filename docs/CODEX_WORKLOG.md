@@ -17,4 +17,10 @@
 - Reused the admin operating-review queue with privacy-specific evidence and language that resolving a review does not execute deletion.
 - Fixed AdminPanel so privileged queries remain disabled until the authenticated user is known to be an admin; regular-user Access Denied no longer generates authorization errors.
 - Verified the Settings request/cancel flow on desktop and 390 x 844 mobile with Playwright after the in-app browser connection timed out.
-- Passed TypeScript, the production build, 155 test files / 788 tests, and the focused resume-import stability check.
+- Passed TypeScript, the production build, 156 test files / 793 tests, and the focused resume-import stability check.
+
+## 2026-08-09 - Retention inventory pass
+
+- Added privacy policy `2026-08-09.v1` covering the identity row, every direct user-owned table, four application-linked child tables, five private-object fields, and connector revocation requirements.
+- Added an admin-only, count-only erasure preview to Review Evidence. It fails closed without a persistent database and explicitly cannot execute deletion.
+- Added a schema-source regression so newly introduced direct user-owned tables fail tests until a retention action is assigned.

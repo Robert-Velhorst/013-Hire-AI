@@ -158,6 +158,19 @@ export default function AdminPanel() {
     { reviewItemId: evidenceDialog.itemId ?? 0 },
     { enabled: isAdmin && evidenceDialog.open && evidenceDialog.itemId !== null }
   );
+  const {
+    data: privacyErasurePreview,
+    isLoading: privacyErasurePreviewLoading,
+    error: privacyErasurePreviewError,
+  } = trpc.admin.previewPrivacyErasure.useQuery(
+    { reviewItemId: evidenceDialog.itemId ?? 0 },
+    {
+      enabled: isAdmin
+        && evidenceDialog.open
+        && evidenceDialog.itemId !== null
+        && reviewEvidence?.reviewItem.category === "privacy_deletion",
+    }
+  );
   const { data: payments } = trpc.admin.listPayments.useQuery(
     { limit: 50, offset: 0 },
     { enabled: isAdmin }
@@ -1316,7 +1329,65 @@ export default function AdminPanel() {
                 ))}
               </div>
 
-              <div
+              {reviewEvidence.reviewItem.category === "privacy_deletion" && (
+                <div
+                  data-testid="privacy-erasure-preview"
+                  className="rounded-md border border-cyan-500/30 bg-cyan-500/5 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-cyan-100">Retention and erasure preview</div>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Read-only inventory. Previewing or resolving this review does not delete data.
+                      </p>
+                    </div>
+                    {privacyErasurePreview?.policyVersion && (
+                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                        Policy {privacyErasurePreview.policyVersion}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {privacyErasurePreviewLoading ? (
+                    <p className="mt-3 text-sm text-slate-400">Counting user-owned records...</p>
+                  ) : privacyErasurePreviewError ? (
+                    <p className="mt-3 text-sm text-red-200">{privacyErasurePreviewError.message}</p>
+                  ) : privacyErasurePreview?.available ? (
+                    <>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                        {[
+                          ["Erase", privacyErasurePreview.summary.erase],
+                          ["Scrub and retain", privacyErasurePreview.summary.scrubAndRetain],
+                          ["Legally retained", privacyErasurePreview.summary.retain],
+                          ["Private object fields", privacyErasurePreview.summary.privateObjects],
+                          ["Provider revocations", privacyErasurePreview.summary.providerRevocations],
+                        ].map(([label, value]) => (
+                          <div key={label} className="rounded border border-slate-800 bg-slate-950/60 p-2">
+                            <div className="text-xs text-slate-500">{label}</div>
+                            <div className="mt-1 font-semibold text-white">{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 max-h-52 overflow-y-auto rounded border border-slate-800">
+                        {privacyErasurePreview.items.map((item) => (
+                          <div key={item.table} className="grid gap-1 border-b border-slate-800 px-3 py-2 text-sm last:border-b-0 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                            <span className="font-mono text-xs text-slate-300">{item.table}</span>
+                            <StatusBadge status={item.action} />
+                            <span className="text-slate-400">{item.recordCount} record{item.recordCount === 1 ? "" : "s"}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs text-amber-200">
+                        Execution remains disabled until retention periods, provider revocation, object deletion, and transactional scrubbing are approved and verified.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-3 text-sm text-amber-200">{privacyErasurePreview?.reason}</p>
+                  )}
+                </div>
+              )}
+
+              {reviewEvidence.reviewItem.category !== "privacy_deletion" && <div
                 data-testid="admin-review-evidence-linked-application"
                 className="rounded-md border border-slate-800 bg-slate-950/50 p-3"
               >
@@ -1341,7 +1412,7 @@ export default function AdminPanel() {
                     The review item points to an application record that could not be loaded for the linked user.
                   </p>
                 )}
-              </div>
+              </div>}
 
               <div
                 data-testid="admin-review-evidence-decision"

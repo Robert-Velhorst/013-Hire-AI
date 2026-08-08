@@ -21,7 +21,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 155 files, 788 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 156 files, 793 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |

@@ -65,6 +65,10 @@ Creates or reuses one open high-priority operator review. The optional reason is
 
 Cancels the current user's open request and records the cancellation. It cannot target another user's review and fails when no open request exists.
 
+### `admin.previewPrivacyErasure`
+
+Admin-only query for a privacy-deletion review. Counts every direct and application-linked user-owned table under policy `2026-08-09.v1`, classifies records as `erase`, `scrub_and_retain`, or `retain`, and reports private-object and provider-revocation work. It fails closed in development-memory mode and always returns `executionAllowed: false`; it performs no deletion.
+
 ---
 
 ## Jobs Router

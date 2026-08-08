@@ -22,6 +22,7 @@ import {
 } from "../successFeeDates";
 import { eq, desc, and, lt, sql, isNotNull, or } from "drizzle-orm";
 import { getStripeClient } from "../stripeClient";
+import { buildPrivacyErasurePreview } from "../privacyRetention";
 
 type StripeSynchronizedFeeStatus = "not_required" | "paused" | "resumed" | "cancelled";
 
@@ -123,6 +124,19 @@ export const adminRouter = router({
           message,
         });
       }
+    }),
+
+  previewPrivacyErasure: adminProcedure
+    .input(z.object({ reviewItemId: z.number() }))
+    .query(async ({ input }) => {
+      const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
+      if (evidence.reviewItem.category !== "privacy_deletion" || evidence.reviewItem.entityType !== "user") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Erasure previews are available only for privacy deletion reviews.",
+        });
+      }
+      return await buildPrivacyErasurePreview(evidence.reviewItem.userId);
     }),
 
   resolveReviewItem: adminProcedure

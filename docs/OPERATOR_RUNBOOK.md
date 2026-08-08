@@ -29,9 +29,10 @@ Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` c
 
 1. Confirm the request belongs to the account holder and inspect the user audit trail.
 2. Identify active billing, employment verification, payment recovery, disputes, and legal holds.
-3. Record which data is eligible for erasure and the retention basis for everything that must remain.
-4. Treat resolving the review as a decision record only; it does not revoke providers, delete objects, or erase database records.
-5. Do not report completion until a separately approved executor produces itemized deletion and revocation evidence.
+3. Open Review Evidence and inspect the retention/erasure preview. It must use the current policy version, return an authoritative database count, and classify every table.
+4. Record which data is eligible for erasure and the approved retention period and legal basis for everything that must remain.
+5. Treat previewing or resolving the review as decision evidence only; neither action revokes providers, deletes objects, scrubs rows, or erases database records.
+6. Do not report completion until a separately approved executor produces itemized deletion, scrubbing, object-removal, and provider-revocation evidence.
 
 ## Deployment
 

@@ -9,6 +9,7 @@
 - Connector tokens are encrypted and kept outside public profile tables; social links are references, not credentials.
 - Application, payment, and provider records use audit events, ownership checks, and idempotency controls.
 - Account deletion requests are session-owned, idempotent while open, auditable, and routed to high-priority operator review. Admin review records `dataDeleted: false`; no review action silently erases regulated evidence.
+- Privacy policy `2026-08-09.v1` classifies every direct and application-linked user-owned table, known private-object key, and provider grant. A schema-source regression fails when a new direct user table is not classified; previews remain read-only and fail closed without persistent storage.
 - HTTP responses disable `X-Powered-By`, prohibit framing, constrain browser permissions, and add production CSP/HSTS.
 
 ## Required before production
@@ -17,4 +18,4 @@
 2. Configure malware scanning, database backup/restore, alerting, and provider-specific quota limits.
 3. Complete independent threat-model, dependency/license, legal, and privacy review.
 4. Run external penetration, browser accessibility, and deployment tests.
-5. Approve a retention schedule and implement a separately verified erasure executor for records and provider grants eligible for deletion.
+5. Approve periods and legal bases for the checked-in retention map, then implement a separately verified executor for database scrubbing, object deletion, and provider-grant revocation.
