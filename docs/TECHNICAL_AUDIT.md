@@ -38,6 +38,7 @@ Audit date: 2026-08-08
 | Autonomous follow-up safety loaded responses, schedules, and follow-up history separately for every candidate. | One run now batch-loads each ownership-scoped evidence type once, groups rows by application, and reuses them across safety and cooldown decisions. |
 | Every job-alert refresh loaded all active alerts, jobs, and platforms, even when no alert was due, and collected every matching job. | The scheduler now selects only due alerts through an indexed frequency/cutoff predicate, returns before job loading when idle, and uses first-match short-circuiting. |
 | A non-idle job-alert refresh still materialized the complete active canonical-job corpus and issued one update per matched alert. | Current jobs are projected and traversed in deterministic 250-row ID pages; matched alerts leave the working set immediately and receive one bulk timestamp update. |
+| CI verified only Ubuntu despite Windows 11 being a required standalone deployment target. | A dedicated Windows runner now installs from the lockfile, type-checks, parses both launchers, runs network and HAI contract tests, and builds the production bundle. |
 
 ## Material unresolved risks
 

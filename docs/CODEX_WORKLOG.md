@@ -74,4 +74,5 @@
 - Batched autonomous follow-up responses, interview schedules, and existing follow-ups into three ownership-scoped reads per run instead of up to three reads per candidate.
 - Added migration `0037` for indexed due-alert selection, avoided loading jobs/platforms when no alert is due, and stopped job matching at the first hit.
 - Replaced the due-alert scheduler's unbounded active-job materialization with 250-row canonical-job pages and one bulk timestamp update for matched alerts.
-- Passed TypeScript and the full regression suite: 159 files and 821 tests.
+- Added a dedicated `windows-latest` CI job for PowerShell launcher parsing, network/HAI contracts, TypeScript, dependency-lock integrity, and the production build.
+- Passed TypeScript and the full regression suite: 160 files and 823 tests.

@@ -54,3 +54,47 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  windows-runtime:
+    runs-on: windows-latest
+    env:
+      NODE_ENV: test
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      JWT_SECRET: ci-placeholder-secret
+      VITE_APP_ID: ci-placeholder-app
+      OAUTH_SERVER_URL: http://localhost:3000
+      OWNER_OPEN_ID: test-user-1
+      BUILT_IN_FORGE_API_KEY: ci-placeholder-forge-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Enable pnpm with Corepack
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.4.1 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Validate Windows launchers
+        shell: pwsh
+        run: ./scripts/check-windows-runtime.ps1
+
+      - name: Test Windows and HAI runtime contracts
+        run: pnpm exec vitest run server/_core/network.test.ts server/haiConnector.test.ts server/windowsCiWorkflow.test.ts
+
+      - name: Build
+        run: pnpm build
