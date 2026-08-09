@@ -68,6 +68,8 @@ Single-record standalone and mutation paths now reuse exact owned application an
 
 Application create, decision, and portal-preparation routes now check for an existing pending application through the unique user/canonical-job key. Existing duplicate-source and preparation-idempotency regressions pass without loading application history.
 
+Save and ignore decisions use that same exact pending application plus its scoped approval set when retiring prepared work, instead of reloading all applications and pending approvals. Closure, cancellation-attempt, and audit semantics remain covered.
+
 ## Release blockers and scope boundaries
 
 - A production database, migration run, backups, restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment.

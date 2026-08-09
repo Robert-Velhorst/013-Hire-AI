@@ -1351,11 +1351,10 @@ export const appRouter = router({
           getJobById,
           getCanonicalJobId,
           getPendingUserApplicationForJob,
-          getUserApplications,
           getUserProfile,
           getUserSkills,
           getWorkExperiences,
-          listUserApplicationApprovals,
+          listUserApplicationApprovalsForApplication,
           resolveApplicationApproval,
           updateApplicationStatus,
         } = await import("./db");
@@ -1592,15 +1591,16 @@ export const appRouter = router({
         }
 
         if (input.decision === "save" || input.decision === "ignore") {
-          const userApplications = await getUserApplications(ctx.user.id);
-          const preparedApplication = userApplications.find((application) =>
-            application.jobId === input.jobId && (application.status || "pending") === "pending"
-          );
+          const preparedApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
 
           if (preparedApplication) {
             applicationRecordId = preparedApplication.id;
-            const pendingApprovals = await listUserApplicationApprovals(ctx.user.id, "pending");
-            const submissionApproval = pendingApprovals.find((approval) =>
+            const applicationApprovals = await listUserApplicationApprovalsForApplication(
+              ctx.user.id,
+              preparedApplication.id
+            );
+            const submissionApproval = applicationApprovals.find((approval) =>
+              approval.status === "pending" &&
               approval.approvalType === "application_submission" &&
               (
                 approval.applicationId === preparedApplication.id ||
