@@ -3971,6 +3971,45 @@ export async function listUserApplicationApprovals(
     .orderBy(desc(applicationApprovals.createdAt));
 }
 
+export async function listUserApplicationApprovalsForApplications(
+  userId: number,
+  requestedApplicationIds: number[]
+) {
+  const applicationIds = Array.from(new Set(
+    requestedApplicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  )).slice(0, 250);
+  if (applicationIds.length === 0) return [] as ApplicationApproval[];
+
+  const requested = new Set(applicationIds);
+  const db = await getDb();
+  if (!db) {
+    return memoryApplicationApprovals
+      .filter((approval) =>
+        approval.userId === userId &&
+        ((approval.applicationId != null && requested.has(approval.applicationId)) ||
+          (approval.entityType === "application" && requested.has(approval.entityId)))
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, 2000) as ApplicationApproval[];
+  }
+
+  return await db
+    .select()
+    .from(applicationApprovals)
+    .where(and(
+      eq(applicationApprovals.userId, userId),
+      or(
+        inArray(applicationApprovals.applicationId, applicationIds),
+        and(
+          eq(applicationApprovals.entityType, "application"),
+          inArray(applicationApprovals.entityId, applicationIds)
+        )
+      )
+    ))
+    .orderBy(desc(applicationApprovals.createdAt), desc(applicationApprovals.id))
+    .limit(2000);
+}
+
 export async function getUserOperatingApplicationApprovals(
   userId: number,
   requestedApplicationIds: number[],

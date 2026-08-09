@@ -1859,11 +1859,11 @@ export const appRouter = router({
       }),
     listApprovals: protectedProcedure
       .input(z.object({
-        status: z.enum(["all", "pending", "approved", "rejected", "cancelled"]).optional().default("pending"),
-      }).optional())
+        applicationIds: z.array(z.number().int().positive()).max(250),
+      }))
       .query(async ({ ctx, input }) => {
-        const { listUserApplicationApprovals } = await import("./db");
-        return await listUserApplicationApprovals(ctx.user.id, input?.status ?? "pending");
+        const { listUserApplicationApprovalsForApplications } = await import("./db");
+        return await listUserApplicationApprovalsForApplications(ctx.user.id, input.applicationIds);
       }),
     resolveApproval: protectedProcedure
       .input(z.object({

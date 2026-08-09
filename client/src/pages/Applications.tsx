@@ -180,6 +180,16 @@ export default function Applications() {
     { applicationId: applicationDeepLink?.applicationId ?? 1 },
     { enabled: Boolean(applicationDeepLink) }
   );
+  const approvalApplicationIds = useMemo(
+    () => Array.from(new Set([
+      selectedApplication?.id,
+      deepLinkedApplication?.id,
+      ...applications.map((application) => application.id),
+    ].filter((applicationId): applicationId is number =>
+      typeof applicationId === "number" && Number.isInteger(applicationId) && applicationId > 0
+    ))).slice(0, 250),
+    [applications, deepLinkedApplication?.id, selectedApplication?.id]
+  );
   const {
     data: followUps,
     refetch: refetchFollowUps,
@@ -207,8 +217,8 @@ export default function Applications() {
     data: approvals,
     refetch: refetchApprovals,
   } = trpc.applications.listApprovals.useQuery(
-    { status: "all" },
-    { enabled: Boolean(user) }
+    { applicationIds: approvalApplicationIds },
+    { enabled: Boolean(user) && approvalApplicationIds.length > 0 }
   );
   const {
     data: operatingLedger,

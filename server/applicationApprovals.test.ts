@@ -24,6 +24,7 @@ import {
   getUserApplicationApprovalById,
   listUserApplicationApprovals,
   listUserApplicationApprovalsForApplication,
+  listUserApplicationApprovalsForApplications,
   resolveApplicationApproval,
   upsertUserProfile,
 } from "./db";
@@ -338,6 +339,82 @@ describe("application approval ledger", () => {
       .resolves.toMatchObject({ id: Number(linkedFollowUp.insertId), userId, applicationId });
     await expect(getUserApplicationApprovalById(otherUserId, Number(linkedFollowUp.insertId)))
       .resolves.toBeUndefined();
+  });
+
+  it("loads approvals only for the bounded requested application set", async () => {
+    const userId = 98025;
+    const otherUserId = 98026;
+    const requestedApplicationIds = [68125, 68127];
+    const requestedFollowUp = await createApplicationApproval({
+      userId,
+      applicationId: requestedApplicationIds[0],
+      entityType: "follow_up",
+      entityId: 78125,
+      approvalType: "follow_up_send",
+      status: "approved",
+      riskLevel: "medium",
+      requestedBy: "system",
+      title: "Requested follow-up",
+      description: "Approval linked through applicationId.",
+      decidedAt: new Date(),
+    });
+    const requestedLegacy = await createApplicationApproval({
+      userId,
+      entityType: "application",
+      entityId: requestedApplicationIds[1],
+      approvalType: "application_submission",
+      status: "cancelled",
+      riskLevel: "high",
+      requestedBy: "system",
+      title: "Requested legacy application",
+      description: "Approval linked through its application entity.",
+    });
+    await Promise.all([
+      createApplicationApproval({
+        userId,
+        applicationId: 68126,
+        entityType: "follow_up",
+        entityId: 78126,
+        approvalType: "follow_up_send",
+        status: "pending",
+        riskLevel: "medium",
+        requestedBy: "system",
+        title: "Unrequested application",
+        description: "Must not enter the scoped result.",
+      }),
+      createApplicationApproval({
+        userId: otherUserId,
+        applicationId: requestedApplicationIds[0],
+        entityType: "follow_up",
+        entityId: 78128,
+        approvalType: "follow_up_send",
+        status: "pending",
+        riskLevel: "medium",
+        requestedBy: "system",
+        title: "Other owner",
+        description: "Must not enter the scoped result.",
+      }),
+    ]);
+
+    const direct = await listUserApplicationApprovalsForApplications(
+      userId,
+      [...requestedApplicationIds, requestedApplicationIds[0]]
+    );
+    const caller = appRouter.createCaller(createContext(userId));
+    const throughApi = await caller.applications.listApprovals({
+      applicationIds: [...requestedApplicationIds, requestedApplicationIds[0]],
+    });
+    const expectedIds = new Set([
+      Number(requestedFollowUp.insertId),
+      Number(requestedLegacy.insertId),
+    ]);
+
+    expect(new Set(direct.map((approval) => approval.id))).toEqual(expectedIds);
+    expect(new Set(throughApi.map((approval) => approval.id))).toEqual(expectedIds);
+    expect(throughApi.every((approval) => approval.userId === userId)).toBe(true);
+    await expect(caller.applications.listApprovals({
+      applicationIds: Array.from({ length: 251 }, (_, index) => index + 1),
+    })).rejects.toThrow();
   });
 
   it("keeps a submission approval pending when core evidence blocks external handoff", async () => {
