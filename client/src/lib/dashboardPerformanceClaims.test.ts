@@ -12,4 +12,15 @@ describe("dashboard performance claims", () => {
     expect(dashboard).not.toContain("Strong interview invitation rate");
     expect(dashboard).not.toContain("Great progress!");
   });
+
+  it("loads the dashboard from one bounded operating snapshot", () => {
+    const dashboard = readFileSync(resolve(process.cwd(), "client", "src", "pages", "Dashboard.tsx"), "utf8");
+
+    expect(dashboard.match(/\.useQuery\(/g)).toHaveLength(1);
+    expect(dashboard).toContain("trpc.applications.getOperatingLedger.useQuery");
+    expect(dashboard).not.toContain("trpc.applications.list.useQuery");
+    expect(dashboard).not.toContain("trpc.automation.plan.useQuery");
+    expect(dashboard).not.toContain("trpc.jobs.list.useQuery");
+    expect(dashboard).not.toContain("trpc.successFees.getMyFees.useQuery");
+  });
 });

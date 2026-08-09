@@ -572,6 +572,7 @@ export function getConnectorReadinessQueue(input: {
 
 export interface OperatingLedgerOptions {
   includeAdminReviews?: boolean;
+  persistCampaign?: boolean;
 }
 
 export async function getUserOperatingLedger(userId: number, options: OperatingLedgerOptions = {}) {
@@ -598,7 +599,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getUserApplications(userId),
     getActiveJobs(250, 0),
     listUserApplicationApprovals(userId, "all"),
-    listAdminReviewItems("all"),
+    options.includeAdminReviews ? listAdminReviewItems("all") : Promise.resolve([]),
     getUserApplicationDecisions(userId),
     getUserSuccessFees(userId),
     getUserOfferAttributionReviews(userId),
@@ -774,30 +775,34 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     successFeeCompliance.status === "needs_attention" ? "Success-fee compliance needs attention" : "",
   ]);
 
-  const campaignWrite = await upsertApplicationCampaign({
-    userId,
-    status: campaignStatus,
-    title: campaignTitle(profile),
-    targetRoles: profile?.desiredJobTypes ?? null,
-    targetLocations: profile?.desiredLocations ?? null,
-    salaryMin: profile?.salaryExpectationMin ?? null,
-    salaryMax: profile?.salaryExpectationMax ?? null,
-    remoteOnly: preferences.remoteOnly === false ? 0 : 1,
-    automationMode: plan.mode,
-    dailyApplicationLimit: preferences.dailyApplicationLimit ?? 12,
-    minMatchScore: preferences.minMatchScore ?? 70,
-    readinessScore: readiness.score,
-    autoApplyEligible: readiness.autoApplyEligible ? 1 : 0,
-    blockers: JSON.stringify(blockers),
-    nextActions: JSON.stringify(nextActions),
-    lastPlanSummary: JSON.stringify(actionReadyPlanSummary),
-    lastSyncedAt: new Date(),
-  }, { preserveStatus: true });
-  const campaign = await getApplicationCampaign(userId);
+  let campaignWrite: Awaited<ReturnType<typeof upsertApplicationCampaign>> | null = null;
+  let campaign = existingCampaign;
+  if (options.persistCampaign !== false) {
+    campaignWrite = await upsertApplicationCampaign({
+      userId,
+      status: campaignStatus,
+      title: campaignTitle(profile),
+      targetRoles: profile?.desiredJobTypes ?? null,
+      targetLocations: profile?.desiredLocations ?? null,
+      salaryMin: profile?.salaryExpectationMin ?? null,
+      salaryMax: profile?.salaryExpectationMax ?? null,
+      remoteOnly: preferences.remoteOnly === false ? 0 : 1,
+      automationMode: plan.mode,
+      dailyApplicationLimit: preferences.dailyApplicationLimit ?? 12,
+      minMatchScore: preferences.minMatchScore ?? 70,
+      readinessScore: readiness.score,
+      autoApplyEligible: readiness.autoApplyEligible ? 1 : 0,
+      blockers: JSON.stringify(blockers),
+      nextActions: JSON.stringify(nextActions),
+      lastPlanSummary: JSON.stringify(actionReadyPlanSummary),
+      lastSyncedAt: new Date(),
+    }, { preserveStatus: true });
+    campaign = await getApplicationCampaign(userId);
+  }
 
   return {
     campaign: campaign ?? {
-      id: Number(campaignWrite.insertId),
+      id: campaignWrite ? Number(campaignWrite.insertId) : 0,
       userId,
       status: "active",
       title: campaignTitle(profile),
@@ -819,6 +824,28 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       updatedAt: new Date(),
     },
     readiness,
+    plan: {
+      mode: plan.mode,
+      summary: actionReadyPlanSummary,
+      nextActions: plan.nextActions,
+      policyWarnings: plan.policyWarnings,
+      evidenceGates,
+    },
+    applicationOverview: {
+      total: applications.length,
+      submitted: submittedApplications.length,
+      active: applicationStatusCount(applications, ["pending", "applied", "viewed", "interview"]),
+      interviewing: applicationStatusCount(applications, ["interview"]),
+      recent: applications.slice(0, 10).map((application) => ({
+        id: application.id,
+        status: application.status,
+        appliedDate: application.appliedDate,
+        lastActivity: application.lastActivity,
+        createdAt: application.createdAt,
+        coverLetter: application.coverLetter,
+        job: application.job,
+      })),
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,

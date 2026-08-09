@@ -20,6 +20,8 @@ Audit date: 2026-08-08
 | No local self-diagnostic command. | `pnpm doctor` checks runtime files, migration inventory, production-required configuration, and the malware-scanner gate without printing values. |
 | No container build definition. | `Dockerfile` and `.dockerignore` provide a production Node 22 build path. |
 | Production HTML embedded the Manus development runtime and a second React runtime. | Manus and JSX-location plugins now run only for the Vite development server. The production shell fell from 367,750 bytes to 487 bytes, and the build fails if development markers return or the shell exceeds 25 KiB. |
+| Dashboard opened seven overlapping API queries and its ledger GET wrote campaign state. | Dashboard data now comes from one bounded operating snapshot, recent applications are projected and capped at 10, non-admin requests skip the global admin-review read, and the protected GET does not persist campaign state. |
+| The embedded Vite server lost its root/plugins after production config became command-aware. | CLI and embedded startup now share `createViteConfig`; tests cover build/serve plugin boundaries and a live check verified `/src/main.tsx` is served as JavaScript. |
 
 ## Material unresolved risks
 

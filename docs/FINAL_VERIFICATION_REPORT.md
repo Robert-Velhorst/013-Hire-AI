@@ -17,13 +17,14 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 - Added an idempotent, user-owned account-deletion review with cancellation, high-priority admin routing, bounded user-visible status, and affected-user audit attribution. Operator resolution explicitly records that no data was deleted.
 - Added loopback-first Windows hosting, a health-gated native launcher, a reserved-domain ngrok launcher, and a read-only HAI A2A 1.0 aggregate-status connector.
 - Removed development instrumentation from production delivery and added a bundle gate; the generated HTML shell decreased from 367,750 bytes to 487 bytes.
+- Consolidated the dashboard from seven overlapping API queries to one bounded, read-only operating snapshot and repaired the embedded development Vite configuration.
 
 ## Automated evidence
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 158 files, 800 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 804 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -43,6 +44,8 @@ The HAI connector was enabled temporarily on loopback port 3040 with an ephemera
 ngrok 3.39.8 is installed and `ngrok config check` reports a valid local configuration. No reserved HTTPS hostname was supplied, so a public tunnel and public callback path were not claimed as accepted.
 
 The production frontend output rendered at desktop (1440 x 900) and mobile (390 x 844), and the landing-page workflow-scroll control moved to the intended section. The in-app browser connection timed out, so this check used the bundled Playwright runtime. Because Vite preview serves static output only, its console contained the expected failed API query; this is not evidence of a credential-complete production full-stack session.
+
+The dashboard now issues one operating-snapshot query instead of seven overlapping requests. Its snapshot exposes exact counts and at most 10 projected recent applications, ordinary users do not trigger global admin-review reads, and the protected GET does not create campaign state. A local development smoke verified the repaired embedded server returns `/src/main.tsx` as JavaScript; browser startup on the loaded host exceeded the acceptance window before a final dashboard screenshot could be captured.
 
 ## Release blockers and scope boundaries
 

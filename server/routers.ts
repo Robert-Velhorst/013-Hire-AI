@@ -1683,6 +1683,7 @@ export const appRouter = router({
       const { getUserOperatingLedger } = await import("./applicationCampaigns");
       return await getUserOperatingLedger(ctx.user.id, {
         includeAdminReviews: ctx.user.role === "admin",
+        persistCampaign: false,
       });
     }),
     listInboxResponseCandidates: protectedProcedure.query(async ({ ctx }) => {

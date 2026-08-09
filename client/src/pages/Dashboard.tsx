@@ -14,7 +14,7 @@ import { getApprovalEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import { getAutonomousPolicyControlAction } from "@/lib/autonomousPolicyControl";
 import { getCommandCenterSummary } from "@/lib/commandCenterSummary";
 import { formatDashboardActivityTarget } from "@/lib/dashboardActivity";
-import { getSuccessFeeComplianceAction, getSuccessFeeComplianceSummary } from "@/lib/successFeeCompliance";
+import { getSuccessFeeComplianceAction } from "@/lib/successFeeCompliance";
 import { getApplicationPerformanceSummary } from "@/lib/applicationPerformance";
 import { shouldShowNewUserDashboard, shouldShowProfileOnboarding } from "@/lib/profileOnboarding";
 import { formatJobSalary } from "@/lib/jobSalary";
@@ -52,23 +52,12 @@ export default function Dashboard() {
   const [showDashboardReviewQueue, setShowDashboardReviewQueue] = useState(false);
 
   // Fetch real data from API
-  const { data: applications, isLoading: appsLoading, refetch: refetchApplications } = trpc.applications.list.useQuery();
-  const { data: profileReadiness } = trpc.profile.getReadiness.useQuery(undefined, {
+  const { data: operatingLedger, isLoading: appsLoading, refetch: refetchOperatingLedger } = trpc.applications.getOperatingLedger.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: jobs, refetch: refetchJobs } = trpc.jobs.list.useQuery({ limit: 100 });
-  const { data: autonomousPlan, refetch: refetchAutonomousPlan } = trpc.automation.plan.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: operatingLedger, refetch: refetchOperatingLedger } = trpc.applications.getOperatingLedger.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: successFees = [] } = trpc.successFees.getMyFees.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: offerAttributionReviews = [] } = trpc.successFees.getOfferAttributionReviews.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const applications = operatingLedger?.applicationOverview.recent;
+  const profileReadiness = operatingLedger?.readiness;
+  const autonomousPlan = operatingLedger?.plan;
   const runAutonomousAgent = trpc.automation.run.useMutation({
     onSuccess: async (result) => {
       const counts = getAutonomousRunCounts(result);
@@ -78,12 +67,7 @@ export default function Dashboard() {
       } else {
         toast.success(message);
       }
-      await Promise.all([
-        refetchApplications(),
-        refetchJobs(),
-        refetchAutonomousPlan(),
-        refetchOperatingLedger(),
-      ]);
+      await refetchOperatingLedger();
     },
     onError: (error) => {
       toast.error(error.message || "Autonomous scan failed");
@@ -92,11 +76,7 @@ export default function Dashboard() {
   const resolveApproval = trpc.applications.resolveApproval.useMutation({
     onSuccess: async (_, variables) => {
       toast.success(`Approval ${variables.status}`);
-      await Promise.all([
-        refetchApplications(),
-        refetchAutonomousPlan(),
-        refetchOperatingLedger(),
-      ]);
+      await refetchOperatingLedger();
     },
     onError: (error) => {
       toast.error(error.message || "Unable to resolve approval");
@@ -116,21 +96,19 @@ export default function Dashboard() {
       toast.success(campaign.status === "paused"
         ? "Campaign paused. New autonomous work is stopped."
         : "Campaign resumed. Autonomous work can run under the current policy.");
-      await Promise.all([refetchAutonomousPlan(), refetchOperatingLedger()]);
+      await refetchOperatingLedger();
     },
     onError: (error) => toast.error(error.message || "Unable to update campaign status"),
   });
 
   // Calculate real stats
-  const totalApplications = applications?.length || 0;
-  const submittedApplications = applications?.filter(a => a.status !== "pending") || [];
-  const activeApplications = applications?.filter(a => 
-    a.status === 'applied' || a.status === 'viewed' || a.status === 'interview'
-  ).length || 0;
-  const interviewInvites = applications?.filter(a => a.status === 'interview').length || 0;
+  const totalApplications = operatingLedger?.applicationOverview.total || 0;
+  const submittedApplicationCount = operatingLedger?.applicationOverview.submitted || 0;
+  const activeApplications = operatingLedger?.applicationOverview.active || 0;
+  const interviewInvites = operatingLedger?.applicationOverview.interviewing || 0;
   
   const applicationPerformance = getApplicationPerformanceSummary({
-    confirmedSubmissions: operatingLedger?.metrics.submittedApplications ?? submittedApplications.length,
+    confirmedSubmissions: operatingLedger?.metrics.submittedApplications ?? submittedApplicationCount,
     recordedResponseSignals: operatingLedger?.metrics.employerResponses,
     recordedInterviews: operatingLedger?.metrics.interviews ?? interviewInvites,
   });
@@ -219,7 +197,22 @@ export default function Dashboard() {
   });
   const reviewQueueCount = getOperatingReviewQueueCounts(operatingLedger).total;
   const canReviewAdminItems = operatingLedger?.canReviewAdminItems === true;
-  const successFeeCompliance = getSuccessFeeComplianceSummary(successFees, offerAttributionReviews);
+  const successFeeCompliance = operatingLedger?.successFeeCompliance ?? {
+    status: "none" as const,
+    activeFees: 0,
+    suspendedFees: 0,
+    pausedFees: 0,
+    disputedFees: 0,
+    pendingVerification: 0,
+    overdueVerifications: 0,
+    dueSoonVerifications: 0,
+    pendingOfferAttributions: 0,
+    monthlyFeeCents: 0,
+    nextVerificationDue: null,
+    daysUntilNextVerification: null,
+    label: "No active fees",
+    nextAction: "Report a hire only after an offer is accepted.",
+  };
   const successFeeComplianceAction = getSuccessFeeComplianceAction(successFeeCompliance);
   const autonomousControl = getAutonomousPolicyControlAction({
     plan: autonomousPlan,
@@ -1461,7 +1454,7 @@ export default function Dashboard() {
                 {appsLoading ? "..." : activeApplications}
               </div>
               <p className="text-xs text-slate-400">
-                {totalApplications > 0 ? `${totalApplications} tracked, ${submittedApplications.length} submitted` : "No applications yet"}
+                {totalApplications > 0 ? `${totalApplications} tracked, ${submittedApplicationCount} submitted` : "No applications yet"}
               </p>
             </CardContent>
           </Card>
@@ -1494,17 +1487,17 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium text-slate-400">
-                  Jobs Available
+                  Roles Scanned
                 </CardTitle>
                 <Search className="h-5 w-5 text-blue-400" />
               </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-white mb-1">
-                {jobs?.length || 0}
+                {operatingLedger?.planSummary.scanned || 0}
               </div>
               <p className="text-xs text-slate-400">
-                From configured supported sources
+                Current bounded planning window
               </p>
             </CardContent>
           </Card>
@@ -1529,16 +1522,16 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-300">Applications Sent</span>
-                  <span className="text-cyan-400 font-semibold">{submittedApplications.length}</span>
+                  <span className="text-cyan-400 font-semibold">{submittedApplicationCount}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500" 
-                    style={{ width: `${Math.min(submittedApplications.length * 2, 100)}%` }}
+                    style={{ width: `${Math.min(submittedApplicationCount * 2, 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-slate-500">
-                  {submittedApplications.length === 0 ? "No confirmed submissions yet" : "Confirmed employer submissions"}
+                  {submittedApplicationCount === 0 ? "No confirmed submissions yet" : "Confirmed employer submissions"}
                 </p>
               </div>
 
@@ -1661,13 +1654,13 @@ export default function Dashboard() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="bg-slate-800/50 border border-slate-700 mb-4">
                 <TabsTrigger value="all" className="data-[state=active]:bg-slate-700">
-                  All ({applications?.length || 0})
+                  All ({totalApplications})
                 </TabsTrigger>
                 <TabsTrigger value="active" className="data-[state=active]:bg-blue-900/50">
-                  Active ({applications?.filter(a => ["pending", "applied", "viewed", "interview"].includes(a.status || "")).length || 0})
+                  Active ({activeApplications})
                 </TabsTrigger>
                 <TabsTrigger value="interviewing" className="data-[state=active]:bg-amber-900/50">
-                  Interviewing ({applications?.filter(a => a.status === "interview").length || 0})
+                  Interviewing ({interviewInvites})
                 </TabsTrigger>
               </TabsList>
 

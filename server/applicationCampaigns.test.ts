@@ -47,6 +47,28 @@ describe("application campaign operating ledger", () => {
     mocks.getActiveResume.mockResolvedValue(null);
   });
 
+  it("can return a bounded dashboard snapshot without creating campaign state", async () => {
+    const userId = 99000;
+    expect(await getApplicationCampaign(userId)).toBeFalsy();
+
+    const ledger = await getUserOperatingLedger(userId, { persistCampaign: false });
+
+    expect(ledger.campaign.id).toBe(0);
+    expect(ledger.applicationOverview).toMatchObject({
+      total: 0,
+      submitted: 0,
+      active: 0,
+      interviewing: 0,
+      recent: [],
+    });
+    expect(ledger.plan).toMatchObject({
+      mode: expect.any(String),
+      summary: expect.any(Object),
+      evidenceGates: expect.any(Array),
+    });
+    expect(await getApplicationCampaign(userId)).toBeFalsy();
+  });
+
   it("syncs durable campaign state from current operating queues", async () => {
     const userId = 99001;
     const oldDate = new Date(Date.now() - 8 * 86400000);
@@ -153,6 +175,9 @@ describe("application campaign operating ledger", () => {
     expect(ledger.campaign.title).toBe("Frontend Engineer campaign");
     expect(ledger.metrics.preparedApplications).toBe(1);
     expect(ledger.metrics.submittedApplications).toBe(2);
+    expect(ledger.applicationOverview.recent.length).toBeLessThanOrEqual(10);
+    expect(ledger.applicationOverview.recent[0]).not.toHaveProperty("customResume");
+    expect(ledger.applicationOverview.recent[0]).not.toHaveProperty("notes");
     expect(ledger.metrics.employerResponsesNeedingReply).toBe(1);
     expect(ledger.metrics.connectorReadiness).toBe(1);
     expect(ledger.metrics.evidenceGates).toBeGreaterThan(0);
