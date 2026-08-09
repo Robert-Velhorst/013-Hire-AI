@@ -21,7 +21,7 @@ import {
   unsaveJob,
   updateSavedJobNotes,
   addApplicationNote,
-  getApplicationNotes,
+  getRecentApplicationNotes,
   updateApplicationNote,
   deleteApplicationNote,
   scheduleInterview,
@@ -368,10 +368,16 @@ export const appRouter = router({
       .input(z.object({
         entityType: auditEntityType,
         entityId: z.number().int().positive(),
+        limit: boundedPageSize.optional().default(25),
       }))
       .query(async ({ ctx, input }) => {
-        const { getAuditEventsForEntity } = await import("./db");
-        return await getAuditEventsForEntity(ctx.user.id, input.entityType, input.entityId);
+        const { getRecentAuditEventsForEntity } = await import("./db");
+        return await getRecentAuditEventsForEntity(
+          ctx.user.id,
+          input.entityType,
+          input.entityId,
+          input.limit
+        );
       }),
   }),
 
@@ -1878,11 +1884,14 @@ export const appRouter = router({
         }
       }),
     getEmployerResponses: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({
+        applicationId: z.number().int().positive(),
+        limit: boundedPageSize.optional().default(25),
+      }))
       .query(async ({ ctx, input }) => {
-        const { getEmployerResponses } = await import("./db");
+        const { getRecentEmployerResponses } = await import("./db");
         try {
-          return await getEmployerResponses(input.applicationId, ctx.user.id);
+          return await getRecentEmployerResponses(input.applicationId, ctx.user.id, input.limit);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unable to load employer responses.";
           throw new TRPCError({
@@ -2447,9 +2456,12 @@ export const appRouter = router({
       }),
 
     getNotes: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({
+        applicationId: z.number().int().positive(),
+        limit: boundedPageSize.optional().default(25),
+      }))
       .query(async ({ ctx, input }) => {
-        return await getApplicationNotes(input.applicationId, ctx.user.id);
+        return await getRecentApplicationNotes(input.applicationId, ctx.user.id, input.limit);
       }),
 
     updateNote: protectedProcedure

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
 import { appRouter } from "./routers";
-import { createAuditEvent } from "./db";
+import { createAuditEvent, getAuditEventsForEntity } from "./db";
 
 function createContext(userId: number): TrpcContext {
   return {
@@ -63,5 +63,31 @@ describe("audit router", () => {
     expect(userEvents.some((event) => event.action === "other_user_approval_requested")).toBe(false);
     expect(entityEvents).toHaveLength(1);
     expect(entityEvents[0].action).toBe("approval_requested");
+  });
+
+  it("bounds interactive entity history while retaining the complete internal ledger", async () => {
+    const userId = 97103;
+    const entityId = 42002;
+    for (let index = 0; index < 12; index += 1) {
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId,
+        action: `bounded_event_${index}`,
+        actor: "system",
+        source: "auditRouter.test",
+        riskLevel: "low",
+      });
+    }
+
+    const caller = appRouter.createCaller(createContext(userId));
+    const visibleEvents = await caller.audit.getForEntity({
+      entityType: "application",
+      entityId,
+      limit: 5,
+    });
+
+    expect(visibleEvents).toHaveLength(5);
+    expect(await getAuditEventsForEntity(userId, "application", entityId)).toHaveLength(12);
   });
 });

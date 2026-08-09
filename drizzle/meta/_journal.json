@@ -463,6 +463,13 @@
       "when": 1786497960000,
       "tag": "0065_interview_history_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1786498020000,
+      "tag": "0066_bounded_entity_detail_indexes",
+      "breakpoints": true
     }
   ]
 }

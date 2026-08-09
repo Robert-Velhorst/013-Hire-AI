@@ -452,6 +452,13 @@ export const auditEvents = mysqlTable("audit_events", {
   index("audit_events_user_created_idx").on(table.userId, table.createdAt),
   index("audit_events_entity_idx").on(table.entityType, table.entityId),
   index("audit_events_entity_created_id_idx").on(table.entityType, table.entityId, table.createdAt, table.id),
+  index("audit_events_user_entity_created_id_idx").on(
+    table.userId,
+    table.entityType,
+    table.entityId,
+    table.createdAt,
+    table.id
+  ),
 ]);
 
 /**
@@ -823,7 +830,9 @@ export const applicationNotes = mysqlTable("application_notes", {
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("application_notes_application_created_id_idx").on(table.applicationId, table.createdAt, table.id),
+]);
 
 /**
  * Interview Schedules

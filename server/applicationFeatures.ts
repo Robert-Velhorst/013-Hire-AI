@@ -400,6 +400,23 @@ export async function getApplicationNotes(applicationId: number, userId: number)
     .orderBy(desc(applicationNotes.createdAt));
 }
 
+export async function getRecentApplicationNotes(
+  applicationId: number,
+  userId: number,
+  requestedLimit = 25
+) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) return [];
+  await assertUserOwnsApplication(applicationId, userId);
+  return await db
+    .select()
+    .from(applicationNotes)
+    .where(eq(applicationNotes.applicationId, applicationId))
+    .orderBy(desc(applicationNotes.createdAt), desc(applicationNotes.id))
+    .limit(limit);
+}
+
 export async function updateApplicationNote(noteId: number, content: string, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

@@ -3258,6 +3258,33 @@ export async function getEmployerResponses(applicationId: number, userId: number
     .orderBy(desc(employerResponses.receivedAt));
 }
 
+export async function getRecentEmployerResponses(
+  applicationId: number,
+  userId: number,
+  requestedLimit = 25
+) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    return (await getEmployerResponses(applicationId, userId)).slice(0, limit);
+  }
+  const application = await db
+    .select({ id: applications.id })
+    .from(applications)
+    .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
+    .limit(1);
+  if (!application[0]) throw new Error("Application not found.");
+  return await db
+    .select()
+    .from(employerResponses)
+    .where(and(
+      eq(employerResponses.applicationId, applicationId),
+      eq(employerResponses.userId, userId)
+    ))
+    .orderBy(desc(employerResponses.receivedAt), desc(employerResponses.id))
+    .limit(limit);
+}
+
 export async function getEmployerResponseReplyTarget(
   applicationId: number,
   userId: number,
@@ -4241,6 +4268,29 @@ export async function getAuditEventsForEntity(
       eq(auditEvents.entityId, entityId)
     ))
     .orderBy(desc(auditEvents.createdAt));
+}
+
+export async function getRecentAuditEventsForEntity(
+  userId: number,
+  entityType: AuditEvent["entityType"],
+  entityId: number,
+  requestedLimit = 25
+) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    return (await getAuditEventsForEntity(userId, entityType, entityId)).slice(0, limit);
+  }
+  return await db
+    .select()
+    .from(auditEvents)
+    .where(and(
+      eq(auditEvents.userId, userId),
+      eq(auditEvents.entityType, entityType),
+      eq(auditEvents.entityId, entityId)
+    ))
+    .orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
+    .limit(limit);
 }
 
 export async function getAuditEventsForUser(userId: number, limit = 50) {
