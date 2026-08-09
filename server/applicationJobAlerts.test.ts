@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   select: vi.fn(),
   update: vi.fn(),
+  delete: vi.fn(),
   limit: vi.fn(),
   set: vi.fn(),
   where: vi.fn(),
@@ -176,6 +177,54 @@ describe("job alert processing", () => {
 
     await deleteJobAlert(userId, id);
     expect(await getJobAlerts(userId)).toEqual([]);
+  });
+
+  it("does not confirm mutations for missing or differently owned local alerts", async () => {
+    const ownerId = 91238;
+    const otherUserId = 91239;
+    mocks.getDb.mockResolvedValue(null);
+    const { id } = await createJobAlert({
+      userId: ownerId,
+      name: "Owner-only alert",
+      keywords: "TypeScript",
+      frequency: "daily",
+    });
+
+    await expect(updateJobAlert(otherUserId, id, { name: "Changed" }))
+      .rejects.toThrow("Job alert not found.");
+    await expect(toggleJobAlert(otherUserId, id, false))
+      .rejects.toThrow("Job alert not found.");
+    await expect(deleteJobAlert(otherUserId, id))
+      .rejects.toThrow("Job alert not found.");
+    await expect(deleteJobAlert(ownerId, id)).resolves.toEqual({ success: true });
+    await expect(deleteJobAlert(ownerId, id)).rejects.toThrow("Job alert not found.");
+  });
+
+  it("distinguishes idempotent database updates from missing alert mutations", async () => {
+    const zeroAffected = [{ affectedRows: 0 }];
+    mocks.update.mockReturnValue({
+      set: () => ({ where: () => Promise.resolve(zeroAffected) }),
+    });
+    mocks.delete.mockReturnValue({
+      where: () => Promise.resolve(zeroAffected),
+    });
+    mocks.select
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 741 }]) }) }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+      });
+    mocks.getDb.mockResolvedValue({
+      select: mocks.select,
+      update: mocks.update,
+      delete: mocks.delete,
+    });
+
+    await expect(updateJobAlert(91, 741, { name: "Already current" }))
+      .resolves.toEqual({ success: true });
+    await expect(toggleJobAlert(91, 742, true)).rejects.toThrow("Job alert not found.");
+    await expect(deleteJobAlert(91, 743)).rejects.toThrow("Job alert not found.");
   });
 
   it("refreshes a local alert from current canonical sample jobs without external notification", async () => {

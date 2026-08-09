@@ -4671,16 +4671,24 @@ export async function updateJobAlert(
   const db = await getDb();
   if (!db) {
     const alert = memoryJobAlerts.find((item) => item.id === alertId && item.userId === userId);
-    if (!alert) return { success: true };
+    if (!alert) throw new Error("Job alert not found.");
     Object.assign(alert, Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined)));
     alert.updatedAt = new Date();
     return { success: true };
   }
 
-  await db
+  const result = await db
     .update(jobAlerts)
     .set(updates)
     .where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)));
+  if (Number(result[0].affectedRows) === 0) {
+    const existing = await db
+      .select({ id: jobAlerts.id })
+      .from(jobAlerts)
+      .where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)))
+      .limit(1);
+    if (!existing[0]) throw new Error("Job alert not found.");
+  }
 
   return { success: true };
 }
@@ -4689,17 +4697,24 @@ export async function toggleJobAlert(userId: number, alertId: number, isActive: 
   const db = await getDb();
   if (!db) {
     const alert = memoryJobAlerts.find((item) => item.id === alertId && item.userId === userId);
-    if (alert) {
-      alert.isActive = isActive ? 1 : 0;
-      alert.updatedAt = new Date();
-    }
+    if (!alert) throw new Error("Job alert not found.");
+    alert.isActive = isActive ? 1 : 0;
+    alert.updatedAt = new Date();
     return { success: true };
   }
 
-  await db
+  const result = await db
     .update(jobAlerts)
     .set({ isActive: isActive ? 1 : 0 })
     .where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)));
+  if (Number(result[0].affectedRows) === 0) {
+    const existing = await db
+      .select({ id: jobAlerts.id })
+      .from(jobAlerts)
+      .where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)))
+      .limit(1);
+    if (!existing[0]) throw new Error("Job alert not found.");
+  }
 
   return { success: true };
 }
@@ -4708,11 +4723,15 @@ export async function deleteJobAlert(userId: number, alertId: number) {
   const db = await getDb();
   if (!db) {
     const index = memoryJobAlerts.findIndex((item) => item.id === alertId && item.userId === userId);
-    if (index >= 0) memoryJobAlerts.splice(index, 1);
+    if (index < 0) throw new Error("Job alert not found.");
+    memoryJobAlerts.splice(index, 1);
     return { success: true };
   }
 
-  await db.delete(jobAlerts).where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)));
+  const result = await db
+    .delete(jobAlerts)
+    .where(and(eq(jobAlerts.id, alertId), eq(jobAlerts.userId, userId)));
+  if (Number(result[0].affectedRows) === 0) throw new Error("Job alert not found.");
   return { success: true };
 }
 
