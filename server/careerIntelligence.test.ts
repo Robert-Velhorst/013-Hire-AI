@@ -230,13 +230,13 @@ describe("Scraping API", () => {
       const indeed = result.platforms.find((platform) => platform.name === "Indeed");
 
       expect(result.coverage).toMatchObject({
-        registeredSources: 48,
-        configuredActiveSources: 48,
-        configuredDedicatedAdapterSources: 10,
+        registeredSources: 49,
+        configuredActiveSources: 49,
+        configuredDedicatedAdapterSources: 11,
         configuredGenericRssAdapterSources: 2,
         configuredGenericHtmlAdapterSources: 36,
         zeroListingSources: 0,
-        readySources: 5,
+        readySources: 6,
         unconfiguredSources: 0,
       });
       expect(indeed).toMatchObject({

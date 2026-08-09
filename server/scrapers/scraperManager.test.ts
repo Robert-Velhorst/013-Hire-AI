@@ -8,11 +8,13 @@ import {
 
 const mocks = vi.hoisted(() => ({
   ensureScraperPlatformCatalog: vi.fn(),
+  claimPlatformScrapeAttempt: vi.fn(),
   getDb: vi.fn(),
   recordPlatformScrapeOutcome: vi.fn(),
 }));
 
 vi.mock("../db", () => ({
+  claimPlatformScrapeAttempt: mocks.claimPlatformScrapeAttempt,
   ensureScraperPlatformCatalog: mocks.ensureScraperPlatformCatalog,
   getDb: mocks.getDb,
   recordPlatformScrapeOutcome: mocks.recordPlatformScrapeOutcome,
@@ -33,6 +35,7 @@ describe("scraper manager platform restrictions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.ensureScraperPlatformCatalog.mockResolvedValue({ created: 0, total: 8 });
+    mocks.claimPlatformScrapeAttempt.mockResolvedValue(true);
     mocks.getDb.mockResolvedValue(null);
     mocks.recordPlatformScrapeOutcome.mockResolvedValue(undefined);
   });
@@ -181,6 +184,52 @@ describe("scraper manager platform restrictions", () => {
     releaseFirst();
     await Promise.all([first, second]);
     expect(source.scrape).toHaveBeenCalledTimes(2);
+  });
+
+  it("enforces a provider polling interval across serialized runs", async () => {
+    const manager = new ScraperManager();
+    const source = createScraper(61);
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Jobicy", source);
+
+    const first = await manager.scrapePlatform("Jobicy");
+    const second = await manager.scrapePlatform("Jobicy");
+
+    expect(first.errors).toEqual([]);
+    expect(second).toMatchObject({ errors: [], skippedReason: "poll_interval" });
+    expect(source.scrape).toHaveBeenCalledOnce();
+    expect(mocks.recordPlatformScrapeOutcome).toHaveBeenCalledOnce();
+    expect(mocks.claimPlatformScrapeAttempt).toHaveBeenCalledOnce();
+  });
+
+  it("skips when another worker owns the provider request window", async () => {
+    mocks.claimPlatformScrapeAttempt.mockResolvedValue(false);
+    const manager = new ScraperManager();
+    const source = createScraper(61);
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Jobicy", source);
+
+    const result = await manager.scrapePlatform("Jobicy");
+    expect(result).toMatchObject({ errors: [], skippedReason: "poll_interval" });
+    expect(source.scrape).not.toHaveBeenCalled();
+    expect(mocks.recordPlatformScrapeOutcome).not.toHaveBeenCalled();
+  });
+
+  it("restores provider polling intervals from durable source state", async () => {
+    const recentAttempt = new Date();
+    const where = vi.fn().mockResolvedValue([{
+      id: 61,
+      name: "Jobicy",
+      isActive: 1,
+      lastScrapeAttemptedAt: recentAttempt,
+    }]);
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => ({ from: vi.fn(() => ({ where })) })) });
+    const manager = new ScraperManager();
+    await manager.initialize();
+
+    const result = await manager.scrapePlatform("Jobicy");
+    expect(result).toMatchObject({ errors: [], skippedReason: "poll_interval" });
+    expect(mocks.recordPlatformScrapeOutcome).not.toHaveBeenCalled();
   });
 
   it("reports the effective bounded execution policy", () => {

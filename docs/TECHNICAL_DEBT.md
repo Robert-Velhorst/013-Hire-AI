@@ -2,7 +2,7 @@
 
 | Item | Status | Owner / unblocker |
 | --- | --- | --- |
-| Verified job-source adapters beyond the ready public feeds | Partial | Platform policy, adapter implementation, acceptance tests, and operator approval. |
+| Verified job-source adapters beyond the six ready public feeds | Partial | Jobicy now has documented API, fixture, live-shape, and polling-policy evidence. Remaining platforms still require source-specific policy, adapter implementation, acceptance tests, and operator approval. |
 | Gmail, Drive, Dropbox, Outlook, LinkedIn, and GitHub live connections | Blocked | User-owned OAuth applications, approved redirect URIs/scopes, and credentials. |
 | Real employer submission automation | Intentionally not implemented | Platform permission, safe official API support, user approval, and deterministic confirmation evidence. |
 | Stripe, S3, Forge and cloud-scanner production verification | Blocked | Production credentials and test accounts. Native Windows Defender scanning is implemented and locally detected; the configured cloud scanner still requires live acceptance. |

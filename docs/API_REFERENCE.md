@@ -560,31 +560,39 @@ Generate interview preparation materials.
 ### `scraping.listScrapers`
 List all available scrapers.
 
-**Type:** Query (Public)
+**Type:** Query (Admin)
 
 **Returns:**
 ```typescript
-Array<{
-  name: string;
-  platformId: number;
-  isActive: boolean;
-  lastRun: Date | null;
-}>
+string[]
 ```
 
 ### `scraping.status`
 Get current scraping status.
 
-**Type:** Query (Protected)
+**Type:** Query (Admin)
 
 **Returns:**
 ```typescript
 {
-  isRunning: boolean;
-  currentPlatform: string | null;
-  progress: number;
-  lastRun: Date | null;
-  nextRun: Date | null;
+  initialized: true;
+  availableScrapers: number;
+  registeredScrapers: number;
+  supportedPlatforms: string[];
+  platforms: Array<{
+    id: number;
+    name: string;
+    readiness: "ready" | "unavailable";
+    freshness: "fresh" | "stale" | "awaiting_first_scan";
+  }>;
+  coverage: Record<string, unknown>;
+  scheduler: Record<string, unknown>;
+  executionPolicy: {
+    scrapeTimeoutMs: number;
+    maxConcurrentScrapes: number;
+    serializedPerPlatform: true;
+  };
+  message: string;
 }
 ```
 
@@ -593,14 +601,24 @@ Trigger scraping for all platforms.
 
 **Type:** Mutation (Admin)
 
+**Input:** Optional `{ keywords?: string; location?: string; limit?: number }`
+
 ### `scraping.scrapePlatform`
+
 Trigger scraping for a specific platform.
+
+Runs one configured and policy-approved source adapter. Jobicy uses its documented public remote-jobs API and enforces a durable one-hour minimum polling interval. A request inside that interval returns `skippedReason: "poll_interval"`, no jobs, and no error; it does not overwrite the latest persisted source result.
 
 **Type:** Mutation (Admin)
 
 **Input:**
 ```typescript
-{ platformId: number }
+{
+  platform: string;
+  keywords?: string;
+  location?: string;
+  limit?: number;
+}
 ```
 
 ---

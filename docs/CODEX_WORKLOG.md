@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Verified Jobicy discovery
+
+- Added a dedicated adapter for Jobicy's documented public remote-jobs API and verified the current live response shape once.
+- Added safe normalization for remote geography, employment type, publication dates, links, industries, and annual salary fields.
+- Enforced Jobicy's hourly polling limit across scheduler cycles and process restarts without misreporting cooldown skips as source failures.
+
 ## 2026-08-09 - Workspace governance
 
 - Added durable workspaces, role-scoped memberships, hashed expiring invitations, ownership transfer, safe archival, bounded queries, and audited mutations.

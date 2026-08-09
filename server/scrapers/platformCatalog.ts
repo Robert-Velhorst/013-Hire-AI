@@ -12,6 +12,7 @@ export interface PlatformDiscoveryPolicy {
   sourceType: "job_board" | "aggregator" | "marketplace";
   reason: string;
   aliases?: readonly string[];
+  minimumPollIntervalMs?: number;
 }
 
 /**
@@ -27,6 +28,7 @@ export const scraperPlatformCatalog = [
   { name: "LinkedIn Jobs", url: "https://www.linkedin.com/jobs/", tier: "tier1", category: "General" },
   { name: "Remote.co", url: "https://remote.co/", tier: "tier1", category: "General" },
   { name: "Remotive", url: "https://remotive.com/", tier: "tier2", category: "General" },
+  { name: "Jobicy", url: "https://jobicy.com/jobs", tier: "tier2", category: "General" },
   { name: "JustRemote", url: "https://justremote.co/", tier: "tier2", category: "General" },
   { name: "Jobspresso", url: "https://jobspresso.co/", tier: "tier2", category: "General" },
   { name: "Working Nomads", url: "https://www.workingnomads.com/jobs", tier: "tier2", category: "General" },
@@ -93,6 +95,12 @@ const automatedFeedPolicies: Record<string, PlatformDiscoveryPolicy> = {
     sourceType: "aggregator",
     reason: "Public job API adapter.",
   },
+  Jobicy: {
+    mode: "automated",
+    sourceType: "aggregator",
+    reason: "Documented public remote-jobs API; provider terms limit polling to no more than hourly.",
+    minimumPollIntervalMs: 60 * 60 * 1000,
+  },
   "We Work Remotely": {
     mode: "automated",
     sourceType: "job_board",
@@ -109,6 +117,10 @@ const automatedFeedPolicies: Record<string, PlatformDiscoveryPolicy> = {
     reason: "Public RSS feed adapter.",
   },
 };
+
+export function getPlatformMinimumPollIntervalMs(platformName: string) {
+  return getPlatformDiscoveryPolicy(platformName).minimumPollIntervalMs ?? 0;
+}
 
 const explicitPolicies: Record<string, PlatformDiscoveryPolicy> = {
   "Stack Overflow Jobs": {

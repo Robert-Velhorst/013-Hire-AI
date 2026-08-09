@@ -18,6 +18,7 @@ export interface ScrapeResult {
   jobs: Partial<Job>[];
   errors: string[];
   scrapedAt: Date;
+  skippedReason?: "poll_interval";
 }
 
 export interface ScrapeRequestOptions {

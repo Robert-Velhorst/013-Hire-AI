@@ -15,6 +15,7 @@ import { JustRemoteScraper } from "./justremoteScraper";
 import { JobspressoScraper } from "./jobspressoScraper";
 import { WorkingNomadsScraper } from "./workingnomadsScraper";
 import { GenericScraper } from "./genericScraper";
+import { JobicyScraper } from "./jobicyScraper";
 
 // Export all scrapers
 export {
@@ -30,6 +31,7 @@ export {
   JobspressoScraper,
   WorkingNomadsScraper,
   GenericScraper,
+  JobicyScraper,
 };
 
 // Platform to scraper mapping
@@ -53,6 +55,7 @@ const dedicatedAdapterPlatforms = new Set([
   "JustRemote",
   "Jobspresso",
   "Working Nomads",
+  "Jobicy",
 ]);
 
 const genericRssAdapterPlatforms = new Set(["NoDesk", "ProBlogger"]);
@@ -90,6 +93,7 @@ export const scraperRegistry: Record<string, ScraperFactory> = {
 
   // Tier 2 - Popular Remote Job Boards
   "Remotive": (id) => new RemotiveScraper(id),
+  "Jobicy": (id) => new JobicyScraper(id),
   "JustRemote": (id) => new JustRemoteScraper(id),
   "Jobspresso": (id) => new JobspressoScraper(id),
   "Working Nomads": (id) => new WorkingNomadsScraper(id),

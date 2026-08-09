@@ -63,6 +63,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Enforced sensitive-upload size, MIME, and signature validation; production uploads now require a configured malware scanner and retain only private storage references.
 - Added an audited, user-scoped English/Dutch language preference and localized shared navigation/account controls.
 - Added durable workspace governance with hashed one-time invitations, least-privilege role controls, ownership transfer, audit evidence, retention-policy coverage, and a Team screen.
+- Added a verified Jobicy public-API adapter with fixture contracts, live schema evidence, remote location and keyword handling, annual-salary safeguards, and restart-safe hourly polling enforcement.
 
 ## Still required before production
 

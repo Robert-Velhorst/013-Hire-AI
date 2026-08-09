@@ -1,12 +1,12 @@
 import type { BaseScraper, ScrapeRequestOptions, ScrapeResult } from "./baseScraper";
 import { getScraperForPlatform, getSupportedPlatforms, hasScraper } from "./index";
-import { ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
+import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
 import { jobDuplicates, jobs, jobPlatforms } from "../../drizzle/schema";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { samplePlatforms } from "../sampleData";
 import { findBestJobDuplicateCandidate } from "../jobDeduplication";
 import { isJobListingCurrent } from "../../shared/jobListingFreshness";
-import { getPlatformDiscoveryPolicy, isAutomatedDiscoveryPlatform, isCatalogedPlatform } from "./platformCatalog";
+import { getPlatformDiscoveryPolicy, getPlatformMinimumPollIntervalMs, isAutomatedDiscoveryPlatform, isCatalogedPlatform } from "./platformCatalog";
 import { ENV } from "../_core/env";
 
 export interface ScrapeOptions {
@@ -86,6 +86,7 @@ export class ScraperManager {
   private readonly scrapeTimeoutMs: number;
   private readonly maxConcurrentScrapes: number;
   private readonly platformRunTails = new Map<string, Promise<void>>();
+  private readonly platformLastAttemptedAt = new Map<string, Date>();
 
   constructor(options: ScraperManagerOptions = {}) {
     this.scrapeTimeoutMs = Math.min(300_000, Math.max(1, Math.floor(options.scrapeTimeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS)));
@@ -107,6 +108,9 @@ export class ScraperManager {
     // Initialize scrapers for platforms we have implemented
     for (const platform of platforms) {
       this.platformIds.set(platform.name, platform.id);
+      if (platform.lastScrapeAttemptedAt instanceof Date) {
+        this.platformLastAttemptedAt.set(platform.name, platform.lastScrapeAttemptedAt);
+      }
       if (isCatalogedPlatform(platform.name) && !isAutomatedDiscoveryPlatform(platform.name)) {
         // The catalog deliberately contains account-only, marketplace, alias,
         // and discontinued sources. Tracking them is useful; unattended
@@ -186,6 +190,26 @@ export class ScraperManager {
     const currentRun = new Promise<void>((resolve) => { releaseRun = resolve; });
     this.platformRunTails.set(platformName, currentRun);
     await previousRun;
+
+    const minimumPollIntervalMs = getPlatformMinimumPollIntervalMs(platformName);
+    const previousAttempt = this.platformLastAttemptedAt.get(platformName);
+    if (previousAttempt && Date.now() - previousAttempt.getTime() < minimumPollIntervalMs) {
+      releaseRun();
+      if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+      return { jobs: [], errors: [], scrapedAt: new Date(), skippedReason: "poll_interval" };
+    }
+    if (minimumPollIntervalMs > 0) {
+      const claimed = await claimPlatformScrapeAttempt(
+        scraper.getPlatformId(),
+        new Date(Date.now() - minimumPollIntervalMs)
+      );
+      if (!claimed) {
+        releaseRun();
+        if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+        return { jobs: [], errors: [], scrapedAt: new Date(), skippedReason: "poll_interval" };
+      }
+    }
+    this.platformLastAttemptedAt.set(platformName, new Date());
 
     const controller = new AbortController();
     let timeout: NodeJS.Timeout | undefined;

@@ -417,6 +417,23 @@ export type ScrapeOutcome = {
   errors: string[];
 };
 
+/** Atomically reserve a provider request window across workers and restarts. */
+export async function claimPlatformScrapeAttempt(platformId: number, eligibleBefore: Date) {
+  const db = await getDb();
+  if (!db) return true;
+  const result = await db.update(jobPlatforms)
+    .set({ lastScrapeAttemptedAt: new Date() })
+    .where(and(
+      eq(jobPlatforms.id, platformId),
+      or(
+        isNull(jobPlatforms.lastScrapeAttemptedAt),
+        lte(jobPlatforms.lastScrapeAttemptedAt, eligibleBefore)
+      )
+    ));
+  const packet = Array.isArray(result) ? result[0] : result;
+  return Number((packet as { affectedRows?: number } | undefined)?.affectedRows ?? 0) === 1;
+}
+
 function boundedScrapeError(errors: string[]) {
   return errors
     .map((error) => error.replace(/\s+/g, " ").trim())
