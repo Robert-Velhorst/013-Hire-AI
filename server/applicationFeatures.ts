@@ -1803,17 +1803,41 @@ function buildFallbackInterviewPreparation(job: {
 }
 
 export async function getOwnedUpcomingInterviewContext(applicationId: number, userId: number) {
-  const application = await getInterviewApplication(applicationId, userId);
   const now = new Date();
-  const interview = (await getInterviewSchedules(applicationId, userId)).find((candidate) =>
-    ["scheduled", "rescheduled"].includes(candidate.status || "scheduled") &&
-    candidate.scheduledAt >= now
-  );
-  if (!interview) {
-    throw new Error("Interview must be scheduled before interview preparation can be used.");
+  const db = await getDb();
+  if (!db) {
+    const application = await getInterviewApplication(applicationId, userId);
+    const interview = memoryInterviewSchedules
+      .filter((candidate) =>
+        candidate.applicationId === applicationId &&
+        ["scheduled", "rescheduled"].includes(candidate.status || "scheduled") &&
+        candidate.scheduledAt >= now
+      )
+      .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
+    if (!interview) {
+      throw new Error("Interview must be scheduled before interview preparation can be used.");
+    }
+    return { application, interview };
   }
 
-  return { application, interview };
+  const rows = await db
+    .select({ application: applications, interview: interviewSchedules })
+    .from(applications)
+    .innerJoin(interviewSchedules, eq(interviewSchedules.applicationId, applications.id))
+    .where(and(
+      eq(applications.id, applicationId),
+      eq(applications.userId, userId),
+      inArray(interviewSchedules.status, ["scheduled", "rescheduled"]),
+      sql`${interviewSchedules.scheduledAt} >= ${now}`
+    ))
+    .orderBy(asc(interviewSchedules.scheduledAt))
+    .limit(1);
+  if (rows.length === 0) {
+    const application = await getUserApplicationById(userId, applicationId);
+    if (!application) throw new Error("Application not found.");
+    throw new Error("Interview must be scheduled before interview preparation can be used.");
+  }
+  return rows[0];
 }
 
 export async function generateInterviewPreparationForApplication(applicationId: number, userId: number) {

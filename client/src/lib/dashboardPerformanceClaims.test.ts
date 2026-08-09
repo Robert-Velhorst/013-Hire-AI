@@ -106,4 +106,17 @@ describe("dashboard performance claims", () => {
     expect(replyTarget).toContain("getEmployerResponseReplyTarget(applicationId, userId, responseId)");
     expect(replyTarget).not.toContain("getEmployerResponses(");
   });
+
+  it("loads interview preparation context through one bounded owned query", () => {
+    const features = readFileSync(resolve(process.cwd(), "server", "applicationFeatures.ts"), "utf8");
+    const interviewContext = features.slice(
+      features.indexOf("export async function getOwnedUpcomingInterviewContext"),
+      features.indexOf("export async function generateInterviewPreparationForApplication")
+    );
+
+    expect(interviewContext).toContain(".innerJoin(interviewSchedules");
+    expect(interviewContext).toContain("eq(applications.userId, userId)");
+    expect(interviewContext).toContain(".limit(1)");
+    expect(interviewContext).not.toContain("getInterviewSchedules(");
+  });
 });

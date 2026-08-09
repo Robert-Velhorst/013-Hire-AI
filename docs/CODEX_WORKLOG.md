@@ -70,4 +70,5 @@
 - Replaced three preparation-route application-history scans with an exact pending `(user, canonical job)` lookup backed by the existing unique key.
 - Reused the exact pending application and application-scoped approval lookups when save/ignore decisions close prepared work.
 - Replaced employer-reply preparation's full response-history load with one ownership-scoped exact/latest-replyable lookup.
-- Passed TypeScript and the full regression suite: 159 files and 816 tests.
+- Replaced interview-preparation context's repeated ownership and full schedule reads with one owned, future-status, ordered, limited query.
+- Passed TypeScript and the full regression suite: 159 files and 817 tests.

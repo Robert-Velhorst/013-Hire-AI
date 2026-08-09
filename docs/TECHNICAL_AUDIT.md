@@ -34,6 +34,7 @@ Audit date: 2026-08-08
 | Application create, decision, and portal-preparation routes loaded all user applications to find one existing pending job record. | Each route canonicalizes the job and queries the existing unique `(user_id, job_id)` record with pending status directly, preserving duplicate-source idempotency without a history scan. |
 | Save/ignore decisions reloaded all applications and all pending approvals to close one prepared review item. | The close branch now reuses the exact pending user/job lookup and loads approvals only for that owned application before cancelling its submission gate. |
 | Employer reply preparation loaded every response for an application to select one target. | Reply preparation now retrieves either the explicit owned response or the newest owned replyable response with one bounded query; cross-user targets are rejected. |
+| Interview preparation verified ownership and then loaded every schedule to select one future interview. | The successful path now joins the owned application to future scheduled/rescheduled interviews, orders by start time, and returns one row. Error semantics remain explicit. |
 
 ## Material unresolved risks
 
