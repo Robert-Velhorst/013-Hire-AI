@@ -1040,15 +1040,15 @@ export const appRouter = router({
     }),
     addWorkExperience: protectedProcedure
       .input(z.object({
-        jobTitle: z.string(),
-        company: z.string(),
-        location: z.string().optional(),
+        jobTitle: z.string().trim().min(1).max(255),
+        company: z.string().trim().min(1).max(255),
+        location: z.string().trim().max(255).optional(),
         startDate: z.string().transform((s) => new Date(s)),
         endDate: z.string().transform((s) => new Date(s)).optional(),
-        isCurrent: z.number().optional(),
-        description: z.string().optional(),
-        achievements: z.string().optional(),
-        skills: z.string().optional(),
+        isCurrent: z.number().int().min(0).max(1).optional(),
+        description: z.string().trim().max(5000).optional(),
+        achievements: z.string().trim().max(5000).optional(),
+        skills: z.string().trim().max(2000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { createWorkExperience } = await import("./db");
@@ -1062,15 +1062,15 @@ export const appRouter = router({
     updateWorkExperience: protectedProcedure
       .input(z.object({
         id: z.number(),
-        jobTitle: z.string().optional(),
-        company: z.string().optional(),
-        location: z.string().optional(),
+        jobTitle: z.string().trim().min(1).max(255).optional(),
+        company: z.string().trim().min(1).max(255).optional(),
+        location: z.string().trim().max(255).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
-        isCurrent: z.number().optional(),
-        description: z.string().optional(),
-        achievements: z.string().optional(),
-        skills: z.string().optional(),
+        isCurrent: z.number().int().min(0).max(1).optional(),
+        description: z.string().trim().max(5000).optional(),
+        achievements: z.string().trim().max(5000).optional(),
+        skills: z.string().trim().max(2000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
@@ -1101,15 +1101,15 @@ export const appRouter = router({
     }),
     addEducation: protectedProcedure
       .input(z.object({
-        degree: z.string(),
-        fieldOfStudy: z.string().optional(),
-        institution: z.string(),
-        location: z.string().optional(),
+        degree: z.string().trim().min(1).max(255),
+        fieldOfStudy: z.string().trim().max(255).optional(),
+        institution: z.string().trim().min(1).max(255),
+        location: z.string().trim().max(255).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
-        isCurrent: z.number().optional(),
-        gpa: z.string().optional(),
-        achievements: z.string().optional(),
+        isCurrent: z.number().int().min(0).max(1).optional(),
+        gpa: z.string().trim().max(20).optional(),
+        achievements: z.string().trim().max(5000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { createEducationEntry } = await import("./db");
@@ -1118,15 +1118,15 @@ export const appRouter = router({
     updateEducation: protectedProcedure
       .input(z.object({
         id: z.number(),
-        degree: z.string().optional(),
-        fieldOfStudy: z.string().optional(),
-        institution: z.string().optional(),
-        location: z.string().optional(),
+        degree: z.string().trim().min(1).max(255).optional(),
+        fieldOfStudy: z.string().trim().max(255).optional(),
+        institution: z.string().trim().min(1).max(255).optional(),
+        location: z.string().trim().max(255).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
-        isCurrent: z.number().optional(),
-        gpa: z.string().optional(),
-        achievements: z.string().optional(),
+        isCurrent: z.number().int().min(0).max(1).optional(),
+        gpa: z.string().trim().max(20).optional(),
+        achievements: z.string().trim().max(5000).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
@@ -1147,10 +1147,10 @@ export const appRouter = router({
     }),
     addSkill: protectedProcedure
       .input(z.object({
-        skillName: z.string(),
-        category: z.string().optional(),
+        skillName: z.string().trim().min(1).max(100),
+        category: z.string().trim().max(100).optional(),
         proficiency: z.enum(["beginner", "intermediate", "advanced", "expert"]).optional(),
-        yearsOfExperience: z.number().optional(),
+        yearsOfExperience: z.number().int().min(0).max(80).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { createUserSkill } = await import("./db");
@@ -1164,10 +1164,10 @@ export const appRouter = router({
     updateSkill: protectedProcedure
       .input(z.object({
         id: z.number(),
-        skillName: z.string().optional(),
-        category: z.string().optional(),
+        skillName: z.string().trim().min(1).max(100).optional(),
+        category: z.string().trim().max(100).optional(),
         proficiency: z.enum(["beginner", "intermediate", "advanced", "expert"]).optional(),
-        yearsOfExperience: z.number().optional(),
+        yearsOfExperience: z.number().int().min(0).max(80).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
@@ -1198,10 +1198,10 @@ export const appRouter = router({
     }),
     addProject: protectedProcedure
       .input(z.object({
-        title: z.string(),
-        description: z.string().optional(),
-        url: z.string().optional(),
-        technologies: z.string().optional(),
+        title: z.string().trim().min(1).max(255),
+        description: z.string().trim().max(5000).optional(),
+        url: z.string().trim().max(500).optional(),
+        technologies: z.string().trim().max(2000).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
       }))
@@ -1212,10 +1212,10 @@ export const appRouter = router({
     updateProject: protectedProcedure
       .input(z.object({
         id: z.number(),
-        title: z.string().optional(),
-        description: z.string().optional(),
-        url: z.string().optional(),
-        technologies: z.string().optional(),
+        title: z.string().trim().min(1).max(255).optional(),
+        description: z.string().trim().max(5000).optional(),
+        url: z.string().trim().max(500).optional(),
+        technologies: z.string().trim().max(2000).optional(),
         startDate: z.string().transform((s) => new Date(s)).optional(),
         endDate: z.string().transform((s) => new Date(s)).optional(),
       }))

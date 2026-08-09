@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAuditEventsForUser: vi.fn(),
-  getEducationEntries: vi.fn(),
+  getAllEducationEntriesForPrivacyExport: vi.fn(),
+  getAllUserProjectsForPrivacyExport: vi.fn(),
+  getAllUserSkillsForPrivacyExport: vi.fn(),
+  getAllWorkExperiencesForPrivacyExport: vi.fn(),
   getUserApplications: vi.fn(),
   getUserProfile: vi.fn(),
-  getUserProjects: vi.fn(),
-  getUserSkills: vi.fn(),
-  getWorkExperiences: vi.fn(),
   listPublicSocialProfiles: vi.fn(),
   listUserConnectorAccounts: vi.fn(),
   getJobAlerts: vi.fn(),
@@ -17,12 +17,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./db", () => ({
   getAuditEventsForUser: mocks.getAuditEventsForUser,
-  getEducationEntries: mocks.getEducationEntries,
+  getAllEducationEntriesForPrivacyExport: mocks.getAllEducationEntriesForPrivacyExport,
+  getAllUserProjectsForPrivacyExport: mocks.getAllUserProjectsForPrivacyExport,
+  getAllUserSkillsForPrivacyExport: mocks.getAllUserSkillsForPrivacyExport,
+  getAllWorkExperiencesForPrivacyExport: mocks.getAllWorkExperiencesForPrivacyExport,
   getUserApplications: mocks.getUserApplications,
   getUserProfile: mocks.getUserProfile,
-  getUserProjects: mocks.getUserProjects,
-  getUserSkills: mocks.getUserSkills,
-  getWorkExperiences: mocks.getWorkExperiences,
   listPublicSocialProfiles: mocks.listPublicSocialProfiles,
   listUserConnectorAccounts: mocks.listUserConnectorAccounts,
 }));

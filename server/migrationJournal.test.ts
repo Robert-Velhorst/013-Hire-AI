@@ -303,6 +303,23 @@ describe("Drizzle migration journal", () => {
     }
   });
 
+  it("keeps profile-evidence operating indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0062_profile_evidence_limits.sql"),
+      "utf8"
+    );
+    for (const indexName of [
+      "work_experiences_user_start_id_idx",
+      "education_entries_user_end_id_idx",
+      "user_skills_user_sort_id_idx",
+      "user_projects_user_sort_id_idx",
+    ]) {
+      expect(schema).toContain(`index("${indexName}")`);
+      expect(migration).toContain(`CREATE INDEX \`${indexName}\``);
+    }
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

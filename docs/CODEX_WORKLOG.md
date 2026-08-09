@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Transactional profile-evidence ceilings
+
+- Added transactionally enforced per-user limits for work history, education, skills, and projects, serializing concurrent inserts on the owning user record.
+- Bounded every operating, matching, readiness, and Profile read to the same complete collection ceilings while retaining separate complete privacy-export reads for legacy overflow.
+- Added stable limit-aligned indexes, strict field-size validation, visible capacity counters, and disabled add controls at capacity.
+
 ## 2026-08-09 - Bounded admin operating windows
 
 - Capped global review, overdue-verification, and pending-verification reads at 100 ordered records and retained existing bounded fee/payment windows.

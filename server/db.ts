@@ -72,6 +72,7 @@ import {
 } from "@shared/jobSearchFilters";
 import { isOfferEligibleApplicationStatus } from "@shared/offerEligibility";
 import { getListingObservationCutoff, isJobListingCurrent } from "@shared/jobListingFreshness";
+import { PROFILE_EVIDENCE_LIMITS, profileEvidenceLimitMessage } from "@shared/profileEvidenceLimits";
 import {
   getMissingScraperPlatformCatalog,
   getPlatformDiscoveryPolicy,
@@ -5449,13 +5450,30 @@ export async function getWorkExperiences(userId: number) {
   if (!db) return [];
   return await db.select().from(workExperiences)
     .where(eq(workExperiences.userId, userId))
-    .orderBy(desc(workExperiences.startDate));
+    .orderBy(desc(workExperiences.startDate), desc(workExperiences.id))
+    .limit(PROFILE_EVIDENCE_LIMITS.workExperiences);
 }
 
 export async function createWorkExperience(experience: InsertWorkExperience) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(workExperiences).values(experience);
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT ${users.id} FROM ${users} WHERE ${users.id} = ${experience.userId} FOR UPDATE`);
+    const [row] = await tx.select({ count: sql<number>`COUNT(*)` }).from(workExperiences)
+      .where(eq(workExperiences.userId, experience.userId));
+    if (Number(row?.count ?? 0) >= PROFILE_EVIDENCE_LIMITS.workExperiences) {
+      throw new Error(profileEvidenceLimitMessage("work experiences", PROFILE_EVIDENCE_LIMITS.workExperiences));
+    }
+    return await tx.insert(workExperiences).values(experience);
+  });
+}
+
+export async function getAllWorkExperiencesForPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(workExperiences)
+    .where(eq(workExperiences.userId, userId))
+    .orderBy(desc(workExperiences.startDate), desc(workExperiences.id));
 }
 
 export async function updateWorkExperience(id: number, userId: number, experience: Partial<InsertWorkExperience>) {
@@ -5478,13 +5496,30 @@ export async function getEducationEntries(userId: number) {
   if (!db) return [];
   return await db.select().from(educationEntries)
     .where(eq(educationEntries.userId, userId))
-    .orderBy(desc(educationEntries.endDate));
+    .orderBy(desc(educationEntries.endDate), desc(educationEntries.id))
+    .limit(PROFILE_EVIDENCE_LIMITS.educationEntries);
 }
 
 export async function createEducationEntry(education: InsertEducationEntry) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(educationEntries).values(education);
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT ${users.id} FROM ${users} WHERE ${users.id} = ${education.userId} FOR UPDATE`);
+    const [row] = await tx.select({ count: sql<number>`COUNT(*)` }).from(educationEntries)
+      .where(eq(educationEntries.userId, education.userId));
+    if (Number(row?.count ?? 0) >= PROFILE_EVIDENCE_LIMITS.educationEntries) {
+      throw new Error(profileEvidenceLimitMessage("education entries", PROFILE_EVIDENCE_LIMITS.educationEntries));
+    }
+    return await tx.insert(educationEntries).values(education);
+  });
+}
+
+export async function getAllEducationEntriesForPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(educationEntries)
+    .where(eq(educationEntries.userId, userId))
+    .orderBy(desc(educationEntries.endDate), desc(educationEntries.id));
 }
 
 export async function updateEducationEntry(id: number, userId: number, education: Partial<InsertEducationEntry>) {
@@ -5507,13 +5542,30 @@ export async function getUserSkills(userId: number) {
   if (!db) return [];
   return await db.select().from(userSkills)
     .where(eq(userSkills.userId, userId))
-    .orderBy(userSkills.sortOrder);
+    .orderBy(userSkills.sortOrder, userSkills.id)
+    .limit(PROFILE_EVIDENCE_LIMITS.skills);
 }
 
 export async function createUserSkill(skill: InsertUserSkill) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(userSkills).values(skill);
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT ${users.id} FROM ${users} WHERE ${users.id} = ${skill.userId} FOR UPDATE`);
+    const [row] = await tx.select({ count: sql<number>`COUNT(*)` }).from(userSkills)
+      .where(eq(userSkills.userId, skill.userId));
+    if (Number(row?.count ?? 0) >= PROFILE_EVIDENCE_LIMITS.skills) {
+      throw new Error(profileEvidenceLimitMessage("skills", PROFILE_EVIDENCE_LIMITS.skills));
+    }
+    return await tx.insert(userSkills).values(skill);
+  });
+}
+
+export async function getAllUserSkillsForPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(userSkills)
+    .where(eq(userSkills.userId, userId))
+    .orderBy(userSkills.sortOrder, userSkills.id);
 }
 
 export async function updateUserSkill(id: number, userId: number, skill: Partial<InsertUserSkill>) {
@@ -5536,13 +5588,30 @@ export async function getUserProjects(userId: number) {
   if (!db) return [];
   return await db.select().from(userProjects)
     .where(eq(userProjects.userId, userId))
-    .orderBy(userProjects.sortOrder);
+    .orderBy(userProjects.sortOrder, userProjects.id)
+    .limit(PROFILE_EVIDENCE_LIMITS.projects);
 }
 
 export async function createUserProject(project: InsertUserProject) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(userProjects).values(project);
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT ${users.id} FROM ${users} WHERE ${users.id} = ${project.userId} FOR UPDATE`);
+    const [row] = await tx.select({ count: sql<number>`COUNT(*)` }).from(userProjects)
+      .where(eq(userProjects.userId, project.userId));
+    if (Number(row?.count ?? 0) >= PROFILE_EVIDENCE_LIMITS.projects) {
+      throw new Error(profileEvidenceLimitMessage("projects", PROFILE_EVIDENCE_LIMITS.projects));
+    }
+    return await tx.insert(userProjects).values(project);
+  });
+}
+
+export async function getAllUserProjectsForPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(userProjects)
+    .where(eq(userProjects.userId, userId))
+    .orderBy(userProjects.sortOrder, userProjects.id);
 }
 
 export async function updateUserProject(id: number, userId: number, project: Partial<InsertUserProject>) {

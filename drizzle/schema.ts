@@ -873,6 +873,7 @@ export const workExperiences = mysqlTable("work_experiences", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("work_experiences_user_sort_idx").on(table.userId, table.sortOrder),
+  index("work_experiences_user_start_id_idx").on(table.userId, table.startDate, table.id),
 ]);
 
 /**
@@ -896,6 +897,7 @@ export const educationEntries = mysqlTable("education_entries", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("education_entries_user_sort_idx").on(table.userId, table.sortOrder),
+  index("education_entries_user_end_id_idx").on(table.userId, table.endDate, table.id),
 ]);
 
 /**
@@ -913,6 +915,7 @@ export const userSkills = mysqlTable("user_skills", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("user_skills_user_sort_idx").on(table.userId, table.sortOrder),
+  index("user_skills_user_sort_id_idx").on(table.userId, table.sortOrder, table.id),
 ]);
 
 /**
@@ -931,7 +934,9 @@ export const userProjects = mysqlTable("user_projects", {
   sortOrder: int("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("user_projects_user_sort_id_idx").on(table.userId, table.sortOrder, table.id),
+]);
 
 /**
  * Job Alerts

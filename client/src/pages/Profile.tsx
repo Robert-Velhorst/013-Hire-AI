@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getLoginUrl } from "@/const";
+import { PROFILE_EVIDENCE_LIMITS } from "@shared/profileEvidenceLimits";
 import { trpc } from "@/lib/trpc";
 import {
   getProfileEvidenceControlSummary,
@@ -1269,6 +1270,7 @@ export default function Profile() {
                   if (!isOpen) setEditingWorkExp(null);
                 }}
                 editing={editingWorkExp}
+                atLimit={(workExperiencesQuery.data?.length ?? 0) >= PROFILE_EVIDENCE_LIMITS.workExperiences}
                 onSuccess={async () => {
                   await Promise.all([workExperiencesQuery.refetch(), evidenceReadinessQuery.refetch()]);
                   setWorkExpDialogOpen(false);
@@ -1277,7 +1279,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your professional work history
+              Add your professional work history ({workExperiencesQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.workExperiences})
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1334,6 +1336,7 @@ export default function Profile() {
                   if (!isOpen) setEditingEducation(null);
                 }}
                 editing={editingEducation}
+                atLimit={(educationQuery.data?.length ?? 0) >= PROFILE_EVIDENCE_LIMITS.educationEntries}
                 onSuccess={async () => {
                   await Promise.all([educationQuery.refetch(), evidenceReadinessQuery.refetch()]);
                   setEducationDialogOpen(false);
@@ -1342,7 +1345,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your educational background
+              Add your educational background ({educationQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.educationEntries})
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1393,6 +1396,7 @@ export default function Profile() {
                   if (!isOpen) setEditingSkill(null);
                 }}
                 editing={editingSkill}
+                atLimit={(skillsQuery.data?.length ?? 0) >= PROFILE_EVIDENCE_LIMITS.skills}
                 onSuccess={async () => {
                   await Promise.all([skillsQuery.refetch(), evidenceReadinessQuery.refetch()]);
                   setSkillDialogOpen(false);
@@ -1401,7 +1405,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your technical and professional skills
+              Add your technical and professional skills ({skillsQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.skills})
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1452,6 +1456,7 @@ export default function Profile() {
                   if (!isOpen) setEditingProject(null);
                 }}
                 editing={editingProject}
+                atLimit={(projectsQuery.data?.length ?? 0) >= PROFILE_EVIDENCE_LIMITS.projects}
                 onSuccess={async () => {
                   await Promise.all([projectsQuery.refetch(), evidenceReadinessQuery.refetch()]);
                   setProjectDialogOpen(false);
@@ -1460,7 +1465,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Showcase your portfolio and side projects
+              Showcase your portfolio and side projects ({projectsQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.projects})
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1656,7 +1661,7 @@ function EvidenceProviderRow({
   );
 }
 
-function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess }: any) {
+function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
   const [form, setForm] = useState(emptyWorkExperience());
   const addExperience = trpc.profile.addWorkExperience.useMutation({
     onSuccess: () => {
@@ -1713,7 +1718,7 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600">
+        <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
           Add Experience
         </Button>
@@ -1751,7 +1756,7 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess }: any) {
   );
 }
 
-function EducationDialog({ open, onOpenChange, editing, onSuccess }: any) {
+function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
   const [form, setForm] = useState(emptyEducation());
   const addEducation = trpc.profile.addEducation.useMutation({
     onSuccess: () => {
@@ -1808,7 +1813,7 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600">
+        <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
           Add Education
         </Button>
@@ -1846,7 +1851,7 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess }: any) {
   );
 }
 
-function SkillDialog({ open, onOpenChange, editing, onSuccess }: any) {
+function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
   const [form, setForm] = useState(emptySkill());
   const addSkill = trpc.profile.addSkill.useMutation({
     onSuccess: () => {
@@ -1898,7 +1903,7 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600">
+        <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
           Add Skill
         </Button>
@@ -1930,7 +1935,7 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess }: any) {
   );
 }
 
-function ProjectDialog({ open, onOpenChange, editing, onSuccess }: any) {
+function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
   const [form, setForm] = useState(emptyProject());
   const addProject = trpc.profile.addProject.useMutation({
     onSuccess: () => {
@@ -1986,7 +1991,7 @@ function ProjectDialog({ open, onOpenChange, editing, onSuccess }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600">
+        <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
           Add Project
         </Button>
