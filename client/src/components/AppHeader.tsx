@@ -10,6 +10,7 @@ import {
 import { Activity, User, Settings, LogOut, Zap } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { useLocale } from "@/contexts/LocaleContext";
 
 interface AppHeaderProps {
   currentPage?: "dashboard" | "profile" | "settings" | "ai-preferences";
@@ -18,11 +19,12 @@ interface AppHeaderProps {
 export default function AppHeader({ currentPage }: AppHeaderProps) {
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
+  const { t } = useLocale();
 
   const handleLogout = async () => {
     await logout();
     setLocation("/");
-    toast.success("Logged out successfully");
+    toast.success(t("loggedOut"));
   };
 
   const getButtonClass = (page: string) => {
@@ -39,7 +41,7 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
           type="button"
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
           onClick={() => setLocation("/")}
-          aria-label="Hire.AI home"
+          aria-label={t("hireAiHome")}
         >
           <Activity className="h-8 w-8 text-cyan-400" />
           <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -52,7 +54,7 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
             className={getButtonClass("dashboard")}
             onClick={() => setLocation("/dashboard")}
           >
-            Dashboard
+            {t("dashboard")}
           </Button>
           
           {/* User Menu */}
@@ -61,7 +63,7 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
               <Button
                 variant="ghost"
                 className="relative h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600"
-                aria-label="Open account menu"
+                aria-label={t("openAccountMenu")}
               >
                 <span className="text-white font-semibold">
                   {user?.name?.charAt(0).toUpperCase() || "U"}
@@ -70,7 +72,7 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800" align="end">
               <div className="px-2 py-1.5">
-                <p className="text-sm font-medium text-white">{user?.name || "User"}</p>
+                <p className="text-sm font-medium text-white">{user?.name || t("userFallback")}</p>
                 <p className="text-xs text-slate-400">{user?.email}</p>
               </div>
               <DropdownMenuSeparator className="bg-slate-800" />
@@ -79,21 +81,21 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
                 onClick={() => setLocation("/profile")}
               >
                 <User className="mr-2 h-4 w-4" />
-                Profile
+                {t("profile")}
               </DropdownMenuItem>
               <DropdownMenuItem 
                 className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
                 onClick={() => setLocation("/ai-preferences")}
               >
                 <Zap className="mr-2 h-4 w-4" />
-                AI Preferences
+                {t("aiPreferences")}
               </DropdownMenuItem>
               <DropdownMenuItem 
                 className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
                 onClick={() => setLocation("/settings")}
               >
                 <Settings className="mr-2 h-4 w-4" />
-                Settings
+                {t("settings")}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-slate-800" />
               <DropdownMenuItem 
@@ -101,7 +103,7 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
                 onClick={handleLogout}
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Log out
+                {t("signOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

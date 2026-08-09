@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-08-09 - Team and shared-header localization
+
+- Removed the English-only account header left visible on localized routes and wired its menu, accessibility names, fallback identity, and logout feedback to the persisted locale.
+- Localized the complete Team governance workflow without changing tenant boundaries or permission behavior.
+- Kept candidate-domain isolation under its existing regression test while proving the privacy explanation in both English and Dutch.
+- Removed Team's nested `main` landmark after rendered browser QA exposed it inside the dashboard's existing primary landmark.
+
 ## 2026-08-09 - Workflow localization foundation
 
 - Extended the shared typed translator with bounded dynamic-value interpolation instead of introducing page-local language state.

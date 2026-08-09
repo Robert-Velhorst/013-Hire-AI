@@ -11,4 +11,4 @@
 | Windows/ngrok hosted acceptance | Partial | Native and tunnel launchers exist; production credentials, a reserved HTTPS hostname, and public health/callback evidence are required. |
 | External HAI peer acceptance | Partial | The read-only A2A 1.0 status contract is locally verified; configure a shared token and private peer URL in a controlled environment. |
 | Candidate collaboration within workspaces | Governance complete; candidate sharing intentionally disabled | Define an explicit consent, tenant-isolation, revocation, and audit model before exposing candidate-domain records to workspace members. |
-| Full product localization | Partial | English/Dutch account persistence plus shell, saved-jobs, job-alerts, and not-found translations exist; translate remaining workflow copy and complete native-speaker/accessibility review. |
+| Full product localization | Partial | English/Dutch account persistence plus shared headers, saved-jobs, job-alerts, Team, and not-found translations exist; translate remaining workflow copy and complete native-speaker/accessibility review. |

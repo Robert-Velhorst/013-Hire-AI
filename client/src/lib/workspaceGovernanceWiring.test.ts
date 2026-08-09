@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { translate } from "../contexts/LocaleContext";
 
 describe("workspace governance UI wiring", () => {
   it("exposes every governance operation while keeping candidate records out of the team surface", () => {
@@ -16,7 +17,10 @@ describe("workspace governance UI wiring", () => {
     ]) {
       expect(team).toContain(`trpc.workspaces.${operation}.`);
     }
-    expect(team).toContain("Candidate data remains private");
+    expect(team).toContain('t("candidateDataPrivate")');
+    expect(team).not.toMatch(/<main\b/);
+    expect(translate("en", "candidateDataPrivate")).toBe("Candidate data remains private");
+    expect(translate("nl", "candidateDataPrivate")).toBe("Kandidaatgegevens blijven prive");
     expect(team).not.toContain("trpc.applications.");
     expect(team).not.toContain("trpc.profile.");
     expect(team).not.toContain("trpc.successFees.");

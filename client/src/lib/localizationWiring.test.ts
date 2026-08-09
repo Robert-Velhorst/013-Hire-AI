@@ -9,6 +9,7 @@ describe("localization wiring", () => {
     const provider = readFileSync(resolve(process.cwd(), "client/src/contexts/LocaleContext.tsx"), "utf8");
     const layout = readFileSync(resolve(process.cwd(), "client/src/components/DashboardLayout.tsx"), "utf8");
     const settings = readFileSync(resolve(process.cwd(), "client/src/pages/Settings.tsx"), "utf8");
+    const appHeader = readFileSync(resolve(process.cwd(), "client/src/components/AppHeader.tsx"), "utf8");
 
     expect(app).toContain("<LocaleProvider>");
     expect(provider).toContain("document.documentElement.lang = locale");
@@ -16,12 +17,15 @@ describe("localization wiring", () => {
     expect(layout).toContain("t(item.labelKey)");
     expect(settings).toContain("trpc.auth.updateLocale.useMutation");
     expect(settings).toContain("SUPPORTED_LOCALES.map");
+    expect(appHeader).toContain('aria-label={t("openAccountMenu")}');
+    expect(appHeader).toContain('t("signOut")');
   });
 
   it("localizes complete saved-job and not-found workflows with safe interpolation", () => {
     const savedJobs = readFileSync(resolve(process.cwd(), "client/src/pages/SavedJobs.tsx"), "utf8");
     const notFound = readFileSync(resolve(process.cwd(), "client/src/pages/NotFound.tsx"), "utf8");
     const jobAlerts = readFileSync(resolve(process.cwd(), "client/src/pages/JobAlerts.tsx"), "utf8");
+    const team = readFileSync(resolve(process.cwd(), "client/src/pages/Team.tsx"), "utf8");
 
     expect(savedJobs).toContain("const { locale, t } = useLocale()");
     expect(savedJobs).toContain('t("savedJobsTitle")');
@@ -30,6 +34,8 @@ describe("localization wiring", () => {
     expect(jobAlerts).toContain('t("jobAlertsTitle")');
     expect(jobAlerts).toContain('toLocaleDateString(locale)');
     expect(jobAlerts).toContain('aria-label={t("deleteAlert"');
+    expect(team).toContain('t("teamAccess")');
+    expect(team).toContain('toLocaleDateString(locale)');
     expect(jobAlerts).not.toContain("â€¢");
     expect(translate("en", "daysAgo", { count: 3 })).toBe("3 days ago");
     expect(translate("nl", "savedOn", { date: "gisteren" })).toBe("Opgeslagen gisteren");

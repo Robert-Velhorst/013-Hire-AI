@@ -17,13 +17,14 @@ describe("dashboard layout landmarks", () => {
   });
 
   it("keeps brand and account navigation keyboard accessible", () => {
-    for (const sourcePath of [
-      "../components/AppHeader.tsx",
-      "../pages/Dashboard.tsx",
-    ]) {
-      const source = readFileSync(new URL(sourcePath, import.meta.url), "utf8");
-      expect(source).toContain('aria-label="Hire.AI home"');
-      expect(source).toContain('aria-label="Open account menu"');
+    const header = readFileSync(new URL("../components/AppHeader.tsx", import.meta.url), "utf8");
+    const dashboard = readFileSync(new URL("../pages/Dashboard.tsx", import.meta.url), "utf8");
+
+    expect(header).toContain('aria-label={t("hireAiHome")}');
+    expect(header).toContain('aria-label={t("openAccountMenu")}');
+    expect(dashboard).toContain('aria-label="Hire.AI home"');
+    expect(dashboard).toContain('aria-label="Open account menu"');
+    for (const source of [header, dashboard]) {
       expect(source).not.toMatch(/<div[^>]+onClick=\{\(\) => setLocation\("\/"\)\}/);
     }
   });
