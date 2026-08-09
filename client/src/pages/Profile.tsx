@@ -1979,13 +1979,12 @@ function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false
     const payload = {
       title: form.title.trim(),
       description: optionalText(form.description),
-      url,
       technologies: optionalText(form.technologies),
       startDate: optionalText(form.startDate),
       endDate: optionalText(form.endDate),
     };
-    if (editing) updateProject.mutate({ id: editing.id, ...payload });
-    else addProject.mutate(payload);
+    if (editing) updateProject.mutate({ id: editing.id, ...payload, url: url ?? null });
+    else addProject.mutate({ ...payload, url });
   };
 
   return (
@@ -2192,7 +2191,7 @@ function ProjectCard({ project, onEdit, onDelete }: any) {
       <div className="flex justify-between items-start mb-2">
         <div>
           <h3 className="text-white font-semibold">{project.title}</h3>
-          {project.url && (
+          {project.url && isHttpUrl(project.url) && (
             <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline">
               View Project →
             </a>

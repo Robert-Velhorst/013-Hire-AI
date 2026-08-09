@@ -190,6 +190,13 @@ describe("dashboard performance claims", () => {
     expect(profile).not.toContain("setForm({ ...form,");
   });
 
+  it("keeps project links safe and removable across the profile UI", () => {
+    const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
+
+    expect(profile).toContain("url: url ?? null");
+    expect(profile).toContain("project.url && isHttpUrl(project.url)");
+  });
+
   it("uses cursor pagination for the saved-jobs surface", () => {
     const page = readFileSync(resolve(process.cwd(), "client/src/pages/SavedJobs.tsx"), "utf8");
     const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");

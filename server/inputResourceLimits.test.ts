@@ -63,6 +63,17 @@ describe("transport resource limits", () => {
     })).rejects.toThrow();
   });
 
+  it("rejects unsafe project links before storing clickable profile data", async () => {
+    await expect(caller.profile.addProject({
+      title: "Unsafe project",
+      url: "javascript:alert(document.domain)",
+    })).rejects.toThrow(/HTTP or HTTPS/);
+    await expect(caller.profile.updateProject({
+      id: 1,
+      url: "data:text/html,unsafe",
+    })).rejects.toThrow(/HTTP or HTTPS/);
+  });
+
   it("rejects zero identifiers before ownership or database work", async () => {
     await expect(caller.jobs.getById({ id: 0 })).rejects.toThrow();
     await expect(caller.applications.getLedgerArtifacts({ applicationId: 0 })).rejects.toThrow();

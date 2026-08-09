@@ -100,6 +100,10 @@ const safeHttpUrl = z.string().trim().max(1000).url().refine((value) => {
   const protocol = new URL(value).protocol;
   return protocol === "https:" || protocol === "http:";
 }, "URL must use HTTP or HTTPS");
+const safeProjectUrl = z.string().trim().max(500).url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "https:" || protocol === "http:";
+}, "Project URL must use HTTP or HTTPS");
 const socialProfileText = z.string().trim().min(1).max(30_000);
 const profileMatchEvidenceFields = [
   "skills",
@@ -1218,7 +1222,7 @@ export const appRouter = router({
       .input(z.object({
         title: z.string().trim().min(1).max(255),
         description: z.string().trim().max(5000).optional(),
-        url: z.string().trim().max(500).optional(),
+        url: safeProjectUrl.optional(),
         technologies: z.string().trim().max(2000).optional(),
         startDate: validDate.optional(),
         endDate: validDate.optional(),
@@ -1232,7 +1236,7 @@ export const appRouter = router({
         id: z.number().int().positive(),
         title: z.string().trim().min(1).max(255).optional(),
         description: z.string().trim().max(5000).optional(),
-        url: z.string().trim().max(500).optional(),
+        url: safeProjectUrl.nullable().optional(),
         technologies: z.string().trim().max(2000).optional(),
         startDate: validDate.optional(),
         endDate: validDate.optional(),
