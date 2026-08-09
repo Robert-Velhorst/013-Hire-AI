@@ -8,7 +8,7 @@ import {
 } from "./connectorOAuth";
 import {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -72,11 +72,11 @@ function requireCloudProvider(provider: string): asserts provider is CloudDocume
   }
 }
 
-type ConnectorAccount = Awaited<ReturnType<typeof listUserConnectorAccounts>>[number];
+type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
 export type CloudDocumentDiscoveryDependencies = {
   getConnectorAuthorization: typeof getConnectorAuthorization;
-  listUserConnectorAccounts: typeof listUserConnectorAccounts;
+  getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
   decryptConnectorToken: typeof decryptConnectorToken;
@@ -87,7 +87,7 @@ export type CloudDocumentDiscoveryDependencies = {
 
 const defaultDependencies: CloudDocumentDiscoveryDependencies = {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
   decryptConnectorToken,
@@ -131,8 +131,7 @@ async function getCloudAccessToken(
   fetcher: typeof fetch,
   dependencies: CloudDocumentDiscoveryDependencies
 ) {
-  const accounts = await dependencies.listUserConnectorAccounts(userId);
-  const account = accounts.find((item) => item.provider === provider);
+  const account = await dependencies.getUserConnectorAccount(userId, provider);
   assertConnectedCloudAccount(account, provider, now);
 
   const authorization = await dependencies.getConnectorAuthorization(userId, provider);

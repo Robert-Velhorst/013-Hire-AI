@@ -12,7 +12,7 @@ function dependencies(): LinkedInProfileDiscoveryDependencies {
       encryptedAccessToken: "encrypted-linkedin-token",
       accessTokenExpiresAt: new Date("2026-07-14T12:00:00.000Z"),
     }),
-    listUserConnectorAccounts: vi.fn().mockResolvedValue([{
+    getUserConnectorAccount: vi.fn().mockResolvedValue({
       userId: 21,
       provider: "linkedin",
       status: "connected",
@@ -21,7 +21,7 @@ function dependencies(): LinkedInProfileDiscoveryDependencies {
       connectionRequestedAt: now,
       lastVerifiedAt: now,
       disconnectedAt: null,
-    }]),
+    }),
     upsertUserConnectorAccount: vi.fn().mockResolvedValue(undefined),
     decryptConnectorToken: vi.fn().mockReturnValue("linkedin-access-token"),
   } as unknown as LinkedInProfileDiscoveryDependencies;
@@ -57,13 +57,13 @@ describe("LinkedIn identity discovery", () => {
 
   it("rejects stale consent before reading LinkedIn data", async () => {
     const deps = dependencies();
-    (deps.listUserConnectorAccounts as ReturnType<typeof vi.fn>).mockResolvedValue([{
+    (deps.getUserConnectorAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
       userId: 21,
       provider: "linkedin",
       status: "connected",
       consentScopes: JSON.stringify(["profile.basic.read"]),
       lastVerifiedAt: new Date("2026-06-01T00:00:00.000Z"),
-    }]);
+    });
     const fetcher = vi.fn();
 
     await expect(discoverLinkedInIdentity(21, { fetcher, now, dependencies: deps }))

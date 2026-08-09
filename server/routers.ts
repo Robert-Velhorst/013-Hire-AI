@@ -424,9 +424,8 @@ export const appRouter = router({
           });
         }
 
-        const { listUserConnectorAccounts, requestUserConnectorConnection, createAuditEvent } = await import("./db");
-        const existingAccount = (await listUserConnectorAccounts(ctx.user.id))
-          .find((account) => account.provider === input.provider);
+        const { getUserConnectorAccount, requestUserConnectorConnection, createAuditEvent } = await import("./db");
+        const existingAccount = await getUserConnectorAccount(ctx.user.id, input.provider);
         // Preserve a verified mailbox while the user completes an optional
         // consent upgrade. A cancelled upgrade must not interrupt monitoring.
         const account = existingAccount?.status === "connected"
@@ -2292,8 +2291,8 @@ export const appRouter = router({
         const {
           createAuditEvent,
           findEmployerResponseBySourceReference,
+          getUserConnectorAccount,
           getInboxResponseCandidate,
-          listUserConnectorAccounts,
           resolveInboxResponseCandidate,
         } = await import("./db");
         const candidate = await getInboxResponseCandidate(input.candidateId, ctx.user.id);
@@ -2306,8 +2305,7 @@ export const appRouter = router({
             message: "A dismissed inbox response candidate cannot be confirmed. Run discovery again if the message needs review.",
           });
         }
-        const account = (await listUserConnectorAccounts(ctx.user.id))
-          .find((item) => item.provider === candidate.provider);
+        const account = await getUserConnectorAccount(ctx.user.id, candidate.provider);
         const requiredScope = candidate.provider === "gmail"
           ? "email.messages.read_recruiting"
           : "mail.messages.read_recruiting";

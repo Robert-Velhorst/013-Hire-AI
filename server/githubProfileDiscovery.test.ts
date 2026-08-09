@@ -13,7 +13,7 @@ function dependencies(): GitHubProfileDiscoveryDependencies {
       encryptedAccessToken: "encrypted-github-token",
       accessTokenExpiresAt: new Date("2026-07-13T13:00:00.000Z"),
     }),
-    listUserConnectorAccounts: vi.fn().mockResolvedValue([{
+    getUserConnectorAccount: vi.fn().mockResolvedValue({
       userId: 18,
       provider: "github",
       status: "connected",
@@ -22,7 +22,7 @@ function dependencies(): GitHubProfileDiscoveryDependencies {
       connectionRequestedAt: now,
       lastVerifiedAt: now,
       disconnectedAt: null,
-    }]),
+    }),
     upsertConnectorAuthorization: vi.fn().mockResolvedValue(undefined),
     upsertUserConnectorAccount: vi.fn().mockResolvedValue(undefined),
     decryptConnectorToken: vi.fn().mockReturnValue("github-access-token"),
@@ -69,13 +69,13 @@ describe("GitHub profile discovery", () => {
 
   it("rejects stale connector consent before making an external request", async () => {
     const deps = dependencies();
-    (deps.listUserConnectorAccounts as ReturnType<typeof vi.fn>).mockResolvedValue([{
+    (deps.getUserConnectorAccount as ReturnType<typeof vi.fn>).mockResolvedValue({
       userId: 18,
       provider: "github",
       status: "connected",
       consentScopes: JSON.stringify(["profile.basic.read"]),
       lastVerifiedAt: new Date("2026-06-01T00:00:00.000Z"),
-    }]);
+    });
     const fetcher = vi.fn();
 
     await expect(discoverGitHubProfile(18, { fetcher, now, dependencies: deps }))

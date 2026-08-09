@@ -8,7 +8,7 @@ import {
 
 const mocks = {
   getConnectorAuthorization: vi.fn(),
-  listUserConnectorAccounts: vi.fn(),
+  getUserConnectorAccount: vi.fn(),
   upsertConnectorAuthorization: vi.fn(),
   upsertUserConnectorAccount: vi.fn(),
   decryptConnectorToken: vi.fn(),
@@ -43,7 +43,7 @@ function discoveryOptions(fetcher: typeof fetch) {
 describe("cloud resume discovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.listUserConnectorAccounts.mockResolvedValue([connectedAccount("google_drive")]);
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("google_drive"));
     mocks.getConnectorAuthorization.mockResolvedValue({
       userId: 501,
       provider: "google_drive",
@@ -88,7 +88,7 @@ describe("cloud resume discovery", () => {
   });
 
   it("uses Dropbox metadata and excludes unsupported cloud files", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([connectedAccount("dropbox")]);
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("dropbox"));
     mocks.getConnectorAuthorization.mockResolvedValue({
       userId: 501,
       provider: "dropbox",
@@ -151,10 +151,10 @@ describe("cloud resume discovery", () => {
   });
 
   it("refuses discovery when connector verification is stale before reading provider data", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([{
+    mocks.getUserConnectorAccount.mockResolvedValue({
       ...connectedAccount("google_drive"),
       lastVerifiedAt: new Date("2026-06-01T00:00:00.000Z"),
-    }]);
+    });
     const fetcher = vi.fn<typeof fetch>();
 
     await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher))).rejects.toThrow(
@@ -164,10 +164,10 @@ describe("cloud resume discovery", () => {
   });
 
   it("refuses cloud discovery without resume-document read consent", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([{
+    mocks.getUserConnectorAccount.mockResolvedValue({
       ...connectedAccount("google_drive"),
       consentScopes: JSON.stringify(["files.metadata.read"]),
-    }]);
+    });
     const fetcher = vi.fn<typeof fetch>();
 
     await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher))).rejects.toThrow(

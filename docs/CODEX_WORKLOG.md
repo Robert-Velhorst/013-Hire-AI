@@ -264,3 +264,11 @@
 - Replaced full application/job hydration with an ownership-scoped four-field matching projection; resume, cover-letter, notes, salary, location, URL, platform, and timestamp data no longer enters inbox scanning memory.
 - Preserved exact source-reference behavior and added direct coverage for tenant isolation, duplicate inputs, mixed recorded/new messages, and empty scans.
 - Added a data-minimization contract and passed focused worker/database tests, TypeScript, the complete regression suite, and the production bundle check.
+
+## 2026-08-09 - Exact connector account access
+
+- Added an owner/provider lookup over the existing unique connector-account index and wired it into inbox access, follow-up delivery, cloud documents, GitHub, LinkedIn, and OAuth callbacks.
+- Reused the exact lookup for OAuth initiation and inbox-candidate confirmation while retaining full account inventories for cross-provider readiness views.
+- Kept list reads for cross-provider readiness and inventory workflows, where the complete account set is required.
+- Added ownership, missing-provider, and wiring contracts; focused provider suites continue to pass with the exact dependency shape.
+- Passed TypeScript, the complete regression suite, and the production bundle check.

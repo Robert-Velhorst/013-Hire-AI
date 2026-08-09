@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getConnectorAuthorization: vi.fn(),
   getConnectorOAuthConfig: vi.fn(),
   getDb: vi.fn(),
-  listUserConnectorAccounts: vi.fn(),
+  getUserConnectorAccount: vi.fn(),
   refreshConnectorAccessToken: vi.fn(),
   upsertConnectorAuthorization: vi.fn(),
   upsertUserConnectorAccount: vi.fn(),
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./db", () => ({
   getConnectorAuthorization: mocks.getConnectorAuthorization,
   getDb: mocks.getDb,
-  listUserConnectorAccounts: mocks.listUserConnectorAccounts,
+  getUserConnectorAccount: mocks.getUserConnectorAccount,
   upsertConnectorAuthorization: mocks.upsertConnectorAuthorization,
   upsertUserConnectorAccount: mocks.upsertUserConnectorAccount,
 }));
@@ -88,12 +88,12 @@ describe("uncertain follow-up mailbox delivery", () => {
           accessTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
         }),
         getConnectorOAuthConfig: mocks.getConnectorOAuthConfig,
-        listUserConnectorAccounts: mocks.listUserConnectorAccounts.mockResolvedValue([{
+        getUserConnectorAccount: mocks.getUserConnectorAccount.mockResolvedValue({
           provider: "gmail",
           status: "connected",
           consentScopes: JSON.stringify(["email.messages.send"]),
           lastVerifiedAt: new Date(),
-        }]),
+        }),
         refreshConnectorAccessToken: mocks.refreshConnectorAccessToken,
         upsertConnectorAuthorization: mocks.upsertConnectorAuthorization,
         upsertUserConnectorAccount: mocks.upsertUserConnectorAccount,

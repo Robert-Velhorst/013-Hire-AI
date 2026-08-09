@@ -18,7 +18,7 @@ import {
 import {
   getConnectorAuthorization,
   getDb,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -37,7 +37,7 @@ type FollowUpMailDeliveryDependencies = {
   encryptConnectorToken: typeof encryptConnectorToken;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
-  listUserConnectorAccounts: typeof listUserConnectorAccounts;
+  getUserConnectorAccount: typeof getUserConnectorAccount;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
@@ -48,7 +48,7 @@ const defaults: FollowUpMailDeliveryDependencies = {
   encryptConnectorToken,
   getConnectorAuthorization,
   getConnectorOAuthConfig,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   refreshConnectorAccessToken,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
@@ -111,8 +111,7 @@ async function getMailAccess(
   fetcher: typeof fetch,
   dependencies: FollowUpMailDeliveryDependencies
 ) {
-  const account = (await dependencies.listUserConnectorAccounts(userId))
-    .find((item) => item.provider === provider);
+  const account = await dependencies.getUserConnectorAccount(userId, provider);
   if (
     !account ||
     account.status !== "connected" ||
@@ -164,7 +163,7 @@ async function getMailAccess(
 
 async function markMailAccessNeedsReauth(
   userId: number,
-  account: Awaited<ReturnType<typeof listUserConnectorAccounts>>[number],
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
   dependencies: FollowUpMailDeliveryDependencies
 ) {
   await dependencies.upsertUserConnectorAccount({

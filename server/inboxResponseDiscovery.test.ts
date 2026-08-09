@@ -9,7 +9,7 @@ const mocks = {
   findEmployerResponseSourceReferences: vi.fn(),
   getConnectorAuthorization: vi.fn(),
   getUserInboxMatchApplications: vi.fn(),
-  listUserConnectorAccounts: vi.fn(),
+  getUserConnectorAccount: vi.fn(),
   upsertConnectorAuthorization: vi.fn(),
   upsertUserConnectorAccount: vi.fn(),
   decryptConnectorToken: vi.fn(),
@@ -43,7 +43,7 @@ describe("inbox response discovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findEmployerResponseSourceReferences.mockResolvedValue([]);
-    mocks.listUserConnectorAccounts.mockResolvedValue([connectedInbox("gmail")]);
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedInbox("gmail"));
     mocks.getConnectorAuthorization.mockResolvedValue({
       encryptedAccessToken: "encrypted-access",
       encryptedRefreshToken: "encrypted-refresh",
@@ -137,10 +137,10 @@ describe("inbox response discovery", () => {
   });
 
   it("rejects stale inbox consent before reading any external message", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([{
+    mocks.getUserConnectorAccount.mockResolvedValue({
       ...connectedInbox("gmail"),
       lastVerifiedAt: new Date("2026-06-01T00:00:00.000Z"),
-    }]);
+    });
     const fetcher = vi.fn<typeof fetch>();
 
     await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher))).rejects.toThrow(
@@ -180,7 +180,7 @@ describe("inbox response discovery", () => {
   });
 
   it("reads Outlook metadata and only surfaces an unambiguous application match", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([connectedInbox("outlook")]);
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedInbox("outlook"));
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       value: [{
         id: "outlook-701",
@@ -203,7 +203,7 @@ describe("inbox response discovery", () => {
   });
 
   it("does not surface Outlook messages outside the recruiting response lookback window", async () => {
-    mocks.listUserConnectorAccounts.mockResolvedValue([connectedInbox("outlook")]);
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedInbox("outlook"));
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       value: [{
         id: "outlook-stale-701",

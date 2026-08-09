@@ -9,8 +9,8 @@ import {
 import {
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
+  getUserConnectorAccount,
   getUserInboxMatchApplications,
-  listUserConnectorAccounts,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -40,7 +40,7 @@ export type InboxResponseDiscoveryDependencies = {
   findEmployerResponseSourceReferences: typeof findEmployerResponseSourceReferences;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getUserInboxMatchApplications: typeof getUserInboxMatchApplications;
-  listUserConnectorAccounts: typeof listUserConnectorAccounts;
+  getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
   decryptConnectorToken: typeof decryptConnectorToken;
@@ -53,7 +53,7 @@ const defaults: InboxResponseDiscoveryDependencies = {
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
   getUserInboxMatchApplications,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
   decryptConnectorToken,
@@ -82,8 +82,7 @@ async function getInboxAccess(
   fetcher: typeof fetch,
   dependencies: InboxResponseDiscoveryDependencies
 ) {
-  const account = (await dependencies.listUserConnectorAccounts(userId))
-    .find((item) => item.provider === provider);
+  const account = await dependencies.getUserConnectorAccount(userId, provider);
   const requiredScope = provider === "gmail" ? "email.messages.read_recruiting" : "mail.messages.read_recruiting";
   if (
     !account ||
@@ -134,7 +133,7 @@ async function getInboxAccess(
 
 async function markInboxAccessVerified(
   userId: number,
-  account: Awaited<ReturnType<typeof listUserConnectorAccounts>>[number],
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
   now: Date,
   dependencies: InboxResponseDiscoveryDependencies
 ) {
@@ -152,7 +151,7 @@ async function markInboxAccessVerified(
 
 async function markInboxAccessNeedsReauth(
   userId: number,
-  account: Awaited<ReturnType<typeof listUserConnectorAccounts>>[number],
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
   dependencies: InboxResponseDiscoveryDependencies
 ) {
   await dependencies.upsertUserConnectorAccount({
@@ -169,7 +168,7 @@ async function markInboxAccessNeedsReauth(
 
 async function throwInboxApiError(
   userId: number,
-  account: Awaited<ReturnType<typeof listUserConnectorAccounts>>[number],
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
   provider: InboxProvider,
   status: number,
   dependencies: InboxResponseDiscoveryDependencies

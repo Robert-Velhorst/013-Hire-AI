@@ -1510,6 +1510,36 @@ export async function listUserConnectorAccounts(userId: number): Promise<UserCon
     .where(eq(userConnectorAccounts.userId, userId));
 }
 
+export async function getUserConnectorAccount(
+  userId: number,
+  provider: UserConnectorAccount["provider"]
+): Promise<UserConnectorAccount | undefined> {
+  const db = await getDb();
+  if (!db) {
+    const account = memoryConnectorAccounts.find((item) =>
+      item.userId === userId && item.provider === provider
+    );
+    return account ? {
+      ...account,
+      consentScopes: account.consentScopes ?? null,
+      externalAccountLabel: account.externalAccountLabel ?? null,
+      connectionRequestedAt: account.connectionRequestedAt ?? null,
+      lastVerifiedAt: account.lastVerifiedAt ?? null,
+      disconnectedAt: account.disconnectedAt ?? null,
+    } as UserConnectorAccount : undefined;
+  }
+
+  const rows = await db
+    .select()
+    .from(userConnectorAccounts)
+    .where(and(
+      eq(userConnectorAccounts.userId, userId),
+      eq(userConnectorAccounts.provider, provider)
+    ))
+    .limit(1);
+  return rows[0];
+}
+
 export async function upsertUserConnectorAccount(account: InsertUserConnectorAccount) {
   const db = await getDb();
   const now = new Date();

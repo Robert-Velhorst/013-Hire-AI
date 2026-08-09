@@ -8,7 +8,7 @@ import {
 } from "./connectorOAuth";
 import {
   createAuditEvent,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -108,8 +108,7 @@ export function registerConnectorOAuthRoutes(app: Express) {
 
     const provider = verifiedState.provider;
     const consentScopes = connectorConsentScopes(provider, verifiedState.consentScopes);
-    const account = (await listUserConnectorAccounts(verifiedState.userId))
-      .find((item) => item.provider === provider);
+    const account = await getUserConnectorAccount(verifiedState.userId, provider);
     if (account?.status === "disabled") {
       res.redirect(302, completeRedirect(provider, "denied"));
       return;

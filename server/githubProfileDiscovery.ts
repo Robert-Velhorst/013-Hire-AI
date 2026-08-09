@@ -8,7 +8,7 @@ import {
 } from "./connectorOAuth";
 import {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -39,11 +39,11 @@ export type GitHubProfileCandidate = {
 const MAX_REPOSITORIES = 10;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 
-type ConnectorAccount = Awaited<ReturnType<typeof listUserConnectorAccounts>>[number];
+type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
 export type GitHubProfileDiscoveryDependencies = {
   getConnectorAuthorization: typeof getConnectorAuthorization;
-  listUserConnectorAccounts: typeof listUserConnectorAccounts;
+  getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
   decryptConnectorToken: typeof decryptConnectorToken;
@@ -54,7 +54,7 @@ export type GitHubProfileDiscoveryDependencies = {
 
 const defaults: GitHubProfileDiscoveryDependencies = {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
   decryptConnectorToken,
@@ -98,8 +98,7 @@ async function getGitHubAccessToken(
   fetcher: typeof fetch,
   dependencies: GitHubProfileDiscoveryDependencies
 ) {
-  const account = (await dependencies.listUserConnectorAccounts(userId))
-    .find((item) => item.provider === "github");
+  const account = await dependencies.getUserConnectorAccount(userId, "github");
   if (
     !account ||
     account.status !== "connected" ||

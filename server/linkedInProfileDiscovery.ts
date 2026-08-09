@@ -2,7 +2,7 @@ import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken } from "./connectorOAuth";
 import {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertUserConnectorAccount,
 } from "./db";
 
@@ -13,18 +13,18 @@ export type LinkedInIdentityCandidate = {
   emailVerified: boolean;
 };
 
-type ConnectorAccount = Awaited<ReturnType<typeof listUserConnectorAccounts>>[number];
+type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
 export type LinkedInProfileDiscoveryDependencies = {
   getConnectorAuthorization: typeof getConnectorAuthorization;
-  listUserConnectorAccounts: typeof listUserConnectorAccounts;
+  getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
   decryptConnectorToken: typeof decryptConnectorToken;
 };
 
 const defaults: LinkedInProfileDiscoveryDependencies = {
   getConnectorAuthorization,
-  listUserConnectorAccounts,
+  getUserConnectorAccount,
   upsertUserConnectorAccount,
   decryptConnectorToken,
 };
@@ -49,8 +49,7 @@ async function getLinkedInAccessToken(
   now: Date,
   dependencies: LinkedInProfileDiscoveryDependencies
 ) {
-  const account = (await dependencies.listUserConnectorAccounts(userId))
-    .find((item) => item.provider === "linkedin");
+  const account = await dependencies.getUserConnectorAccount(userId, "linkedin");
   if (
     !account ||
     account.status !== "connected" ||
