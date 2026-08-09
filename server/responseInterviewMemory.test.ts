@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createFollowUp,
+  getInterviewSchedulePage,
   getInterviewSchedules,
   getUpcomingInterviews,
   getUserFollowUpsForApplications,
@@ -386,6 +387,9 @@ describe("response and interview memory fallback", () => {
     expect(interviews).toHaveLength(1);
     expect(interviews[0].status).toBe("scheduled");
     expect(interviews[0].meetingLink).toContain("meet.example");
+    const activePage = await getInterviewSchedulePage(applicationId, userId);
+    expect(activePage.activeItems.map((item) => item.id)).toEqual([scheduled.id]);
+    expect(activePage.historyItems).toEqual([]);
 
     let userApplications = await getUserApplications(userId);
     expect(userApplications.find((item) => item.id === applicationId)?.status).toBe("interview");
@@ -404,6 +408,9 @@ describe("response and interview memory fallback", () => {
     await updateInterviewStatus(scheduled.id, "completed", userId);
     interviews = await getInterviewSchedules(applicationId, userId);
     expect(interviews[0].status).toBe("completed");
+    const historyPage = await getInterviewSchedulePage(applicationId, userId);
+    expect(historyPage.activeItems).toEqual([]);
+    expect(historyPage.historyItems.map((item) => item.id)).toEqual([scheduled.id]);
     upcoming = await getUpcomingInterviews(userId);
     expect(upcoming.some((item) => item.interview.id === scheduled.id)).toBe(false);
 

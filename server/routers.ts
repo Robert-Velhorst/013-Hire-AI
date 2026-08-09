@@ -25,7 +25,7 @@ import {
   updateApplicationNote,
   deleteApplicationNote,
   scheduleInterview,
-  getInterviewSchedules,
+  getInterviewSchedulePage,
   getUpcomingInterviews,
   updateInterviewStatus,
   recordInterviewOutcome,
@@ -2490,10 +2490,17 @@ export const appRouter = router({
         }
       }),
 
-    getInterviews: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+    getInterviewPage: protectedProcedure
+      .input(z.object({
+        applicationId: z.number().int().positive(),
+        historyLimit: z.number().int().min(1).max(50).default(10),
+        cursor: z.object({
+          scheduledAt: z.date(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
       .query(async ({ ctx, input }) => {
-        return await getInterviewSchedules(input.applicationId, ctx.user.id);
+        return await getInterviewSchedulePage(input.applicationId, ctx.user.id, input);
       }),
 
     getUpcomingInterviews: protectedProcedure

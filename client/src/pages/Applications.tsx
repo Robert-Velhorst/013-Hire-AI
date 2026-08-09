@@ -217,13 +217,30 @@ export default function Applications() {
     { enabled: Boolean(selectedApplication?.id) }
   );
   const {
-    data: interviews,
+    data: interviewPages,
     isLoading: interviewsLoading,
     refetch: refetchInterviews,
-  } = trpc.applications.getInterviews.useQuery(
-    { applicationId: selectedApplication?.id || 0 },
-    { enabled: Boolean(selectedApplication?.id) }
+    hasNextPage: hasEarlierInterviewHistory,
+    fetchNextPage: fetchEarlierInterviewHistory,
+    isFetchingNextPage: isFetchingEarlierInterviewHistory,
+  } = trpc.applications.getInterviewPage.useInfiniteQuery(
+    {
+      applicationId: selectedApplication?.id || 0,
+      historyLimit: 10,
+    },
+    {
+      enabled: Boolean(selectedApplication?.id),
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    }
   );
+  const interviews = useMemo(
+    () => [
+      ...(interviewPages?.pages[0]?.activeItems ?? []),
+      ...(interviewPages?.pages.flatMap((page) => page.historyItems) ?? []),
+    ],
+    [interviewPages]
+  );
+  const activeInterviewWindowTruncated = interviewPages?.pages[0]?.activeHasMore === true;
   const {
     data: approvals,
     refetch: refetchApprovals,
@@ -1531,8 +1548,8 @@ export default function Applications() {
                         <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 md:grid-cols-4">
                           {[
                             ["Active", selectedInterviewSummary.activeInterviews],
-                            ["Completed", selectedInterviewSummary.completedInterviews],
-                            ["Cancelled", selectedInterviewSummary.cancelledInterviews],
+                            ["Completed shown", selectedInterviewSummary.completedInterviews],
+                            ["Cancelled shown", selectedInterviewSummary.cancelledInterviews],
                             [
                               "Next",
                               selectedInterviewSummary.nextInterviewAt
@@ -1637,6 +1654,22 @@ export default function Applications() {
                             })
                           ) : (
                             <p className="text-sm text-slate-400">No interview time has been recorded yet.</p>
+                          )}
+                          {activeInterviewWindowTruncated && (
+                            <p className="text-xs text-amber-300">
+                              More than 25 active interview rounds exist. Resolve older active rounds before scheduling another.
+                            </p>
+                          )}
+                          {hasEarlierInterviewHistory && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isFetchingEarlierInterviewHistory}
+                              onClick={() => void fetchEarlierInterviewHistory()}
+                            >
+                              {isFetchingEarlierInterviewHistory && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                              Load earlier interview history
+                            </Button>
                           )}
                         </div>
 

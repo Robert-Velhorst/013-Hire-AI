@@ -846,6 +846,12 @@ export const interviewSchedules = mysqlTable("interview_schedules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("interview_schedules_application_scheduled_idx").on(table.applicationId, table.scheduledAt),
+  index("interview_schedules_application_status_scheduled_id_idx").on(
+    table.applicationId,
+    table.status,
+    table.scheduledAt,
+    table.id
+  ),
   index("interview_schedules_application_status_created_response_idx").on(
     table.applicationId,
     table.status,

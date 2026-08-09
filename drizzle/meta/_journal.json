@@ -456,6 +456,13 @@
       "when": 1786497900000,
       "tag": "0064_follow_up_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1786497960000,
+      "tag": "0065_interview_history_cursor_index",
+      "breakpoints": true
     }
   ]
 }

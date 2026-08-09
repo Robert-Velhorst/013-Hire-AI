@@ -1763,6 +1763,101 @@ export async function getInterviewSchedules(applicationId: number, userId: numbe
     .orderBy(asc(interviewSchedules.scheduledAt));
 }
 
+export async function getInterviewSchedulePage(
+  applicationId: number,
+  userId: number,
+  options: {
+    historyLimit?: number;
+    cursor?: { scheduledAt: Date; id: number };
+  } = {}
+) {
+  const historyLimit = Math.min(50, Math.max(1, Math.trunc(options.historyLimit ?? 10)));
+  const activeLimit = 25;
+  const activeStatuses = ["scheduled", "rescheduled"] as const;
+  const historyStatuses = ["completed", "cancelled"] as const;
+  const db = await getDb();
+
+  if (!db) {
+    await getInterviewApplication(applicationId, userId);
+    const applicationInterviews = memoryInterviewSchedules.filter(
+      (interview) => interview.applicationId === applicationId
+    );
+    const activeRows = options.cursor
+      ? []
+      : applicationInterviews
+          .filter((interview) => activeStatuses.includes(interview.status as typeof activeStatuses[number]))
+          .sort((left, right) =>
+            left.scheduledAt.getTime() - right.scheduledAt.getTime() || left.id - right.id
+          )
+          .slice(0, activeLimit + 1);
+    const historyRows = applicationInterviews
+      .filter((interview) => historyStatuses.includes(interview.status as typeof historyStatuses[number]))
+      .filter((interview) => !options.cursor ||
+        interview.scheduledAt < options.cursor.scheduledAt ||
+        (interview.scheduledAt.getTime() === options.cursor.scheduledAt.getTime() &&
+          interview.id < options.cursor.id)
+      )
+      .sort((left, right) =>
+        right.scheduledAt.getTime() - left.scheduledAt.getTime() || right.id - left.id
+      )
+      .slice(0, historyLimit + 1);
+    const historyItems = historyRows.slice(0, historyLimit);
+    const lastHistoryItem = historyItems.at(-1);
+    return {
+      activeItems: activeRows.slice(0, activeLimit),
+      activeHasMore: activeRows.length > activeLimit,
+      historyItems,
+      nextCursor: historyRows.length > historyLimit && lastHistoryItem
+        ? { scheduledAt: lastHistoryItem.scheduledAt, id: lastHistoryItem.id }
+        : null,
+    };
+  }
+
+  await assertUserOwnsApplication(applicationId, userId);
+  const historyCursorCondition = options.cursor
+    ? or(
+        lt(interviewSchedules.scheduledAt, options.cursor.scheduledAt),
+        and(
+          eq(interviewSchedules.scheduledAt, options.cursor.scheduledAt),
+          lt(interviewSchedules.id, options.cursor.id)
+        )
+      )
+    : undefined;
+  const [activeRows, historyRows] = await Promise.all([
+    options.cursor
+      ? Promise.resolve([] as Array<typeof interviewSchedules.$inferSelect>)
+      : db
+          .select()
+          .from(interviewSchedules)
+          .where(and(
+            eq(interviewSchedules.applicationId, applicationId),
+            inArray(interviewSchedules.status, [...activeStatuses])
+          ))
+          .orderBy(asc(interviewSchedules.scheduledAt), asc(interviewSchedules.id))
+          .limit(activeLimit + 1),
+    db
+      .select()
+      .from(interviewSchedules)
+      .where(and(
+        eq(interviewSchedules.applicationId, applicationId),
+        inArray(interviewSchedules.status, [...historyStatuses]),
+        historyCursorCondition
+      ))
+      .orderBy(desc(interviewSchedules.scheduledAt), desc(interviewSchedules.id))
+      .limit(historyLimit + 1),
+  ]);
+  const historyItems = historyRows.slice(0, historyLimit);
+  const lastHistoryItem = historyItems.at(-1);
+  return {
+    activeItems: activeRows.slice(0, activeLimit),
+    activeHasMore: activeRows.length > activeLimit,
+    historyItems,
+    nextCursor: historyRows.length > historyLimit && lastHistoryItem
+      ? { scheduledAt: lastHistoryItem.scheduledAt, id: lastHistoryItem.id }
+      : null,
+  };
+}
+
 export async function getUserInterviewSchedulesForApplications(
   userId: number,
   applicationIds: number[]
