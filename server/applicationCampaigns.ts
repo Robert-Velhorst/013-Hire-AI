@@ -49,6 +49,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import {
   getUpcomingInterviewPreparationPage,
   getEmployerResponseReplyPage,
+  getFollowUpDeliveryOperatingQueues,
   getInterviewOutcomePage,
   getInterviewSchedulingPage,
   getUserFollowUpsForApplications,
@@ -855,6 +856,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewNotificationQueue,
     interviewSchedulingPage,
     employerResponseReplyPage,
+    followUpDeliveryQueues,
     interviewPreparationQueue,
     interviewOutcomePage,
     successFeeOperatingSet,
@@ -874,11 +876,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getInterviewNotificationQueue(userId),
     getInterviewSchedulingPage(userId, 5),
     getEmployerResponseReplyPage(userId, 5),
+    getFollowUpDeliveryOperatingQueues(userId, 5),
     getInterviewPreparationQueue(userId),
     getInterviewOutcomePage(userId, 5),
     getUserSuccessFeeOperatingItems(userId),
   ]);
-  const followUpSuppressionState = followUpReadiness.suppressionState;
   const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
   const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
   const employerResponseQueue = employerResponseReplyPage.items;
@@ -888,8 +890,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   );
   const successFeeComplianceQueue = getSuccessFeeComplianceQueue(successFeeOperatingSet.items, offerAttributionReviews);
   const followUpDueQueue = followUpReadiness.actionReadyQueue;
-  const approvedFollowUpsReadyToSend = followUpSuppressionState.approvedFollowUpsReadyToSend;
-  const followUpDeliveryReconciliation = followUpSuppressionState.followUpDeliveryReconciliation;
+  const approvedFollowUpsReadyToSend = followUpDeliveryQueues.ready.items;
+  const followUpDeliveryReconciliation = followUpDeliveryQueues.reconciliation.items;
   const actionReadyPlanSummary = {
     ...plan.summary,
     followUpsActionReady: followUpReadiness.actionReadyCount,
@@ -953,11 +955,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     employerResponseReplyPage.total > 0
       ? `Reply to ${employerResponseReplyPage.total} employer question${employerResponseReplyPage.total === 1 ? "" : "s"} before routine follow-ups continue.`
       : "",
-    approvedFollowUpsReadyToSend.length > 0
-      ? `Record send handoff for ${approvedFollowUpsReadyToSend.length} approved follow-up draft${approvedFollowUpsReadyToSend.length === 1 ? "" : "s"}.`
+    followUpDeliveryQueues.ready.total > 0
+      ? `Record send handoff for ${followUpDeliveryQueues.ready.total} approved follow-up draft${followUpDeliveryQueues.ready.total === 1 ? "" : "s"}.`
       : "",
-    followUpDeliveryReconciliation.length > 0
-      ? `Verify ${followUpDeliveryReconciliation.length} uncertain mailbox ${followUpDeliveryReconciliation.length === 1 ? "delivery" : "deliveries"} before any retry.`
+    followUpDeliveryQueues.reconciliation.total > 0
+      ? `Verify ${followUpDeliveryQueues.reconciliation.total} uncertain mailbox ${followUpDeliveryQueues.reconciliation.total === 1 ? "delivery" : "deliveries"} before any retry.`
       : "",
     successFeeCompliance.status === "needs_attention" || successFeeCompliance.status === "due_soon"
       ? successFeeCompliance.nextAction
@@ -1087,6 +1089,18 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: employerResponseReplyPage.limit,
       hasMore: employerResponseReplyPage.hasMore,
     },
+    followUpDeliveryScope: {
+      ready: {
+        loaded: followUpDeliveryQueues.ready.items.length,
+        limit: followUpDeliveryQueues.ready.limit,
+        hasMore: followUpDeliveryQueues.ready.hasMore,
+      },
+      reconciliation: {
+        loaded: followUpDeliveryQueues.reconciliation.items.length,
+        limit: followUpDeliveryQueues.reconciliation.limit,
+        hasMore: followUpDeliveryQueues.reconciliation.hasMore,
+      },
+    },
     interviewOutcomeScope: {
       loaded: interviewOutcomePage.items.length,
       limit: interviewOutcomePage.limit,
@@ -1123,8 +1137,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       dueSoonSuccessFeeVerifications: successFeeCompliance.dueSoonVerifications,
       successFeeMonthlyCents: successFeeCompliance.monthlyFeeCents,
       pendingApprovals: pendingApprovalCount,
-      approvedFollowUpsReadyToSend: approvedFollowUpsReadyToSend.length,
-      followUpDeliveryReconciliation: followUpDeliveryReconciliation.length,
+      approvedFollowUpsReadyToSend: followUpDeliveryQueues.ready.total,
+      followUpDeliveryReconciliation: followUpDeliveryQueues.reconciliation.total,
       evidenceGates: evidenceGates.length,
       connectorReadiness: connectorReadinessQueue.length,
       openAdminReviews: adminReviewPage.total,

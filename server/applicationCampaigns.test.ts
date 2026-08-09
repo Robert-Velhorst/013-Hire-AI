@@ -14,7 +14,7 @@ import {
   getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
-import { createFollowUp, getEmployerResponseReplyPage, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
+import { createFollowUp, getEmployerResponseReplyPage, getFollowUpDeliveryOperatingQueues, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
 import {
   createAdminReviewItem,
   createApplication,
@@ -1335,5 +1335,72 @@ describe("application campaign operating ledger", () => {
       deliveryRecipient: "recruiter@example.com",
     }]);
     expect(ledger.nextActions).toContain("Verify 1 uncertain mailbox delivery before any retry.");
+  });
+
+  it("counts delivery work beyond the planning window without leaking another user", async () => {
+    const userId = 99029;
+    const otherUserId = 99030;
+    for (let index = 0; index < 250; index += 1) {
+      await createApplication({
+        userId,
+        jobId: 800 + index,
+        status: "applied",
+        notes: `Planning-window application ${index + 1}.`,
+      });
+    }
+
+    for (let index = 0; index < 12; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 1200 + index,
+        status: "applied",
+        notes: `Approved delivery item ${index + 1} outside the planning window.`,
+      });
+      const applicationId = Number(application.insertId);
+      const followUp = await createFollowUp({
+        applicationId,
+        message: `Approved delivery message ${index + 1}.`,
+      }, userId);
+      const approval = (await listUserApplicationApprovals(userId, "pending")).find((item) =>
+        item.entityType === "follow_up" && item.entityId === followUp.id
+      );
+      expect(approval).toBeTruthy();
+      await resolveApplicationApproval(approval!.id, userId, "approved", "Approved for delivery.", "user");
+      if (index >= 6) {
+        const [storedFollowUp] = await getFollowUps(applicationId, userId);
+        storedFollowUp.deliveryState = index % 2 === 0 ? "sending" : "unknown";
+      }
+    }
+
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 1300,
+      status: "applied",
+      notes: "Foreign approved delivery item.",
+    });
+    const foreignFollowUp = await createFollowUp({
+      applicationId: Number(foreignApplication.insertId),
+      message: "Foreign approved delivery message.",
+    }, otherUserId);
+    const foreignApproval = (await listUserApplicationApprovals(otherUserId, "pending")).find((item) =>
+      item.entityType === "follow_up" && item.entityId === foreignFollowUp.id
+    );
+    await resolveApplicationApproval(foreignApproval!.id, otherUserId, "approved", "Foreign approval.", "user");
+
+    const queues = await getFollowUpDeliveryOperatingQueues(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(queues.ready).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(queues.reconciliation).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(queues.ready.items).toHaveLength(5);
+    expect(queues.reconciliation.items).toHaveLength(5);
+    expect(queues.ready.items.some((item) => item.followUpId === foreignFollowUp.id)).toBe(false);
+    expect(ledger.applicationOverview.operatingWindow).toMatchObject({ loaded: 250, hasMore: true });
+    expect(ledger.metrics.approvedFollowUpsReadyToSend).toBe(6);
+    expect(ledger.metrics.followUpDeliveryReconciliation).toBe(6);
+    expect(ledger.followUpDeliveryScope).toEqual({
+      ready: { loaded: 5, limit: 5, hasMore: true },
+      reconciliation: { loaded: 5, limit: 5, hasMore: true },
+    });
   });
 });

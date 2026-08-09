@@ -566,6 +566,15 @@ export const applicationApprovals = mysqlTable("application_approvals", {
 }, (table) => [
   index("application_approvals_user_status_idx").on(table.userId, table.status),
   index("application_approvals_user_status_created_idx").on(table.userId, table.status, table.createdAt),
+  index("application_approvals_delivery_operating_idx").on(
+    table.userId,
+    table.status,
+    table.approvalType,
+    table.entityType,
+    table.entityId,
+    table.decidedAt,
+    table.id
+  ),
   index("application_approvals_application_idx").on(table.applicationId),
   index("application_approvals_entity_idx").on(table.entityType, table.entityId),
 ]);

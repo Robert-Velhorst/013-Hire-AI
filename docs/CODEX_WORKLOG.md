@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded follow-up delivery queues
+
+- Replaced operating-window send-handoff and uncertain-delivery counts with exact owner-scoped aggregates.
+- Added separate five-record command-center pages and truncation metadata for send-ready and reconciliation work.
+- Added a covering approval index plus scale coverage proving delivery work beyond the 250-application planning window remains visible.
+
 ## 2026-08-09 - Exact bounded employer-reply queue
 
 - Replaced operating-window reply counts with an exact owner-scoped latest-response query and a five-record command-center page.

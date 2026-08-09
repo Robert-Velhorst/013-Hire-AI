@@ -32,7 +32,7 @@ import {
   updateApplicationStatus,
   upsertInterviewPreparation,
 } from "./db";
-import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type EmployerResponse, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
+import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type Application, type ApplicationApproval, type EmployerResponse, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
 import { isJobListingCurrent } from "../shared/jobListingFreshness";
 import { generateInterviewPreparation as generateAiInterviewPreparation } from "./aiMatching";
@@ -2091,6 +2091,180 @@ export async function getEmployerResponseReplyPage(userId: number, requestedLimi
   ]);
   const total = Number(countRows[0]?.count ?? 0);
   return { items, total, limit, hasMore: total > items.length };
+}
+
+function parseFollowUpDeliveryPayload(payload: string | null) {
+  if (!payload) return {} as {
+    purpose?: string;
+    sourceResponseId?: number | null;
+    responseType?: string | null;
+    message?: string | null;
+  };
+  try {
+    const parsed = JSON.parse(payload);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return {
+      purpose: typeof parsed.purpose === "string" ? parsed.purpose : undefined,
+      sourceResponseId: typeof parsed.sourceResponseId === "number" ? parsed.sourceResponseId : null,
+      responseType: typeof parsed.responseType === "string" ? parsed.responseType : null,
+      message: typeof parsed.message === "string" ? parsed.message : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function toFollowUpDeliveryQueueItem(input: {
+  followUp: FollowUp;
+  approval: ApplicationApproval;
+  application: Pick<Application, "id" | "jobId">;
+  job: Pick<typeof jobs.$inferSelect, "id" | "title" | "company" | "location"> | null;
+}) {
+  const payload = parseFollowUpDeliveryPayload(input.approval.payload);
+  const message = input.followUp.message || payload.message || "";
+  return {
+    followUpId: input.followUp.id,
+    applicationId: input.application.id,
+    jobId: input.application.jobId,
+    approvalId: input.approval.id,
+    approvalTitle: input.approval.title,
+    riskLevel: input.approval.riskLevel,
+    purpose: payload.purpose || "routine_follow_up",
+    sourceResponseId: input.followUp.sourceResponseId ?? payload.sourceResponseId ?? null,
+    responseType: payload.responseType ?? null,
+    messagePreview: message.length > 180 ? `${message.slice(0, 177)}...` : message,
+    approvedAt: input.approval.decidedAt ?? null,
+    deliveryState: input.followUp.deliveryState || "draft",
+    deliveryProvider: input.followUp.deliveryProvider || null,
+    deliveryRecipient: input.followUp.deliveryRecipient || null,
+    deliveryFailureMessage: input.followUp.deliveryFailureMessage || null,
+    job: input.job,
+  };
+}
+
+export async function getFollowUpDeliveryOperatingQueues(userId: number, requestedLimit = 5) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    const applicationIds = Array.from(new Set(memoryFollowUps
+      .filter((followUp) => !followUp.sentDate)
+      .map((followUp) => followUp.applicationId)));
+    type OwnedApplication = Awaited<ReturnType<typeof getUserApplicationsByIds>>[number];
+    const ownedApplications: OwnedApplication[] = [];
+    for (let offset = 0; offset < applicationIds.length; offset += 500) {
+      ownedApplications.push(...await getUserApplicationsByIds(userId, applicationIds.slice(offset, offset + 500)));
+    }
+    const applicationsById = new Map(ownedApplications
+      .filter((application) => ["applied", "viewed", "interview"].includes(application.status || "pending"))
+      .map((application) => [application.id, application] as const));
+    const candidates = [] as ReturnType<typeof toFollowUpDeliveryQueueItem>[];
+    for (const application of Array.from(applicationsById.values())) {
+      const approvals = await listUserApplicationApprovalsForApplication(userId, application.id);
+      const latestApprovalByFollowUp = new Map<number, ApplicationApproval>();
+      for (const approval of approvals) {
+        if (approval.entityType !== "follow_up" || approval.approvalType !== "follow_up_send" || approval.status !== "approved") continue;
+        const current = latestApprovalByFollowUp.get(approval.entityId);
+        if (!current || approval.id > current.id) latestApprovalByFollowUp.set(approval.entityId, approval);
+      }
+      for (const followUp of memoryFollowUps) {
+        if (followUp.applicationId !== application.id || followUp.sentDate) continue;
+        const approval = latestApprovalByFollowUp.get(followUp.id);
+        if (!approval) continue;
+        candidates.push(toFollowUpDeliveryQueueItem({
+          followUp,
+          approval,
+          application,
+          job: application.job?.id != null && application.job.title != null && application.job.company != null ? {
+            id: application.job.id,
+            title: application.job.title,
+            company: application.job.company,
+            location: application.job.location,
+          } : null,
+        }));
+      }
+    }
+    candidates.sort((left, right) =>
+      (right.approvedAt?.getTime() ?? 0) - (left.approvedAt?.getTime() ?? 0) ||
+      right.approvalId - left.approvalId
+    );
+    const reconciliation = candidates.filter((item) => ["sending", "unknown"].includes(item.deliveryState));
+    const ready = candidates.filter((item) => !["sending", "unknown"].includes(item.deliveryState));
+    return {
+      ready: { items: ready.slice(0, limit), total: ready.length, limit, hasMore: ready.length > limit },
+      reconciliation: {
+        items: reconciliation.slice(0, limit),
+        total: reconciliation.length,
+        limit,
+        hasMore: reconciliation.length > limit,
+      },
+    };
+  }
+
+  const latestApproved = sql`NOT EXISTS (
+    SELECT 1 FROM application_approvals later_approval
+    WHERE later_approval.user_id = ${userId}
+      AND later_approval.entity_type = 'follow_up'
+      AND later_approval.entity_id = ${followUps.id}
+      AND later_approval.approval_type = 'follow_up_send'
+      AND later_approval.status = 'approved'
+      AND later_approval.id > ${applicationApprovals.id}
+  )`;
+  const baseCondition = and(
+    eq(applications.userId, userId),
+    inArray(applications.status, ["applied", "viewed", "interview"]),
+    eq(applicationApprovals.userId, userId),
+    eq(applicationApprovals.entityType, "follow_up"),
+    eq(applicationApprovals.approvalType, "follow_up_send"),
+    eq(applicationApprovals.status, "approved"),
+    isNull(followUps.sentDate),
+    latestApproved
+  );
+  const selection = {
+    followUp: followUps,
+    approval: applicationApprovals,
+    application: { id: applications.id, jobId: applications.jobId },
+    job: { id: jobs.id, title: jobs.title, company: jobs.company, location: jobs.location },
+  };
+  const itemQuery = (reconciliation: boolean) => db
+    .select(selection)
+    .from(applicationApprovals)
+    .innerJoin(followUps, eq(applicationApprovals.entityId, followUps.id))
+    .innerJoin(applications, eq(followUps.applicationId, applications.id))
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .where(and(
+      baseCondition,
+      reconciliation
+        ? inArray(followUps.deliveryState, ["sending", "unknown"])
+        : sql`${followUps.deliveryState} NOT IN ('sending', 'unknown')`
+    ))
+    .orderBy(desc(applicationApprovals.decidedAt), desc(applicationApprovals.id))
+    .limit(limit);
+  const [readyRows, reconciliationRows, countRows] = await Promise.all([
+    itemQuery(false),
+    itemQuery(true),
+    db
+      .select({
+        ready: sql<number>`SUM(CASE WHEN ${followUps.deliveryState} NOT IN ('sending', 'unknown') THEN 1 ELSE 0 END)`,
+        reconciliation: sql<number>`SUM(CASE WHEN ${followUps.deliveryState} IN ('sending', 'unknown') THEN 1 ELSE 0 END)`,
+      })
+      .from(applicationApprovals)
+      .innerJoin(followUps, eq(applicationApprovals.entityId, followUps.id))
+      .innerJoin(applications, eq(followUps.applicationId, applications.id))
+      .where(baseCondition),
+  ]);
+  const readyItems = readyRows.map(toFollowUpDeliveryQueueItem);
+  const reconciliationItems = reconciliationRows.map(toFollowUpDeliveryQueueItem);
+  const readyTotal = Number(countRows[0]?.ready ?? 0);
+  const reconciliationTotal = Number(countRows[0]?.reconciliation ?? 0);
+  return {
+    ready: { items: readyItems, total: readyTotal, limit, hasMore: readyTotal > readyItems.length },
+    reconciliation: {
+      items: reconciliationItems,
+      total: reconciliationTotal,
+      limit,
+      hasMore: reconciliationTotal > reconciliationItems.length,
+    },
+  };
 }
 
 async function getMemoryUpcomingInterviewContexts(
