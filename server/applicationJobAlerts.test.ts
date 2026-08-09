@@ -26,8 +26,21 @@ import {
 } from "./applicationFeatures";
 
 describe("job alert processing", () => {
+  const dueAlertRows = (rows: unknown[]) => ({
+    from: () => ({
+      where: () => ({
+        orderBy: () => ({
+          limit: (value: number) => {
+            mocks.limit(value);
+            return Promise.resolve(rows);
+          },
+        }),
+      }),
+    }),
+  });
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("records a matching alert refresh without sending an external notification", async () => {
@@ -44,7 +57,7 @@ describe("job alert processing", () => {
       lastTriggered: null,
     };
     mocks.select
-      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
+      .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
           id: 1,
@@ -64,8 +77,9 @@ describe("job alert processing", () => {
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
-    expect(mocks.update).toHaveBeenCalledTimes(1);
-    expect(mocks.where).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+    expect(mocks.where).toHaveBeenCalledTimes(2);
+    expect(mocks.limit).toHaveBeenCalledWith(250);
   });
 
   it("does not mark an alert as refreshed when active jobs miss its criteria", async () => {
@@ -82,7 +96,7 @@ describe("job alert processing", () => {
       lastTriggered: null,
     };
     mocks.select
-      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
+      .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
           id: 2,
@@ -97,16 +111,15 @@ describe("job alert processing", () => {
         }]) }) }) }),
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 3, name: "We Work Remotely" }]) });
+    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
   });
 
   it("does not load jobs or platforms when no alert is due", async () => {
-    mocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => Promise.resolve([]) }),
-    });
+    mocks.select.mockReturnValueOnce(dueAlertRows([]));
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
@@ -134,7 +147,7 @@ describe("job alert processing", () => {
       from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(rows) }) }) }),
     });
     mocks.select
-      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
+      .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce(page(firstPage))
       .mockReturnValueOnce({ from: () => Promise.resolve([]) })
       .mockReturnValueOnce(page([{
@@ -149,7 +162,7 @@ describe("job alert processing", () => {
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
     expect(mocks.select).toHaveBeenCalledTimes(4);
-    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenCalledTimes(2);
   });
 
   it("keeps a user-scoped alert ledger available without a configured database", async () => {

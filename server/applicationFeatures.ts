@@ -4546,10 +4546,14 @@ function nextMemoryJobAlertId() {
   return (memoryJobAlerts.reduce((max, alert) => Math.max(max, alert.id), 0) || 0) + 1;
 }
 
-function isJobAlertDue(alert: Pick<JobAlertConfig, "frequency" | "lastTriggered">, now = new Date()) {
-  if (!alert.lastTriggered) return true;
+function isJobAlertDue(
+  alert: Pick<JobAlertConfig, "frequency" | "lastTriggered" | "lastCheckedAt">,
+  now = new Date()
+) {
+  const lastChecked = alert.lastCheckedAt ?? alert.lastTriggered;
+  if (!lastChecked) return true;
 
-  const hoursSince = (now.getTime() - new Date(alert.lastTriggered).getTime()) / (1000 * 60 * 60);
+  const hoursSince = (now.getTime() - new Date(lastChecked).getTime()) / (1000 * 60 * 60);
   switch (alert.frequency) {
     case "instant":
       return hoursSince >= 1;
@@ -4576,6 +4580,7 @@ export async function createJobAlert(input: CreateAlertInput) {
       frequency: input.frequency,
       isActive: 1,
       lastTriggered: null,
+      lastCheckedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -4737,6 +4742,7 @@ export async function deleteJobAlert(userId: number, alertId: number) {
 
 // Refresh job alerts without interrupting job seekers for ordinary job matches.
 export async function processJobAlerts() {
+  const alertBatchSize = 250;
   const db = await getDb();
   if (!db) {
     const { sampleJobDuplicateLinks, sampleJobs, samplePlatforms } = await import("./sampleData");
@@ -4748,16 +4754,23 @@ export async function processJobAlerts() {
     );
     let processed = 0;
 
-    for (const alert of memoryJobAlerts.filter((item) => item.isActive === 1 && isJobAlertDue(item, now))) {
+    const dueAlerts = memoryJobAlerts
+      .filter((item) => item.isActive === 1 && isJobAlertDue(item, now))
+      .sort((left, right) => {
+        const leftChecked = left.lastCheckedAt?.getTime() ?? left.lastTriggered?.getTime() ?? 0;
+        const rightChecked = right.lastCheckedAt?.getTime() ?? right.lastTriggered?.getTime() ?? 0;
+        return leftChecked - rightChecked || left.id - right.id;
+      })
+      .slice(0, alertBatchSize);
+    for (const alert of dueAlerts) {
       const hasMatch = currentCanonicalJobs.some((job) => matchesJobAlert({
         ...job,
         platformName: platformNamesById.get(job.platformId),
       }, alert));
-      if (!hasMatch) continue;
-
-      alert.lastTriggered = now;
+      alert.lastCheckedAt = now;
+      if (hasMatch) alert.lastTriggered = now;
       alert.updatedAt = now;
-      processed++;
+      if (hasMatch) processed++;
     }
 
     return { processed, externalNotifications: 0 as const };
@@ -4773,12 +4786,14 @@ export async function processJobAlerts() {
     .where(and(
       eq(jobAlerts.isActive, 1),
       or(
-        isNull(jobAlerts.lastTriggered),
-        and(eq(jobAlerts.frequency, "instant"), lte(jobAlerts.lastTriggered, instantCutoff)),
-        and(eq(jobAlerts.frequency, "daily"), lte(jobAlerts.lastTriggered, dailyCutoff)),
-        and(eq(jobAlerts.frequency, "weekly"), lte(jobAlerts.lastTriggered, weeklyCutoff))
+        isNull(jobAlerts.lastCheckedAt),
+        and(eq(jobAlerts.frequency, "instant"), lte(jobAlerts.lastCheckedAt, instantCutoff)),
+        and(eq(jobAlerts.frequency, "daily"), lte(jobAlerts.lastCheckedAt, dailyCutoff)),
+        and(eq(jobAlerts.frequency, "weekly"), lte(jobAlerts.lastCheckedAt, weeklyCutoff))
       )
-    ));
+    ))
+    .orderBy(asc(jobAlerts.lastCheckedAt), asc(jobAlerts.id))
+    .limit(alertBatchSize);
   if (alerts.length === 0) {
     return { processed: 0, externalNotifications: 0 as const };
   }
@@ -4846,6 +4861,12 @@ export async function processJobAlerts() {
     if (activeJobs.length < jobPageSize || unmatchedAlerts.size === 0) break;
     activeJobs = await selectJobPage(activeJobs[activeJobs.length - 1].id);
   }
+
+  const checkedAlertIds = alerts.map((alert) => alert.id);
+  await db
+    .update(jobAlerts)
+    .set({ lastCheckedAt: now })
+    .where(inArray(jobAlerts.id, checkedAlertIds));
 
   if (matchedAlertIds.length > 0) {
     // Matching jobs remain available in the command center. External alerts are
