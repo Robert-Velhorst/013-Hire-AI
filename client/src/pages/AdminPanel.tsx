@@ -147,6 +147,10 @@ export default function AdminPanel() {
 
   // Data queries
   const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
+  const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
+    { limit: 8 },
+    { enabled: isAdmin, refetchInterval: 30_000 }
+  );
   const { data: fees, refetch: refetchFees } = trpc.admin.listFees.useQuery(
     { status: "all", limit: 100, offset: 0 },
     { enabled: isAdmin }
@@ -433,6 +437,7 @@ export default function AdminPanel() {
                 refetchVerifications();
                 refetchReviewQueue();
                 refetchScrapingStatus();
+                refetchOperationalFailures();
               }}
               className="text-slate-400 hover:text-white"
             >
@@ -520,6 +525,41 @@ export default function AdminPanel() {
             </div>
           </CardContent>
         </Card>
+
+        <section
+          aria-labelledby="runtime-failure-heading"
+          data-testid="admin-runtime-failure-signals"
+          className="mb-6 border-y border-slate-800 bg-slate-950/35 px-1 py-4"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <AlertTriangle className={operationalFailures?.totalFailures ? "h-5 w-5 text-amber-300" : "h-5 w-5 text-emerald-300"} />
+                <h2 id="runtime-failure-heading" className="text-sm font-semibold text-white">Runtime failure signals</h2>
+                <Badge variant="outline" className={operationalFailures?.totalFailures ? "border-amber-500/30 text-amber-300" : "border-emerald-500/30 text-emerald-300"}>
+                  {operationalFailures?.totalFailures ?? 0} since startup
+                </Badge>
+              </div>
+              <p className="mt-1 max-w-2xl text-xs text-slate-400">
+                Redacted process-local counters for failed provider and runtime operations. Restarting the server resets this view; durable provider evidence remains in the operating ledger.
+              </p>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
+              {operationalFailures?.signals.length ? operationalFailures.signals.slice(0, 4).map((signal) => (
+                <div key={`${signal.scope}:${signal.operation}`} className="min-w-0 border-l border-slate-700 pl-3 text-xs">
+                  <div className="truncate font-medium text-slate-200" title={`${signal.scope}: ${signal.operation}`}>
+                    {signal.scope}: {signal.operation}
+                  </div>
+                  <div className="mt-1 text-slate-500">
+                    {signal.count} occurrence{signal.count === 1 ? "" : "s"} · last {new Date(signal.lastOccurredAt).toLocaleString()}
+                  </div>
+                </div>
+              )) : (
+                <div className="text-xs text-slate-500">No redacted failure signals have been recorded by this server process.</div>
+              )}
+            </div>
+          </div>
+        </section>
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5 mb-8">

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded operational failure monitoring
+
+- Extended fixed redacted failure markers into cardinality-bounded process-local counters without accepting exception objects, provider payloads, credentials, or user identifiers.
+- Added an admin-only summary endpoint and a 30-second-refresh operator region that distinguishes transient process signals from durable operating-ledger evidence.
+- Verified the authenticated admin page in the in-app browser at desktop and mobile breakpoints with no console errors or measured horizontal overflow.
+
 ## 2026-08-09 - Referential-integrity schema gate
 
 - Extended the production-bundled schema audit to verify every runtime primary key and declared foreign key, including ordered columns, referenced targets, and delete/update actions.

@@ -24,6 +24,7 @@ import {
 import { eq, desc, and, lt, sql, isNotNull, or } from "drizzle-orm";
 import { getStripeClient } from "../stripeClient";
 import { buildPrivacyErasurePreview } from "../privacyRetention";
+import { getOperationalFailureSnapshot } from "../operationalFailureLog";
 
 type StripeSynchronizedFeeStatus = "not_required" | "paused" | "resumed" | "cancelled";
 
@@ -103,6 +104,12 @@ async function recordBlockedBillingEnforcement(input: {
 }
 
 export const adminRouter = router({
+  getOperationalFailures: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }).optional())
+    .query(({ input }) => {
+      return getOperationalFailureSnapshot(input?.limit ?? 20);
+    }),
+
   getReviewQueue: adminProcedure
     .input(z.object({
       status: z.enum(["all", "open", "in_progress", "resolved", "dismissed"]).default("open"),
