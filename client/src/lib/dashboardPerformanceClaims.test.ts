@@ -179,4 +179,14 @@ describe("dashboard performance claims", () => {
     expect(router).toContain("getPendingInboxResponseCandidatePage(ctx.user.id, input?.limit ?? 25)");
     expect(router).not.toContain("listInboxResponseCandidates: protectedProcedure");
   });
+
+  it("uses cursor pagination for the saved-jobs surface", () => {
+    const page = readFileSync(resolve(process.cwd(), "client/src/pages/SavedJobs.tsx"), "utf8");
+    const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
+
+    expect(page).toContain("getSavedJobPage.useInfiniteQuery");
+    expect(page).toContain("getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined");
+    expect(router).toContain("getSavedJobPage: protectedProcedure");
+    expect(router).not.toContain("getSavedJobs: protectedProcedure");
+  });
 });

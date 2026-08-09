@@ -33,7 +33,21 @@ export default function SavedJobs() {
   const { locale, t } = useLocale();
 
   // Fetch saved jobs
-  const { data: savedJobs, isLoading, refetch } = trpc.jobs.getSavedJobs.useQuery();
+  const {
+    data: savedJobPages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = trpc.jobs.getSavedJobPage.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const savedJobs = useMemo(
+    () => savedJobPages?.pages.flatMap((page) => page.items) ?? [],
+    [savedJobPages]
+  );
   const { data: profileData } = trpc.profile.get.useQuery(undefined, {
     enabled: Boolean(user),
   });
@@ -144,7 +158,7 @@ export default function SavedJobs() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
           </div>
-        ) : savedJobs && savedJobs.length > 0 ? (
+        ) : savedJobs.length > 0 ? (
           <div className="grid gap-4">
             {savedJobs.map((savedJob: any) => {
               const job = savedJob.job || savedJob;
@@ -257,6 +271,20 @@ export default function SavedJobs() {
                 </Card>
               );
             })}
+            {hasNextPage ? (
+              <div className="flex justify-center pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-700"
+                  disabled={isFetchingNextPage}
+                  onClick={() => fetchNextPage()}
+                >
+                  {isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Load more
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <Card className="bg-slate-900/50 border-slate-700/50">

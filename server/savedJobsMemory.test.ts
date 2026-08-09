@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  getSavedJobPage,
   getSavedJobs,
   saveJob,
   unsaveJob,
@@ -79,5 +80,39 @@ describe("saved jobs memory fallback", () => {
 
     await unsaveJob(userId, 5);
     expect(await getSavedJobs(userId)).toEqual([]);
+  });
+
+  it("pages equal-timestamp saves without leaking another owner's records", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T18:00:00.000Z"));
+    const userId = 990_003;
+    const otherUserId = 990_004;
+    try {
+      for (const jobId of [1, 2, 3, 4]) {
+        await saveJob({ userId, jobId });
+      }
+      await saveJob({ userId: otherUserId, jobId: 1 });
+
+      const first = await getSavedJobPage(userId, { limit: 2 });
+      expect(first.items).toHaveLength(2);
+      expect(first.nextCursor).toEqual({
+        updatedAt: new Date("2026-08-09T18:00:00.000Z"),
+        id: first.items[1].id,
+      });
+      const second = await getSavedJobPage(userId, {
+        limit: 2,
+        cursor: first.nextCursor ?? undefined,
+      });
+      expect(second.items).toHaveLength(2);
+      expect(second.nextCursor).toBeNull();
+      expect(new Set([...first.items, ...second.items].map((item) => item.id)).size).toBe(4);
+      expect([...first.items, ...second.items].every((item) => item.userId === userId)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      for (const jobId of [1, 2, 3, 4]) {
+        await unsaveJob(userId, jobId);
+      }
+      await unsaveJob(otherUserId, 1);
+    }
   });
 });

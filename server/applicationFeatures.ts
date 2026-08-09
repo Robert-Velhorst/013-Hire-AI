@@ -3,7 +3,7 @@
  * Handles saved jobs, application notes, interview scheduling, and follow-up emails
  */
 
-import { eq, and, desc, asc, sql, inArray, isNull, lte, or, gt } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNull, lte, lt, or, gt } from "drizzle-orm";
 import {
   createApplicationApproval,
   createAdminReviewItem,
@@ -243,6 +243,91 @@ export async function getSavedJobs(userId: number) {
     .orderBy(desc(savedJobs.updatedAt));
 
   return result;
+}
+
+export async function getSavedJobPage(
+  userId: number,
+  options: {
+    limit?: number;
+    cursor?: { updatedAt: Date; id: number };
+  } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const rows = memorySavedJobs
+      .filter((item) => item.userId === userId)
+      .filter((item) => !options.cursor || (
+        item.updatedAt < options.cursor.updatedAt ||
+        (item.updatedAt.getTime() === options.cursor.updatedAt.getTime() && item.id < options.cursor.id)
+      ))
+      .sort((left, right) =>
+        right.updatedAt.getTime() - left.updatedAt.getTime() || right.id - left.id
+      )
+      .slice(0, limit + 1);
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const items = await Promise.all(pageRows.map(async (item) => {
+      const job = await getJobById(item.jobId);
+      return {
+        ...item,
+        job: job ? {
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
+          jobType: job.jobType,
+          applicationUrl: job.applicationUrl,
+        } : null,
+      };
+    }));
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last ? { updatedAt: last.updatedAt, id: last.id } : null,
+    };
+  }
+
+  const cursorCondition = options.cursor ? or(
+    lt(savedJobs.updatedAt, options.cursor.updatedAt),
+    and(eq(savedJobs.updatedAt, options.cursor.updatedAt), lt(savedJobs.id, options.cursor.id))
+  ) : undefined;
+  const rows = await db
+    .select({
+      id: savedJobs.id,
+      jobId: savedJobs.jobId,
+      notes: savedJobs.notes,
+      tags: savedJobs.tags,
+      priority: savedJobs.priority,
+      createdAt: savedJobs.createdAt,
+      updatedAt: savedJobs.updatedAt,
+      job: {
+        id: jobs.id,
+        title: jobs.title,
+        company: jobs.company,
+        location: jobs.location,
+        salaryMin: jobs.salaryMin,
+        salaryMax: jobs.salaryMax,
+        salaryCurrency: jobs.salaryCurrency,
+        jobType: jobs.jobType,
+        applicationUrl: jobs.applicationUrl,
+      },
+    })
+    .from(savedJobs)
+    .leftJoin(jobs, eq(savedJobs.jobId, jobs.id))
+    .where(and(eq(savedJobs.userId, userId), cursorCondition))
+    .orderBy(desc(savedJobs.updatedAt), desc(savedJobs.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: hasMore && last ? { updatedAt: last.updatedAt, id: last.id } : null,
+  };
 }
 
 export async function updateSavedJobNotes(

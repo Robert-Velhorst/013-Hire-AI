@@ -803,7 +803,7 @@ export const savedJobs = mysqlTable("saved_jobs", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("saved_jobs_user_job_unique").on(table.userId, table.jobId),
-  index("saved_jobs_user_updated_idx").on(table.userId, table.updatedAt),
+  index("saved_jobs_user_updated_idx").on(table.userId, table.updatedAt, table.id),
 ]);
 
 /**

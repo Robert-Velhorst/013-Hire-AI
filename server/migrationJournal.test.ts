@@ -210,6 +210,21 @@ describe("Drizzle migration journal", () => {
     );
   });
 
+  it("keeps the saved-job cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0056_saved_job_cursor_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("saved_jobs_user_updated_idx").on(table.userId, table.updatedAt, table.id)'
+    );
+    expect(migration).toContain(
+      "ADD INDEX `saved_jobs_user_updated_idx` (`user_id`, `updated_at`, `id`)"
+    );
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Cursor-paged saved jobs
+
+- Replaced the live saved-jobs full-history read with stable cursor pagination and incremental frontend loading.
+- Added an owner/time/ID database index so equal-timestamp pages stay deterministic and index-backed.
+- Kept complete saved-job reads available only for explicit privacy export and internal compatibility.
+
 ## 2026-08-09 - Bounded profile inbox-response review
 
 - Replaced the Profile page's unbounded inbox-response route with an owner-validated 25-item page and exact pending total.

@@ -19,7 +19,6 @@ import { uploadResume, getActiveResume, getResumeVersions, setActiveVersion, del
 import {
   saveJob,
   unsaveJob,
-  getSavedJobs,
   updateSavedJobNotes,
   addApplicationNote,
   getApplicationNotes,
@@ -625,9 +624,17 @@ export const appRouter = router({
         return await unsaveJob(ctx.user.id, input.jobId);
       }),
 
-    getSavedJobs: protectedProcedure
-      .query(async ({ ctx }) => {
-        return await getSavedJobs(ctx.user.id);
+    getSavedJobPage: protectedProcedure
+      .input(z.object({
+        limit: boundedPageSize.optional().default(50),
+        cursor: z.object({
+          updatedAt: z.date(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getSavedJobPage } = await import("./applicationFeatures");
+        return await getSavedJobPage(ctx.user.id, input);
       }),
 
     updateSavedJobNotes: protectedProcedure
