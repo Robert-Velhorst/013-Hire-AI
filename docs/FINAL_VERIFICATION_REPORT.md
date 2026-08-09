@@ -74,6 +74,8 @@ Non-idle alert refreshes now traverse projected current canonical jobs in bounde
 
 CI now includes a dedicated Windows runner in addition to the complete Ubuntu suite. The Windows job validates the frozen dependency graph, TypeScript, both native PowerShell launchers, network binding and HAI connector contracts, and the production build; credential-complete startup remains deployment acceptance rather than a CI claim.
 
+GitHub Actions run `31291576077` passed both jobs: Ubuntu `build-and-test` and Windows `windows-runtime`.
+
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
 
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
