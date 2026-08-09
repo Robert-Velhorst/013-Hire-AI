@@ -9,20 +9,25 @@ const AUTONOMOUS_MAX_CONCURRENT_USERS = 3;
 async function processWithConcurrency<T>(
   items: T[],
   maxConcurrency: number,
-  worker: (item: T) => Promise<void>
+  worker: (item: T) => Promise<void>,
+  signal?: AbortSignal
 ) {
   let nextIndex = 0;
   const workers = Array.from(
     { length: Math.min(maxConcurrency, items.length) },
     async () => {
-      while (nextIndex < items.length) {
+      while (nextIndex < items.length && !signal?.aborted) {
         const item = items[nextIndex];
         nextIndex += 1;
         await worker(item);
       }
     }
   );
-  await Promise.all(workers);
+  const results = await Promise.allSettled(workers);
+  const failedWorker = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected"
+  );
+  if (failedWorker) throw failedWorker.reason;
 }
 
 interface AutonomousSchedulerStatus {
@@ -70,6 +75,7 @@ export class AutonomousScheduler {
   private readonly tickMs = 5 * 60 * 1000;
   private intervalId: NodeJS.Timeout | null = null;
   private activeCycle: Promise<void> | null = null;
+  private activeCycleController: AbortController | null = null;
   private readonly userRunStatuses = new Map<number, AutonomousUserRunStatus>();
   private status: AutonomousSchedulerStatus = {
     isStarted: false,
@@ -96,6 +102,7 @@ export class AutonomousScheduler {
 
   start() {
     if (this.intervalId) return;
+    if (this.activeCycleController?.signal.aborted) return;
 
     this.status.isStarted = true;
     this.scheduleCycle();
@@ -109,22 +116,26 @@ export class AutonomousScheduler {
     this.intervalId = null;
     this.status.isStarted = false;
     this.status.nextCycleAt = null;
+    this.activeCycleController?.abort();
     await this.activeCycle;
   }
 
   private scheduleCycle() {
     if (this.activeCycle) return;
 
+    const controller = new AbortController();
+    this.activeCycleController = controller;
     let cycle: Promise<void>;
-    cycle = this.runDueUsers().finally(() => {
+    cycle = this.runDueUsers(controller.signal).finally(() => {
       if (this.activeCycle === cycle) {
         this.activeCycle = null;
+        this.activeCycleController = null;
       }
     });
     this.activeCycle = cycle;
   }
 
-  async runDueUsers() {
+  async runDueUsers(signal?: AbortSignal) {
     if (this.status.isRunning) return;
 
     this.status.isRunning = true;
@@ -146,17 +157,20 @@ export class AutonomousScheduler {
     try {
       this.status.enrolledUsers = 0;
       let afterUserId = 0;
-      while (true) {
+      while (!signal?.aborted) {
         const profiles = await getProfilesWithAutonomousPreferences(afterUserId, AUTONOMOUS_PROFILE_PAGE_SIZE);
+        if (signal?.aborted) break;
         this.status.enrolledUsers += profiles.length;
         await processWithConcurrency(profiles, AUTONOMOUS_MAX_CONCURRENT_USERS, async (profile) => {
+          if (signal?.aborted) return;
           const preferences = parseAutonomousPreferences(profile.preferences);
           if (!preferences.autonomousEnabled) return;
           const frequency = preferences.scanFrequency || "daily";
           const interval = getAutonomousScanIntervalMs(frequency);
 
           try {
-            const result = await runScheduledAutonomousForUser(profile.userId, interval);
+            const result = await runScheduledAutonomousForUser(profile.userId, interval, signal);
+            if (signal?.aborted) return;
             if (result) {
               const jobsQueued =
                 result.queuedApplicationRecords +
@@ -200,6 +214,7 @@ export class AutonomousScheduler {
               }
             }
           } catch {
+            if (signal?.aborted) return;
             this.userRunStatuses.set(profile.userId, {
               lastRunAt: new Date(),
               jobsQueued: 0,
@@ -219,7 +234,8 @@ export class AutonomousScheduler {
             });
             this.status.errors.push(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
           }
-        });
+        }, signal);
+        if (signal?.aborted) break;
         if (profiles.length < AUTONOMOUS_PROFILE_PAGE_SIZE) break;
         const nextUserId = profiles[profiles.length - 1]?.userId ?? afterUserId;
         if (nextUserId <= afterUserId) throw new Error("Autonomous profile pagination did not advance.");

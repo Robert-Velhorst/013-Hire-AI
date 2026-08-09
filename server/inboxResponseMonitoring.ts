@@ -76,7 +76,7 @@ async function recordMonitoringAudit(
  */
 export async function monitorInboxResponses(
   userId: number,
-  options: { dependencies?: InboxResponseMonitoringDependencies } = {}
+  options: { dependencies?: InboxResponseMonitoringDependencies; signal?: AbortSignal } = {}
 ): Promise<InboxMonitoringResult> {
   const dependencies = options.dependencies ?? defaults;
   const result: InboxMonitoringResult = {
@@ -108,8 +108,12 @@ export async function monitorInboxResponses(
   result.inboxReauthorizationRequired = reauthorizationRequiredProviders.size;
 
   for (const provider of providers) {
+    if (options.signal?.aborted) break;
     try {
-      const candidates = await dependencies.discoverInboxResponseCandidates(userId, provider);
+      const candidates = await dependencies.discoverInboxResponseCandidates(userId, provider, {
+        signal: options.signal,
+      });
+      if (options.signal?.aborted) break;
       result.providersScanned += 1;
       const persistenceResults = await Promise.allSettled(candidates.map((candidate) =>
         dependencies.upsertInboxResponseCandidate({
@@ -159,6 +163,7 @@ export async function monitorInboxResponses(
         result.errors.push(`${provider}: unable to record inbox monitoring audit`);
       }
     } catch {
+      if (options.signal?.aborted) break;
       result.monitoringFailures += 1;
       result.errors.push(`${provider}: inbox response monitoring failed`);
       // A provider request can invalidate a previously healthy grant. Re-read

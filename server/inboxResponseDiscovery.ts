@@ -265,18 +265,19 @@ function gmailHeaders(payload: Record<string, unknown>) {
   };
 }
 
-function inboxRequest(init: RequestInit = {}): RequestInit {
+function inboxRequest(init: RequestInit = {}, signal?: AbortSignal): RequestInit {
+  const deadline = outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard);
   return {
     ...init,
     redirect: "error",
-    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
   };
 }
 
 export async function discoverInboxResponseCandidates(
   userId: number,
   provider: InboxProvider,
-  options: { fetcher?: typeof fetch; now?: Date; dependencies?: InboxResponseDiscoveryDependencies } = {}
+  options: { fetcher?: typeof fetch; now?: Date; dependencies?: InboxResponseDiscoveryDependencies; signal?: AbortSignal } = {}
 ): Promise<InboxResponseCandidate[]> {
   const fetcher = options.fetcher ?? fetch;
   const now = options.now ?? new Date();
@@ -287,7 +288,7 @@ export async function discoverInboxResponseCandidates(
     const list = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages?" + new URLSearchParams({
       maxResults: String(MAX_MESSAGES),
       q: "newer_than:30d",
-    }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }));
+    }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }, options.signal));
     if (!list.ok) await throwInboxApiError(userId, account, "gmail", list.status, dependencies);
     const payload = await readBoundedResponseJson<{ messages?: Array<{ id?: unknown }> }>(
       list,
@@ -303,7 +304,7 @@ export async function discoverInboxResponseCandidates(
       const batchCandidates = await Promise.all(batch.map(async (messageId): Promise<InboxResponseCandidate | null> => {
         const detail = await fetcher(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, inboxRequest({
           headers: { Authorization: `Bearer ${accessToken}` },
-        }));
+        }, options.signal));
         if (!detail.ok) {
           if (detail.status === 401 || detail.status === 403) {
             await throwInboxApiError(userId, account, "gmail", detail.status, dependencies);
@@ -341,7 +342,7 @@ export async function discoverInboxResponseCandidates(
     "$select": "id,subject,from,receivedDateTime,bodyPreview",
     "$filter": `receivedDateTime ge ${lookbackStart}`,
     "$orderby": "receivedDateTime desc",
-  }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }));
+  }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }, options.signal));
   if (!response.ok) await throwInboxApiError(userId, account, "outlook", response.status, dependencies);
   const payload = await readBoundedResponseJson<{ value?: Array<Record<string, unknown>> }>(
     response,

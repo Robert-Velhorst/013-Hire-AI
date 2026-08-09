@@ -406,7 +406,8 @@ async function getAutonomousFollowUpSafetyBlock(
 async function executeAutonomousRun(
   userId: number,
   overrides: AutonomousPreferences = {},
-  assertLeaseActive: () => void = () => {}
+  assertLeaseActive: () => void = () => {},
+  signal?: AbortSignal
 ): Promise<AutonomousRunResult> {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -890,7 +891,7 @@ async function executeAutonomousRun(
 
   // Read-only inbox monitoring is consent-gated and only creates pending review candidates.
   assertLeaseActive();
-  const inboxMonitoring = await monitorInboxResponses(userId);
+  const inboxMonitoring = await monitorInboxResponses(userId, { signal });
   inboxProvidersScanned = inboxMonitoring.providersScanned;
   inboxReauthorizationRequired = inboxMonitoring.inboxReauthorizationRequired;
   inboxCandidatesDiscovered = inboxMonitoring.candidatesDiscovered;
@@ -956,13 +957,14 @@ export function runAutonomousForUser(
 
 export async function runScheduledAutonomousForUser(
   userId: number,
-  minimumIntervalMs: number
+  minimumIntervalMs: number,
+  signal?: AbortSignal
 ): Promise<AutonomousRunResult | null> {
   if (activeRuns.has(userId)) return null;
 
   return await activeRuns.track(
     userId,
-    runWithLease(userId, {}, minimumIntervalMs, true)
+    runWithLease(userId, {}, minimumIntervalMs, true, signal)
   );
 }
 
@@ -970,15 +972,20 @@ async function runWithLease(
   userId: number,
   overrides: AutonomousPreferences,
   minimumIntervalMs: number,
-  skipIfUnavailable: boolean
+  skipIfUnavailable: boolean,
+  signal?: AbortSignal
 ): Promise<AutonomousRunResult | null> {
+  const executionGuard = new AutonomousExecutionGuard(signal);
+  executionGuard.assertLeaseActive();
   const eligibility = await getAutonomousUserEligibility(userId);
+  executionGuard.assertLeaseActive();
   if (!eligibility.eligible) {
     if (skipIfUnavailable) return null;
     throw new Error(eligibility.reason || "This account is not eligible for autonomous actions.");
   }
 
   const campaignBlock = await getCampaignExecutionBlock(userId);
+  executionGuard.assertLeaseActive();
   if (campaignBlock) {
     if (skipIfUnavailable) return null;
     throw new Error(campaignBlock);
@@ -986,6 +993,7 @@ async function runWithLease(
 
   if (skipIfUnavailable) {
     const profile = await getUserProfile(userId);
+    executionGuard.assertLeaseActive();
     const preferences = parseAutonomousPreferences(profile?.preferences);
     if (!preferences.autonomousEnabled) {
       return null;
@@ -999,9 +1007,39 @@ async function runWithLease(
     throw new Error("An autonomous run is already active for this account.");
   }
 
-  const campaignBlockAfterLease = await getCampaignExecutionBlock(userId);
+  if (signal?.aborted) {
+    try {
+      await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
+    } catch {
+      console.error(`[AutonomousService] Failed to release cancelled lease for user ${userId}.`);
+    }
+    throw new Error(AUTONOMOUS_RUN_FAILURE);
+  }
+
+  let campaignBlockAfterLease: string | null;
+  try {
+    campaignBlockAfterLease = await getCampaignExecutionBlock(userId);
+    executionGuard.assertLeaseActive();
+  } catch {
+    try {
+      await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
+    } catch {
+      console.error(`[AutonomousService] Failed to release post-acquisition lease for user ${userId}.`);
+    }
+    throw new Error(AUTONOMOUS_RUN_FAILURE);
+  }
   if (campaignBlockAfterLease) {
-    await skipAutonomousRunLease(userId, leaseToken, campaignBlockAfterLease);
+    try {
+      const skipped = await skipAutonomousRunLease(userId, leaseToken, campaignBlockAfterLease);
+      if (!skipped) throw new Error("Autonomous run lease ownership changed.");
+    } catch {
+      try {
+        await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
+      } catch {
+        console.error(`[AutonomousService] Failed to release blocked lease for user ${userId}.`);
+      }
+      throw new Error(AUTONOMOUS_RUN_FAILURE);
+    }
     if (skipIfUnavailable) return null;
     throw new Error(campaignBlockAfterLease);
   }
@@ -1009,13 +1047,15 @@ async function runWithLease(
   if (skipIfUnavailable) {
     try {
       const profile = await getUserProfile(userId);
+      executionGuard.assertLeaseActive();
       const preferences = parseAutonomousPreferences(profile?.preferences);
       if (!preferences.autonomousEnabled) {
-        await skipAutonomousRunLease(
+        const skipped = await skipAutonomousRunLease(
           userId,
           leaseToken,
           "Autonomous scheduling was disabled before execution started."
         );
+        if (!skipped) throw new Error("Autonomous run lease ownership changed.");
         return null;
       }
     } catch {
@@ -1028,7 +1068,6 @@ async function runWithLease(
     }
   }
 
-  const executionGuard = new AutonomousExecutionGuard();
   const leaseRenewal = setInterval(() => {
     void renewAutonomousRunLease(userId, leaseToken)
       .then((renewed) => {
@@ -1052,7 +1091,8 @@ async function runWithLease(
       result = await executeAutonomousRun(
         userId,
         overrides,
-        () => executionGuard.assertLeaseActive()
+        () => executionGuard.assertLeaseActive(),
+        signal
       );
       executionGuard.assertLeaseActive();
     } catch {

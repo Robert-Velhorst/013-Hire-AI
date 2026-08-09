@@ -184,4 +184,34 @@ describe("inbox response monitoring", () => {
       afterState: expect.stringContaining('"persistenceFailures":1'),
     }));
   });
+
+  it("does not persist or audit an intentionally cancelled inbox scan", async () => {
+    const mocks = dependencies();
+    const controller = new AbortController();
+    mocks.discoverInboxResponseCandidates.mockImplementation(
+      async (_userId: number, _provider: string, options: { signal: AbortSignal }) => {
+        await new Promise<void>((resolve) => {
+          options.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        throw new Error("cancelled");
+      }
+    );
+    const monitoring = monitorInboxResponses(701, {
+      dependencies: mocks,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(mocks.discoverInboxResponseCandidates).toHaveBeenCalledOnce());
+
+    controller.abort();
+
+    await expect(monitoring).resolves.toEqual({
+      providersScanned: 0,
+      inboxReauthorizationRequired: 0,
+      candidatesDiscovered: 0,
+      monitoringFailures: 0,
+      errors: [],
+    });
+    expect(mocks.upsertInboxResponseCandidate).not.toHaveBeenCalled();
+    expect(mocks.createAuditEvent).not.toHaveBeenCalled();
+  });
 });

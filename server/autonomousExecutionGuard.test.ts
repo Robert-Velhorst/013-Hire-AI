@@ -12,4 +12,12 @@ describe("AutonomousExecutionGuard", () => {
     guard.markLeaseLost("Lease renewal failed.");
     expect(() => guard.assertLeaseActive()).toThrow("Lease renewal failed.");
   });
+
+  it("blocks subsequent actions when the owning scheduler is cancelled", () => {
+    const controller = new AbortController();
+    const guard = new AutonomousExecutionGuard(controller.signal);
+    controller.abort();
+
+    expect(() => guard.assertLeaseActive()).toThrow("autonomous run was cancelled");
+  });
 });

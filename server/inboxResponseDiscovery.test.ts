@@ -171,6 +171,31 @@ describe("inbox response discovery", () => {
     expect(detailCalls).toBe(6);
   });
 
+  it("aborts an active Gmail request when its autonomous owner stops", async () => {
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      requestSignal = init?.signal ?? undefined;
+      return await new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => {
+          const error = new Error("request cancelled");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      });
+    });
+    const discovery = discoverInboxResponseCandidates(700, "gmail", {
+      ...options(fetcher),
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+
+    controller.abort();
+
+    await expect(discovery).rejects.toMatchObject({ name: "AbortError" });
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it("rejects oversized Gmail list metadata before verifying the connector", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", {
       status: 200,

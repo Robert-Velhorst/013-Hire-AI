@@ -207,4 +207,39 @@ describe("AutonomousScheduler", () => {
     ]);
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("provider-secret");
   });
+
+  it("aborts active users and does not dequeue more work during shutdown", async () => {
+    mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
+      Array.from({ length: 7 }, (_, index) => ({
+        userId: index + 1,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+      }))
+    );
+    mocks.runScheduledAutonomousForUser.mockImplementation(
+      async (_userId: number, _interval: number, signal: AbortSignal) => {
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        throw new Error("cancelled");
+      }
+    );
+    const scheduler = new AutonomousScheduler();
+    scheduler.start();
+    await vi.waitFor(() => expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(3));
+
+    await scheduler.stop();
+
+    expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(3);
+    expect(mocks.runScheduledAutonomousForUser.mock.calls.every((call) =>
+      (call[2] as AbortSignal).aborted
+    )).toBe(true);
+    expect(scheduler.getStatus()).toMatchObject({
+      isStarted: false,
+      isRunning: false,
+      usersRun: 0,
+      nextCycleAt: null,
+      errors: [],
+    });
+  });
 });
