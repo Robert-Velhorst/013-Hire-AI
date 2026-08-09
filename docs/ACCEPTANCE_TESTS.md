@@ -20,5 +20,6 @@
 | Embedded development runtime | `server/_core/viteConfig.test.ts` | Build and serve modes share the same factory; development keeps its client root/instrumentation while production excludes it. `/src/main.tsx` returned JavaScript in the local smoke. |
 | Operating query indexes | `server/migrationJournal.test.ts` | Migration `0036` and the Drizzle schema must declare the same 17 operating indexes. Production acceptance must apply the migration and inspect query plans against representative data. |
 | Operating evidence batching | `client/src/lib/dashboardPerformanceClaims.test.ts`; `server/responseInterviewMemory.test.ts` | Responses, schedules, and follow-ups are loaded through three shared batch paths, mixed application IDs return only owned records, and interview preparation uses one user-level lookup. |
+| Preloaded offer attribution | `server/applicationApprovals.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | The operating ledger reuses its existing application, approval, and response data; mixed-user supplied rows are filtered to the authenticated user. |
 
 Expected outcomes are enforced through tests where practical. Provider callbacks, real S3 objects, Stripe webhook delivery, and legal/compliance flows require credentials and controlled external verification.

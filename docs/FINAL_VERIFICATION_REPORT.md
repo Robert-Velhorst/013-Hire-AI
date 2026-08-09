@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 807 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 808 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -53,6 +53,8 @@ Migration `0036` adds query-aligned indexes for profile readiness and the operat
 The operating ledger now batch-loads employer responses, interview schedules, and follow-ups once per refresh and reuses that ownership-scoped evidence across all related queues. Regression coverage rejects the former per-application calls and verifies that requesting mixed application IDs cannot expose another user's child records.
 
 Upcoming interview preparation also uses one user-scoped preparation read rather than one existence query per interview, while retaining the same queue semantics.
+
+Offer-attribution review generation now reuses the ledger's owned applications, approvals, and employer responses instead of loading those datasets again. Supplied rows are filtered by the requested user before projection, and a mixed-user regression verifies that another user's application, approval, or offer cannot enter the result.
 
 ## Release blockers and scope boundaries
 

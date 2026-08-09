@@ -19,6 +19,7 @@ import {
   createApplicationApproval,
   createEmployerResponse,
   getApplicationLedgerArtifacts,
+  getUserApplications,
   getUserOfferAttributionReviews,
   listUserApplicationApprovals,
   resolveApplicationApproval,
@@ -562,5 +563,82 @@ describe("application approval ledger", () => {
     });
 
     await expect(getUserOfferAttributionReviews(userId)).resolves.toEqual([]);
+  });
+
+  it("filters supplied attribution evidence to the requested user", async () => {
+    const userId = 98012;
+    const otherUserId = 98013;
+    const application = await createApplication({ userId, jobId: 1, status: "offer" });
+    const otherApplication = await createApplication({ userId: otherUserId, jobId: 3, status: "offer" });
+    const applicationId = Number(application.insertId);
+    const otherApplicationId = Number(otherApplication.insertId);
+    await createEmployerResponse({
+      applicationId,
+      userId,
+      responseType: "offer",
+      source: "email",
+      sourceReference: "gmail-supplied-offer-98012",
+      summary: "Offer for the requested user.",
+      receivedAt: new Date("2026-07-01T09:00:00.000Z"),
+      statusBefore: "interview",
+      statusAfter: "offer",
+    });
+    await createEmployerResponse({
+      applicationId: otherApplicationId,
+      userId: otherUserId,
+      responseType: "offer",
+      source: "email",
+      sourceReference: "gmail-supplied-offer-98013",
+      summary: "Offer belonging to another user.",
+      receivedAt: new Date("2026-07-01T10:00:00.000Z"),
+      statusBefore: "interview",
+      statusAfter: "offer",
+    });
+    for (const [approvalUserId, approvalApplicationId] of [
+      [userId, applicationId],
+      [otherUserId, otherApplicationId],
+    ] as const) {
+      await createApplicationApproval({
+        userId: approvalUserId,
+        applicationId: approvalApplicationId,
+        entityType: "application",
+        entityId: approvalApplicationId,
+        approvalType: "offer_attribution",
+        status: "pending",
+        riskLevel: "high",
+        requestedBy: "system",
+        title: "Confirm supplied offer attribution",
+      });
+    }
+
+    const [approvals, applications, userArtifacts, otherArtifacts] = await Promise.all([
+      Promise.all([
+        listUserApplicationApprovals(userId, "all"),
+        listUserApplicationApprovals(otherUserId, "all"),
+      ]).then((items) => items.flat()),
+      Promise.all([
+        getUserApplications(userId),
+        getUserApplications(otherUserId),
+      ]).then((items) => items.flat()),
+      getApplicationLedgerArtifacts(applicationId, userId),
+      getApplicationLedgerArtifacts(otherApplicationId, otherUserId),
+    ]);
+    const reviews = await getUserOfferAttributionReviews(userId, {
+      approvals,
+      applications,
+      employerResponses: [
+        ...userArtifacts.employerResponses,
+        ...otherArtifacts.employerResponses,
+      ],
+    });
+
+    expect(applications.find((item) => item.id === applicationId)?.status).toBe("offer");
+    expect(approvals.some((item) =>
+      item.userId === userId && item.applicationId === applicationId && item.status === "pending"
+    )).toBe(true);
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].approval.userId).toBe(userId);
+    expect(reviews[0].application?.id).toBe(applicationId);
+    expect(reviews[0].latestEmployerResponse?.summary).toContain("requested user");
   });
 });

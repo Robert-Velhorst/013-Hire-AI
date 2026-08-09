@@ -639,10 +639,10 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     adminReviews,
     decisions,
     successFees,
-    offerAttributionReviews,
     connectorAccounts,
     activeResume,
     inboxResponseCandidates,
+    existingCampaign,
   ] = await Promise.all([
     getUserProfile(userId),
     getWorkExperiences(userId),
@@ -654,13 +654,12 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     options.includeAdminReviews ? listAdminReviewItems("all") : Promise.resolve([]),
     getUserApplicationDecisions(userId),
     getUserSuccessFees(userId),
-    getUserOfferAttributionReviews(userId),
     listUserConnectorAccounts(userId),
     getActiveResume(userId),
     listPendingInboxResponseCandidates(userId),
+    getApplicationCampaign(userId),
   ]);
   const approvals = allApprovals.filter((approval) => approval.status === "pending");
-  const existingCampaign = await getApplicationCampaign(userId);
   const campaignStatus = existingCampaign?.status ?? "active";
 
   const readiness = calculateProfileReadiness({
@@ -723,21 +722,30 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   const submittedApplications = applications.filter((application) => application.status !== "pending");
   const responseCount = applicationStatusCount(applications, ["viewed", "interview", "offer", "accepted", "rejected"]);
   const operatingEvidence = await loadOperatingApplicationEvidence(applications, userId);
-  const followUpReadiness = await getAutonomousFollowUpReadiness({
-    applications,
-    approvals: allApprovals,
-    plan,
-    userId,
-    evidence: operatingEvidence,
-  });
+  const employerResponses = Array.from(operatingEvidence.responsesByApplication.values()).flat();
+  const [
+    followUpReadiness,
+    offerAttributionReviews,
+    interviewNotificationQueue,
+    interviewPreparationQueue,
+  ] = await Promise.all([
+    getAutonomousFollowUpReadiness({
+      applications,
+      approvals: allApprovals,
+      plan,
+      userId,
+      evidence: operatingEvidence,
+    }),
+    getUserOfferAttributionReviews(userId, {
+      approvals: allApprovals,
+      applications,
+      employerResponses,
+    }),
+    getInterviewNotificationQueue(applications, userId, operatingEvidence),
+    getInterviewPreparationQueue(userId),
+  ]);
   const followUpSuppressionState = followUpReadiness.suppressionState;
   const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
-  const interviewNotificationQueue = await getInterviewNotificationQueue(
-    applications,
-    userId,
-    operatingEvidence
-  );
-  const interviewPreparationQueue = await getInterviewPreparationQueue(userId);
   const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
   const employerResponseQueue = followUpReadiness.employerResponseQueue;
   const successFeeCompliance = getSuccessFeeComplianceSummary(successFees, offerAttributionReviews);

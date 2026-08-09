@@ -2551,13 +2551,26 @@ function parseApprovalPayload(payload?: string | null): Record<string, unknown> 
   }
 }
 
-export async function getUserOfferAttributionReviews(userId: number) {
-  const [pendingApprovals, userApplications] = await Promise.all([
-    listUserApplicationApprovals(userId, "pending"),
-    getUserApplications(userId),
+interface OfferAttributionReviewData {
+  approvals?: ApplicationApproval[];
+  applications?: Awaited<ReturnType<typeof getUserApplications>>;
+  employerResponses?: EmployerResponse[];
+}
+
+export async function getUserOfferAttributionReviews(
+  userId: number,
+  supplied: OfferAttributionReviewData = {}
+) {
+  const [approvalRows, applicationRows] = await Promise.all([
+    supplied.approvals ?? listUserApplicationApprovals(userId, "pending"),
+    supplied.applications ?? getUserApplications(userId),
   ]);
-  const approvals = pendingApprovals
-    .filter((approval) => approval.approvalType === "offer_attribution");
+  const approvals = approvalRows.filter((approval) =>
+    approval.userId === userId &&
+    approval.status === "pending" &&
+    approval.approvalType === "offer_attribution"
+  );
+  const userApplications = applicationRows.filter((application) => application.userId === userId);
   const applicationsById = new Map(
     userApplications.map((application) => [application.id, application] as const)
   );
@@ -2566,7 +2579,12 @@ export async function getUserOfferAttributionReviews(userId: number) {
       (approval.entityType === "application" ? approval.entityId : null);
     return applicationId && applicationsById.has(applicationId) ? [applicationId] : [];
   })));
-  const responses = await getUserEmployerResponsesForApplications(userId, applicationIds);
+  const requestedApplicationIds = new Set(applicationIds);
+  const responses = supplied.employerResponses
+    ? supplied.employerResponses.filter((response) =>
+        response.userId === userId && requestedApplicationIds.has(response.applicationId)
+      )
+    : await getUserEmployerResponsesForApplications(userId, applicationIds);
   const responsesByApplication = new Map<number, EmployerResponse[]>();
   for (const response of responses) {
     const existing = responsesByApplication.get(response.applicationId) ?? [];
