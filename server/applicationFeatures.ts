@@ -3,7 +3,7 @@
  * Handles saved jobs, application notes, interview scheduling, and follow-up emails
  */
 
-import { eq, and, desc, asc, sql, inArray, isNull, lte, or } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNull, lte, or, gt } from "drizzle-orm";
 import {
   createApplicationApproval,
   createAdminReviewItem,
@@ -3593,46 +3593,80 @@ export async function processJobAlerts() {
     return { processed: 0, externalNotifications: 0 as const };
   }
 
-  const [activeJobs, platforms] = await Promise.all([
-    db.select().from(jobs).where(and(
+  const jobPageSize = 250;
+  const selectJobPage = (afterId: number) => db
+    .select({
+      id: jobs.id,
+      title: jobs.title,
+      company: jobs.company,
+      description: jobs.description,
+      requirements: jobs.requirements,
+      responsibilities: jobs.responsibilities,
+      benefits: jobs.benefits,
+      skills: jobs.skills,
+      location: jobs.location,
+      platformId: jobs.platformId,
+      jobType: jobs.jobType,
+      salaryMin: jobs.salaryMin,
+      salaryMax: jobs.salaryMax,
+      isActive: jobs.isActive,
+      expiryDate: jobs.expiryDate,
+      createdAt: jobs.createdAt,
+      updatedAt: jobs.updatedAt,
+    })
+    .from(jobs)
+    .where(and(
       eq(jobs.isActive, 1),
+      gt(jobs.id, afterId),
       sql`NOT EXISTS (
         SELECT 1 FROM ${jobDuplicates}
         WHERE ${jobDuplicates.duplicateJobId} = ${jobs.id}
       )`,
-    )),
+    ))
+    .orderBy(asc(jobs.id))
+    .limit(jobPageSize);
+  let [activeJobs, platforms] = await Promise.all([
+    selectJobPage(0),
     db.select({ id: jobPlatforms.id, name: jobPlatforms.name }).from(jobPlatforms),
   ]);
   const platformNamesById = new Map(platforms.map((platform) => [platform.id, platform.name]));
-  let processed = 0;
+  const unmatchedAlerts = new Map(alerts.map((alert) => [alert.id, alert]));
+  const matchedAlertIds: number[] = [];
 
-  for (const alert of alerts) {
-    if (isJobAlertDue(alert, now)) {
-      const hasMatchingJob = activeJobs.some((job) => isJobListingCurrent(job, now) && matchesJobAlert({
-        ...job,
-        platformName: platformNamesById.get(job.platformId),
-      }, {
-        keywords: alert.keywords,
-        locations: alert.locations,
-        platforms: alert.platforms,
-        minSalary: alert.minSalary,
-        jobTypes: alert.jobTypes,
-      }));
-
-      if (hasMatchingJob) {
-        // Matching jobs remain available in the command center. External alerts are
-        // reserved for deterministic interview-invite evidence.
-        await db
-          .update(jobAlerts)
-          .set({ lastTriggered: now })
-          .where(eq(jobAlerts.id, alert.id));
-
-        processed++;
+  while (activeJobs.length > 0 && unmatchedAlerts.size > 0) {
+    for (const job of activeJobs) {
+      if (!isJobListingCurrent(job, now)) continue;
+      for (const [alertId, alert] of Array.from(unmatchedAlerts.entries())) {
+        if (matchesJobAlert({
+          ...job,
+          platformName: platformNamesById.get(job.platformId),
+        }, {
+          keywords: alert.keywords,
+          locations: alert.locations,
+          platforms: alert.platforms,
+          minSalary: alert.minSalary,
+          jobTypes: alert.jobTypes,
+        })) {
+          matchedAlertIds.push(alertId);
+          unmatchedAlerts.delete(alertId);
+        }
       }
     }
+
+    if (activeJobs.length < jobPageSize || unmatchedAlerts.size === 0) break;
+    activeJobs = await selectJobPage(activeJobs[activeJobs.length - 1].id);
   }
 
-  return { processed, externalNotifications: 0 as const };
+  if (matchedAlertIds.length > 0) {
+    // Matching jobs remain available in the command center. External alerts are
+    // reserved for deterministic interview-invite evidence.
+    await db
+      .update(jobAlerts)
+      .set({ lastTriggered: now })
+      .where(inArray(jobAlerts.id, matchedAlertIds));
+  }
+
+  return { processed: matchedAlertIds.length, externalNotifications: 0 as const };
 }
 
 // ==================== INTERVIEW PREPARATION ====================

@@ -73,4 +73,5 @@
 - Replaced interview-preparation context's repeated ownership and full schedule reads with one owned, future-status, ordered, limited query.
 - Batched autonomous follow-up responses, interview schedules, and existing follow-ups into three ownership-scoped reads per run instead of up to three reads per candidate.
 - Added migration `0037` for indexed due-alert selection, avoided loading jobs/platforms when no alert is due, and stopped job matching at the first hit.
-- Passed TypeScript and the full regression suite: 159 files and 820 tests.
+- Replaced the due-alert scheduler's unbounded active-job materialization with 250-row canonical-job pages and one bulk timestamp update for matched alerts.
+- Passed TypeScript and the full regression suite: 159 files and 821 tests.

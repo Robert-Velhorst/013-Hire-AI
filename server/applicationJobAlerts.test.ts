@@ -44,7 +44,7 @@ describe("job alert processing", () => {
     mocks.select
       .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
       .mockReturnValueOnce({
-        from: () => ({ where: () => Promise.resolve([{
+        from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
           id: 1,
           title: "TypeScript Engineer",
           description: "Build React applications",
@@ -55,7 +55,7 @@ describe("job alert processing", () => {
           isActive: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
-        }]) }),
+        }]) }) }) }),
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 7, name: "Remote OK" }]) });
     mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
@@ -82,7 +82,7 @@ describe("job alert processing", () => {
     mocks.select
       .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
       .mockReturnValueOnce({
-        from: () => ({ where: () => Promise.resolve([{
+        from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
           id: 2,
           title: "Go Engineer",
           location: "Remote, Europe",
@@ -92,7 +92,7 @@ describe("job alert processing", () => {
           isActive: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
-        }]) }),
+        }]) }) }) }),
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 3, name: "We Work Remotely" }]) });
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
@@ -110,6 +110,44 @@ describe("job alert processing", () => {
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
     expect(mocks.select).toHaveBeenCalledTimes(1);
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("pages current jobs until a due alert finds a match", async () => {
+    const alert = {
+      id: 414,
+      userId: 82,
+      name: "Late page role",
+      keywords: "Rust",
+      frequency: "daily",
+      lastTriggered: null,
+    };
+    const firstPage = Array.from({ length: 250 }, (_, index) => ({
+      id: index + 1,
+      title: "TypeScript Engineer",
+      isActive: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    const page = (rows: unknown[]) => ({
+      from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(rows) }) }) }),
+    });
+    mocks.select
+      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([alert]) }) })
+      .mockReturnValueOnce(page(firstPage))
+      .mockReturnValueOnce({ from: () => Promise.resolve([]) })
+      .mockReturnValueOnce(page([{
+        id: 251,
+        title: "Rust Engineer",
+        isActive: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }]));
+    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+
+    await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
+    expect(mocks.select).toHaveBeenCalledTimes(4);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a user-scoped alert ledger available without a configured database", async () => {

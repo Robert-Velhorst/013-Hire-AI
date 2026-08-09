@@ -37,6 +37,7 @@ Audit date: 2026-08-08
 | Interview preparation verified ownership and then loaded every schedule to select one future interview. | The successful path now joins the owned application to future scheduled/rescheduled interviews, orders by start time, and returns one row. Error semantics remain explicit. |
 | Autonomous follow-up safety loaded responses, schedules, and follow-up history separately for every candidate. | One run now batch-loads each ownership-scoped evidence type once, groups rows by application, and reuses them across safety and cooldown decisions. |
 | Every job-alert refresh loaded all active alerts, jobs, and platforms, even when no alert was due, and collected every matching job. | The scheduler now selects only due alerts through an indexed frequency/cutoff predicate, returns before job loading when idle, and uses first-match short-circuiting. |
+| A non-idle job-alert refresh still materialized the complete active canonical-job corpus and issued one update per matched alert. | Current jobs are projected and traversed in deterministic 250-row ID pages; matched alerts leave the working set immediately and receive one bulk timestamp update. |
 
 ## Material unresolved risks
 
