@@ -13,6 +13,7 @@ import {
   createInterviewNotification,
   dismissOfferAttributionAdminReviews,
   findEmployerResponseBySourceReference,
+  getEmployerResponseReplyTarget,
   getEmployerResponses,
   getInterviewPreparationForJob,
   getDb,
@@ -2331,10 +2332,7 @@ async function findOwnedMemoryFollowUp(followUpId: number, userId: number) {
 }
 
 async function getEmployerResponseForReply(applicationId: number, userId: number, responseId?: number) {
-  const responses = await getEmployerResponses(applicationId, userId);
-  const response = responseId
-    ? responses.find((item) => item.id === responseId)
-    : responses.find((item) => ["employer_question", "other"].includes(item.responseType));
+  const response = await getEmployerResponseReplyTarget(applicationId, userId, responseId);
 
   if (!response) {
     throw new Error("Employer response not found.");

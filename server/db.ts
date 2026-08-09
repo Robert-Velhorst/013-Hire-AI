@@ -2398,6 +2398,45 @@ export async function getEmployerResponses(applicationId: number, userId: number
     .orderBy(desc(employerResponses.receivedAt));
 }
 
+export async function getEmployerResponseReplyTarget(
+  applicationId: number,
+  userId: number,
+  responseId?: number
+) {
+  const replyableTypes: EmployerResponse["responseType"][] = ["employer_question", "other"];
+  const db = await getDb();
+  if (!db) {
+    const responses = memoryEmployerResponses
+      .filter((response) =>
+        response.applicationId === applicationId &&
+        response.userId === userId &&
+        (responseId === undefined || response.id === responseId)
+      )
+      .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime());
+    return responseId === undefined
+      ? responses.find((response) => replyableTypes.includes(response.responseType)) as EmployerResponse | undefined
+      : responses[0] as EmployerResponse | undefined;
+  }
+
+  const conditions: SQL[] = [
+    eq(employerResponses.applicationId, applicationId),
+    eq(employerResponses.userId, userId),
+  ];
+  if (responseId === undefined) {
+    conditions.push(inArray(employerResponses.responseType, replyableTypes));
+  } else {
+    conditions.push(eq(employerResponses.id, responseId));
+  }
+
+  const rows = await db
+    .select()
+    .from(employerResponses)
+    .where(and(...conditions))
+    .orderBy(desc(employerResponses.receivedAt))
+    .limit(1);
+  return rows[0];
+}
+
 export async function getUserEmployerResponsesForApplications(
   userId: number,
   applicationIds: number[]

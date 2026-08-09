@@ -69,4 +69,5 @@
 - Replaced standalone lifecycle and approval-resolution list scans with exact owned application and approval lookups across confirmation, response, interview, follow-up, withdrawal, acceptance, and offer-decline paths.
 - Replaced three preparation-route application-history scans with an exact pending `(user, canonical job)` lookup backed by the existing unique key.
 - Reused the exact pending application and application-scoped approval lookups when save/ignore decisions close prepared work.
-- Passed TypeScript and the full regression suite: 159 files and 815 tests.
+- Replaced employer-reply preparation's full response-history load with one ownership-scoped exact/latest-replyable lookup.
+- Passed TypeScript and the full regression suite: 159 files and 816 tests.

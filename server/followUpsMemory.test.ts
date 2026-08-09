@@ -10,6 +10,7 @@ import {
 } from "./applicationFeatures";
 import {
   createApplication,
+  createEmployerResponse,
   getAuditEventsForEntity,
   listUserApplicationApprovals,
   resolveApplicationApproval,
@@ -130,11 +131,30 @@ describe("follow-up memory fallback", () => {
       receivedAt: new Date(),
     }, userId);
 
+    const foreignResponse = await createEmployerResponse({
+      applicationId,
+      interviewId: null,
+      userId: userId + 1,
+      responseType: "employer_question",
+      source: "email",
+      sourceReference: "foreign-owner-response",
+      summary: "A newer response belonging to another user.",
+      receivedAt: new Date(Date.now() + 1_000),
+      statusBefore: "applied",
+      statusAfter: "applied",
+      noteId: null,
+    });
+
     const generated = await generateEmployerReplyEmail(applicationId, userId, response.responseId);
+    const generatedFromLatestOwned = await generateEmployerReplyEmail(applicationId, userId);
 
     expect(generated.responseId).toBe(response.responseId);
+    expect(generatedFromLatestOwned.responseId).toBe(response.responseId);
     expect(generated.email).toContain("Backend Python Developer");
     expect(generated.email).toContain("Add your exact answer here");
+    await expect(
+      generateEmployerReplyEmail(applicationId, userId, Number(foreignResponse.insertId))
+    ).rejects.toThrow("Employer response not found.");
 
     const created = await createFollowUp({
       applicationId,

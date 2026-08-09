@@ -95,4 +95,15 @@ describe("dashboard performance claims", () => {
     expect(router).not.toContain("(await getUserApplications(ctx.user.id)).find");
     expect(router).toContain("listUserApplicationApprovalsForApplication");
   });
+
+  it("resolves employer reply targets through one exact ownership-scoped query", () => {
+    const features = readFileSync(resolve(process.cwd(), "server", "applicationFeatures.ts"), "utf8");
+    const replyTarget = features.slice(
+      features.indexOf("async function getEmployerResponseForReply"),
+      features.indexOf("function getFollowUpDraftMetadata")
+    );
+
+    expect(replyTarget).toContain("getEmployerResponseReplyTarget(applicationId, userId, responseId)");
+    expect(replyTarget).not.toContain("getEmployerResponses(");
+  });
 });
