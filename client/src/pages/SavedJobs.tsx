@@ -25,10 +25,12 @@ import {
   AlertCircle,
   Briefcase,
 } from "lucide-react";
+import { useLocale } from "@/contexts/LocaleContext";
 
 export default function SavedJobs() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { locale, t } = useLocale();
 
   // Fetch saved jobs
   const { data: savedJobs, isLoading, refetch } = trpc.jobs.getSavedJobs.useQuery();
@@ -49,26 +51,26 @@ export default function SavedJobs() {
   // Mutations
   const unsaveMutation = trpc.jobs.unsaveJob.useMutation({
     onSuccess: () => {
-      toast.success("Job removed from saved");
+      toast.success(t("savedJobRemoved"));
       refetch();
     },
     onError: () => {
-      toast.error("Failed to remove job");
+      toast.error(t("savedJobRemoveFailed"));
     },
   });
 
   const decideMutation = trpc.applications.decide.useMutation({
     onSuccess: async (result) => {
       if (result.preparationBlocked) {
-        toast.info("Resolve profile evidence before preparing an application.");
+        toast.info(t("resolveProfileEvidence"));
         setLocation(preparationEvidenceGate?.route || "/profile");
         return;
       }
-      toast.success(result.existing ? "Review decision updated" : "Application queued for review");
+      toast.success(result.existing ? t("reviewDecisionUpdated") : t("applicationQueued"));
       await refetch();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to record the application decision");
+      toast.error(error.message || t("applicationDecisionFailed"));
     },
   });
 
@@ -78,11 +80,11 @@ export default function SavedJobs() {
 
   const handleApply = (job: any) => {
     if (!user) {
-      toast.error("Please log in to queue an application review");
+      toast.error(t("loginToQueueReview"));
       return;
     }
     if (preparationEvidenceGate) {
-      toast.info(preparationEvidenceGate.detail || "Resolve profile evidence before preparing an application.");
+      toast.info(preparationEvidenceGate.detail || t("resolveProfileEvidence"));
       setLocation(preparationEvidenceGate.route || "/profile");
       return;
     }
@@ -96,11 +98,11 @@ export default function SavedJobs() {
     const diff = now.getTime() - d.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     
-    if (days === 0) return "Today";
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days} days ago`;
-    if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-    return d.toLocaleDateString();
+    if (days === 0) return t("today");
+    if (days === 1) return t("yesterday");
+    if (days < 7) return t("daysAgo", { count: days });
+    if (days < 30) return t("weeksAgo", { count: Math.floor(days / 7) });
+    return d.toLocaleDateString(locale);
   };
 
   if (authLoading) {
@@ -123,9 +125,9 @@ export default function SavedJobs() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Bookmark className="h-6 w-6 text-cyan-400" />
-              Saved Jobs
+              {t("savedJobsTitle")}
             </h1>
-            <p className="text-slate-400">Jobs you've bookmarked for later</p>
+            <p className="text-slate-400">{t("savedJobsDescription")}</p>
           </div>
           <Button
             variant="outline"
@@ -133,7 +135,7 @@ export default function SavedJobs() {
             onClick={() => setLocation("/dashboard")}
           >
             <Briefcase className="w-4 h-4 mr-2" />
-            View Dashboard
+            {t("viewDashboard")}
           </Button>
         </div>
 
@@ -200,21 +202,21 @@ export default function SavedJobs() {
                             ))}
                             {job.skills.split(",").length > 5 && (
                               <Badge variant="secondary" className="bg-slate-800 text-slate-400 text-xs">
-                                +{job.skills.split(",").length - 5} more
+                                {t("moreSkills", { count: job.skills.split(",").length - 5 })}
                               </Badge>
                             )}
                           </div>
                         )}
 
                         <p className="text-xs text-slate-500 mt-2">
-                          Saved {formatDate(savedJob.savedAt || savedJob.createdAt)}
+                          {t("savedOn", { date: formatDate(savedJob.savedAt || savedJob.createdAt) })}
                         </p>
                       </div>
 
                       <div className="flex flex-col gap-2">
                         <Button
                           data-testid={`saved-job-prepare-or-resolve-evidence-${job.id}`}
-                          title={preparationEvidenceGate?.detail || "Queue a controlled application review"}
+                          title={preparationEvidenceGate?.detail || t("queueControlledReview")}
                           className={preparationEvidenceGate
                             ? "border border-amber-500/50 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
                             : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"}
@@ -228,7 +230,7 @@ export default function SavedJobs() {
                           ) : (
                             <Send className="w-4 h-4 mr-2" />
                           )}
-                          {preparationEvidenceGate ? "Resolve Evidence" : "Queue Review"}
+                          {preparationEvidenceGate ? t("resolveEvidence") : t("queueReview")}
                         </Button>
                         {getSafeExternalUrl(job.applicationUrl) && (
                           <Button
@@ -237,7 +239,7 @@ export default function SavedJobs() {
                             onClick={() => openExternalUrl(job.applicationUrl)}
                           >
                             <ExternalLink className="w-4 h-4 mr-2" />
-                            View Job
+                            {t("viewJob")}
                           </Button>
                         )}
                         <Button
@@ -247,7 +249,7 @@ export default function SavedJobs() {
                           disabled={unsaveMutation.isPending || decideMutation.isPending}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
-                          Remove
+                          {t("remove")}
                         </Button>
                       </div>
                     </div>
@@ -262,16 +264,16 @@ export default function SavedJobs() {
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
                 <Bookmark className="w-10 h-10 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">No saved jobs yet</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">{t("noSavedJobs")}</h3>
               <p className="text-slate-400 mb-6 max-w-md mx-auto">
-                Browse jobs and click the bookmark icon to save them for later. Saved jobs will appear here.
+                {t("noSavedJobsDescription")}
               </p>
               <Button
                 className="bg-gradient-to-r from-cyan-500 to-blue-600"
                 onClick={() => setLocation("/profile")}
               >
                 <Briefcase className="w-4 h-4 mr-2" />
-                Complete Profile
+                {t("completeProfile")}
               </Button>
             </CardContent>
           </Card>

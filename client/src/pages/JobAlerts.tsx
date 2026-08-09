@@ -24,6 +24,14 @@ import {
   Mail,
   CheckCircle,
 } from "lucide-react";
+import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
+
+const jobTypeLabels: Record<string, TranslationKey> = {
+  "full-time": "fullTime",
+  "part-time": "partTime",
+  contract: "contract",
+  temporary: "temporary",
+};
 
 export default function JobAlerts() {
   const { user, loading: authLoading } = useAuth();
@@ -36,6 +44,7 @@ export default function JobAlerts() {
   const [minSalary, setMinSalary] = useState("");
   const [jobTypes, setJobTypes] = useState<string[]>(["full-time"]);
   const [frequency, setFrequency] = useState("daily");
+  const { locale, t } = useLocale();
 
   // Fetch alerts
   const { data: alerts, isLoading, refetch } = trpc.alerts.list.useQuery();
@@ -43,33 +52,33 @@ export default function JobAlerts() {
   // Mutations
   const createMutation = trpc.alerts.create.useMutation({
     onSuccess: () => {
-      toast.success("Matching rule created");
+      toast.success(t("matchingRuleCreated"));
       setIsCreateOpen(false);
       resetForm();
       refetch();
     },
     onError: () => {
-      toast.error("Failed to create alert");
+      toast.error(t("createAlertFailed"));
     },
   });
 
   const deleteMutation = trpc.alerts.delete.useMutation({
     onSuccess: () => {
-      toast.success("Alert deleted");
+      toast.success(t("alertDeleted"));
       refetch();
     },
     onError: () => {
-      toast.error("Failed to delete alert");
+      toast.error(t("deleteAlertFailed"));
     },
   });
 
   const toggleMutation = trpc.alerts.toggle.useMutation({
     onSuccess: () => {
-      toast.success("Alert updated");
+      toast.success(t("alertUpdated"));
       refetch();
     },
     onError: () => {
-      toast.error("Failed to update alert");
+      toast.error(t("updateAlertFailed"));
     },
   });
 
@@ -85,7 +94,7 @@ export default function JobAlerts() {
 
   const handleCreate = () => {
     if (!alertName || !keywords) {
-      toast.error("Please fill in required fields");
+      toast.error(t("requiredFields"));
       return;
     }
 
@@ -101,7 +110,7 @@ export default function JobAlerts() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this alert?")) {
+    if (confirm(t("deleteAlertConfirm"))) {
       deleteMutation.mutate({ alertId: id });
     }
   };
@@ -112,9 +121,9 @@ export default function JobAlerts() {
 
   const getFrequencyLabel = (freq: string) => {
     switch (freq) {
-      case "instant": return "Hourly";
-      case "daily": return "Daily";
-      case "weekly": return "Weekly";
+      case "instant": return t("hourly");
+      case "daily": return t("daily");
+      case "weekly": return t("weekly");
       default: return freq;
     }
   };
@@ -137,31 +146,31 @@ export default function JobAlerts() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Bell className="h-6 w-6 text-cyan-400" />
-              Job Alerts
+              {t("jobAlertsTitle")}
             </h1>
-            <p className="text-slate-400">Track matching jobs in your command center with precise, saved criteria.</p>
+            <p className="text-slate-400">{t("jobAlertsDescription")}</p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-to-r from-cyan-500 to-blue-600">
                 <Plus className="w-4 h-4 mr-2" />
-                Create Alert
+                {t("createAlert")}
               </Button>
             </DialogTrigger>
             <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
               <DialogHeader>
-                <DialogTitle>Create Job Alert</DialogTitle>
+                <DialogTitle>{t("createJobAlert")}</DialogTitle>
                 <DialogDescription className="text-slate-400">
-                  Define the criteria used to refresh this matching rule.
+                  {t("createAlertDescription")}
                 </DialogDescription>
               </DialogHeader>
               
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Alert Name *</Label>
+                  <Label htmlFor="name">{t("alertName")}</Label>
                   <Input
                     id="name"
-                    placeholder="e.g., Senior React Developer"
+                    placeholder={t("alertNamePlaceholder")}
                     value={alertName}
                     onChange={(e) => setAlertName(e.target.value)}
                     className="bg-slate-800 border-slate-700"
@@ -169,22 +178,22 @@ export default function JobAlerts() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="keywords">Keywords *</Label>
+                  <Label htmlFor="keywords">{t("keywords")}</Label>
                   <Input
                     id="keywords"
-                    placeholder="e.g., React, TypeScript, Node.js"
+                    placeholder={t("keywordsPlaceholder")}
                     value={keywords}
                     onChange={(e) => setKeywords(e.target.value)}
                     className="bg-slate-800 border-slate-700"
                   />
-                  <p className="text-xs text-slate-500">Separate multiple keywords with commas</p>
+                  <p className="text-xs text-slate-500">{t("commaSeparatedKeywords")}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location (optional)</Label>
+                  <Label htmlFor="location">{t("optionalLocation")}</Label>
                   <Input
                     id="location"
-                    placeholder="e.g., Remote, US, Europe"
+                    placeholder={t("locationPlaceholder")}
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     className="bg-slate-800 border-slate-700"
@@ -192,23 +201,23 @@ export default function JobAlerts() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="platforms">Sources (optional)</Label>
+                  <Label htmlFor="platforms">{t("optionalSources")}</Label>
                   <Input
                     id="platforms"
-                    placeholder="e.g., Remote OK, We Work Remotely"
+                    placeholder={t("sourcesPlaceholder")}
                     value={platforms}
                     onChange={(e) => setPlatforms(e.target.value)}
                     className="bg-slate-800 border-slate-700"
                   />
-                  <p className="text-xs text-slate-500">Separate source names or IDs with commas</p>
+                  <p className="text-xs text-slate-500">{t("commaSeparatedSources")}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="salary">Minimum Salary (optional)</Label>
+                  <Label htmlFor="salary">{t("optionalMinimumSalary")}</Label>
                   <Input
                     id="salary"
                     type="number"
-                    placeholder="e.g., 100000"
+                    placeholder={t("minimumSalaryPlaceholder")}
                     value={minSalary}
                     onChange={(e) => setMinSalary(e.target.value)}
                     className="bg-slate-800 border-slate-700"
@@ -216,7 +225,7 @@ export default function JobAlerts() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Job Types</Label>
+                  <Label>{t("jobTypes")}</Label>
                   <div className="flex flex-wrap gap-2">
                     {["full-time", "part-time", "contract", "temporary"].map((type) => (
                       <Badge
@@ -235,22 +244,22 @@ export default function JobAlerts() {
                           }
                         }}
                       >
-                        {type}
+                        {t(jobTypeLabels[type])}
                       </Badge>
                     ))}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="frequency">Matching Cadence</Label>
+                  <Label htmlFor="frequency">{t("matchingCadence")}</Label>
                   <Select value={frequency} onValueChange={setFrequency}>
                     <SelectTrigger className="bg-slate-800 border-slate-700">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="instant">Hourly</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="instant">{t("hourly")}</SelectItem>
+                      <SelectItem value="daily">{t("daily")}</SelectItem>
+                      <SelectItem value="weekly">{t("weekly")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -258,7 +267,7 @@ export default function JobAlerts() {
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button
                   className="bg-gradient-to-r from-cyan-500 to-blue-600"
@@ -270,7 +279,7 @@ export default function JobAlerts() {
                   ) : (
                     <CheckCircle className="w-4 h-4 mr-2" />
                   )}
-                  Create Alert
+                  {t("createAlert")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -298,7 +307,7 @@ export default function JobAlerts() {
                             : "bg-slate-500/20 text-slate-400 border-slate-500/30"
                           }
                         >
-                          {alert.isActive ? "Active" : "Paused"}
+                          {alert.isActive ? t("active") : t("paused")}
                         </Badge>
                         <Badge variant="outline" className="border-slate-600 text-slate-400">
                           <Clock className="w-3 h-3 mr-1" />
@@ -339,7 +348,7 @@ export default function JobAlerts() {
 
                       {alert.lastTriggered && (
                         <p className="text-xs text-slate-500 mt-2">
-                          Last matched: {new Date(alert.lastTriggered).toLocaleDateString()}
+                          {t("lastMatched", { date: new Date(alert.lastTriggered).toLocaleDateString(locale) })}
                         </p>
                       )}
                     </div>
@@ -348,12 +357,14 @@ export default function JobAlerts() {
                       <Switch
                         checked={alert.isActive}
                         onCheckedChange={() => handleToggle(alert.id, alert.isActive)}
+                        aria-label={t("toggleAlert", { action: t(alert.isActive ? "pause" : "activate"), name: alert.name })}
                       />
                       <Button
                         variant="ghost"
                         size="icon"
                         className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                         onClick={() => handleDelete(alert.id)}
+                        aria-label={t("deleteAlert", { name: alert.name })}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -369,16 +380,16 @@ export default function JobAlerts() {
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
                 <Bell className="w-10 h-10 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">No job alerts yet</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">{t("noJobAlerts")}</h3>
               <p className="text-slate-400 mb-6 max-w-md mx-auto">
-                Create a matching rule to keep relevant jobs available in your command center.
+                {t("noJobAlertsDescription")}
               </p>
               <Button
                 className="bg-gradient-to-r from-cyan-500 to-blue-600"
                 onClick={() => setIsCreateOpen(true)}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Create Your First Alert
+                {t("createFirstAlert")}
               </Button>
             </CardContent>
           </Card>
@@ -389,14 +400,16 @@ export default function JobAlerts() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Mail className="h-5 w-5 text-cyan-400" />
-              Pro Tips for Job Alerts
+              {t("alertTips")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-slate-300 space-y-2">
-            <p>• Use specific keywords to get more relevant matches</p>
-            <p>• Set up multiple alerts for different job types or locations</p>
-            <p>• Choose "Instant" frequency for competitive roles to apply early</p>
-            <p>• Review and update your alerts regularly as your preferences change</p>
+          <CardContent className="text-slate-300">
+            <ul className="list-disc space-y-2 pl-5">
+              <li>{t("alertTipSpecific")}</li>
+              <li>{t("alertTipMultiple")}</li>
+              <li>{t("alertTipCadence")}</li>
+              <li>{t("alertTipReview")}</li>
+            </ul>
           </CardContent>
         </Card>
       </div>

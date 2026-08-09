@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Workflow localization foundation
+
+- Extended the shared typed translator with bounded dynamic-value interpolation instead of introducing page-local language state.
+- Localized the complete saved-jobs, job-alerts, and not-found routes, including errors, confirmations, empty states, relative dates, form labels, placeholders, status controls, and screen-reader labels.
+- Replaced an encoding-damaged visual bullet sequence in job-alert tips with semantic list markup.
+
 ## 2026-08-09 - Bounded Arbeitnow remote discovery
 
 - Added a one-page adapter for Arbeitnow's documented no-key API after checking the live response shape.
