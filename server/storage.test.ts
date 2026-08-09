@@ -52,6 +52,7 @@ describe("private storage deletion", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0][0])).toBe("https://scanner.example.local/scan");
     expect(String(fetchMock.mock.calls[1][0])).toContain("/v1/storage/upload");
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({ redirect: "error" }));
   });
 
   it("rejects an unsafe URL returned after upload", async () => {
@@ -62,7 +63,30 @@ describe("private storage deletion", () => {
     }), { status: 200 })) as typeof fetch;
 
     const { storagePut } = await import("./storage");
-    await expect(storagePut("generated/result.png", "image", "image/png")).rejects.toThrow("HTTP or HTTPS");
+    await expect(storagePut("generated/result.png", "image", "image/png")).rejects.toThrow("credential-free HTTPS");
+  });
+
+  it("rejects insecure storage configuration before sending the API key", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "http://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+    const { storageGet } = await import("./storage");
+
+    await expect(storageGet("resumes/7/resume.pdf")).rejects.toThrow(/HTTPS or loopback HTTP/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty and oversized uploads before scanning or network access", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+    const { storagePut } = await import("./storage");
+
+    await expect(storagePut("generated/empty.bin", Buffer.alloc(0))).rejects.toThrow(/between 1 byte and 25MB/i);
+    await expect(storagePut("generated/large.bin", Buffer.alloc(25 * 1024 * 1024 + 1))).rejects.toThrow(/between 1 byte and 25MB/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses the authenticated storage delete endpoint with a normalized object key", async () => {
@@ -81,6 +105,7 @@ describe("private storage deletion", () => {
     expect(request.method).toBe("DELETE");
     expect(request.headers).toEqual({ Authorization: "Bearer storage-test-key" });
     expect(request.signal).toBeInstanceOf(AbortSignal);
+    expect(request.redirect).toBe("error");
   });
 
   it("does not hide failed object cleanup", async () => {
@@ -92,7 +117,7 @@ describe("private storage deletion", () => {
     })) as typeof fetch;
 
     const { storageDelete } = await import("./storage");
-    await expect(storageDelete("resumes/7/resume.pdf")).rejects.toThrow("Storage deletion failed (403 Forbidden)");
+    await expect(storageDelete("resumes/7/resume.pdf")).rejects.toThrow("Storage deletion failed (HTTP 403)");
   });
 
   it("treats an already-missing object as an idempotent deletion", async () => {
@@ -123,6 +148,7 @@ describe("private storage deletion", () => {
     expect(url.toString()).toBe("https://storage.example.local/api/v1/storage/downloadUrl?path=offer-letters%2F7%2Foffer.pdf");
     expect(request.headers).toEqual({ Authorization: "Bearer storage-test-key" });
     expect(request.signal).toBeInstanceOf(AbortSignal);
+    expect(request.redirect).toBe("error");
   });
 
   it("rejects failed or unsafe private download responses", async () => {
@@ -133,13 +159,32 @@ describe("private storage deletion", () => {
       statusText: "Forbidden",
     })) as typeof fetch;
     const { storageGet } = await import("./storage");
-    await expect(storageGet("verifications/7/proof.pdf")).rejects.toThrow("retrieval failed (403 Forbidden)");
+    await expect(storageGet("verifications/7/proof.pdf")).rejects.toThrow("retrieval failed (HTTP 403)");
 
     vi.resetModules();
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       url: "javascript:alert(1)",
     }), { status: 200 })) as typeof fetch;
     const unsafeStorage = await import("./storage");
-    await expect(unsafeStorage.storageGet("verifications/7/proof.pdf")).rejects.toThrow("HTTP or HTTPS");
+    await expect(unsafeStorage.storageGet("verifications/7/proof.pdf")).rejects.toThrow("credential-free HTTPS");
+  });
+
+  it("does not expose an upstream storage error body", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("Bearer upstream-secret", {
+      status: 502,
+      statusText: "Bad Gateway",
+    })) as typeof fetch;
+    const { storageDelete } = await import("./storage");
+
+    let message = "";
+    try {
+      await storageDelete("resumes/7/resume.pdf");
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toBe("Storage deletion failed (HTTP 502).");
+    expect(message).not.toContain("upstream-secret");
   });
 });
