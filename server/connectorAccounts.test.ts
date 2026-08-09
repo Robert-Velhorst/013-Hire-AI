@@ -110,7 +110,11 @@ describe("connector account tRPC procedures", () => {
     });
 
     const caller = appRouter.createCaller(createContext(userId));
-    expect(await caller.applications.listInboxResponseCandidates()).toHaveLength(1);
+    await expect(caller.applications.getInboxResponseCandidatePage({ limit: 25 })).resolves.toMatchObject({
+      total: 1,
+      hasMore: false,
+      items: [expect.objectContaining({ id: candidate.candidate.id })],
+    });
     expect(await listUnreadInterviewNotifications(userId)).toHaveLength(0);
 
     await caller.applications.ingestInboxResponse({

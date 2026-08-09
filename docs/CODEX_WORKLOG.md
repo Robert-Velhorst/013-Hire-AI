@@ -1,5 +1,10 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded profile inbox-response review
+
+- Replaced the Profile page's unbounded inbox-response route with an owner-validated 25-item page and exact pending total.
+- Preserved review processing and dismissal refresh behavior while preventing the browser from loading an unlimited mailbox-derived queue.
+
 ## 2026-08-09 - Exact connector impact and bounded inbox candidates
 
 - Added an exact owner-scoped application aggregate for inbox response monitoring instead of counting only the bounded operating window.

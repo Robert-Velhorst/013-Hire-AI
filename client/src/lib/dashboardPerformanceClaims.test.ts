@@ -168,4 +168,15 @@ describe("dashboard performance claims", () => {
     expect(autonomousService).not.toContain("getUserApplications(userId)");
     expect(autonomousService).not.toContain("getUserApplicationDecisions(userId)");
   });
+
+  it("bounds the profile inbox-response review surface", () => {
+    const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
+    const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
+
+    expect(profile).toContain("getInboxResponseCandidatePage.useQuery({ limit: 25 }");
+    expect(profile).toContain("inboxResponseCandidatesQuery.data?.items.map");
+    expect(router).toContain("getInboxResponseCandidatePage: protectedProcedure");
+    expect(router).toContain("getPendingInboxResponseCandidatePage(ctx.user.id, input?.limit ?? 25)");
+    expect(router).not.toContain("listInboxResponseCandidates: protectedProcedure");
+  });
 });

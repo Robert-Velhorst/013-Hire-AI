@@ -1763,10 +1763,12 @@ export const appRouter = router({
         persistCampaign: false,
       });
     }),
-    listInboxResponseCandidates: protectedProcedure.query(async ({ ctx }) => {
-      const { listPendingInboxResponseCandidates } = await import("./db");
-      return await listPendingInboxResponseCandidates(ctx.user.id);
-    }),
+    getInboxResponseCandidatePage: protectedProcedure
+      .input(z.object({ limit: boundedPageSize.optional().default(25) }).optional())
+      .query(async ({ ctx, input }) => {
+        const { getPendingInboxResponseCandidatePage } = await import("./db");
+        return await getPendingInboxResponseCandidatePage(ctx.user.id, input?.limit ?? 25);
+      }),
     setCampaignStatus: protectedProcedure
       .input(z.object({ status: z.enum(["active", "paused"]) }))
       .mutation(async ({ ctx, input }) => {

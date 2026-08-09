@@ -159,11 +159,11 @@ export default function Profile() {
   const projectsQuery = trpc.profile.getProjects.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const inboxResponseCandidatesQuery = trpc.applications.listInboxResponseCandidates.useQuery(undefined, {
+  const inboxResponseCandidatesQuery = trpc.applications.getInboxResponseCandidatePage.useQuery({ limit: 25 }, {
     enabled: isAuthenticated,
   });
   const inboxResponseCandidates = useMemo<InboxResponseCandidate[]>(() => (
-    inboxResponseCandidatesQuery.data?.map((candidate) => ({
+    inboxResponseCandidatesQuery.data?.items.map((candidate) => ({
       ...candidate,
       receivedAt: candidate.receivedAt instanceof Date
         ? candidate.receivedAt.toISOString()
@@ -898,7 +898,12 @@ export default function Profile() {
             ) : null}
             {inboxResponseCandidates.length > 0 ? (
               <div className="mt-4 space-y-2 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Inbox response candidates</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Inbox response candidates</p>
+                  <span className="text-xs text-slate-500">
+                    {inboxResponseCandidates.length} of {inboxResponseCandidatesQuery.data?.total ?? inboxResponseCandidates.length}
+                  </span>
+                </div>
                 {inboxResponseCandidates.map((candidate) => (
                   <div key={`${candidate.provider}:${candidate.messageId}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
                     <div className="min-w-0 max-w-2xl">
