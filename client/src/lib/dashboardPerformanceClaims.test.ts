@@ -36,6 +36,8 @@ describe("dashboard performance claims", () => {
     expect(campaigns).toContain("getUserFollowUpsForApplications");
     expect(campaigns).toContain("listInterviewPreparationsForUser");
     expect(campaigns).toContain("getUserOfferAttributionReviews(userId, {");
+    expect(campaigns).toContain("listUserAdminReviewItems(userId");
+    expect(campaigns).not.toContain("listAdminReviewItems(\"all\")");
     expect(campaigns).not.toMatch(/\bgetEmployerResponses\(/);
     expect(campaigns).not.toMatch(/\bgetInterviewSchedules\(/);
     expect(campaigns).not.toMatch(/\bgetFollowUps\(/);

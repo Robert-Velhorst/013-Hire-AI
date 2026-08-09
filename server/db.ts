@@ -2908,6 +2908,40 @@ export async function listAdminReviewItems(status: AdminReviewItem["status"] | "
     .orderBy(desc(adminReviewItems.createdAt));
 }
 
+export async function listUserAdminReviewItems(
+  userId: number,
+  statuses: AdminReviewItem["status"][] = ["open", "in_progress"],
+  limit = 100
+) {
+  const allowedStatuses = new Set<AdminReviewItem["status"]>([
+    "open",
+    "in_progress",
+    "resolved",
+    "dismissed",
+  ]);
+  const selectedStatuses = Array.from(new Set(statuses.filter((status) => allowedStatuses.has(status))));
+  if (selectedStatuses.length === 0) return [] as AdminReviewItem[];
+  const boundedLimit = Math.min(250, Math.max(1, Math.floor(limit)));
+  const db = await getDb();
+  if (!db) {
+    const selectedStatusSet = new Set(selectedStatuses);
+    return memoryAdminReviewItems
+      .filter((item) => item.userId === userId && selectedStatusSet.has(item.status))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, boundedLimit);
+  }
+
+  return await db
+    .select()
+    .from(adminReviewItems)
+    .where(and(
+      eq(adminReviewItems.userId, userId),
+      inArray(adminReviewItems.status, selectedStatuses)
+    ))
+    .orderBy(desc(adminReviewItems.createdAt))
+    .limit(boundedLimit);
+}
+
 export async function getLatestPrivacyDeletionReview(userId: number) {
   const db = await getDb();
   if (!db) {

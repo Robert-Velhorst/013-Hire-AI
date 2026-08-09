@@ -22,7 +22,7 @@ import {
   getWorkExperiences,
   listUserConnectorAccounts,
   listInterviewPreparationsForUser,
-  listAdminReviewItems,
+  listUserAdminReviewItems,
   listUserApplicationApprovals,
   upsertApplicationCampaign,
 } from "./db";
@@ -651,7 +651,9 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getUserApplications(userId),
     getActiveJobs(250, 0),
     listUserApplicationApprovals(userId, "all"),
-    options.includeAdminReviews ? listAdminReviewItems("all") : Promise.resolve([]),
+    options.includeAdminReviews
+      ? listUserAdminReviewItems(userId, ["open", "in_progress"], 100)
+      : Promise.resolve([]),
     getUserApplicationDecisions(userId),
     getUserSuccessFees(userId),
     listUserConnectorAccounts(userId),

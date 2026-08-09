@@ -62,4 +62,5 @@
 - Replaced one interview-preparation existence query per upcoming interview with one user-scoped preparation read and a local job-ID set.
 - Reused the ledger's preloaded applications, approvals, and employer responses for offer-attribution projection, while filtering every supplied row by user ownership and running remaining post-evidence projections concurrently.
 - Moved the application-campaign row into the initial parallel snapshot read.
-- Passed TypeScript and the full regression suite: 159 files and 808 tests.
+- Replaced the admin operating ledger's global review-table read with a capped user/status query backed by the existing `(user_id, status)` index.
+- Passed TypeScript and the full regression suite: 159 files and 809 tests.

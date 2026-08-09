@@ -5,6 +5,7 @@ import {
   getAuditEventsForEntity,
   getAuditEventsForUser,
   listAdminReviewItems,
+  listUserAdminReviewItems,
   resolveAdminReviewItem,
 } from "./db";
 
@@ -106,5 +107,56 @@ describe("audit and admin review ledger", () => {
 
     const remainingOpenItems = await listAdminReviewItems("open");
     expect(remainingOpenItems.some((review) => review.id === Number(first.insertId))).toBe(false);
+  });
+
+  it("bounds user review reads without exposing other users or closed statuses", async () => {
+    const userId = 97005;
+    const otherUserId = 97006;
+    await createAdminReviewItem({
+      userId,
+      entityType: "application",
+      entityId: 1,
+      category: "application_review",
+      status: "open",
+      priority: "medium",
+      title: "Open user review",
+    });
+    await createAdminReviewItem({
+      userId,
+      entityType: "application",
+      entityId: 2,
+      category: "submission_evidence",
+      status: "in_progress",
+      priority: "high",
+      title: "In-progress user review",
+    });
+    await createAdminReviewItem({
+      userId,
+      entityType: "application",
+      entityId: 3,
+      category: "employer_response",
+      status: "resolved",
+      priority: "low",
+      title: "Closed user review",
+    });
+    await createAdminReviewItem({
+      userId: otherUserId,
+      entityType: "application",
+      entityId: 4,
+      category: "application_review",
+      status: "open",
+      priority: "critical",
+      title: "Other user review",
+    });
+
+    const activeReviews = await listUserAdminReviewItems(userId);
+    const limitedReviews = await listUserAdminReviewItems(userId, ["open", "in_progress"], 1);
+
+    expect(activeReviews).toHaveLength(2);
+    expect(activeReviews.every((review) => review.userId === userId)).toBe(true);
+    expect(activeReviews.every((review) => ["open", "in_progress"].includes(review.status))).toBe(true);
+    expect(activeReviews.some((review) => review.title === "Closed user review")).toBe(false);
+    expect(activeReviews.some((review) => review.title === "Other user review")).toBe(false);
+    expect(limitedReviews).toHaveLength(1);
   });
 });
