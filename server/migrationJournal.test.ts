@@ -76,7 +76,6 @@ describe("Drizzle migration journal", () => {
     const expectedIndexes = [
       "jobs_active_posted_created_idx",
       "jobs_platform_external_idx",
-      "user_profiles_user_idx",
       "social_media_profiles_user_active_idx",
       "applications_user_created_idx",
       "application_decisions_user_updated_idx",
@@ -101,6 +100,21 @@ describe("Drizzle migration journal", () => {
         `\`${indexName}\``
       );
     }
+  });
+
+  it("enforces one data-preserving profile per account owner", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0043_user_profile_owner_unique.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('uniqueIndex("user_profiles_user_unique").on(table.userId)');
+    expect(migration).toContain("CREATE TABLE `_migration_0043_user_profile_source`");
+    expect(migration).toContain("DROP TABLE IF EXISTS `_migration_0043_user_profile_source`");
+    expect(migration).toContain("ORDER BY `source`.`updated_at` DESC, `source`.`id` DESC LIMIT 1");
+    expect(migration).toContain("WHERE `duplicate`.`id` <> `choice`.`canonical_id`");
+    expect(migration).toContain("ADD UNIQUE INDEX `user_profiles_user_unique` (`user_id`)");
   });
 
   it("keeps the due job-alert index aligned with the schema", () => {

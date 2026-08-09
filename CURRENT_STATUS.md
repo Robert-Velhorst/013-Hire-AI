@@ -70,6 +70,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Localized the complete Settings workflow, including preference controls, privacy export, retention-safe deletion review status and confirmations, feedback messages, and accessible control names; the page now reuses the shared account header.
 - Replaced browser-side replacement of the shared preference JSON blob with a validated server-side patch transaction used by Settings, AI Preferences, and Job Search, preventing stale tabs from dropping unrelated autonomy controls.
 - Localized AI preference controls, activity framing, evidence and policy sections, metrics, scheduler states and counts, quick actions, and locale-aware run times while preserving backend evidence text verbatim.
+- Enforced one candidate profile per account owner with a field-preserving duplicate consolidation migration and atomic runtime upserts.
 
 ## Still required before production
 

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Candidate profile ownership invariant
+
+- Added a data-preserving migration that consolidates duplicate `user_profiles` rows field by field onto the oldest stable profile ID.
+- Replaced the non-unique owner index with a unique owner constraint after consolidation.
+- Converted runtime profile writes from read-then-insert behavior to one atomic MySQL upsert, eliminating concurrent profile-creation races.
+
 ## 2026-08-09 - AI preference workflow localization
 
 - Localized AI preference controls, activity framing, policy/evidence headings, metrics, scheduler states and numeric outcomes, and quick actions in English and Dutch.

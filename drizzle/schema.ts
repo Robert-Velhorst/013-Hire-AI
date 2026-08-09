@@ -175,7 +175,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
-  index("user_profiles_user_idx").on(table.userId),
+  uniqueIndex("user_profiles_user_unique").on(table.userId),
 ]);
 
 /**

@@ -1324,13 +1324,13 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
     return;
   }
 
-  const existing = await getUserProfile(profile.userId);
-
-  if (existing) {
-    await db.update(userProfiles).set(profile).where(eq(userProfiles.userId, profile.userId));
-  } else {
-    await db.insert(userProfiles).values(profile);
-  }
+  const { id: _id, userId: _userId, ...updates } = profile;
+  await db
+    .insert(userProfiles)
+    .values(profile)
+    .onDuplicateKeyUpdate({
+      set: Object.keys(updates).length > 0 ? updates : { userId: profile.userId },
+    });
 }
 
 export async function patchUserProfilePreferences(
