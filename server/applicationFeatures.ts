@@ -23,6 +23,7 @@ import {
   getJobById,
   getUserApplicationById,
   getUserApplicationsByIds,
+  getUserEmployerResponsesForApplications,
   listUserApplicationApprovalsForApplication,
   markUnreadInterviewNotificationsReadForApplication,
   resolveApplicationApproval,
@@ -1705,6 +1706,100 @@ export async function getUserInterviewSchedulesForApplications(
     ))
     .orderBy(asc(interviewSchedules.scheduledAt));
   return rows.map((row) => row.interview);
+}
+
+export async function getInterviewOutcomePage(userId: number, requestedLimit = 10) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    const completed = memoryInterviewSchedules
+      .filter((schedule) => schedule.status === "completed")
+      .sort((left, right) =>
+        right.updatedAt.getTime() - left.updatedAt.getTime() || right.id - left.id
+      );
+    const applicationIds = Array.from(new Set(completed.map((schedule) => schedule.applicationId)));
+    const ownedApplications: Awaited<ReturnType<typeof getUserApplicationsByIds>>[number][] = [];
+    for (let offset = 0; offset < applicationIds.length; offset += 500) {
+      ownedApplications.push(...await getUserApplicationsByIds(userId, applicationIds.slice(offset, offset + 500)));
+    }
+    const applicationsById = new Map(
+      ownedApplications
+        .filter((application) => application.status === "interview")
+        .map((application) => [application.id, application] as const)
+    );
+    const responses = await getUserEmployerResponsesForApplications(userId, Array.from(applicationsById.keys()));
+    const recordedInterviewIds = new Set(
+      responses
+        .map((response) => response.interviewId)
+        .filter((interviewId): interviewId is number => typeof interviewId === "number")
+    );
+    const candidates = completed.filter((schedule) =>
+      applicationsById.has(schedule.applicationId) && !recordedInterviewIds.has(schedule.id)
+    );
+    return {
+      items: candidates.slice(0, limit).map((schedule) => {
+        const application = applicationsById.get(schedule.applicationId)!;
+        return {
+          interviewId: schedule.id,
+          applicationId: application.id,
+          jobId: application.jobId,
+          completedAt: schedule.updatedAt,
+          interviewType: schedule.interviewType,
+          status: application.status,
+          job: application.job ? {
+            id: application.job.id,
+            title: application.job.title,
+            company: application.job.company,
+            location: application.job.location,
+          } : null,
+        };
+      }),
+      total: candidates.length,
+      limit,
+      hasMore: candidates.length > limit,
+    };
+  }
+
+  const condition = and(
+    eq(applications.userId, userId),
+    eq(applications.status, "interview"),
+    eq(interviewSchedules.status, "completed"),
+    sql`NOT EXISTS (
+      SELECT 1 FROM employer_responses
+      WHERE employer_responses.interview_id = ${interviewSchedules.id}
+      AND employer_responses.user_id = ${userId}
+    )`
+  );
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        interviewId: interviewSchedules.id,
+        applicationId: applications.id,
+        jobId: applications.jobId,
+        completedAt: interviewSchedules.updatedAt,
+        interviewType: interviewSchedules.interviewType,
+        status: applications.status,
+        job: {
+          id: jobs.id,
+          title: jobs.title,
+          company: jobs.company,
+          location: jobs.location,
+        },
+      })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(condition)
+      .orderBy(desc(interviewSchedules.updatedAt), desc(interviewSchedules.id))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .where(condition),
+  ]);
+  const total = Number(countRows[0]?.count ?? 0);
+  return { items: rows, total, limit, hasMore: total > rows.length };
 }
 
 async function getMemoryUpcomingInterviewContexts(

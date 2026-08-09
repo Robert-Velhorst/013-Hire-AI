@@ -14,7 +14,7 @@ import {
   getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
-import { createFollowUp, getFollowUps, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
+import { createFollowUp, getFollowUps, getInterviewOutcomePage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
 import {
   createAdminReviewItem,
   createApplication,
@@ -887,6 +887,52 @@ describe("application campaign operating ledger", () => {
     expect(outcome.responseType).toBe("no_response");
     expect(ledgerAfterOutcome.metrics.interviewOutcomesNeeded).toBe(0);
     expect(ledgerAfterOutcome.queues.interviewOutcomesNeeded).toHaveLength(0);
+  });
+
+  it("reports an exact bounded interview-outcome queue without leaking another user", async () => {
+    const userId = 99015;
+    const otherUserId = 99016;
+
+    for (let index = 0; index < 6; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 200 + index,
+        status: "interview",
+        notes: `Completed interview ${index + 1} needs an outcome.`,
+      });
+      const applicationId = Number(application.insertId);
+      await recordInterviewInvite(applicationId, userId);
+      const interview = await scheduleInterview({
+        applicationId,
+        interviewType: index % 2 === 0 ? "video" : "technical",
+        scheduledAt: new Date(Date.now() + (index + 2) * 86400000),
+      }, userId);
+      await updateInterviewStatus(interview.id, "completed", userId);
+    }
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 300,
+      status: "interview",
+      notes: "This completed interview belongs to another user.",
+    });
+    const foreignApplicationId = Number(foreignApplication.insertId);
+    await recordInterviewInvite(foreignApplicationId, otherUserId);
+    const foreignInterview = await scheduleInterview({
+      applicationId: foreignApplicationId,
+      interviewType: "video",
+      scheduledAt: new Date(Date.now() + 10 * 86400000),
+    }, otherUserId);
+    await updateInterviewStatus(foreignInterview.id, "completed", otherUserId);
+
+    const page = await getInterviewOutcomePage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.every((item) => item.applicationId !== foreignApplicationId)).toBe(true);
+    expect(ledger.metrics.interviewOutcomesNeeded).toBe(6);
+    expect(ledger.queues.interviewOutcomesNeeded).toHaveLength(5);
+    expect(ledger.interviewOutcomeScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
   });
 
   it("tracks outcomes separately for each completed interview round", async () => {

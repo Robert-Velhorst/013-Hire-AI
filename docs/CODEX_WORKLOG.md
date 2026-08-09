@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded interview-outcome queue
+
+- Replaced operating-window outcome counts with an exact owner-scoped anti-join over completed interviews and recorded outcome evidence.
+- Added a five-record command-center page and explicit truncation metadata without widening autonomous planning reads.
+- Added scale coverage proving completed interviews for another account cannot enter the queue or its total.
+
 ## 2026-08-09 - Exact bounded admin-review queue
 
 - Replaced capped-list length reporting with an exact owner- and status-scoped admin-review count.
