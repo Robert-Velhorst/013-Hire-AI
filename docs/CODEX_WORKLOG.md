@@ -250,3 +250,10 @@
 - Replaced full approval and decision histories with bounded operating queues plus exact aggregate totals; approved follow-up handoffs remain scoped to the loaded applications.
 - Added migration `0040` for the user/status/activity operating index and explicit truncation fields in dashboard and durable autonomous-run output.
 - Passed synthetic 260-application and 105-pending-approval workloads, exact ownership/current-job checks, TypeScript, and the full 169-file/883-test regression suite. Representative production-volume MySQL query plans remain deployment acceptance.
+
+## 2026-08-09 - Bounded HAI status aggregation
+
+- Replaced HAI's full application, approval, connector, and success-fee history loads with database-side aggregate counts, keeping response cost bounded as account history grows.
+- Added aggregate process runtime-health totals and latest occurrence time to HAI status while retaining individual failure labels behind the administrator-only diagnostics endpoint.
+- Versioned the expanded read-only HAI Agent Card as 1.1.0 and added resource/privacy contract coverage.
+- Passed focused HAI/privacy tests, TypeScript, the complete regression suite, and the production bundle check.

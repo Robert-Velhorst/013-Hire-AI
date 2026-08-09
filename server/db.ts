@@ -1868,6 +1868,82 @@ export async function getUserApplications(userId: number) {
     .orderBy(desc(applications.createdAt), desc(applications.id));
 }
 
+export type HaiStatusCounts = {
+  applications: {
+    total: number;
+    prepared: number;
+    submitted: number;
+    interviews: number;
+    offers: number;
+  };
+  pendingApprovals: number;
+  connectedProviders: number;
+  connectorsNeedingAttention: number;
+  activeSuccessFees: number;
+};
+
+export async function getUserHaiStatusCounts(userId: number): Promise<HaiStatusCounts> {
+  const db = await getDb();
+  if (!db) {
+    const userApplications = memoryApplications.filter((item) => item.userId === userId);
+    return {
+      applications: {
+        total: userApplications.length,
+        prepared: userApplications.filter((item) => item.status === "pending").length,
+        submitted: userApplications.filter((item) => item.status !== "pending").length,
+        interviews: userApplications.filter((item) => item.status === "interview").length,
+        offers: userApplications.filter((item) => item.status === "offer" || item.status === "accepted").length,
+      },
+      pendingApprovals: memoryApplicationApprovals.filter((item) =>
+        item.userId === userId && item.status === "pending"
+      ).length,
+      connectedProviders: memoryConnectorAccounts.filter((item) =>
+        item.userId === userId && item.status === "connected"
+      ).length,
+      connectorsNeedingAttention: memoryConnectorAccounts.filter((item) =>
+        item.userId === userId && ["needs_reauth", "connection_requested"].includes(item.status ?? "")
+      ).length,
+      activeSuccessFees: memorySuccessFees.filter((item) =>
+        item.userId === userId && item.status === "active"
+      ).length,
+    };
+  }
+
+  const [applicationRows, approvalRows, connectorRows, feeRows] = await Promise.all([
+    db.select({
+      total: sql<number>`COUNT(*)`,
+      prepared: sql<number>`COALESCE(SUM(${applications.status} = 'pending'), 0)`,
+      submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
+      interviews: sql<number>`COALESCE(SUM(${applications.status} = 'interview'), 0)`,
+      offers: sql<number>`COALESCE(SUM(${applications.status} IN ('offer', 'accepted')), 0)`,
+    }).from(applications).where(eq(applications.userId, userId)),
+    db.select({ count: sql<number>`COUNT(*)` })
+      .from(applicationApprovals)
+      .where(and(eq(applicationApprovals.userId, userId), eq(applicationApprovals.status, "pending"))),
+    db.select({
+      connected: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} = 'connected'), 0)`,
+      needsAttention: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} IN ('needs_reauth', 'connection_requested')), 0)`,
+    }).from(userConnectorAccounts).where(eq(userConnectorAccounts.userId, userId)),
+    db.select({ count: sql<number>`COUNT(*)` })
+      .from(successFees)
+      .where(and(eq(successFees.userId, userId), eq(successFees.status, "active"))),
+  ]);
+  const applicationCounts = applicationRows[0];
+  return {
+    applications: {
+      total: Number(applicationCounts.total),
+      prepared: Number(applicationCounts.prepared),
+      submitted: Number(applicationCounts.submitted),
+      interviews: Number(applicationCounts.interviews),
+      offers: Number(applicationCounts.offers),
+    },
+    pendingApprovals: Number(approvalRows[0].count),
+    connectedProviders: Number(connectorRows[0].connected),
+    connectorsNeedingAttention: Number(connectorRows[0].needsAttention),
+    activeSuccessFees: Number(feeRows[0].count),
+  };
+}
+
 export type ApplicationPageCursor = {
   createdAt: Date;
   id: number;

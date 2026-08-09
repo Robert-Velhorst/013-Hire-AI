@@ -2,21 +2,19 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   getApplicationCampaign,
   getAutonomousRunState,
-  getUserApplications,
-  getUserSuccessFees,
-  listUserApplicationApprovals,
-  listUserConnectorAccounts,
+  getUserHaiStatusCounts,
 } from "./db";
 import {
   defaultHaiConnectorConfig,
   type HaiConnectorConfig,
   validateHaiConnectorConfig,
 } from "./haiConnectorConfig";
+import { getOperationalFailureSnapshot } from "./operationalFailureLog";
 
 export type { HaiConnectorConfig } from "./haiConnectorConfig";
 
 export const HAI_CONNECTOR_PROTOCOL_VERSION = "1.0";
-export const HAI_CONNECTOR_AGENT_VERSION = "1.0.0";
+export const HAI_CONNECTOR_AGENT_VERSION = "1.1.0";
 
 export type HaiJobSearchSnapshot = {
   generatedAt: string;
@@ -38,6 +36,11 @@ export type HaiJobSearchSnapshot = {
     status: "running" | "completed" | "failed" | "skipped" | "never_run";
     lastCompletedAt: string | null;
   };
+  runtimeSignals: {
+    totalFailures: number;
+    uniqueSignals: number;
+    latestAt: string | null;
+  };
   nextActions: string[];
   scope: string;
 };
@@ -51,26 +54,18 @@ function constantTimeTokenMatch(expected: string, actual: string) {
 }
 
 export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobSearchSnapshot> {
-  const [campaign, applications, approvals, connectors, successFees, autonomousRun] = await Promise.all([
+  const [campaign, counts, autonomousRun] = await Promise.all([
     getApplicationCampaign(userId),
-    getUserApplications(userId),
-    listUserApplicationApprovals(userId, "pending"),
-    listUserConnectorAccounts(userId),
-    getUserSuccessFees(userId),
+    getUserHaiStatusCounts(userId),
     getAutonomousRunState(userId),
   ]);
-  const submitted = applications.filter((item) => item.status !== "pending").length;
-  const interviews = applications.filter((item) => item.status === "interview").length;
-  const offers = applications.filter((item) => item.status === "offer" || item.status === "accepted").length;
-  const connectedProviders = connectors.filter((item) => item.status === "connected").length;
-  const connectorsNeedingAttention = connectors.filter((item) =>
-    item.status === "needs_reauth" || item.status === "connection_requested"
-  ).length;
+  const runtimeSignals = getOperationalFailureSnapshot(1);
   const nextActions = [
-    approvals.length > 0 ? `Review ${approvals.length} pending approval${approvals.length === 1 ? "" : "s"}.` : "",
-    connectorsNeedingAttention > 0 ? `Resolve ${connectorsNeedingAttention} connector setup item${connectorsNeedingAttention === 1 ? "" : "s"}.` : "",
+    counts.pendingApprovals > 0 ? `Review ${counts.pendingApprovals} pending approval${counts.pendingApprovals === 1 ? "" : "s"}.` : "",
+    counts.connectorsNeedingAttention > 0 ? `Resolve ${counts.connectorsNeedingAttention} connector setup item${counts.connectorsNeedingAttention === 1 ? "" : "s"}.` : "",
     campaign?.status === "paused" ? "Resume the paused campaign before scheduled preparation can continue." : "",
-    interviews > 0 ? `Review ${interviews} active interview application${interviews === 1 ? "" : "s"}.` : "",
+    counts.applications.interviews > 0 ? `Review ${counts.applications.interviews} active interview application${counts.applications.interviews === 1 ? "" : "s"}.` : "",
+    runtimeSignals.totalFailures > 0 ? "Review aggregate runtime failure signals in Hire.AI administration." : "",
   ].filter(Boolean).slice(0, 4);
 
   return {
@@ -78,23 +73,22 @@ export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobS
     campaignStatus: campaign?.status ?? "not_configured",
     readinessScore: campaign?.readinessScore ?? null,
     automationMode: campaign?.automationMode ?? "not_configured",
-    applications: {
-      total: applications.length,
-      prepared: applications.length - submitted,
-      submitted,
-      interviews,
-      offers,
-    },
-    pendingApprovals: approvals.length,
-    connectedProviders,
-    connectorsNeedingAttention,
-    activeSuccessFees: successFees.filter((item) => item.status === "active").length,
+    applications: counts.applications,
+    pendingApprovals: counts.pendingApprovals,
+    connectedProviders: counts.connectedProviders,
+    connectorsNeedingAttention: counts.connectorsNeedingAttention,
+    activeSuccessFees: counts.activeSuccessFees,
     autonomousRun: {
       status: autonomousRun?.lastStatus ?? "never_run",
       lastCompletedAt: autonomousRun?.lastCompletedAt?.toISOString() ?? null,
     },
+    runtimeSignals: {
+      totalFailures: runtimeSignals.totalFailures,
+      uniqueSignals: runtimeSignals.uniqueSignals,
+      latestAt: runtimeSignals.signals[0]?.lastOccurredAt ?? null,
+    },
     nextActions,
-    scope: "Read-only aggregate Hire.AI status. No personal profile, job, document, message, credential, payment amount, or raw audit data is included.",
+    scope: "Read-only aggregate Hire.AI status. No personal profile, job, document, message, credential, payment amount, raw audit data, or individual runtime failure label is included.",
   };
 }
 
@@ -123,7 +117,7 @@ export class HaiConnectorService {
       provider: "HAI A2A read-only status connector",
       endpoint: this.configured ? this.config.endpointUrl : undefined,
       configError: this.config.enabled ? this.configError ?? undefined : undefined,
-      capabilities: ["authenticated aggregate job-search status", "A2A 1.0-shaped Agent Card and SendMessage response"],
+      capabilities: ["authenticated aggregate job-search and runtime health status", "A2A 1.0-shaped Agent Card and SendMessage response"],
       restrictions: ["one configured user", "read-only", "no personal data", "no provider calls", "no application, approval, message, billing, or workflow mutation"],
     };
   }
@@ -132,7 +126,7 @@ export class HaiConnectorService {
     if (!this.configured) return null;
     return {
       name: "Hire.AI controlled status",
-      description: "Local, token-authenticated aggregate job-search status for HAI. This connector cannot execute or approve work.",
+      description: "Local, token-authenticated aggregate job-search and runtime health status for HAI. This connector cannot execute or approve work.",
       supportedInterfaces: [{ url: this.config.endpointUrl, protocolBinding: "JSONRPC", protocolVersion: HAI_CONNECTOR_PROTOCOL_VERSION }],
       version: HAI_CONNECTOR_AGENT_VERSION,
       capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: false },
@@ -141,7 +135,7 @@ export class HaiConnectorService {
       skills: [{
         id: "hire_ai_read_only_status",
         name: "Hire.AI read-only status",
-        description: "Returns bounded aggregate application, review, connector, campaign, and autonomous-run status without personal data.",
+        description: "Returns bounded aggregate application, review, connector, campaign, autonomous-run, and runtime health status without personal data or failure labels.",
         tags: ["job-search", "status", "read-only", "local-first"],
         examples: ["Summarize the current Hire.AI operating status."],
       }],

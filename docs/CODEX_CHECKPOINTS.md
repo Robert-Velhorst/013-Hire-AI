@@ -16,7 +16,7 @@
 | Retention inventory | Policy `2026-08-09.v2`; schema/finalizer lockstep, authorization, fail-closed preview, workspace ownership guard, and clean-MySQL rollback tests | Complete for checked-in policy and implementation |
 | Windows runtime contract | Explicit host/port selection, native launcher, doctor integration, network/HAI tests, PowerShell parser validation, and dedicated `windows-latest` CI | Complete in CI run `31291576077`; credential-complete production launch pending |
 | Supply-chain audit | Pnpm 11 frozen graph; restricted build scripts; patched Vitest/Vite, Nano ID, Mermaid, DOMPurify, PostCSS, and esbuild; `pnpm security:audit`; moderate-or-higher CI gate | Complete locally and enforced in CI |
-| HAI interoperability | Agent Card, concealed bearer auth, aggregate status, and read-only A2A 1.0 smoke | Complete locally; external HAI peer acceptance pending |
+| HAI interoperability | Agent Card, concealed bearer auth, database-side aggregate status, label-free runtime health, and read-only A2A 1.0 smoke | Complete locally; external HAI peer acceptance pending |
 | ngrok readiness | ngrok 3.39.8 installed; configuration valid; fail-closed reserved-domain launcher | Partial: reserved HTTPS hostname and public health acceptance pending |
 | Frontend delivery efficiency | Production-only bundle gate; 487-byte HTML shell; lazy route chunks retained | Complete for current production build |
 | Browser shell accessibility | One primary landmark, keyboard-named brand/account controls, authenticated dashboard-to-review interaction, clean console, and 390-pixel no-overflow smoke | Complete locally; independent assistive-technology and usability acceptance remain |

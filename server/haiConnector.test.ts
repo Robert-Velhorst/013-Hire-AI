@@ -20,6 +20,7 @@ const snapshot: HaiJobSearchSnapshot = {
   connectorsNeedingAttention: 1,
   activeSuccessFees: 0,
   autonomousRun: { status: "completed", lastCompletedAt: "2026-08-08T23:00:00.000Z" },
+  runtimeSignals: { totalFailures: 0, uniqueSignals: 0, latestAt: null },
   nextActions: ["Review 2 pending approvals."],
   scope: "Read-only aggregate Hire.AI status.",
 };
@@ -121,6 +122,7 @@ describe("HAI A2A route", () => {
     expect(response.status).toBe(200);
     expect(body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
     expect(body.result.task.artifacts[0].parts[0].data).toEqual(snapshot);
+    expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(41);
   });
