@@ -6,7 +6,9 @@ import {
   hasDatabaseSchemaDrift,
   type DatabaseColumnRow,
   type DatabaseIndexRow,
+  type DatabaseForeignKeyRow,
   type ExpectedDatabaseColumn,
+  type ExpectedDatabaseForeignKey,
   type ExpectedDatabaseIndex,
 } from "./lib/database-schema-audit";
 
@@ -14,6 +16,7 @@ function expectedRuntimeSchema() {
   const tables = new Map<string, Set<string>>();
   const columns = new Map<string, Map<string, ExpectedDatabaseColumn>>();
   const indexes = new Map<string, Map<string, ExpectedDatabaseIndex>>();
+  const foreignKeys = new Map<string, ExpectedDatabaseForeignKey[]>();
   for (const value of Object.values(schema)) {
     try {
       const config = getTableConfig(value as MySqlTable);
@@ -26,7 +29,7 @@ function expectedRuntimeSchema() {
             nullable: !column.notNull,
           },
         ])));
-        indexes.set(config.name, new Map(config.indexes.map((index) => [
+        const tableIndexes = new Map(config.indexes.map((index) => [
           index.config.name,
           {
             columns: index.config.columns
@@ -34,13 +37,28 @@ function expectedRuntimeSchema() {
               .filter((column): column is string => Boolean(column)),
             unique: index.config.unique,
           },
-        ])));
+        ]));
+        const primaryColumns = config.columns.filter((column) => column.primary).map((column) => column.name);
+        if (primaryColumns.length > 0) {
+          tableIndexes.set("PRIMARY", { columns: primaryColumns, unique: true });
+        }
+        indexes.set(config.name, tableIndexes);
+        foreignKeys.set(config.name, config.foreignKeys.map((foreignKey) => {
+          const reference = foreignKey.reference();
+          return {
+            columns: reference.columns.map((column) => column.name),
+            referencedTable: getTableConfig(reference.foreignTable).name,
+            referencedColumns: reference.foreignColumns.map((column) => column.name),
+            onDelete: foreignKey.onDelete ?? "restrict",
+            onUpdate: foreignKey.onUpdate ?? "no action",
+          };
+        }));
       }
     } catch {
       // The schema module also exports types and relation helpers.
     }
   }
-  return { tables, columns, indexes };
+  return { tables, columns, indexes, foreignKeys };
 }
 
 async function main() {
@@ -61,6 +79,20 @@ async function main() {
        FROM information_schema.statistics
        WHERE table_schema = DATABASE()`
     );
+    const [foreignKeyRows] = await connection.query<DatabaseForeignKeyRow[]>(
+      `SELECT kcu.table_name AS tableName, kcu.constraint_name AS constraintName,
+              kcu.column_name AS columnName, kcu.ordinal_position AS sequence,
+              kcu.referenced_table_name AS referencedTable,
+              kcu.referenced_column_name AS referencedColumn,
+              rc.delete_rule AS deleteRule, rc.update_rule AS updateRule
+       FROM information_schema.key_column_usage kcu
+       JOIN information_schema.referential_constraints rc
+         ON rc.constraint_schema = kcu.constraint_schema
+        AND rc.constraint_name = kcu.constraint_name
+        AND rc.table_name = kcu.table_name
+       WHERE kcu.table_schema = DATABASE()
+         AND kcu.referenced_table_name IS NOT NULL`
+    );
     const expected = expectedRuntimeSchema();
     if (expected.tables.size === 0) throw new Error("Runtime schema metadata is empty.");
     const audit = compareDatabaseSchema(
@@ -68,7 +100,9 @@ async function main() {
       columnRows,
       expected.indexes,
       indexRows,
-      expected.columns
+      expected.columns,
+      expected.foreignKeys,
+      foreignKeyRows
     );
     console.log(JSON.stringify(audit, null, 2));
     if (hasDatabaseSchemaDrift(audit)) {

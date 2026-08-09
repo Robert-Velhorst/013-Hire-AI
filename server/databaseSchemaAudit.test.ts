@@ -26,6 +26,10 @@ describe("database schema audit", () => {
       unexpectedColumns: ["users.legacy_name"],
       missingIndexes: [],
       mismatchedIndexes: [],
+      expectedForeignKeyCount: 0,
+      actualForeignKeyCount: 0,
+      missingForeignKeys: [],
+      mismatchedForeignKeys: [],
     });
     expect(hasDatabaseSchemaDrift(audit)).toBe(true);
   });
@@ -87,6 +91,41 @@ describe("database schema audit", () => {
     expect(audit.mismatchedColumns).toEqual([
       "users.email: expected varchar(320) NOT NULL, actual varchar(255) NULL",
       "users.id: expected int NOT NULL, actual bigint NOT NULL",
+    ]);
+    expect(hasDatabaseSchemaDrift(audit)).toBe(true);
+  });
+
+  it("reports missing foreign keys and referential-action drift", () => {
+    const audit = compareDatabaseSchema(
+      new Map([["applications", new Set(["user_id", "job_id"])]]),
+      [
+        { tableName: "applications", columnName: "user_id" },
+        { tableName: "applications", columnName: "job_id" },
+      ],
+      new Map(),
+      [],
+      new Map(),
+      new Map([["applications", [
+        { columns: ["user_id"], referencedTable: "users", referencedColumns: ["id"], onDelete: "cascade", onUpdate: "restrict" },
+        { columns: ["job_id"], referencedTable: "jobs", referencedColumns: ["id"], onDelete: "restrict", onUpdate: "restrict" },
+      ]]]),
+      [{
+        tableName: "applications",
+        constraintName: "applications_user_fk",
+        columnName: "user_id",
+        sequence: 1,
+        referencedTable: "users",
+        referencedColumn: "id",
+        deleteRule: "SET NULL",
+        updateRule: "RESTRICT",
+      }]
+    );
+
+    expect(audit.expectedForeignKeyCount).toBe(2);
+    expect(audit.actualForeignKeyCount).toBe(1);
+    expect(audit.missingForeignKeys).toEqual(["applications.job_id -> jobs(id)"]);
+    expect(audit.mismatchedForeignKeys).toEqual([
+      "applications.user_id -> users(id): expected DELETE CASCADE UPDATE RESTRICT, actual DELETE SET NULL UPDATE RESTRICT",
     ]);
     expect(hasDatabaseSchemaDrift(audit)).toBe(true);
   });

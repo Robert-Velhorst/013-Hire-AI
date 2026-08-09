@@ -242,8 +242,8 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
  */
 export const applications = mysqlTable("applications", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("user_id").notNull(),
-  jobId: int("job_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  jobId: int("job_id").notNull().references(() => jobs.id, { onDelete: "restrict" }),
   status: mysqlEnum("status", [
     "pending",
     "applied",
@@ -323,7 +323,7 @@ export const applicationMaterials = mysqlTable("application_materials", {
  */
 export const applicationAttempts = mysqlTable("application_attempts", {
   id: int("id").autoincrement().primaryKey(),
-  applicationId: int("application_id").notNull(),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   userId: int("user_id").notNull(),
   jobId: int("job_id").notNull(),
   platformId: int("platform_id"),
@@ -348,7 +348,7 @@ export const applicationAttempts = mysqlTable("application_attempts", {
  */
 export const employerResponses = mysqlTable("employer_responses", {
   id: int("id").autoincrement().primaryKey(),
-  applicationId: int("application_id").notNull(),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   interviewId: int("interview_id"),
   userId: int("user_id").notNull(),
   responseType: mysqlEnum("response_type", [
@@ -677,7 +677,7 @@ export const interviewPreparation = mysqlTable("interview_preparation", {
  */
 export const followUps = mysqlTable("follow_ups", {
   id: int("id").autoincrement().primaryKey(),
-  applicationId: int("application_id").notNull(),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   message: text("message"),
   sentDate: timestamp("sent_date"),
   deliveryConfirmation: text("delivery_confirmation"),
@@ -735,7 +735,7 @@ export const inboxResponseCandidates = mysqlTable("inbox_response_candidates", {
  */
 export const userResumes = mysqlTable("user_resumes", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("user_id").notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   fileName: varchar("file_name", { length: 255 }).notNull(),
   fileUrl: varchar("file_url", { length: 1000 }).notNull(),
   fileKey: varchar("file_key", { length: 500 }).notNull(),
@@ -773,7 +773,7 @@ export const savedJobs = mysqlTable("saved_jobs", {
  */
 export const applicationNotes = mysqlTable("application_notes", {
   id: int("id").autoincrement().primaryKey(),
-  applicationId: int("application_id").notNull(),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
   noteType: mysqlEnum("note_type", ["general", "interview", "followup", "research", "feedback"]).default("general"),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -786,8 +786,8 @@ export const applicationNotes = mysqlTable("application_notes", {
  */
 export const interviewSchedules = mysqlTable("interview_schedules", {
   id: int("id").autoincrement().primaryKey(),
-  applicationId: int("application_id").notNull(),
-  employerResponseId: int("employer_response_id"),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  employerResponseId: int("employer_response_id").references(() => employerResponses.id, { onDelete: "set null" }),
   interviewType: mysqlEnum("interview_type", ["phone", "video", "onsite", "technical", "behavioral", "panel"]).notNull(),
   scheduledAt: timestamp("scheduled_at").notNull(),
   duration: int("duration"),
@@ -946,8 +946,8 @@ export type UserProject = typeof userProjects.$inferSelect;
  */
 export const successFees = mysqlTable("success_fees", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("user_id").notNull(),
-  applicationId: int("application_id"),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  applicationId: int("application_id").references(() => applications.id, { onDelete: "set null" }),
   employerName: varchar("employer_name", { length: 255 }).notNull(),
   jobTitle: varchar("job_title", { length: 255 }).notNull(),
   monthlySalary: int("monthly_salary").notNull(),
@@ -980,7 +980,7 @@ export const successFees = mysqlTable("success_fees", {
  */
 export const employmentVerifications = mysqlTable("employment_verifications", {
   id: int("id").autoincrement().primaryKey(),
-  successFeeId: int("success_fee_id").notNull(),
+  successFeeId: int("success_fee_id").notNull().references(() => successFees.id, { onDelete: "cascade" }),
   userId: int("user_id").notNull(),
   verificationType: mysqlEnum("verification_type", ["initial", "quarterly"]).default("initial").notNull(),
   documentUrl: varchar("document_url", { length: 1000 }),
@@ -999,7 +999,7 @@ export const employmentVerifications = mysqlTable("employment_verifications", {
  */
 export const feePayments = mysqlTable("fee_payments", {
   id: int("id").autoincrement().primaryKey(),
-  successFeeId: int("success_fee_id").notNull(),
+  successFeeId: int("success_fee_id").notNull().references(() => successFees.id, { onDelete: "cascade" }),
   userId: int("user_id").notNull(),
   amount: int("amount").notNull(),
   currency: varchar("currency", { length: 10 }).default("USD").notNull(),

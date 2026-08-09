@@ -23,6 +23,25 @@ export type DatabaseIndexRow = {
   columnName: string | null;
 };
 
+export type ExpectedDatabaseForeignKey = {
+  columns: string[];
+  referencedTable: string;
+  referencedColumns: string[];
+  onDelete: string;
+  onUpdate: string;
+};
+
+export type DatabaseForeignKeyRow = {
+  tableName: string;
+  constraintName: string;
+  columnName: string;
+  sequence: number;
+  referencedTable: string;
+  referencedColumn: string;
+  deleteRule: string;
+  updateRule: string;
+};
+
 export type DatabaseSchemaAudit = {
   expectedTableCount: number;
   actualTableCount: number;
@@ -34,6 +53,10 @@ export type DatabaseSchemaAudit = {
   unexpectedColumns: string[];
   missingIndexes: string[];
   mismatchedIndexes: string[];
+  expectedForeignKeyCount: number;
+  actualForeignKeyCount: number;
+  missingForeignKeys: string[];
+  mismatchedForeignKeys: string[];
 };
 
 export function hasDatabaseSchemaDrift(audit: DatabaseSchemaAudit) {
@@ -42,7 +65,9 @@ export function hasDatabaseSchemaDrift(audit: DatabaseSchemaAudit) {
     audit.mismatchedColumns.length > 0 ||
     audit.unexpectedColumns.length > 0 ||
     audit.missingIndexes.length > 0 ||
-    audit.mismatchedIndexes.length > 0;
+    audit.mismatchedIndexes.length > 0 ||
+    audit.missingForeignKeys.length > 0 ||
+    audit.mismatchedForeignKeys.length > 0;
 }
 
 export function compareDatabaseSchema(
@@ -50,7 +75,9 @@ export function compareDatabaseSchema(
   actualRows: DatabaseColumnRow[],
   expectedIndexes: ReadonlyMap<string, ReadonlyMap<string, ExpectedDatabaseIndex>> = new Map(),
   actualIndexRows: DatabaseIndexRow[] = [],
-  expectedColumnDefinitions: ReadonlyMap<string, ReadonlyMap<string, ExpectedDatabaseColumn>> = new Map()
+  expectedColumnDefinitions: ReadonlyMap<string, ReadonlyMap<string, ExpectedDatabaseColumn>> = new Map(),
+  expectedForeignKeys: ReadonlyMap<string, readonly ExpectedDatabaseForeignKey[]> = new Map(),
+  actualForeignKeyRows: DatabaseForeignKeyRow[] = []
 ): DatabaseSchemaAudit {
   const actual = new Map<string, Set<string>>();
   const actualColumnDefinitions = new Map<string, Map<string, ExpectedDatabaseColumn>>();
@@ -74,6 +101,8 @@ export function compareDatabaseSchema(
   const unexpectedColumns: string[] = [];
   const missingIndexes: string[] = [];
   const mismatchedIndexes: string[] = [];
+  const missingForeignKeys: string[] = [];
+  const mismatchedForeignKeys: string[] = [];
   for (const [tableName, expectedColumns] of expected) {
     const actualColumns = actual.get(tableName);
     if (!actualColumns) {
@@ -136,6 +165,50 @@ export function compareDatabaseSchema(
     }
   }
 
+  const normalizeRule = (value: string) => value.toUpperCase().replace(/_/g, " ");
+  const foreignKeyIdentity = (foreignKey: ExpectedDatabaseForeignKey) =>
+    `${foreignKey.columns.join(",")} -> ${foreignKey.referencedTable}(${foreignKey.referencedColumns.join(",")})`;
+  const actualForeignKeys = new Map<string, ExpectedDatabaseForeignKey[]>();
+  const groupedActualForeignKeys = new Map<string, DatabaseForeignKeyRow[]>();
+  for (const row of actualForeignKeyRows) {
+    const key = `${row.tableName}.${row.constraintName}`;
+    const rows = groupedActualForeignKeys.get(key) ?? [];
+    rows.push(row);
+    groupedActualForeignKeys.set(key, rows);
+  }
+  for (const rows of groupedActualForeignKeys.values()) {
+    rows.sort((left, right) => left.sequence - right.sequence);
+    const first = rows[0];
+    const tableForeignKeys = actualForeignKeys.get(first.tableName) ?? [];
+    tableForeignKeys.push({
+      columns: rows.map((row) => row.columnName),
+      referencedTable: first.referencedTable,
+      referencedColumns: rows.map((row) => row.referencedColumn),
+      onDelete: normalizeRule(first.deleteRule),
+      onUpdate: normalizeRule(first.updateRule),
+    });
+    actualForeignKeys.set(first.tableName, tableForeignKeys);
+  }
+  for (const [tableName, foreignKeys] of expectedForeignKeys) {
+    const actualTableForeignKeys = actualForeignKeys.get(tableName) ?? [];
+    for (const expectedForeignKey of foreignKeys) {
+      const identity = foreignKeyIdentity(expectedForeignKey);
+      const actualForeignKey = actualTableForeignKeys.find((candidate) =>
+        foreignKeyIdentity(candidate) === identity
+      );
+      if (!actualForeignKey) {
+        missingForeignKeys.push(`${tableName}.${identity}`);
+      } else if (
+        normalizeRule(actualForeignKey.onDelete) !== normalizeRule(expectedForeignKey.onDelete) ||
+        normalizeRule(actualForeignKey.onUpdate) !== normalizeRule(expectedForeignKey.onUpdate)
+      ) {
+        mismatchedForeignKeys.push(
+          `${tableName}.${identity}: expected DELETE ${normalizeRule(expectedForeignKey.onDelete)} UPDATE ${normalizeRule(expectedForeignKey.onUpdate)}, actual DELETE ${actualForeignKey.onDelete} UPDATE ${actualForeignKey.onUpdate}`
+        );
+      }
+    }
+  }
+
   return {
     expectedTableCount: expected.size,
     actualTableCount: actual.size,
@@ -149,5 +222,11 @@ export function compareDatabaseSchema(
     unexpectedColumns: unexpectedColumns.sort(),
     missingIndexes: missingIndexes.sort(),
     mismatchedIndexes: mismatchedIndexes.sort(),
+    expectedForeignKeyCount: Array.from(expectedForeignKeys.values())
+      .reduce((count, foreignKeys) => count + foreignKeys.length, 0),
+    actualForeignKeyCount: Array.from(actualForeignKeys.values())
+      .reduce((count, foreignKeys) => count + foreignKeys.length, 0),
+    missingForeignKeys: missingForeignKeys.sort(),
+    mismatchedForeignKeys: mismatchedForeignKeys.sort(),
   };
 }

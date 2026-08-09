@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Referential-integrity schema gate
+
+- Extended the production-bundled schema audit to verify every runtime primary key and declared foreign key, including ordered columns, referenced targets, and delete/update actions.
+- Restored existing production foreign-key declarations to the Drizzle runtime model so migration generation and runtime metadata describe the same relationships.
+- Applied all 48 migrations to clean MySQL 8.4 and verified 42 runtime primary keys plus all 19 declared foreign keys without drift.
+
 ## 2026-08-09 - Runtime-to-migration schema audit
 
 - Added a production-bundled audit that compares every Drizzle table and column with MySQL `information_schema` without exposing connection credentials.
