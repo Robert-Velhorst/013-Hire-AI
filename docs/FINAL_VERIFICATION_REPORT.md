@@ -25,7 +25,8 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 160 files, 823 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 161 files, 825 tests |
+| Dependency advisory audit | `pnpm security:audit` | Passed: no high or critical advisories |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -75,6 +76,8 @@ Non-idle alert refreshes now traverse projected current canonical jobs in bounde
 CI now includes a dedicated Windows runner in addition to the complete Ubuntu suite. The Windows job validates the frozen dependency graph, TypeScript, both native PowerShell launchers, network binding and HAI connector contracts, and the production build; credential-complete startup remains deployment acceptance rather than a CI claim.
 
 GitHub Actions run `31291576077` passed both jobs: Ubuntu `build-and-test` and Windows `windows-runtime`.
+
+The supply-chain pass removed the critical Vitest advisory and high nested-Vite and Nano ID advisories. The corrected lockfile resolves Vitest 3.2.x, Vite 7.3.x, and Nano ID 3.3.17, while CI now rejects high or critical advisories on every pull request and `main` push.
 
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
 

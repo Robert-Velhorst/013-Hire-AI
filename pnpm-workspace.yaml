@@ -1,0 +1,8 @@
+packages:
+  - .
+
+allowBuilds:
+  esbuild: set this to true or false
+
+overrides:
+  "nanoid@<3.3.17": "3.3.17"

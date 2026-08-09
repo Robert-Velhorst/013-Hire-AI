@@ -39,6 +39,7 @@ Audit date: 2026-08-08
 | Every job-alert refresh loaded all active alerts, jobs, and platforms, even when no alert was due, and collected every matching job. | The scheduler now selects only due alerts through an indexed frequency/cutoff predicate, returns before job loading when idle, and uses first-match short-circuiting. |
 | A non-idle job-alert refresh still materialized the complete active canonical-job corpus and issued one update per matched alert. | Current jobs are projected and traversed in deterministic 250-row ID pages; matched alerts leave the working set immediately and receive one bulk timestamp update. |
 | CI verified only Ubuntu despite Windows 11 being a required standalone deployment target. | A dedicated Windows runner now installs from the lockfile, type-checks, parses both launchers, runs network and HAI contract tests, and builds the production bundle. |
+| The dependency graph contained a critical Vitest advisory, a high nested-Vite Windows path advisory, and an ignored Nano ID override. | Vitest/Vite are patched, Nano ID 3 is forced to 3.3.17 through active workspace settings, and CI fails on any future high or critical registry advisory. |
 
 ## Material unresolved risks
 

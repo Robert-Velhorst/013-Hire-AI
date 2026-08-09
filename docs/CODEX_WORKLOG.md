@@ -76,4 +76,6 @@
 - Replaced the due-alert scheduler's unbounded active-job materialization with 250-row canonical-job pages and one bulk timestamp update for matched alerts.
 - Added a dedicated `windows-latest` CI job for PowerShell launcher parsing, network/HAI contracts, TypeScript, dependency-lock integrity, and the production build.
 - Verified both the complete Ubuntu job and the new Windows runtime job in GitHub Actions run `31291576077`.
-- Passed TypeScript and the full regression suite: 160 files and 823 tests.
+- Upgraded vulnerable Vitest/Vite dependencies, moved the ignored Nano ID override into active pnpm workspace settings, and enforced high/critical advisory scanning in CI.
+- Verified the dependency audit reports no high or critical advisories.
+- Passed TypeScript and the full regression suite: 161 files and 825 tests.
