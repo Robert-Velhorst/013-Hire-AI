@@ -3388,6 +3388,25 @@ export async function listUserApplicationApprovalsForApplication(
     .orderBy(desc(applicationApprovals.createdAt));
 }
 
+export async function getUserApplicationApprovalById(userId: number, approvalId: number) {
+  const db = await getDb();
+  if (!db) {
+    return memoryApplicationApprovals.find((approval) =>
+      approval.id === approvalId && approval.userId === userId
+    ) as ApplicationApproval | undefined;
+  }
+
+  const rows = await db
+    .select()
+    .from(applicationApprovals)
+    .where(and(
+      eq(applicationApprovals.id, approvalId),
+      eq(applicationApprovals.userId, userId)
+    ))
+    .limit(1);
+  return rows[0];
+}
+
 export async function getPendingFollowUpApproval(followUpId: number, userId: number) {
   const db = await getDb();
   if (!db) {

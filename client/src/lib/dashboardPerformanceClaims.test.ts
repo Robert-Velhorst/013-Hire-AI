@@ -67,4 +67,28 @@ describe("dashboard performance claims", () => {
     expect(evidenceFunction).not.toContain("getUserApplications(");
     expect(evidenceFunction).not.toContain("getUserApplicationDecisions(");
   });
+
+  it("uses exact owned records for single-application lifecycle mutations", () => {
+    const features = readFileSync(resolve(process.cwd(), "server", "applicationFeatures.ts"), "utf8");
+    const router = readFileSync(resolve(process.cwd(), "server", "routers.ts"), "utf8");
+    const approvalResolution = router.slice(
+      router.indexOf("resolveApproval: protectedProcedure"),
+      router.indexOf("updateStatus: protectedProcedure")
+    );
+    const offerDecline = router.slice(
+      router.indexOf("declineOffer: protectedProcedure"),
+      router.indexOf("confirmSubmission: protectedProcedure")
+    );
+
+    expect(features).toContain("getUserApplicationById(userId, input.applicationId)");
+    expect(features).toContain("getUserApplicationById(userId, applicationId)");
+    expect(features).not.toContain("(await getUserApplications(userId)).find");
+    expect(features).not.toContain("const userApplications = await getUserApplications(userId)");
+    expect(approvalResolution).toContain("getUserApplicationApprovalById");
+    expect(approvalResolution).toContain("getUserApplicationById");
+    expect(approvalResolution).not.toContain("listUserApplicationApprovals");
+    expect(approvalResolution).not.toContain("getUserApplications");
+    expect(offerDecline).toContain("getUserApplicationById");
+    expect(offerDecline).not.toContain("getUserApplications");
+  });
 });

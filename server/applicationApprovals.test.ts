@@ -21,6 +21,7 @@ import {
   getApplicationLedgerArtifacts,
   getUserApplications,
   getUserOfferAttributionReviews,
+  getUserApplicationApprovalById,
   listUserApplicationApprovals,
   listUserApplicationApprovalsForApplication,
   resolveApplicationApproval,
@@ -333,6 +334,10 @@ describe("application approval ledger", () => {
       Number(legacyApplication.insertId),
     ]));
     expect(approvals.every((approval) => approval.userId === userId)).toBe(true);
+    await expect(getUserApplicationApprovalById(userId, Number(linkedFollowUp.insertId)))
+      .resolves.toMatchObject({ id: Number(linkedFollowUp.insertId), userId, applicationId });
+    await expect(getUserApplicationApprovalById(otherUserId, Number(linkedFollowUp.insertId)))
+      .resolves.toBeUndefined();
   });
 
   it("keeps a submission approval pending when core evidence blocks external handoff", async () => {

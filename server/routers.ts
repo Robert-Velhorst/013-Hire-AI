@@ -1810,8 +1810,8 @@ export const appRouter = router({
           createAuditEvent,
           createApplicationAttempt,
           getJobById,
-          getUserApplications,
-          listUserApplicationApprovals,
+          getUserApplicationApprovalById,
+          getUserApplicationById,
         } = await import("./db");
         const {
           getApplicationSubmissionGateAttemptStatus,
@@ -1819,16 +1819,14 @@ export const appRouter = router({
           shouldRecordApplicationSubmissionGateAttempt,
         } = await import("./applicationApprovalResolution");
         try {
-          const approval = (await listUserApplicationApprovals(ctx.user.id, "all"))
-            .find((item) => item.id === input.approvalId);
+          const approval = await getUserApplicationApprovalById(ctx.user.id, input.approvalId);
           if (
             input.status === "approved" &&
             approval?.approvalType === "application_submission" &&
             approval.applicationId != null &&
             approval.status === "pending"
           ) {
-            const userApplications = await getUserApplications(ctx.user.id);
-            const application = userApplications.find((item) => item.id === approval.applicationId);
+            const application = await getUserApplicationById(ctx.user.id, approval.applicationId);
             const job = application ? await getJobById(application.jobId) : null;
             if (!application || !job || !isJobCurrentForAutonomousProcessing(job)) {
               const cancelled = await resolveApplicationApproval(
@@ -1924,8 +1922,7 @@ export const appRouter = router({
           let approvalAttemptWarning: string | null = null;
           if (shouldRecordApplicationSubmissionGateAttempt(result.approval)) {
             const applicationId = result.approval.applicationId as number;
-            const userApplications = await getUserApplications(ctx.user.id);
-            const application = userApplications.find((item) => item.id === applicationId);
+            const application = await getUserApplicationById(ctx.user.id, applicationId);
             if (application) {
               const job = await getJobById(application.jobId);
               const attempt = await createApplicationAttempt({
@@ -2060,8 +2057,8 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         assertJobSearchTermsAccepted(ctx.user);
-        const { createAuditEvent, getUserApplications } = await import("./db");
-        const application = (await getUserApplications(ctx.user.id)).find((item) => item.id === input.applicationId);
+        const { createAuditEvent, getUserApplicationById } = await import("./db");
+        const application = await getUserApplicationById(ctx.user.id, input.applicationId);
         if (!application) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Application not found." });
         }

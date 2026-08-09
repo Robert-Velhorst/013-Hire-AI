@@ -19,6 +19,7 @@ import {
   getCanonicalJobId,
   getApplicationLedgerArtifacts,
   getJobById,
+  getUserApplicationById,
   getUserApplications,
   listUserApplicationApprovalsForApplication,
   markUnreadInterviewNotificationsReadForApplication,
@@ -365,8 +366,7 @@ export async function confirmApplicationSubmission(input: ConfirmSubmissionInput
   const evidence = normalizeSubmissionEvidence(input);
 
   if (!db) {
-    const applicationsForUser = await getUserApplications(userId);
-    const application = applicationsForUser.find((item) => item.id === input.applicationId);
+    const application = await getUserApplicationById(userId, input.applicationId);
     if (!application) throw new Error("Application not found.");
 
     const currentStatus = application.status || "pending";
@@ -726,8 +726,7 @@ async function retireInterviewNotificationsAfterApplicationClosure(
 export async function recordEmployerResponse(input: RecordEmployerResponseInput, userId: number) {
   const db = await getDb();
   if (!db) {
-    const applicationsForUser = await getUserApplications(userId);
-    const application = applicationsForUser.find((item) => item.id === input.applicationId);
+    const application = await getUserApplicationById(userId, input.applicationId);
     if (!application) throw new Error("Application not found.");
 
     const sourceReference = normalizeEmployerResponseSourceReference(input.sourceReference);
@@ -1413,8 +1412,7 @@ function nextMemoryInterviewId() {
 }
 
 async function getInterviewApplication(applicationId: number, userId: number) {
-  const applicationsForUser = await getUserApplications(userId);
-  const application = applicationsForUser.find((item) => item.id === applicationId);
+  const application = await getUserApplicationById(userId, applicationId);
   if (!application) {
     throw new Error("Application not found.");
   }
@@ -1422,12 +1420,8 @@ async function getInterviewApplication(applicationId: number, userId: number) {
 }
 
 async function findOwnedMemoryInterview(interviewId: number, userId: number) {
-  const applicationsForUser = await getUserApplications(userId);
-  const userApplicationIds = new Set(applicationsForUser.map((application) => application.id));
-  const interview = memoryInterviewSchedules.find((item) =>
-    item.id === interviewId && userApplicationIds.has(item.applicationId)
-  );
-  if (!interview) {
+  const interview = memoryInterviewSchedules.find((item) => item.id === interviewId);
+  if (!interview || !await getUserApplicationById(userId, interview.applicationId)) {
     throw new Error("Interview not found.");
   }
   return interview;
@@ -2315,8 +2309,7 @@ function nextMemoryFollowUpId() {
 }
 
 async function getFollowUpApplication(applicationId: number, userId: number) {
-  const applicationsForUser = await getUserApplications(userId);
-  const application = applicationsForUser.find((item) => item.id === applicationId);
+  const application = await getUserApplicationById(userId, applicationId);
   if (!application) {
     throw new Error("Application not found.");
   }
@@ -2330,12 +2323,8 @@ function assertFollowUpAllowed(status: string) {
 }
 
 async function findOwnedMemoryFollowUp(followUpId: number, userId: number) {
-  const applicationsForUser = await getUserApplications(userId);
-  const userApplicationIds = new Set(applicationsForUser.map((application) => application.id));
-  const followUp = memoryFollowUps.find((item) =>
-    item.id === followUpId && userApplicationIds.has(item.applicationId)
-  );
-  if (!followUp) {
+  const followUp = memoryFollowUps.find((item) => item.id === followUpId);
+  if (!followUp || !await getUserApplicationById(userId, followUp.applicationId)) {
     throw new Error("Follow-up not found.");
   }
   return followUp;
@@ -2582,8 +2571,7 @@ export async function withdrawApplication(
   const dismissOfferAttributionReviews = options.dismissOfferAttributionReviews === true;
 
   if (!db) {
-    const userApplications = await getUserApplications(userId);
-    const application = userApplications.find((item) => item.id === applicationId);
+    const application = await getUserApplicationById(userId, applicationId);
     if (!application) throw new Error("Application not found.");
 
     const followUpsForApplication = await getFollowUps(applicationId, userId);
@@ -2913,7 +2901,7 @@ export async function acceptOfferApplication(applicationId: number, userId: numb
   const acceptedAt = new Date();
 
   if (!db) {
-    const application = (await getUserApplications(userId)).find((item) => item.id === applicationId);
+    const application = await getUserApplicationById(userId, applicationId);
     if (!application) throw new Error("Application not found.");
     if (application.status !== "offer") {
       throw new Error("Only a recorded offer can be confirmed as accepted.");
