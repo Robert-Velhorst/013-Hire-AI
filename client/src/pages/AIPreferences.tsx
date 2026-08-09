@@ -49,7 +49,7 @@ export default function AIPreferences() {
   
   // AI Settings State
   const [autonomousEnabled, setAutonomousEnabled] = useState(false);
-  const [autoApplyEnabled, setAutoApplyEnabled] = useState(true);
+  const [autoApplyEnabled, setAutoApplyEnabled] = useState(false);
   const [maxApplicationsPerDay, setMaxApplicationsPerDay] = useState("10");
   const [minMatchScore, setMinMatchScore] = useState("70");
   const [scanFrequency, setScanFrequency] = useState("daily");
@@ -58,7 +58,9 @@ export default function AIPreferences() {
   const [allowUnsupportedATS, setAllowUnsupportedATS] = useState(false);
   const [createFollowUps, setCreateFollowUps] = useState(false);
 
-  const { data: profile } = trpc.profile.get.useQuery();
+  const { data: profile, isLoading: profileLoading } = trpc.profile.get.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
   const { data: autonomousPlan, refetch: refetchPlan } = trpc.automation.plan.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -151,7 +153,7 @@ export default function AIPreferences() {
     setLocation(autonomousControl.route);
   };
 
-  if (loading) {
+  if (loading || (isAuthenticated && profileLoading)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <AppHeader currentPage="ai-preferences" />

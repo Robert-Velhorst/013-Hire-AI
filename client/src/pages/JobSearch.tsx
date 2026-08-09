@@ -153,15 +153,19 @@ export default function JobSearch() {
   // Fetch user profile for matching
   const {
     data: profileData,
+    isLoading: profileLoading,
     refetch: refetchProfileData,
-  } = trpc.profile.get.useQuery();
-  const { data: autonomousPlan, refetch: refetchAutonomousPlan } = trpc.automation.plan.useQuery({
-    mode: autonomousMode,
-    remoteOnly: showRemoteOnly,
-    requireHumanReview,
-    allowUnsupportedATS,
-    createFollowUps,
-  });
+  } = trpc.profile.get.useQuery(undefined, { enabled: Boolean(user) });
+  const { data: autonomousPlan, refetch: refetchAutonomousPlan } = trpc.automation.plan.useQuery(
+    {
+      mode: autonomousMode,
+      remoteOnly: showRemoteOnly,
+      requireHumanReview,
+      allowUnsupportedATS,
+      createFollowUps,
+    },
+    { enabled: Boolean(user) }
+  );
   const {
     data: applicationDecisions = [],
     refetch: refetchApplicationDecisions,
@@ -224,7 +228,7 @@ export default function JobSearch() {
   const hasUnsavedJobSearchPolicy = isJobSearchAutonomousPolicyDirty(
     profileData?.preferences,
     jobSearchPolicyDraft
-  );
+  ) && Boolean(user) && !profileLoading;
 
   // AI Match mutation
   const matchMutation = trpc.matching.calculateMatch.useMutation({
@@ -705,7 +709,7 @@ export default function JobSearch() {
               variant="outline"
               size="sm"
               onClick={handleSaveJobSearchPolicy}
-              disabled={!hasUnsavedJobSearchPolicy || saveJobSearchPolicyMutation.isPending}
+              disabled={!hasUnsavedJobSearchPolicy || saveJobSearchPolicyMutation.isPending || profileLoading}
             >
               {saveJobSearchPolicyMutation.isPending
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />

@@ -35,7 +35,7 @@ export default function Settings() {
   const [autoApply, setAutoApply] = useState(false);
   const [scanFrequency, setScanFrequency] = useState("daily");
   const [maxApplicationsPerDay, setMaxApplicationsPerDay] = useState("10");
-  const { data: profile } = trpc.profile.get.useQuery(undefined, {
+  const { data: profile, isLoading: profileLoading } = trpc.profile.get.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   const privacyExport = trpc.privacy.exportData.useQuery(undefined, {
@@ -134,7 +134,7 @@ export default function Settings() {
         ? t("deletionStatusDismissed")
         : t("deletionStatusNone");
 
-  if (loading) {
+  if (loading || (isAuthenticated && profileLoading)) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">

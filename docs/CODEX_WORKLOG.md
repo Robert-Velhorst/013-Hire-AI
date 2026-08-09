@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Authenticated preference loading gates
+
+- Stopped public Job Search from issuing protected profile and autonomy-plan requests for signed-out visitors.
+- Prevented Settings, AI Preferences, and Job Search from saving default policy values before authoritative account preferences load.
+- Changed AI Preferences to the conservative review-first default when no stored profile preference exists.
+
 ## 2026-08-09 - Concurrent preference persistence
 
 - Added a strict `profile.updatePreferences` contract for autonomy, sourcing, and scheduler controls.
