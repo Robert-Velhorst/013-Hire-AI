@@ -24,6 +24,7 @@ import {
   createSuccessFee,
   getAuditEventsForEntity,
   getApplicationCampaign,
+  getUserOfferAttributionReviewPage,
   listUserApplicationApprovals,
   requestUserConnectorConnection,
   upsertUserConnectorAccount,
@@ -640,6 +641,80 @@ describe("application campaign operating ledger", () => {
     );
     expect(ledger.nextActions).toContain("Review offer attribution and report hires that came through Hire.AI.");
     expect(ledger.blockers).toContain("Success-fee compliance needs attention");
+  });
+
+  it("counts offer attribution reviews beyond the general approval window", async () => {
+    const userId = 99033;
+    const otherUserId = 99034;
+    const offerApplicationIds: number[] = [];
+
+    for (let index = 0; index < 6; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 2000 + index,
+        status: "offer",
+        notes: `Offer ${index + 1} needs attribution review.`,
+      });
+      const applicationId = Number(application.insertId);
+      offerApplicationIds.push(applicationId);
+      await createApplicationApproval({
+        userId,
+        applicationId,
+        entityType: "application",
+        entityId: applicationId,
+        approvalType: "offer_attribution",
+        status: "pending",
+        riskLevel: "high",
+        requestedBy: "system",
+        title: `Confirm offer attribution ${index + 1}`,
+        description: "Confirm whether this offer came from Hire.AI activity.",
+      });
+    }
+
+    for (let index = 0; index < 100; index += 1) {
+      await createApplicationApproval({
+        userId,
+        entityType: "application",
+        entityId: 50000 + index,
+        approvalType: "application_submission",
+        status: "pending",
+        riskLevel: "high",
+        requestedBy: "system",
+        title: `Later submission approval ${index + 1}`,
+        description: "Keeps the offer reviews outside the general approval page.",
+      });
+    }
+
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 2999,
+      status: "offer",
+      notes: "Another user's offer must stay isolated.",
+    });
+    const foreignApplicationId = Number(foreignApplication.insertId);
+    await createApplicationApproval({
+      userId: otherUserId,
+      applicationId: foreignApplicationId,
+      entityType: "application",
+      entityId: foreignApplicationId,
+      approvalType: "offer_attribution",
+      status: "pending",
+      riskLevel: "high",
+      requestedBy: "system",
+      title: "Foreign offer attribution",
+      description: "Must not enter this user's operating ledger.",
+    });
+
+    const page = await getUserOfferAttributionReviewPage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.every((item) => item.application.userId === userId)).toBe(true);
+    expect(page.items.every((item) => offerApplicationIds.includes(item.application.id))).toBe(true);
+    expect(ledger.metrics.pendingOfferAttributions).toBe(6);
+    expect(ledger.queues.successFeeCompliance).toHaveLength(5);
+    expect(ledger.offerAttributionScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
   });
 
   it("queues upcoming scheduled interviews until preparation is persisted", async () => {

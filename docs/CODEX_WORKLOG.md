@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded offer-attribution operating reads
+
+- Replaced the dashboard's first-100 approval dependency with an exact owner-scoped offer-attribution count and a bounded five-item review page.
+- Limited employer-response hydration to the visible review page and exposed truncation truthfully through `offerAttributionScope`.
+- Added a covering operating index plus regression coverage for reviews beyond the general approval window and cross-user isolation.
+
 ## 2026-08-09 - Exact bounded follow-up drafting queue
 
 - Replaced planning-window drafting counts with an exact owner-scoped due-time query and a five-record command-center page.

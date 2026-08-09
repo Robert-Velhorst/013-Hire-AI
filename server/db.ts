@@ -3418,6 +3418,138 @@ export async function getUserOfferAttributionReviews(
   return reviews.filter((review) => review !== null);
 }
 
+export async function getUserOfferAttributionReviewPage(userId: number, requestedLimit = 5) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  type OfferReviewApplication = Pick<Application, "id" | "userId" | "jobId" | "status"> & {
+    job?: Job;
+  };
+  let approvalRows: ApplicationApproval[];
+  let applicationRows: OfferReviewApplication[];
+  let total: number;
+
+  if (!db) {
+    const pendingApprovals = memoryApplicationApprovals
+      .filter((approval) =>
+        approval.userId === userId &&
+        approval.status === "pending" &&
+        approval.approvalType === "offer_attribution"
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id);
+    const candidateApplicationIds = Array.from(new Set(pendingApprovals.flatMap((approval) => {
+      const applicationId = approval.applicationId ??
+        (approval.entityType === "application" ? approval.entityId : null);
+      return applicationId ? [applicationId] : [];
+    })));
+    const ownedApplications: Array<Awaited<ReturnType<typeof getUserApplicationsByIds>>[number]> = [];
+    for (let offset = 0; offset < candidateApplicationIds.length; offset += 500) {
+      ownedApplications.push(...await getUserApplicationsByIds(
+        userId,
+        candidateApplicationIds.slice(offset, offset + 500)
+      ));
+    }
+    const eligibleApplicationsById = new Map(ownedApplications
+      .filter((application) => isOfferEligibleApplicationStatus(application.status))
+      .map((application) => [application.id, application] as const));
+    const eligibleApprovals = pendingApprovals.filter((approval) => {
+      const applicationId = approval.applicationId ??
+        (approval.entityType === "application" ? approval.entityId : null);
+      return applicationId != null && eligibleApplicationsById.has(applicationId);
+    });
+    total = eligibleApprovals.length;
+    approvalRows = eligibleApprovals.slice(0, limit) as ApplicationApproval[];
+    applicationRows = approvalRows.flatMap((approval) => {
+      const applicationId = approval.applicationId ??
+        (approval.entityType === "application" ? approval.entityId : null);
+      const application = applicationId ? eligibleApplicationsById.get(applicationId) : undefined;
+      return application ? [{
+        id: application.id,
+        userId: application.userId,
+        jobId: application.jobId,
+        status: application.status || "pending",
+        job: application.job?.id != null ? application.job as Job : undefined,
+      }] : [];
+    });
+  } else {
+    const condition = and(
+      eq(applicationApprovals.userId, userId),
+      eq(applicationApprovals.status, "pending"),
+      eq(applicationApprovals.approvalType, "offer_attribution"),
+      eq(applications.userId, userId),
+      inArray(applications.status, ["offer", "accepted"])
+    );
+    const [rows, countRows] = await Promise.all([
+      db
+        .select({ approval: applicationApprovals, application: applications, job: jobs })
+        .from(applicationApprovals)
+        .innerJoin(applications, and(
+          sql`${applications.id} = COALESCE(
+            ${applicationApprovals.applicationId},
+            CASE WHEN ${applicationApprovals.entityType} = 'application' THEN ${applicationApprovals.entityId} END
+          )`,
+          eq(applicationApprovals.userId, applications.userId)
+        ))
+        .leftJoin(jobs, eq(applications.jobId, jobs.id))
+        .where(condition)
+        .orderBy(desc(applicationApprovals.createdAt), desc(applicationApprovals.id))
+        .limit(limit),
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(applicationApprovals)
+        .innerJoin(applications, and(
+          sql`${applications.id} = COALESCE(
+            ${applicationApprovals.applicationId},
+            CASE WHEN ${applicationApprovals.entityType} = 'application' THEN ${applicationApprovals.entityId} END
+          )`,
+          eq(applicationApprovals.userId, applications.userId)
+        ))
+        .where(condition),
+    ]);
+    total = Number(countRows[0]?.count ?? 0);
+    approvalRows = rows.map((row) => row.approval);
+    applicationRows = rows.map((row) => ({
+      id: row.application.id,
+      userId: row.application.userId,
+      jobId: row.application.jobId,
+      status: row.application.status,
+      job: row.job ?? undefined,
+    }));
+  }
+
+  const applicationsById = new Map(applicationRows.map((application) => [application.id, application] as const));
+  const applicationIds = Array.from(applicationsById.keys());
+  const responses = await getUserEmployerResponsesForApplications(userId, applicationIds);
+  const responsesByApplication = new Map<number, EmployerResponse[]>();
+  for (const response of responses) {
+    const existing = responsesByApplication.get(response.applicationId) ?? [];
+    existing.push(response);
+    responsesByApplication.set(response.applicationId, existing);
+  }
+  const items = approvalRows.flatMap((approval) => {
+    const applicationId = approval.applicationId ??
+      (approval.entityType === "application" ? approval.entityId : null);
+    const application = applicationId ? applicationsById.get(applicationId) : undefined;
+    if (!application) return [];
+    const payload = parseApprovalPayload(approval.payload);
+    const responseId = payload && typeof payload.responseId === "number" &&
+      Number.isInteger(payload.responseId) && payload.responseId > 0
+      ? payload.responseId
+      : null;
+    const applicationResponses = responsesByApplication.get(application.id) ?? [];
+    const latestEmployerResponse = responseId
+      ? applicationResponses.find((response) => response.id === responseId && response.responseType === "offer") ?? null
+      : applicationResponses.find((response) => response.responseType === "offer") ?? null;
+    return [{
+      approval,
+      application,
+      latestEmployerResponse,
+      payload,
+      recommendedAction: "report_hire" as const,
+    }];
+  });
+  return { items, total, limit, hasMore: total > items.length };
+}
+
 export async function createSuccessFee(fee: InsertSuccessFee) {
   const db = await getDb();
   if (!db) {
