@@ -4,6 +4,26 @@ import { AUTONOMOUS_RUN_FAILURE, runScheduledAutonomousForUser } from "./autonom
 
 const AUTONOMOUS_SCHEDULER_FAILURE = "Autonomous scheduler cycle could not complete.";
 const AUTONOMOUS_PROFILE_PAGE_SIZE = 100;
+const AUTONOMOUS_MAX_CONCURRENT_USERS = 3;
+
+async function processWithConcurrency<T>(
+  items: T[],
+  maxConcurrency: number,
+  worker: (item: T) => Promise<void>
+) {
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(maxConcurrency, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex];
+        nextIndex += 1;
+        await worker(item);
+      }
+    }
+  );
+  await Promise.all(workers);
+}
 
 interface AutonomousSchedulerStatus {
   isStarted: boolean;
@@ -129,9 +149,9 @@ export class AutonomousScheduler {
       while (true) {
         const profiles = await getProfilesWithAutonomousPreferences(afterUserId, AUTONOMOUS_PROFILE_PAGE_SIZE);
         this.status.enrolledUsers += profiles.length;
-        for (const profile of profiles) {
+        await processWithConcurrency(profiles, AUTONOMOUS_MAX_CONCURRENT_USERS, async (profile) => {
           const preferences = parseAutonomousPreferences(profile.preferences);
-          if (!preferences.autonomousEnabled) continue;
+          if (!preferences.autonomousEnabled) return;
           const frequency = preferences.scanFrequency || "daily";
           const interval = getAutonomousScanIntervalMs(frequency);
 
@@ -199,7 +219,7 @@ export class AutonomousScheduler {
             });
             this.status.errors.push(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
           }
-          }
+        });
         if (profiles.length < AUTONOMOUS_PROFILE_PAGE_SIZE) break;
         const nextUserId = profiles[profiles.length - 1]?.userId ?? afterUserId;
         if (nextUserId <= afterUserId) throw new Error("Autonomous profile pagination did not advance.");

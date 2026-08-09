@@ -153,4 +153,58 @@ describe("AutonomousScheduler", () => {
     expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(101);
     expect(scheduler.getStatus().enrolledUsers).toBe(101);
   });
+
+  it("runs at most three enrolled users concurrently", async () => {
+    mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
+      Array.from({ length: 7 }, (_, index) => ({
+        userId: index + 1,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+      }))
+    );
+    let active = 0;
+    let maximumActive = 0;
+    let releaseWorkers!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseWorkers = resolve;
+    });
+    mocks.runScheduledAutonomousForUser.mockImplementation(async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await gate;
+      active -= 1;
+      return null;
+    });
+
+    const scheduler = new AutonomousScheduler();
+    const cycle = scheduler.runDueUsers();
+    await vi.waitFor(() => expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(3));
+    expect(maximumActive).toBe(3);
+
+    releaseWorkers();
+    await cycle;
+    expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(7);
+    expect(maximumActive).toBe(3);
+  });
+
+  it("continues the bounded page after one user run fails", async () => {
+    mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
+      Array.from({ length: 5 }, (_, index) => ({
+        userId: index + 21,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+      }))
+    );
+    mocks.runScheduledAutonomousForUser.mockImplementation(async (userId: number) => {
+      if (userId === 22) throw new Error("Bearer provider-secret");
+      return null;
+    });
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(5);
+    expect(scheduler.getStatus().errors).toEqual([
+      "User 22: Autonomous work could not complete. Review the operating ledger before retrying.",
+    ]);
+    expect(JSON.stringify(scheduler.getStatus())).not.toContain("provider-secret");
+  });
 });
