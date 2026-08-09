@@ -4140,6 +4140,9 @@ export async function getAdminMemoryFallback() {
     overdue,
     pendingVerifications: [],
     payments: [],
+    reviewItems: memoryAdminReviewItems
+      .slice()
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()),
   };
 }
 
@@ -4276,19 +4279,25 @@ export async function createAdminReviewItem(item: InsertAdminReviewItem) {
   return { insertId: Number(result[0].insertId) };
 }
 
-export async function listAdminReviewItems(status: AdminReviewItem["status"] | "all" = "open") {
+export async function listAdminReviewItems(
+  status: AdminReviewItem["status"] | "all" = "open",
+  requestedLimit = 100
+) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
   const db = await getDb();
   if (!db) {
     return memoryAdminReviewItems
       .filter((item) => status === "all" || item.status === status)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) as AdminReviewItem[];
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit) as AdminReviewItem[];
   }
 
   return await db
     .select()
     .from(adminReviewItems)
     .where(status === "all" ? undefined : eq(adminReviewItems.status, status))
-    .orderBy(desc(adminReviewItems.createdAt));
+    .orderBy(desc(adminReviewItems.createdAt), desc(adminReviewItems.id))
+    .limit(limit);
 }
 
 export async function listUserAdminReviewItems(

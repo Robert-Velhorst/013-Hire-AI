@@ -484,6 +484,7 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
 }, (table) => [
   index("admin_review_items_status_priority_idx").on(table.status, table.priority),
   index("admin_review_items_status_created_idx").on(table.status, table.createdAt),
+  index("admin_review_items_status_created_id_idx").on(table.status, table.createdAt, table.id),
   index("admin_review_items_user_status_idx").on(table.userId, table.status),
   index("admin_review_items_user_status_created_idx").on(
     table.userId,
@@ -1022,6 +1023,7 @@ export const successFees = mysqlTable("success_fees", {
   index("success_fees_user_created_id_idx").on(table.userId, table.createdAt, table.id),
   index("success_fees_user_application_created_idx").on(table.userId, table.applicationId, table.createdAt, table.id),
   index("success_fees_user_status_due_id_idx").on(table.userId, table.status, table.nextVerificationDue, table.id),
+  index("success_fees_status_due_id_idx").on(table.status, table.nextVerificationDue, table.id),
 ]);
 
 /**
@@ -1041,7 +1043,9 @@ export const employmentVerifications = mysqlTable("employment_verifications", {
   reviewNotes: text("review_notes"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("employment_verifications_status_submitted_id_idx").on(table.status, table.submittedAt, table.id),
+]);
 
 /**
  * Fee Payments
@@ -1064,6 +1068,7 @@ export const feePayments = mysqlTable("fee_payments", {
   uniqueIndex("fee_payments_stripe_invoice_unique").on(table.stripeInvoiceId),
   index("fee_payments_success_fee_status_idx").on(table.successFeeId, table.status),
   index("fee_payments_user_created_id_idx").on(table.userId, table.createdAt, table.id),
+  index("fee_payments_created_id_idx").on(table.createdAt, table.id),
 ]);
 
 /**

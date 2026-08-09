@@ -41,6 +41,19 @@ export interface AdminOperatingSummary {
   monthlyRevenueUsd: number;
 }
 
+export interface AdminOperatingAggregates {
+  reviewTotal: number;
+  criticalItems: number;
+  highRiskItems: number;
+  overdueVerifications: number;
+  graceExpiredVerifications: number;
+  pendingVerifications: number;
+  failedPayments: number;
+  legalEscalations: number;
+  offerAttributionReviews: number;
+  employmentEndedReviews: number;
+}
+
 function countBy<T>(items: T[] | null | undefined, predicate: (item: T) => boolean) {
   return (items || []).filter(predicate).length;
 }
@@ -51,20 +64,21 @@ export function getAdminOperatingSummary(input: {
   pendingVerifications?: unknown[] | null;
   reviewQueue?: AdminReviewItemLike[] | null;
   payments?: AdminPaymentLike[] | null;
+  aggregates?: Partial<AdminOperatingAggregates> | null;
 }): AdminOperatingSummary {
-  const overdueVerifications = input.overdue?.length ?? input.stats?.overdueVerifications ?? 0;
-  const graceExpiredVerifications = countBy(input.overdue, (item) => item.graceExpired === true);
-  const pendingVerifications = input.pendingVerifications?.length ?? input.stats?.pendingFees ?? 0;
-  const failedPayments = countBy(input.payments, (payment) => payment.status === "failed");
-  const legalEscalations = countBy(input.reviewQueue, (item) => item.category === "legal_escalation");
-  const offerAttributionReviews = countBy(input.reviewQueue, (item) => item.category === "offer_attribution");
-  const employmentEndedReviews = countBy(input.reviewQueue, (item) => item.category === "employment_ended");
-  const criticalItems = countBy(input.reviewQueue, (item) =>
+  const overdueVerifications = input.aggregates?.overdueVerifications ?? input.overdue?.length ?? input.stats?.overdueVerifications ?? 0;
+  const graceExpiredVerifications = input.aggregates?.graceExpiredVerifications ?? countBy(input.overdue, (item) => item.graceExpired === true);
+  const pendingVerifications = input.aggregates?.pendingVerifications ?? input.pendingVerifications?.length ?? input.stats?.pendingFees ?? 0;
+  const failedPayments = input.aggregates?.failedPayments ?? countBy(input.payments, (payment) => payment.status === "failed");
+  const legalEscalations = input.aggregates?.legalEscalations ?? countBy(input.reviewQueue, (item) => item.category === "legal_escalation");
+  const offerAttributionReviews = input.aggregates?.offerAttributionReviews ?? countBy(input.reviewQueue, (item) => item.category === "offer_attribution");
+  const employmentEndedReviews = input.aggregates?.employmentEndedReviews ?? countBy(input.reviewQueue, (item) => item.category === "employment_ended");
+  const criticalItems = input.aggregates?.criticalItems ?? (countBy(input.reviewQueue, (item) =>
     item.priority === "critical" || item.category === "legal_escalation" || item.category === "payment_failed"
-  ) + graceExpiredVerifications + failedPayments;
-  const highRiskItems = countBy(input.reviewQueue, (item) => item.priority === "high" || item.category === "employment_ended") + overdueVerifications;
+  ) + graceExpiredVerifications + failedPayments);
+  const highRiskItems = input.aggregates?.highRiskItems ?? (countBy(input.reviewQueue, (item) => item.priority === "high" || item.category === "employment_ended") + overdueVerifications);
   const totalOpenWork =
-    (input.reviewQueue?.length || 0) +
+    (input.aggregates?.reviewTotal ?? input.reviewQueue?.length ?? 0) +
     pendingVerifications +
     overdueVerifications +
     failedPayments;

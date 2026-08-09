@@ -286,6 +286,23 @@ describe("Drizzle migration journal", () => {
     );
   });
 
+  it("keeps bounded admin operating queue indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0061_admin_operating_queue_indexes.sql"),
+      "utf8"
+    );
+    for (const indexName of [
+      "admin_review_items_status_created_id_idx",
+      "employment_verifications_status_submitted_id_idx",
+      "fee_payments_created_id_idx",
+      "success_fees_status_due_id_idx",
+    ]) {
+      expect(schema).toContain(`index("${indexName}")`);
+      expect(migration).toContain(`CREATE INDEX \`${indexName}\``);
+    }
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

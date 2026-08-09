@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded admin operating windows
+
+- Capped global review, overdue-verification, and pending-verification reads at 100 ordered records and retained existing bounded fee/payment windows.
+- Added one parallel database aggregate for exact queue, risk, category, fee, and payment totals so command-center decisions and badges no longer depend on truncated arrays.
+- Added global operating indexes for review order, verification order, overdue selection, and payment order, with standalone-mode parity and truthful visible-window labels.
+
 ## 2026-08-09 - Scoped offer-attribution review reads
 
 - Replaced interactive offer-review history scans with exact owner/application reads for Applications and the report-hire dialog.

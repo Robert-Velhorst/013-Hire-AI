@@ -428,6 +428,13 @@
       "when": 1786497660000,
       "tag": "0060_fee_payment_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1786497720000,
+      "tag": "0061_admin_operating_queue_indexes",
+      "breakpoints": true
     }
   ]
 }

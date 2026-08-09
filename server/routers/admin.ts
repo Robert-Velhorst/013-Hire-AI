@@ -15,6 +15,7 @@ import {
   successFees,
   employmentVerifications,
   feePayments,
+  adminReviewItems,
   users,
 } from "../../drizzle/schema";
 import {
@@ -113,10 +114,73 @@ export const adminRouter = router({
   getReviewQueue: adminProcedure
     .input(z.object({
       status: z.enum(["all", "open", "in_progress", "resolved", "dismissed"]).default("open"),
+      limit: z.number().int().min(1).max(100).default(100),
     }).optional())
     .query(async ({ input }) => {
-      return await listAdminReviewItems(input?.status ?? "open");
+      return await listAdminReviewItems(input?.status ?? "open", input?.limit ?? 100);
     }),
+
+  getOperatingCounts: adminProcedure.query(async () => {
+    const memoryFallback = await getAdminMemoryFallback();
+    if (memoryFallback) {
+      const reviews = memoryFallback.reviewItems.filter((item) => item.status === "open");
+      return {
+        reviewTotal: reviews.length,
+        feesTotal: memoryFallback.fees.length,
+        paymentsTotal: memoryFallback.payments.length,
+        criticalReviews: reviews.filter((item) => item.category !== "payment_failed" && (item.priority === "critical" || item.category === "legal_escalation")).length,
+        highRiskReviews: reviews.filter((item) => item.priority === "high" || item.category === "employment_ended").length,
+        legalEscalations: reviews.filter((item) => item.category === "legal_escalation").length,
+        offerAttributionReviews: reviews.filter((item) => item.category === "offer_attribution").length,
+        employmentEndedReviews: reviews.filter((item) => item.category === "employment_ended").length,
+        overdueVerifications: memoryFallback.overdue.length,
+        graceExpiredVerifications: memoryFallback.overdue.filter((item) => item.graceExpired).length,
+        pendingVerifications: memoryFallback.pendingVerifications.length,
+        failedPayments: reviews.filter((item) => item.category === "payment_failed").length,
+      };
+    }
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const now = new Date();
+    const overdueCondition = and(
+      or(eq(successFees.status, "active"), eq(successFees.status, "suspended")),
+      isNotNull(successFees.nextVerificationDue),
+      lt(successFees.nextVerificationDue, now)
+    );
+    const [reviewRows, overdueRows, verificationRows, feeRows, paymentRows] = await Promise.all([
+      db.select({
+        reviewTotal: sql<number>`COUNT(*)`,
+        criticalReviews: sql<number>`SUM(CASE WHEN ${adminReviewItems.category} <> 'payment_failed' AND (${adminReviewItems.priority} = 'critical' OR ${adminReviewItems.category} = 'legal_escalation') THEN 1 ELSE 0 END)`,
+        highRiskReviews: sql<number>`SUM(CASE WHEN ${adminReviewItems.priority} = 'high' OR ${adminReviewItems.category} = 'employment_ended' THEN 1 ELSE 0 END)`,
+        legalEscalations: sql<number>`SUM(CASE WHEN ${adminReviewItems.category} = 'legal_escalation' THEN 1 ELSE 0 END)`,
+        offerAttributionReviews: sql<number>`SUM(CASE WHEN ${adminReviewItems.category} = 'offer_attribution' THEN 1 ELSE 0 END)`,
+        employmentEndedReviews: sql<number>`SUM(CASE WHEN ${adminReviewItems.category} = 'employment_ended' THEN 1 ELSE 0 END)`,
+        failedPayments: sql<number>`SUM(CASE WHEN ${adminReviewItems.category} = 'payment_failed' THEN 1 ELSE 0 END)`,
+      }).from(adminReviewItems).where(eq(adminReviewItems.status, "open")),
+      db.select({
+        overdueVerifications: sql<number>`COUNT(*)`,
+        graceExpiredVerifications: sql<number>`SUM(CASE WHEN ${successFees.verificationGraceExpiry} < ${now} THEN 1 ELSE 0 END)`,
+      }).from(successFees).where(overdueCondition),
+      db.select({ pendingVerifications: sql<number>`COUNT(*)` })
+        .from(employmentVerifications).where(eq(employmentVerifications.status, "pending")),
+      db.select({ feesTotal: sql<number>`COUNT(*)` }).from(successFees),
+      db.select({ paymentsTotal: sql<number>`COUNT(*)` }).from(feePayments),
+    ]);
+    return {
+      reviewTotal: Number(reviewRows[0]?.reviewTotal ?? 0),
+      criticalReviews: Number(reviewRows[0]?.criticalReviews ?? 0),
+      highRiskReviews: Number(reviewRows[0]?.highRiskReviews ?? 0),
+      legalEscalations: Number(reviewRows[0]?.legalEscalations ?? 0),
+      offerAttributionReviews: Number(reviewRows[0]?.offerAttributionReviews ?? 0),
+      employmentEndedReviews: Number(reviewRows[0]?.employmentEndedReviews ?? 0),
+      overdueVerifications: Number(overdueRows[0]?.overdueVerifications ?? 0),
+      graceExpiredVerifications: Number(overdueRows[0]?.graceExpiredVerifications ?? 0),
+      pendingVerifications: Number(verificationRows[0]?.pendingVerifications ?? 0),
+      failedPayments: Number(reviewRows[0]?.failedPayments ?? 0),
+      feesTotal: Number(feeRows[0]?.feesTotal ?? 0),
+      paymentsTotal: Number(paymentRows[0]?.paymentsTotal ?? 0),
+    };
+  }),
 
   getReviewEvidence: adminProcedure
     .input(z.object({
@@ -403,7 +467,7 @@ export const adminRouter = router({
   // ─── Overdue Verifications ───────────────────────────────────────────────────
   listOverdueVerifications: adminProcedure.query(async () => {
     const memoryFallback = await getAdminMemoryFallback();
-    if (memoryFallback) return memoryFallback.overdue;
+    if (memoryFallback) return memoryFallback.overdue.slice(0, 100);
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -432,7 +496,8 @@ export const adminRouter = router({
           lt(successFees.nextVerificationDue, now)
         )
       )
-      .orderBy(successFees.nextVerificationDue);
+      .orderBy(successFees.nextVerificationDue, successFees.id)
+      .limit(100);
 
     return fees.map((fee) => ({
       ...fee,
@@ -855,7 +920,7 @@ export const adminRouter = router({
   // ─── List Pending Verifications ──────────────────────────────────────────────
   listPendingVerifications: adminProcedure.query(async () => {
     const memoryFallback = await getAdminMemoryFallback();
-    if (memoryFallback) return memoryFallback.pendingVerifications;
+    if (memoryFallback) return memoryFallback.pendingVerifications.slice(0, 100);
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -879,7 +944,8 @@ export const adminRouter = router({
       .leftJoin(users, eq(employmentVerifications.userId, users.id))
       .leftJoin(successFees, eq(employmentVerifications.successFeeId, successFees.id))
       .where(eq(employmentVerifications.status, "pending"))
-      .orderBy(desc(employmentVerifications.submittedAt));
+      .orderBy(desc(employmentVerifications.submittedAt), desc(employmentVerifications.id))
+      .limit(100);
 
     return verifications;
   }),

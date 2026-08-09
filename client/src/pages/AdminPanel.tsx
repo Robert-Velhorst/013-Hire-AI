@@ -147,6 +147,7 @@ export default function AdminPanel() {
 
   // Data queries
   const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
+  const { data: operatingCounts, refetch: refetchOperatingCounts } = trpc.admin.getOperatingCounts.useQuery(undefined, { enabled: isAdmin });
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
     { limit: 8 },
     { enabled: isAdmin, refetchInterval: 30_000 }
@@ -158,7 +159,7 @@ export default function AdminPanel() {
   const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(undefined, { enabled: isAdmin });
   const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(undefined, { enabled: isAdmin });
   const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
-    { status: "open" },
+    { status: "open", limit: 100 },
     { enabled: isAdmin }
   );
   const reviewDialogItem = reviewQueue?.find((item) => item.id === reviewDialog.itemId);
@@ -229,6 +230,7 @@ export default function AdminPanel() {
       toast.success("Fee status updated");
       refetchFees();
       refetchStats();
+      refetchOperatingCounts();
       setStatusDialog({ open: false, feeId: null, currentStatus: "" });
       setNewStatus("");
       setStatusNote("");
@@ -243,6 +245,7 @@ export default function AdminPanel() {
       refetchOverdue();
       refetchStats();
       refetchReviewQueue();
+      refetchOperatingCounts();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -252,6 +255,7 @@ export default function AdminPanel() {
       toast.success("Account flagged for legal escalation");
       refetchFees();
       refetchStats();
+      refetchOperatingCounts();
       setEscalateDialog({ open: false, feeId: null, userName: "" });
       setEscalateReason("");
     },
@@ -273,6 +277,7 @@ export default function AdminPanel() {
       toast.success("User reinstated");
       refetchFees();
       refetchStats();
+      refetchOperatingCounts();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -283,6 +288,7 @@ export default function AdminPanel() {
         : "Review item updated");
       refetchReviewQueue();
       refetchStats();
+      refetchOperatingCounts();
       setReviewDialog({ open: false, itemId: null, status: "resolved" });
       setReviewResolution("");
       await refetchPrivacyErasurePlan();
@@ -385,7 +391,7 @@ export default function AdminPanel() {
     { label: "Active Fees", value: stats?.activeFees ?? 0, icon: Activity, color: "text-green-400" },
     { label: "Pending Verification", value: stats?.pendingFees ?? 0, icon: FileText, color: "text-yellow-400" },
     { label: "Overdue Verifications", value: stats?.overdueVerifications ?? 0, icon: AlertTriangle, color: "text-orange-400" },
-    { label: "Review Items", value: reviewQueue?.length ?? 0, icon: Shield, color: "text-cyan-400" },
+    { label: "Review Items", value: operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0, icon: Shield, color: "text-cyan-400" },
     { label: "Suspended", value: stats?.suspendedFees ?? 0, icon: Ban, color: "text-red-400" },
     { label: "Paused", value: stats?.pausedFees ?? 0, icon: Pause, color: "text-slate-400" },
     { label: "Disputed", value: stats?.disputedFees ?? 0, icon: AlertTriangle, color: "text-orange-400" },
@@ -399,6 +405,18 @@ export default function AdminPanel() {
     pendingVerifications,
     reviewQueue,
     payments,
+    aggregates: operatingCounts ? {
+      reviewTotal: operatingCounts.reviewTotal,
+      criticalItems: operatingCounts.criticalReviews + operatingCounts.graceExpiredVerifications + operatingCounts.failedPayments,
+      highRiskItems: operatingCounts.highRiskReviews + operatingCounts.overdueVerifications,
+      overdueVerifications: operatingCounts.overdueVerifications,
+      graceExpiredVerifications: operatingCounts.graceExpiredVerifications,
+      pendingVerifications: operatingCounts.pendingVerifications,
+      failedPayments: operatingCounts.failedPayments,
+      legalEscalations: operatingCounts.legalEscalations,
+      offerAttributionReviews: operatingCounts.offerAttributionReviews,
+      employmentEndedReviews: operatingCounts.employmentEndedReviews,
+    } : undefined,
   });
   const operatingSummaryClass = {
     clear: "border-emerald-500/30 text-emerald-300",
@@ -436,6 +454,7 @@ export default function AdminPanel() {
                 refetchOverdue();
                 refetchVerifications();
                 refetchReviewQueue();
+                refetchOperatingCounts();
                 refetchScrapingStatus();
                 refetchOperationalFailures();
               }}
@@ -581,13 +600,13 @@ export default function AdminPanel() {
               All Fees
             </TabsTrigger>
             <TabsTrigger value="overdue" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-400">
-              Overdue {overdue && overdue.length > 0 && <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">{overdue.length}</Badge>}
+              Overdue {(operatingCounts?.overdueVerifications ?? overdue?.length ?? 0) > 0 && <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">{operatingCounts?.overdueVerifications ?? overdue?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="verifications" className="data-[state=active]:bg-yellow-500/20 data-[state=active]:text-yellow-400">
-              Verifications {pendingVerifications && pendingVerifications.length > 0 && <Badge className="ml-1 bg-yellow-500 text-white text-xs px-1.5">{pendingVerifications.length}</Badge>}
+              Verifications {(operatingCounts?.pendingVerifications ?? pendingVerifications?.length ?? 0) > 0 && <Badge className="ml-1 bg-yellow-500 text-white text-xs px-1.5">{operatingCounts?.pendingVerifications ?? pendingVerifications?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="review" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
-              Review {reviewQueue && reviewQueue.length > 0 && <Badge className="ml-1 bg-cyan-500 text-white text-xs px-1.5">{reviewQueue.length}</Badge>}
+              Review {(operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0) > 0 && <Badge className="ml-1 bg-cyan-500 text-white text-xs px-1.5">{operatingCounts?.reviewTotal ?? reviewQueue?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="payments" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400">
               Payments
@@ -927,6 +946,9 @@ export default function AdminPanel() {
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
                 <CardTitle className="text-white text-base">All Success Fees</CardTitle>
+                {(operatingCounts?.feesTotal ?? 0) > (fees?.length ?? 0) && (
+                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.feesTotal} success fees.</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1023,6 +1045,9 @@ export default function AdminPanel() {
                   <AlertTriangle className="h-5 w-5 text-orange-400" />
                   Overdue Verifications
                 </CardTitle>
+                {(operatingCounts?.overdueVerifications ?? 0) > (overdue?.length ?? 0) && (
+                  <p className="text-xs text-slate-400">Showing the 100 oldest of {operatingCounts?.overdueVerifications} overdue records.</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1111,6 +1136,9 @@ export default function AdminPanel() {
                   <FileText className="h-5 w-5 text-yellow-400" />
                   Pending Verification Reviews
                 </CardTitle>
+                {(operatingCounts?.pendingVerifications ?? 0) > (pendingVerifications?.length ?? 0) && (
+                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.pendingVerifications} pending verifications.</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1181,6 +1209,9 @@ export default function AdminPanel() {
                   <Shield className="h-5 w-5 text-cyan-400" />
                   Operating Review Queue
                 </CardTitle>
+                {(operatingCounts?.reviewTotal ?? 0) > (reviewQueue?.length ?? 0) && (
+                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.reviewTotal} open reviews.</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1303,6 +1334,9 @@ export default function AdminPanel() {
                   <DollarSign className="h-5 w-5 text-green-400" />
                   Payment History
                 </CardTitle>
+                {(operatingCounts?.paymentsTotal ?? 0) > (payments?.length ?? 0) && (
+                  <p className="text-xs text-slate-400">Showing the newest 50 of {operatingCounts?.paymentsTotal} payments.</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
