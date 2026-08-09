@@ -7,6 +7,10 @@ import {
   directPrivacyRetentionPolicy,
   privacyRetentionPolicyTables,
 } from "./privacyRetention";
+import {
+  assertPrivacyFinalizerCoverage,
+  privacyFinalizerPolicyTables,
+} from "./privacyErasureFinalization";
 import { appRouter } from "./routers";
 
 const expectedUserOwnedTables = [
@@ -71,6 +75,11 @@ describe("privacy retention inventory", () => {
   it("classifies every direct and application-linked user-owned table exactly once", () => {
     expect([...privacyRetentionPolicyTables].sort()).toEqual(expectedUserOwnedTables);
     expect(new Set(privacyRetentionPolicyTables).size).toBe(privacyRetentionPolicyTables.length);
+  });
+
+  it("keeps the transactional finalizer in lockstep with the policy inventory", () => {
+    expect(() => assertPrivacyFinalizerCoverage()).not.toThrow();
+    expect([...privacyFinalizerPolicyTables].sort()).toEqual(expectedUserOwnedTables);
   });
 
   it("fails when a new direct user-owned schema table is not added to the policy", () => {

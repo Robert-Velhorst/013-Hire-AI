@@ -20,4 +20,4 @@
 2. Configure malware scanning, database backup/restore, alerting, and provider-specific quota limits.
 3. Complete independent threat-model, dependency/license, legal, and privacy review.
 4. Run external penetration, browser accessibility, and deployment tests.
-5. Approve periods and legal bases for the checked-in retention map, then complete the separately verified executor for transactional database scrubbing, private-object deletion, and bulk provider cleanup.
+5. Approve periods and legal bases for the checked-in retention map, then perform controlled live-provider acceptance of the review-gated erasure executor before production use.

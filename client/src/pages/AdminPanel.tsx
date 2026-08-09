@@ -5,7 +5,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
-import { buildPrivacyCleanupConfirmation, canExecutePrivacyCleanup } from "@/lib/privacyErasureControl";
+import {
+  buildPrivacyCleanupConfirmation,
+  buildPrivacyDatabaseConfirmation,
+  canExecutePrivacyCleanup,
+  canFinalizePrivacyErasure,
+} from "@/lib/privacyErasureControl";
 import {
   getScraperSourceHealthSummary,
   getScraperSourceOutcomeCounts,
@@ -131,6 +136,7 @@ export default function AdminPanel() {
   const [reviewDialog, setReviewDialog] = useState<{ open: boolean; itemId: number | null; status: "resolved" | "dismissed" }>({ open: false, itemId: null, status: "resolved" });
   const [reviewResolution, setReviewResolution] = useState("");
   const [erasureCleanupConfirmation, setErasureCleanupConfirmation] = useState("");
+  const [databaseErasureConfirmation, setDatabaseErasureConfirmation] = useState("");
   const [manualCleanupEvidence, setManualCleanupEvidence] = useState<Record<number, string>>({});
   const [evidenceDialog, setEvidenceDialog] = useState<{ open: boolean; itemId: number | null }>({ open: false, itemId: null });
   const [scrapingIntervalMinutes, setScrapingIntervalMinutes] = useState("60");
@@ -291,6 +297,14 @@ export default function AdminPanel() {
     onSuccess: async (_result, variables) => {
       toast.success("Manual provider cleanup evidence recorded");
       setManualCleanupEvidence((current) => ({ ...current, [variables.taskId]: "" }));
+      await refetchPrivacyErasurePlan();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const finalizePrivacyErasure = trpc.admin.finalizePrivacyErasure.useMutation({
+    onSuccess: async () => {
+      toast.success("Database erasure completed transactionally");
+      setDatabaseErasureConfirmation("");
       await refetchPrivacyErasurePlan();
     },
     onError: (err) => toast.error(err.message),
@@ -1491,8 +1505,43 @@ export default function AdminPanel() {
                             </div>
                           ))}
                           {privacyErasurePlan.run.status === "ready_for_database" && (
+                            <div className="space-y-2 border-t border-red-500/20 pt-3">
+                              <p className="text-xs text-amber-200">
+                                External cleanup is complete. This final action atomically erases product data, scrubs retained ledgers, pseudonymizes the account, and preserves regulated records.
+                              </p>
+                              <Label className="text-slate-300">Database erasure confirmation</Label>
+                              <code className="block break-all rounded bg-slate-950 px-2 py-1 text-xs text-red-200">
+                                {buildPrivacyDatabaseConfirmation(privacyErasurePlan.run.userId, privacyErasurePlan.run.policyVersion)}
+                              </code>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <Input
+                                  value={databaseErasureConfirmation}
+                                  onChange={(event) => setDatabaseErasureConfirmation(event.target.value)}
+                                  className="border-red-700/50 bg-slate-950 text-white"
+                                  aria-label="Database erasure confirmation"
+                                />
+                                <Button
+                                  onClick={() => finalizePrivacyErasure.mutate({
+                                    runId: privacyErasurePlan.run.id,
+                                    confirmation: databaseErasureConfirmation,
+                                  })}
+                                  disabled={finalizePrivacyErasure.isPending || !canFinalizePrivacyErasure({
+                                    status: privacyErasurePlan.run.status,
+                                    confirmation: databaseErasureConfirmation,
+                                    userId: privacyErasurePlan.run.userId,
+                                    policyVersion: privacyErasurePlan.run.policyVersion,
+                                  })}
+                                  className="bg-red-800 hover:bg-red-900"
+                                >
+                                  <Shield className="mr-2 h-4 w-4" />
+                                  Finalize erasure
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          {privacyErasurePlan.run.status === "completed" && (
                             <p className="text-xs text-green-300">
-                              External cleanup is complete. Transactional database scrubbing is the remaining execution stage.
+                              Erasure completed. Regulated records remain retained under the recorded policy with the account identity pseudonymized.
                             </p>
                           )}
                         </div>

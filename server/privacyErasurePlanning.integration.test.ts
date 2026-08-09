@@ -2,7 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   adminReviewItems,
+  applicationAttempts,
+  applicationMaterials,
+  applications,
   connectorAuthorizations,
+  followUps,
+  jobPlatforms,
+  jobs,
   privacyErasureRuns,
   privacyErasureTasks,
   successFees,
@@ -16,6 +22,10 @@ import {
   executePrivacyErasureCleanup,
   privacyErasureConfirmation,
 } from "./privacyErasureExecution";
+import {
+  finalizePrivacyErasure,
+  privacyDatabaseErasureConfirmation,
+} from "./privacyErasureFinalization";
 
 const runIntegration = process.env.PRIVACY_ERASURE_INTEGRATION === "true";
 
@@ -23,6 +33,9 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
   const userId = 1_780_900_001;
   const adminId = 1_780_900_002;
   let reviewItemId = 0;
+  let applicationId = 0;
+  let jobId = 0;
+  let platformId = 0;
   let db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
   beforeAll(async () => {
@@ -40,6 +53,44 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
       userId,
       skills: "Sensitive profile content",
       resumeFileKey: `resumes/${userId}/private-resume.pdf`,
+    });
+    const platform = await db.insert(jobPlatforms).values({
+      name: `Privacy integration ${userId}`,
+      url: "https://jobs.example.test",
+      tier: "tier4",
+    });
+    platformId = Number(platform[0].insertId);
+    const job = await db.insert(jobs).values({
+      title: "Privacy Integration Role",
+      company: "Integration Employer",
+      platformId,
+    });
+    jobId = Number(job[0].insertId);
+    const application = await db.insert(applications).values({
+      userId,
+      jobId,
+      coverLetter: "Sensitive cover letter",
+      customResume: "Sensitive custom resume",
+      notes: "Sensitive application notes",
+    });
+    applicationId = Number(application[0].insertId);
+    await db.insert(applicationMaterials).values({
+      applicationId,
+      coverLetter: "Sensitive generated material",
+    });
+    await db.insert(applicationAttempts).values({
+      applicationId,
+      userId,
+      jobId,
+      confirmationText: "Sensitive confirmation",
+      confirmationUrl: "https://private.example.test/confirmation",
+      screenshotKey: `attempts/${userId}/private.png`,
+    });
+    await db.insert(followUps).values({
+      applicationId,
+      message: "Sensitive follow-up",
+      deliveryRecipient: "person@example.test",
+      deliverySubject: "Sensitive subject",
     });
     await db.insert(connectorAuthorizations).values({
       userId,
@@ -90,6 +141,18 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     await db
       .delete(connectorAuthorizations)
       .where(eq(connectorAuthorizations.userId, userId));
+    await db
+      .delete(followUps)
+      .where(eq(followUps.applicationId, applicationId));
+    await db
+      .delete(applicationMaterials)
+      .where(eq(applicationMaterials.applicationId, applicationId));
+    await db
+      .delete(applicationAttempts)
+      .where(eq(applicationAttempts.applicationId, applicationId));
+    await db.delete(applications).where(eq(applications.id, applicationId));
+    await db.delete(jobs).where(eq(jobs.id, jobId));
+    await db.delete(jobPlatforms).where(eq(jobPlatforms.id, platformId));
     await db.delete(userProfiles).where(eq(userProfiles.userId, userId));
     await db.delete(successFees).where(eq(successFees.userId, userId));
     await db.delete(users).where(eq(users.id, userId));
@@ -177,7 +240,13 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
       }
     );
     expect(cleanup.status).toBe("manual_action_required");
-    expect(deletedObjects).toEqual([`resumes/${userId}/private-resume.pdf`]);
+    expect(deletedObjects).toHaveLength(2);
+    expect(deletedObjects).toEqual(
+      expect.arrayContaining([
+        `resumes/${userId}/private-resume.pdf`,
+        `attempts/${userId}/private.png`,
+      ])
+    );
     const manualTask = cleanup.tasks.find(
       task => task.kind === "provider_revoke" && task.status === "blocked"
     );
@@ -196,5 +265,109 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
         .limit(1)
     )[0];
     expect(readyRun.status).toBe("ready_for_database");
+
+    const databaseConfirmation = privacyDatabaseErasureConfirmation(
+      userId,
+      first.run.policyVersion
+    );
+    await expect(
+      finalizePrivacyErasure(first.run.id, databaseConfirmation, {
+        beforeCommit: async () => {
+          throw new Error("injected_transaction_failure");
+        },
+      })
+    ).rejects.toThrow("injected_transaction_failure");
+    expect(
+      (
+        await db
+          .select()
+          .from(userProfiles)
+          .where(eq(userProfiles.userId, userId))
+      ).length
+    ).toBe(1);
+    expect(
+      (
+        await db
+          .select()
+          .from(privacyErasureRuns)
+          .where(eq(privacyErasureRuns.id, first.run.id))
+      )[0].status
+    ).toBe("ready_for_database");
+
+    await db
+      .update(privacyErasureRuns)
+      .set({
+        status: "database_in_progress",
+        executionLeaseId: "active-database-worker",
+        executionLeaseExpiresAt: new Date(Date.now() + 60_000),
+      })
+      .where(eq(privacyErasureRuns.id, first.run.id));
+    await expect(
+      finalizePrivacyErasure(first.run.id, databaseConfirmation)
+    ).rejects.toThrow("Another database erasure worker");
+    await db
+      .update(privacyErasureRuns)
+      .set({ executionLeaseExpiresAt: new Date(Date.now() - 60_000) })
+      .where(eq(privacyErasureRuns.id, first.run.id));
+
+    const finalized = await finalizePrivacyErasure(
+      first.run.id,
+      databaseConfirmation
+    );
+    expect(finalized.existing).toBe(false);
+    expect(
+      await finalizePrivacyErasure(first.run.id, databaseConfirmation)
+    ).toMatchObject({ success: true, existing: true });
+    expect(
+      await db
+        .select()
+        .from(userProfiles)
+        .where(eq(userProfiles.userId, userId))
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(applicationMaterials)
+        .where(eq(applicationMaterials.applicationId, applicationId))
+    ).toHaveLength(0);
+    const retainedApplication = (
+      await db
+        .select()
+        .from(applications)
+        .where(eq(applications.id, applicationId))
+    )[0];
+    expect(retainedApplication).toMatchObject({
+      coverLetter: null,
+      customResume: null,
+      notes: null,
+    });
+    const retainedFollowUp = (
+      await db
+        .select()
+        .from(followUps)
+        .where(eq(followUps.applicationId, applicationId))
+    )[0];
+    expect(retainedFollowUp).toMatchObject({
+      message: null,
+      deliveryRecipient: null,
+      deliverySubject: null,
+    });
+    const retainedFee = (
+      await db.select().from(successFees).where(eq(successFees.userId, userId))
+    )[0];
+    expect(retainedFee.offerLetterKey).toBe(
+      `offers/${userId}/retained-offer.pdf`
+    );
+    const erasedUser = (
+      await db.select().from(users).where(eq(users.id, userId))
+    )[0];
+    expect(erasedUser).toMatchObject({
+      name: null,
+      email: null,
+      loginMethod: null,
+      stripeCustomerId: null,
+      accountStatus: "suspended",
+    });
+    expect(erasedUser.openId).toMatch(/^erased-/);
   });
 });

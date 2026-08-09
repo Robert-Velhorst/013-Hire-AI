@@ -197,6 +197,32 @@ export const adminRouter = router({
       return result;
     }),
 
+  finalizePrivacyErasure: adminProcedure
+    .input(z.object({
+      runId: z.number().int().positive(),
+      confirmation: z.string().min(1).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { finalizePrivacyErasure } = await import("../privacyErasureFinalization");
+      const result = await finalizePrivacyErasure(input.runId, input.confirmation);
+      await createAuditEvent({
+        userId: result.userId,
+        entityType: "user",
+        entityId: result.userId,
+        action: "privacy_erasure_database_finalized",
+        actor: "admin",
+        source: "admin.finalizePrivacyErasure",
+        afterState: JSON.stringify({
+          runId: input.runId,
+          completed: true,
+          idempotentReplay: result.existing,
+          adminUserId: ctx.user.id,
+        }),
+        riskLevel: "critical",
+      });
+      return result;
+    }),
+
   resolveReviewItem: adminProcedure
     .input(z.object({
       reviewItemId: z.number(),

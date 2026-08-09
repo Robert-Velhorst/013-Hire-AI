@@ -77,7 +77,11 @@ Returns the durable run and itemized tasks for a privacy review without returnin
 
 ### `admin.executePrivacyErasureCleanup`
 
-Requires exact run-specific confirmation. Claims a five-minute database lease, revokes supported providers, deletes erasable private objects idempotently, and records retry/manual states. It does not execute database scrubbing.
+Requires exact run-specific confirmation. Claims a five-minute lease, revokes supported providers, deletes erasable private objects idempotently, and records retry/manual states.
+
+### `admin.finalizePrivacyErasure`
+
+Requires `ready_for_database` state and the exact `ERASE DATABASE USER <id> USING <policy>` confirmation. Claims a separate lease and transactionally deletes erasable records, scrubs retained ledgers, pseudonymizes and suspends the account, preserves regulated records, completes itemized tasks, and rolls back the entire database stage on failure.
 
 ### `admin.confirmManualPrivacyCleanup`
 

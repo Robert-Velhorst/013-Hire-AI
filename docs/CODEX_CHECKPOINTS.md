@@ -7,13 +7,13 @@
 | Privacy export | server export test; Settings calls `privacy.exportData` | Complete |
 | Static verification | `npm.cmd run check` | Complete |
 | Focused verification | privacy and HTTP safety tests | Complete |
-| Full regression | `npm.cmd test -- --run`: 167 files, 863 tests; 1 MySQL integration test separately passed | Complete |
+| Full regression | `npm.cmd test -- --run`: 167 files, 865 tests; 1 MySQL integration test separately passed | Complete |
 | Production build | `npm.cmd run build` | Complete |
 | Configuration audit | Development doctor warns; production doctor fails closed for missing required configuration | Complete |
 | Local health/readiness | Port 3040: `/healthz` and `/readyz` returned 200; readiness reports development memory | Complete |
 | Browser acceptance | Playwright Settings export plus deletion request/cancel on desktop and 390 x 844 mobile; regular-user Admin denial reload has no new privileged-query errors | Complete |
-| Privacy lifecycle | Migrations 0035/0038; idempotent request, cancellation, user-safe status, retention inventory, durable task plan, leased external cleanup, manual evidence, and audit tests | Partial: transactional database scrubbing/finalization still requires approved retention rules |
-| Retention inventory | Policy `2026-08-09.v1`; schema completeness, authorization, and fail-closed preview tests | Complete for inventory; execution remains intentionally disabled |
+| Privacy lifecycle | Migrations 0035/0038; idempotent request, cancellation, user-safe status, retention inventory, durable task plan, leased external cleanup, manual evidence, transactional finalization, and audit tests | Implemented; production use still requires approved retention periods/legal bases and provider acceptance |
+| Retention inventory | Policy `2026-08-09.v1`; schema/finalizer lockstep, authorization, fail-closed preview, and clean-MySQL rollback tests | Complete for checked-in policy and implementation |
 | Windows runtime contract | Explicit host/port selection, native launcher, doctor integration, network/HAI tests, PowerShell parser validation, and dedicated `windows-latest` CI | Complete in CI run `31291576077`; credential-complete production launch pending |
 | Supply-chain audit | Pnpm 11 frozen graph; restricted build scripts; patched Vitest/Vite, Nano ID, Mermaid, DOMPurify, PostCSS, and esbuild; `pnpm security:audit`; moderate-or-higher CI gate | Complete locally and enforced in CI |
 | HAI interoperability | Agent Card, concealed bearer auth, aggregate status, and read-only A2A 1.0 smoke | Complete locally; external HAI peer acceptance pending |

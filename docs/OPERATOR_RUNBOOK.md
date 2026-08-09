@@ -51,7 +51,7 @@ The restore command fails before starting `mysql` when the manifest is malformed
 5. Resolving a review on persistent storage creates one non-destructive run with itemized provider, private-object, retention-hold, and database-finalization tasks.
 6. Type the exact run-specific confirmation in Admin before external cleanup. A five-minute lease prevents concurrent workers; failed tasks remain retryable without exposing provider responses, tokens, or object keys.
 7. Complete Microsoft and LinkedIn account-side removal, then record bounded evidence against each blocked task. Never paste tokens or credentials into evidence.
-8. `ready_for_database` proves external cleanup only. Do not report account erasure until the separately gated transactional database finalizer completes and the final inventory is reconciled.
+8. At `ready_for_database`, enter the separate database confirmation and run finalization. Report erasure only after status is `completed`; reconcile the final deleted/scrubbed inventory and retained regulated records first.
 
 ## Deployment
 
