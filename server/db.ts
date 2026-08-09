@@ -4673,6 +4673,30 @@ export async function getInterviewPreparationForJob(userId: number, jobId: numbe
   return rows[0];
 }
 
+export async function getInterviewPreparationsForJobs(userId: number, requestedJobIds: number[]) {
+  const jobIds = Array.from(new Set(requestedJobIds.filter((jobId) => Number.isInteger(jobId) && jobId > 0)));
+  if (jobIds.length === 0) return [] as InterviewPreparation[];
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(jobIds);
+    return memoryInterviewPreparations.filter((item) =>
+      item.userId === userId && requested.has(item.jobId)
+    ) as InterviewPreparation[];
+  }
+  const batches = [] as InterviewPreparation[];
+  for (let offset = 0; offset < jobIds.length; offset += 500) {
+    const rows = await db
+      .select()
+      .from(interviewPreparation)
+      .where(and(
+        eq(interviewPreparation.userId, userId),
+        inArray(interviewPreparation.jobId, jobIds.slice(offset, offset + 500))
+      ));
+    batches.push(...rows);
+  }
+  return batches;
+}
+
 export async function listInterviewPreparationsForUser(userId: number) {
   const db = await getDb();
   if (!db) {

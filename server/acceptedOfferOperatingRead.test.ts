@@ -24,6 +24,7 @@ describe("accepted-offer operating reads", () => {
     expect(features.match(/getUserApplicationsByIds\(/g)?.length).toBeGreaterThanOrEqual(3);
     expect(features.match(/\.slice\(0, 500\)/g)?.length).toBeGreaterThanOrEqual(2);
     expect(features).toContain("offset += 500");
-    expect(features).toContain("ownedUpcoming.length < 10");
+    expect(features).toContain("getMemoryUpcomingInterviewContexts(userId, now, 10)");
+    expect(features).toContain("ownedUpcoming.length < requestedLimit");
   });
 });

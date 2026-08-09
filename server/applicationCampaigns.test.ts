@@ -655,6 +655,11 @@ describe("application campaign operating ledger", () => {
       meetingLink: "https://meet.example.com/hire-ai",
       interviewerName: "Recruiter",
     }, userId);
+    await upsertInterviewPreparation({
+      userId: 99007,
+      jobId: 2,
+      questions: JSON.stringify(["Other user's preparation must not suppress this queue."]),
+    });
 
     const ledger = await getUserOperatingLedger(userId);
 
@@ -681,6 +686,44 @@ describe("application campaign operating ledger", () => {
 
     expect(updatedLedger.metrics.interviewPreparationNeeded).toBe(0);
     expect(updatedLedger.queues.interviewPreparationNeeded).toHaveLength(0);
+  });
+
+  it("keeps an exact preparation total while bounding upcoming interview records", async () => {
+    const userId = 99024;
+    const application = await createApplication({
+      userId,
+      jobId: 2,
+      status: "interview",
+      notes: "Multi-round interview process.",
+    });
+    const applicationId = Number(application.insertId);
+    for (let index = 0; index < 12; index += 1) {
+      await recordEmployerResponse({
+        applicationId,
+        responseType: "interview_invite",
+        source: "email",
+        sourceReference: `gmail-campaign-round-${applicationId}-${index}`,
+        summary: `Employer invited the candidate to interview round ${index + 1}.`,
+      }, userId);
+      await scheduleInterview({
+        applicationId,
+        interviewType: "video",
+        scheduledAt: new Date(Date.now() + (index + 1) * 3_600_000),
+        duration: 30,
+        interviewerName: `Interviewer ${index + 1}`,
+      }, userId);
+    }
+
+    const ledger = await getUserOperatingLedger(userId, { persistCampaign: false });
+
+    expect(ledger.metrics.interviewPreparationNeeded).toBe(12);
+    expect(ledger.queues.interviewPreparationNeeded).toHaveLength(5);
+    expect(ledger.interviewPreparationScope).toEqual({
+      loaded: 10,
+      limit: 10,
+      hasMore: true,
+    });
+    expect(ledger.nextActions).toContain("Prepare for 12 upcoming interviews.");
   });
 
   it("surfaces interview-status applications that still need scheduling", async () => {

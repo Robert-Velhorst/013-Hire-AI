@@ -30,7 +30,6 @@ import {
   getUserSkills,
   getWorkExperiences,
   listUserConnectorAccounts,
-  listInterviewPreparationsForUser,
   listUserAdminReviewItems,
   upsertApplicationCampaign,
 } from "./db";
@@ -48,7 +47,7 @@ import {
 import { buildAutonomousEvidenceGates } from "@shared/autonomousEvidenceGates";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import {
-  getUpcomingInterviews,
+  getUpcomingInterviewPreparationPage,
   getUserFollowUpsForApplications,
   getUserInterviewSchedulesForApplications,
 } from "./applicationFeatures";
@@ -485,15 +484,10 @@ export function getActionReadyFollowUpNextActions(
 }
 
 async function getInterviewPreparationQueue(userId: number) {
-  const [upcomingInterviews, preparations] = await Promise.all([
-    getUpcomingInterviews(userId),
-    listInterviewPreparationsForUser(userId),
-  ]);
-  const preparedJobIds = new Set(preparations.map((preparation) => preparation.jobId));
-  const items = upcomingInterviews.map((item) => {
-    if (preparedJobIds.has(item.application.jobId)) return null;
-
-    return {
+  const page = await getUpcomingInterviewPreparationPage(userId);
+  return {
+    ...page,
+    items: page.items.map((item) => ({
       interviewId: item.interview.id,
       applicationId: item.application.id,
       jobId: item.application.jobId,
@@ -505,10 +499,8 @@ async function getInterviewPreparationQueue(userId: number) {
         title: item.job.title,
         company: item.job.company,
       } : null,
-    };
-  });
-
-  return items.filter((item): item is NonNullable<typeof item> => item !== null);
+    })),
+  };
 }
 
 function getInterviewOutcomeQueue(
@@ -982,8 +974,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     inboxResponseCandidatePage.total > 0
       ? `Confirm or dismiss ${inboxResponseCandidatePage.total} inbox response candidate${inboxResponseCandidatePage.total === 1 ? "" : "s"} before changing application status.`
       : "",
-    interviewPreparationQueue.length > 0
-      ? `Prepare for ${interviewPreparationQueue.length} upcoming interview${interviewPreparationQueue.length === 1 ? "" : "s"}.`
+    interviewPreparationQueue.total > 0
+      ? `Prepare for ${interviewPreparationQueue.total} upcoming interview${interviewPreparationQueue.total === 1 ? "" : "s"}.`
       : "",
     interviewOutcomeQueue.length > 0
       ? `Record outcomes for ${interviewOutcomeQueue.length} completed interview${interviewOutcomeQueue.length === 1 ? "" : "s"} before routine follow-ups continue.`
@@ -1105,6 +1097,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: inboxResponseCandidatePage.limit,
       hasMore: inboxResponseCandidatePage.hasMore,
     },
+    interviewPreparationScope: {
+      loaded: interviewPreparationQueue.items.length,
+      limit: interviewPreparationQueue.limit,
+      hasMore: interviewPreparationQueue.hasMore,
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,
@@ -1121,7 +1118,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       unreadInterviewNotifications: interviewNotificationQueue.length,
       inboxResponseCandidates: inboxResponseCandidatePage.total,
       interviewSchedulingNeeded: interviewSchedulingQueue.length,
-      interviewPreparationNeeded: interviewPreparationQueue.length,
+      interviewPreparationNeeded: interviewPreparationQueue.total,
       interviewOutcomesNeeded: interviewOutcomeQueue.length,
       offers: applicationSummary.offered,
       activeSuccessFees: successFeeCompliance.activeFees,
@@ -1148,7 +1145,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       interviewNotifications: interviewNotificationQueue,
       inboxResponseCandidates: inboxResponseCandidateQueue.slice(0, 5),
       interviewScheduling: interviewSchedulingQueue.slice(0, 5),
-      interviewPreparationNeeded: interviewPreparationQueue.slice(0, 5),
+      interviewPreparationNeeded: interviewPreparationQueue.items.slice(0, 5),
       interviewOutcomesNeeded: interviewOutcomeQueue.slice(0, 5),
       employerResponsesNeedingReply: employerResponseQueue.slice(0, 5),
       followUpsDue: followUpDueQueue.slice(0, 5),

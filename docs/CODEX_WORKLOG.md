@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded interview-preparation queue
+
+- Replaced full user preparation-history hydration with an owner-scoped anti-join over upcoming scheduled interviews.
+- Added an exact actionable preparation count, a 10-record operating page, and explicit truncation metadata.
+- Preserved the existing upcoming-interviews API without adding an unnecessary aggregate query to that bounded list.
+
 ## 2026-08-09 - Bounded inbox-response command-center reads
 
 - Replaced full pending mailbox-candidate hydration with an indexed 100-item operating page and exact owner-scoped count.

@@ -16,6 +16,7 @@ import {
   getEmployerResponseReplyTarget,
   getEmployerResponses,
   getInterviewPreparationForJob,
+  getInterviewPreparationsForJobs,
   getDb,
   getCanonicalJobId,
   getApplicationLedgerArtifacts,
@@ -29,7 +30,7 @@ import {
   updateApplicationStatus,
   upsertInterviewPreparation,
 } from "./db";
-import { savedJobs, applicationNotes, interviewSchedules, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
+import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
 import { isJobListingCurrent } from "../shared/jobListingFreshness";
 import { generateInterviewPreparation as generateAiInterviewPreparation } from "./aiMatching";
@@ -1706,75 +1707,127 @@ export async function getUserInterviewSchedulesForApplications(
   return rows.map((row) => row.interview);
 }
 
+async function getMemoryUpcomingInterviewContexts(
+  userId: number,
+  now: Date,
+  requestedLimit = Number.MAX_SAFE_INTEGER
+) {
+  const candidates = memoryInterviewSchedules
+    .filter((interview) =>
+      (interview.status === "scheduled" || interview.status === "rescheduled") &&
+      interview.scheduledAt >= now
+    )
+    .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
+  const applicationsById = new Map<number, Awaited<ReturnType<typeof getUserApplicationsByIds>>[number]>();
+  const ownedUpcoming: typeof candidates = [];
+  for (let offset = 0; offset < candidates.length && ownedUpcoming.length < requestedLimit; offset += 500) {
+    const chunk = candidates.slice(offset, offset + 500);
+    const ownedApplications = await getUserApplicationsByIds(
+      userId,
+      chunk.map((interview) => interview.applicationId)
+    );
+    for (const application of ownedApplications) applicationsById.set(application.id, application);
+    for (const interview of chunk) {
+      if (applicationsById.has(interview.applicationId)) ownedUpcoming.push(interview);
+      if (ownedUpcoming.length === requestedLimit) break;
+    }
+  }
+  return await Promise.all(ownedUpcoming.map(async (interview) => {
+    const application = applicationsById.get(interview.applicationId)!;
+    const job = await getJobById(application.jobId);
+    return {
+      interview,
+      application: {
+        id: application.id,
+        jobId: application.jobId,
+      },
+      job: job ? {
+        id: job.id,
+        title: job.title,
+        company: job.company,
+      } : null,
+    };
+  }));
+}
+
 export async function getUpcomingInterviews(userId: number) {
   const db = await getDb();
   const now = new Date();
   if (!db) {
-    const candidates = memoryInterviewSchedules
-      .filter((interview) =>
-        (interview.status === "scheduled" || interview.status === "rescheduled") &&
-        interview.scheduledAt >= now
-      )
-      .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
-    const applicationsById = new Map<number, Awaited<ReturnType<typeof getUserApplicationsByIds>>[number]>();
-    const ownedUpcoming: typeof candidates = [];
-    for (let offset = 0; offset < candidates.length && ownedUpcoming.length < 10; offset += 500) {
-      const chunk = candidates.slice(offset, offset + 500);
-      const ownedApplications = await getUserApplicationsByIds(
-        userId,
-        chunk.map((interview) => interview.applicationId)
-      );
-      for (const application of ownedApplications) applicationsById.set(application.id, application);
-      for (const interview of chunk) {
-        if (applicationsById.has(interview.applicationId)) ownedUpcoming.push(interview);
-        if (ownedUpcoming.length === 10) break;
-      }
-    }
-    return await Promise.all(ownedUpcoming.map(async (interview) => {
-      const application = applicationsById.get(interview.applicationId)!;
-      const job = await getJobById(application.jobId);
-      return {
-        interview,
-        application: {
-          id: application.id,
-          jobId: application.jobId,
-        },
-        job: job ? {
-          id: job.id,
-          title: job.title,
-          company: job.company,
-        } : null,
-      };
-    }));
+    return await getMemoryUpcomingInterviewContexts(userId, now, 10);
   }
-  
-  const result = await db
+  const condition = and(
+    eq(applications.userId, userId),
+    sql`${interviewSchedules.status} IN ('scheduled', 'rescheduled')`,
+    sql`${interviewSchedules.scheduledAt} >= ${now}`
+  );
+  return await db
     .select({
       interview: interviewSchedules,
-      application: {
-        id: applications.id,
-        jobId: applications.jobId,
-      },
-      job: {
-        id: jobs.id,
-        title: jobs.title,
-        company: jobs.company,
-      },
+      application: { id: applications.id, jobId: applications.jobId },
+      job: { id: jobs.id, title: jobs.title, company: jobs.company },
     })
     .from(interviewSchedules)
     .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
     .innerJoin(jobs, eq(applications.jobId, jobs.id))
-    .where(
-      and(
-        eq(applications.userId, userId),
-        sql`${interviewSchedules.status} IN ('scheduled', 'rescheduled')`,
-        sql`${interviewSchedules.scheduledAt} >= ${now}`
-      )
-    )
+    .where(condition)
     .orderBy(asc(interviewSchedules.scheduledAt))
     .limit(10);
+}
 
-  return result;
+export async function getUpcomingInterviewPreparationPage(userId: number, requestedLimit = 10) {
+  const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 50);
+  const db = await getDb();
+  const now = new Date();
+  if (!db) {
+    const upcoming = await getMemoryUpcomingInterviewContexts(userId, now);
+    const preparations = await getInterviewPreparationsForJobs(
+      userId,
+      upcoming.map((item) => item.application.jobId)
+    );
+    const preparedJobIds = new Set(preparations.map((preparation) => preparation.jobId));
+    const items = upcoming.filter((item) => !preparedJobIds.has(item.application.jobId));
+    return {
+      items: items.slice(0, limit),
+      total: items.length,
+      limit,
+      hasMore: items.length > limit,
+    };
+  }
+  const condition = and(
+    eq(applications.userId, userId),
+    sql`${interviewSchedules.status} IN ('scheduled', 'rescheduled')`,
+    sql`${interviewSchedules.scheduledAt} >= ${now}`,
+    isNull(interviewPreparation.id)
+  );
+  const preparationJoin = and(
+    eq(interviewPreparation.userId, userId),
+    eq(interviewPreparation.jobId, applications.jobId)
+  );
+  const [items, totalRows] = await Promise.all([
+    db
+      .select({
+        interview: interviewSchedules,
+        application: { id: applications.id, jobId: applications.jobId },
+        job: { id: jobs.id, title: jobs.title, company: jobs.company },
+      })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .innerJoin(jobs, eq(applications.jobId, jobs.id))
+      .leftJoin(interviewPreparation, preparationJoin)
+      .where(condition)
+      .orderBy(asc(interviewSchedules.scheduledAt))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .innerJoin(jobs, eq(applications.jobId, jobs.id))
+      .leftJoin(interviewPreparation, preparationJoin)
+      .where(condition),
+  ]);
+  const total = Number(totalRows[0]?.count ?? 0);
+  return { items, total, limit, hasMore: total > items.length };
 }
 
 function parsePreparationList(value?: string | null): string[] {
