@@ -25,12 +25,13 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 163 files, 846 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 164 files, 852 tests |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Database recovery contract | `server/databaseRecovery.test.ts` | Passed: streaming backup, checksum verification, credential exclusion, tamper rejection, target matching, and explicit restore confirmation |
 | Discovery traffic contract | `server/discoveryTrafficPolicy.test.ts`; scraper unit tests | Passed: cancellation propagation, deadline abort, source serialization, bounded concurrency, selective retry/backoff, `Retry-After`, and production allowlisting |
+| Container and fresh database | Docker Desktop; MySQL 8.4; `server/containerPackaging.test.ts`; `server/migrationJournal.test.ts` | Passed: fail-closed doctor, all 38 migrations, advisory-lock release, non-root runtime, Docker health, production readiness, and frontend HTTP 200 |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
 | Diff whitespace audit | `git diff --check` | Passed |
@@ -87,6 +88,8 @@ Admin evidence also retrieves its application by owned primary key and its decis
 
 Discovery execution now has one active scan per source, a configurable bounded cross-source worker pool, abortable source deadlines, adapter-level minimum pacing, and transient-only backoff. HTTP 408/425/429 and 5xx responses can retry, `Retry-After` is capped at five minutes, permanent HTTP failures stop immediately, and production startup diagnostics reject a scheduled scanner without an explicit approved-source allowlist.
 
+The production image was built and exercised on Windows Docker Desktop against a clean MySQL 8.4 container. This uncovered and closed four runtime-only defects: a stale pnpm major, omitted workspace overrides, invalid migration statement grouping/identifier length, and a pruned Vite dependency still imported by the server. The corrected image fails closed without configuration, carries an advisory-lock migrator that applied all 38 entries from zero, runs as the non-root Node user, becomes Docker-healthy, reports database-backed production readiness, and serves the frontend. The in-app browser could not attach to the local container page during the final render attempt; HTTP and Docker runtime evidence remain authoritative for this pass.
+
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
 
 Application create, decision, and portal-preparation routes now check for an existing pending application through the unique user/canonical-job key. Existing duplicate-source and preparation-idempotency regressions pass without loading application history.
@@ -95,14 +98,14 @@ Save and ignore decisions use that same exact pending application plus its scope
 
 ## Release blockers and scope boundaries
 
-- A production database, migration run, real backup, isolated restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment. The repository now provides verified streaming backup/restore tooling so that acceptance can be performed without ad hoc shell handling.
+- A clean MySQL 8.4 migration and container health run are verified locally and repeated in CI. A hosted production database, real backup, isolated restore drill, monitoring, and deployment health checks still require the target environment.
 - Gmail, Google Drive, Dropbox, Microsoft, LinkedIn, and GitHub integrations require user-owned OAuth applications, credentials, redirect configuration, consent, and live acceptance testing.
 - The HAI connector contract is locally verified, but acceptance against an independently running HAI peer is still required.
 - Public ngrok health and OAuth callback verification require an operator-owned reserved HTTPS hostname.
 - Only sources with compliant, configured adapters are eligible for discovery. Account-only, blocked, unsafe, or ambiguous sources remain unavailable or review-only.
 - Applications are prepared, reviewed, and handed off to the employer destination. There is no verified unattended cross-platform application submission system.
 - Retention/deletion policy approval, a verified erasure executor, security/legal review, accessibility review, penetration testing, and a formal incident response exercise require operator decisions and external evidence.
-- The supplied Dockerfile is buildable infrastructure, not proof of a successful image build or production deployment in this verification pass.
+- The Dockerfile and production runtime are locally verified and CI-enforced; this is not evidence of a hosted production deployment.
 
 ## Required operator sequence before production
 

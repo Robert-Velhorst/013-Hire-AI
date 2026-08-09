@@ -101,3 +101,71 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  container-runtime:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-ci-password
+          MYSQL_DATABASE: hire_ai
+          MYSQL_USER: hire_ai
+          MYSQL_PASSWORD: hire-ai-ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root --password=root-ci-password"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build production image
+        run: docker build -t hire-ai:ci .
+
+      - name: Verify fail-closed startup
+        run: |
+          if docker run --rm hire-ai:ci; then
+            echo "Container started without required production configuration."
+            exit 1
+          fi
+
+      - name: Apply complete migration history from the image
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
+            --entrypoint node hire-ai:ci scripts/database-migrate.mjs
+
+      - name: Verify production health and readiness
+        run: |
+          trap 'docker rm -f hire-ai-ci-app >/dev/null 2>&1 || true' EXIT
+          docker run -d --name hire-ai-ci-app --network host \
+            -e PORT=33050 \
+            -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
+            -e JWT_SECRET='container-ci-jwt-secret-at-least-32-characters' \
+            -e VITE_APP_ID='hire-ai-container-ci' \
+            -e OAUTH_SERVER_URL='https://oauth.example.test' \
+            -e OWNER_OPEN_ID='container-ci-owner' \
+            -e BUILT_IN_FORGE_API_KEY='container-ci-forge-key' \
+            -e STRIPE_SECRET_KEY='sk_test_container_ci' \
+            -e STRIPE_WEBHOOK_SECRET='whsec_container_ci' \
+            -e FILE_MALWARE_SCAN_URL='http://127.0.0.1:39999/scan' \
+            -e AUTONOMOUS_SCHEDULER_ENABLED=false \
+            -e JOB_SCRAPING_SCHEDULER_ENABLED=false \
+            hire-ai:ci
+          for attempt in $(seq 1 45); do
+            state=$(docker inspect hire-ai-ci-app --format '{{.State.Status}}/{{.State.Health.Status}}')
+            if [ "$state" = 'running/healthy' ] \
+              && curl --fail --silent http://127.0.0.1:33050/healthz | grep -q '"status":"ok"' \
+              && curl --fail --silent http://127.0.0.1:33050/readyz | grep -q '"ready":true' \
+              && curl --fail --silent http://127.0.0.1:33050/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs hire-ai-ci-app
+          exit 1

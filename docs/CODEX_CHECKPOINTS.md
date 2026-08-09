@@ -7,7 +7,7 @@
 | Privacy export | server export test; Settings calls `privacy.exportData` | Complete |
 | Static verification | `npm.cmd run check` | Complete |
 | Focused verification | privacy and HTTP safety tests | Complete |
-| Full regression | `npm.cmd test -- --run`: 163 files, 846 tests | Complete |
+| Full regression | `npm.cmd test -- --run`: 164 files, 852 tests | Complete |
 | Production build | `npm.cmd run build` | Complete |
 | Configuration audit | Development doctor warns; production doctor fails closed for missing required configuration | Complete |
 | Local health/readiness | Port 3040: `/healthz` and `/readyz` returned 200; readiness reports development memory | Complete |
@@ -22,5 +22,6 @@
 | Database recovery tooling | Streaming MySQL backup, atomic checksummed bundle, independent verification, target-bound restore confirmation, adversarial tests, and operator runbook | Complete in code; production backup retention and an isolated restore drill remain operator acceptance |
 | Discovery resource controls | Adapter cancellation propagation, per-source serialization/pacing, bounded cross-source concurrency/deadlines, selective retry/backoff, production allowlist doctor gate, and admin-visible policy | Complete in code; live provider quota acceptance remains operator evidence |
 | Dashboard request efficiency | Seven overlapping queries reduced to one bounded snapshot; GET persistence and non-admin global review reads removed | Complete for dashboard path |
-| Operating query efficiency | Migrations 0036-0037; 18 schema-aligned indexes; indexed due-alert selection with paged canonical-job matching; bounded privacy/deduplication/admin-review reads; exact owned lifecycle/admin evidence/approval/preparation/decision-close/employer-reply/interview-context queries; application-scoped approval reads; exact verification-review resolution; shared child evidence for the ledger and autonomous follow-ups; preloaded offer attribution and interview-preparation datasets | Complete locally; production migration acceptance pending |
+| Operating query efficiency | Migrations 0036-0037; 18 schema-aligned indexes; indexed due-alert selection with paged canonical-job matching; bounded privacy/deduplication/admin-review reads; exact owned lifecycle/admin evidence/approval/preparation/decision-close/employer-reply/interview-context queries; application-scoped approval reads; exact verification-review resolution; shared child evidence for the ledger and autonomous follow-ups; preloaded offer attribution and interview-preparation datasets | Complete locally; all 38 migrations applied from zero on MySQL 8.4 |
+| Container runtime | Pnpm 11 frozen build, non-root runtime, configuration doctor entrypoint, bundled lock-protected migrator, Docker health probe, MySQL 8.4 readiness smoke | Complete locally and enforced in Linux CI |
 | Hosted deployment and provider acceptance | Requires credentials, a production database, and operator-owned external accounts | Partial |

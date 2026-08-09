@@ -42,10 +42,11 @@ Audit date: 2026-08-08
 | The dependency graph contained a critical Vitest advisory, a high nested-Vite Windows path advisory, and an ignored Nano ID override. | Vitest/Vite are patched, Nano ID 3 is forced to 3.3.17 through active workspace settings, and the advisory gate covers moderate or higher severity. |
 | Remaining moderate runtime/tooling advisories affected Mermaid, DOMPurify, PostCSS, and esbuild, while pnpm 10 and 11 interpreted override locations differently. | Local and CI resolution now use pnpm 11, workspace overrides pin every patched path, only esbuild install scripts are allowed, and CI rejects moderate-or-higher advisories. |
 | A source timeout abandoned the manager result but did not cancel the underlying fetch; fixed-delay retries ignored provider pacing and retried permanent HTTP failures. | Every network adapter now receives an abort signal, source scans are serialized, concurrency/deadlines are bounded, and transient-only retries apply abortable exponential and `Retry-After` pacing. Production doctor requires an explicit scheduled-source allowlist. |
+| The production Dockerfile pinned pnpm 10 without workspace overrides, did not enforce the doctor, and its pruned runtime still imported Vite. Fresh MySQL migration also failed on a multi-statement chunk and a 65-character foreign-key name. | The image now uses pnpm 11 with workspace policy, runs non-root with a health check and fail-closed doctor, carries a lock-protected migrator, and excludes the development Vite module. Migration boundaries and identifier limits are regression-tested; all 38 migrations and the live image passed MySQL 8.4 acceptance. |
 
 ## Material unresolved risks
 
 1. Production needs MySQL/TiDB, OAuth, Stripe, Forge, S3, malware scanning, and any enabled connector credentials.
 2. A real browser or official API provider adapter needs separate policy, account, quota, and acceptance-test approval before activation.
 3. Employment/payment retention and success-fee terms need legal and privacy review before real-user launch.
-4. Docker has not been built in this workspace because Docker Desktop availability is external to the repository.
+4. Hosted deployment, monitoring, and external-provider acceptance remain separate from the locally verified Windows Docker/MySQL runtime.

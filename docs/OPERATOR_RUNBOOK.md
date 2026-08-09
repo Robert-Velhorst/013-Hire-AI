@@ -17,7 +17,7 @@ For native production startup on Windows 11, use `npm.cmd run start:windows`. It
 
 ## Database and workers
 
-Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default. Before enabling it, set an explicit `JOB_SCRAPING_ENABLED_PLATFORMS` allowlist, verify each source policy, and choose bounded `JOB_SCRAPING_MAX_CONCURRENT_SOURCES` (1-10) and `JOB_SCRAPING_SOURCE_TIMEOUT_MS` (5,000-300,000). Production doctor rejects scheduled discovery without an allowlist or with invalid traffic limits.
+Set `DATABASE_URL`, then run `pnpm db:migrate`. The migrator uses a database-scoped advisory lock, a 15-second connection timeout, and a 60-second lock wait by default; `DB_MIGRATION_CONNECT_TIMEOUT_MS` and `DB_MIGRATION_LOCK_WAIT_SECONDS` provide bounded overrides. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default. Before enabling it, set an explicit `JOB_SCRAPING_ENABLED_PLATFORMS` allowlist, verify each source policy, and choose bounded `JOB_SCRAPING_MAX_CONCURRENT_SOURCES` (1-10) and `JOB_SCRAPING_SOURCE_TIMEOUT_MS` (5,000-300,000). Production doctor rejects scheduled discovery without an allowlist or with invalid traffic limits.
 
 Each source adapter applies its own minimum request interval. Transient network, HTTP 408/425/429, and 5xx failures use bounded exponential backoff and honor `Retry-After` up to five minutes. Permanent HTTP failures are not retried. One source cannot have overlapping scans, cross-source concurrency is capped, and a source deadline aborts its underlying fetch rather than only abandoning the result. The Admin source-health view reports the effective concurrency and timeout policy.
 
@@ -53,4 +53,4 @@ The restore command fails before starting `mysql` when the manifest is malformed
 
 ## Deployment
 
-Build with `docker build -t hire-ai .` when Docker is available. The container will fail startup in production if the core required environment variables are absent. Do not deploy until `pnpm doctor` passes with production configuration and malware scanning configured, and a verified database backup and isolated restore drill have been recorded.
+Build with `docker build -t hire-ai .`. Apply migrations from the same immutable image with `docker run --rm --network <database-network> -e DATABASE_URL=<target> --entrypoint node hire-ai scripts/database-migrate.mjs`, then start the normal image with its production environment. The non-root container runs the production doctor before the server and reports Docker health through `/healthz`; missing configuration or malware scanning fails startup. Do not deploy until the doctor passes and a verified database backup and isolated restore drill have been recorded.

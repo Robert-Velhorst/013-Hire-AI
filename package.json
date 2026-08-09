@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
-    "build": "vite build && node scripts/check-production-bundle.mjs && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "vite build && node scripts/check-production-bundle.mjs && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --bundle --format=esm --outdir=dist",
     "start": "node dist/index.js",
     "start:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
     "start:ngrok": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ngrok.ps1",
@@ -18,8 +18,8 @@
     "db:backup:verify": "node scripts/database-backup.mjs verify",
     "db:restore": "node scripts/database-restore.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit migrate"
+    "db:migrate": "node scripts/database-migrate.mjs",
+    "db:push": "node scripts/database-migrate.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1085.0",

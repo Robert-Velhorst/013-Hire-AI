@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createViteConfig } from "../../vite.config";
 
@@ -25,4 +26,18 @@ describe("Vite runtime configuration", () => {
     expect(names).toContain("vite-plugin-manus-runtime");
     expect(names).toContain("vite-plugin-jsx-loc");
   });
+
+  it("loads the Vite server only inside the development branch", () => {
+    const entrypoint = readFileSync(resolveSource("index.ts"), "utf8");
+    const staticServer = readFileSync(resolveSource("static.ts"), "utf8");
+
+    expect(entrypoint).toContain('await import("./vite")');
+    expect(entrypoint).not.toMatch(/^import .*from ["']\.\/vite["'];/m);
+    expect(staticServer).not.toContain('from "vite"');
+    expect(staticServer).not.toContain("vite.config");
+  });
 });
+
+function resolveSource(fileName: string) {
+  return path.resolve(import.meta.dirname, fileName);
+}

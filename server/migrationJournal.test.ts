@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 
 type MigrationJournal = {
   entries: Array<{
@@ -32,9 +33,38 @@ describe("Drizzle migration journal", () => {
 
     expect(packageJson.scripts).toMatchObject({
       "db:generate": "drizzle-kit generate",
-      "db:migrate": "drizzle-kit migrate",
-      "db:push": "drizzle-kit migrate",
+      "db:migrate": "node scripts/database-migrate.mjs",
+      "db:push": "node scripts/database-migrate.mjs",
     });
+  });
+
+  it("separates every MySQL statement into a migrator-safe chunk", () => {
+    const migrations = readMigrationFiles({
+      migrationsFolder: resolve(process.cwd(), "drizzle"),
+    });
+
+    for (const migration of migrations) {
+      for (const statement of migration.sql) {
+        const withoutTrailingTerminator = statement.replace(/;\s*$/, "");
+        expect(
+          withoutTrailingTerminator,
+          `Migration ${migration.folderMillis} contains multiple SQL statements without a statement breakpoint`
+        ).not.toMatch(/;\s*(?:alter|create|drop|insert|update|delete|rename|truncate)\b/i);
+      }
+    }
+  });
+
+  it("keeps MySQL identifiers within the 64-character limit", () => {
+    const migrationsDirectory = resolve(process.cwd(), "drizzle");
+    const migrationFiles = readdirSync(migrationsDirectory)
+      .filter((fileName) => /^\d{4}_.+\.sql$/.test(fileName));
+
+    for (const fileName of migrationFiles) {
+      const migration = readFileSync(resolve(migrationsDirectory, fileName), "utf8");
+      for (const [, identifier] of migration.matchAll(/`([^`]+)`/g)) {
+        expect(identifier.length, `${fileName} contains an overlong MySQL identifier: ${identifier}`).toBeLessThanOrEqual(64);
+      }
+    }
   });
 
   it("keeps operating query indexes aligned with the schema", () => {

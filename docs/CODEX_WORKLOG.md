@@ -96,3 +96,14 @@
 - Replaced unconditional fixed-delay retries with transient-only exponential backoff, bounded `Retry-After` handling, and abortable per-source pacing.
 - Added production doctor enforcement for explicit scheduled-source allowlisting and valid timeout/concurrency settings.
 - Exposed the effective execution policy through the admin API and source-health UI, with cross-adapter regression coverage.
+
+## 2026-08-09 - Container and fresh-database acceptance pass
+
+- Built the production image on Windows Docker Desktop and repaired its stale pnpm 10 pin and missing workspace override configuration.
+- Added a non-root runtime, Docker health check, bundled production doctor, and bundled lock-protected database migrator.
+- Repaired migration `0030`'s overlong MySQL foreign-key identifier and made its related DDL atomic; added missing statement boundaries to migration `0036`.
+- Added migration contracts for statement boundaries and MySQL's 64-character identifier limit.
+- Applied all 38 migrations from an empty MySQL 8.4 database, verified 38 tables and released migration lock, and reran the bundled migrator idempotently.
+- Removed the production server's Vite runtime dependency and verified the pruned image becomes healthy, reports production database readiness, and serves the frontend.
+- Added a Linux CI container job that repeats fail-closed startup, full migration, image health, readiness, and frontend checks.
+- Passed TypeScript and the full regression suite: 164 files and 852 tests.
