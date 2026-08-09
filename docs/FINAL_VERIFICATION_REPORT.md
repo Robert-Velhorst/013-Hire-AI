@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 805 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 807 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -49,6 +49,8 @@ The production frontend output rendered at desktop (1440 x 900) and mobile (390 
 The dashboard now issues one operating-snapshot query instead of seven overlapping requests. Its snapshot exposes exact counts and at most 10 projected recent applications, ordinary users do not trigger global admin-review reads, and the protected GET does not create campaign state. A local development smoke verified the repaired embedded server returns `/src/main.tsx` as JavaScript; browser startup on the loaded host exceeded the acceptance window before a final dashboard screenshot could be captured.
 
 Migration `0036` adds query-aligned indexes for profile readiness and the operating lifecycle. Privacy deletion status and admin evidence now fetch one matching review row, job aggregation loads only the selected job's duplicate group, and offer-attribution evidence uses one ownership-scoped batch instead of one response query per approval. This is source- and test-verified locally; execution plans and migration timing still require a production-like database acceptance run.
+
+The operating ledger now batch-loads employer responses, interview schedules, and follow-ups once per refresh and reuses that ownership-scoped evidence across all related queues. Regression coverage rejects the former per-application calls and verifies that requesting mixed application IDs cannot expose another user's child records.
 
 ## Release blockers and scope boundaries
 

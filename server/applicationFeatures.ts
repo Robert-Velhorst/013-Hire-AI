@@ -1668,6 +1668,41 @@ export async function getInterviewSchedules(applicationId: number, userId: numbe
     .orderBy(asc(interviewSchedules.scheduledAt));
 }
 
+export async function getUserInterviewSchedulesForApplications(
+  userId: number,
+  applicationIds: number[]
+) {
+  const boundedApplicationIds = Array.from(new Set(
+    applicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  ));
+  if (boundedApplicationIds.length === 0) return [] as InterviewSchedule[];
+  const requestedApplicationIds = new Set(boundedApplicationIds);
+
+  const db = await getDb();
+  if (!db) {
+    const applicationsForUser = await getUserApplications(userId);
+    const ownedApplicationIds = new Set(
+      applicationsForUser
+        .filter((application) => requestedApplicationIds.has(application.id))
+        .map((application) => application.id)
+    );
+    return memoryInterviewSchedules
+      .filter((interview) => ownedApplicationIds.has(interview.applicationId))
+      .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
+  }
+
+  const rows = await db
+    .select({ interview: interviewSchedules })
+    .from(interviewSchedules)
+    .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.id, boundedApplicationIds)
+    ))
+    .orderBy(asc(interviewSchedules.scheduledAt));
+  return rows.map((row) => row.interview);
+}
+
 export async function getUpcomingInterviews(userId: number) {
   const db = await getDb();
   const now = new Date();
@@ -2485,6 +2520,41 @@ export async function getFollowUps(applicationId: number, userId: number) {
     .from(followUps)
     .where(eq(followUps.applicationId, applicationId))
     .orderBy(desc(followUps.createdAt));
+}
+
+export async function getUserFollowUpsForApplications(
+  userId: number,
+  applicationIds: number[]
+) {
+  const boundedApplicationIds = Array.from(new Set(
+    applicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  ));
+  if (boundedApplicationIds.length === 0) return [] as FollowUp[];
+  const requestedApplicationIds = new Set(boundedApplicationIds);
+
+  const db = await getDb();
+  if (!db) {
+    const applicationsForUser = await getUserApplications(userId);
+    const ownedApplicationIds = new Set(
+      applicationsForUser
+        .filter((application) => requestedApplicationIds.has(application.id))
+        .map((application) => application.id)
+    );
+    return memoryFollowUps
+      .filter((followUp) => ownedApplicationIds.has(followUp.applicationId))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+  }
+
+  const rows = await db
+    .select({ followUp: followUps })
+    .from(followUps)
+    .innerJoin(applications, eq(followUps.applicationId, applications.id))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.id, boundedApplicationIds)
+    ))
+    .orderBy(desc(followUps.createdAt));
+  return rows.map((row) => row.followUp);
 }
 
 const WITHDRAWAL_CANCELLATION_NOTE = "Application was withdrawn, so this unsent external action is no longer permitted.";

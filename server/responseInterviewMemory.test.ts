@@ -3,6 +3,8 @@ import {
   createFollowUp,
   getInterviewSchedules,
   getUpcomingInterviews,
+  getUserFollowUpsForApplications,
+  getUserInterviewSchedulesForApplications,
   markFollowUpSent,
   recordEmployerResponse,
   recordInterviewOutcome,
@@ -16,6 +18,7 @@ import {
   createApplication,
   createInterviewNotification,
   getApplicationLedgerArtifacts,
+  getUserEmployerResponsesForApplications,
   getUserApplications,
   getUserOfferAttributionReviews,
   listAdminReviewItems,
@@ -525,5 +528,53 @@ describe("response and interview memory fallback", () => {
     expect(ledger.metrics.employerResponsesNeedingReply).toBe(0);
     expect(ledger.metrics.approvedFollowUpsReadyToSend).toBe(1);
     expect(artifacts.auditEvents.some((event) => event.action === "stale_follow_up_approvals_cancelled")).toBe(false);
+  });
+
+  it("batch-loads operating evidence without crossing application ownership", async () => {
+    const userId = 98216;
+    const otherUserId = 98217;
+    const application = await createApplication({ userId, jobId: 1, status: "applied" });
+    const otherApplication = await createApplication({ userId: otherUserId, jobId: 3, status: "applied" });
+    const applicationId = Number(application.insertId);
+    const otherApplicationId = Number(otherApplication.insertId);
+
+    expect(await getUserApplications(userId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: applicationId })])
+    );
+    expect(await getUserApplications(otherUserId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: otherApplicationId })])
+    );
+
+    await recordInterviewInvite(applicationId, userId);
+    await recordInterviewInvite(otherApplicationId, otherUserId);
+    const interview = await scheduleInterview({
+      applicationId,
+      interviewType: "video",
+      scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    }, userId);
+    await scheduleInterview({
+      applicationId: otherApplicationId,
+      interviewType: "phone",
+      scheduledAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    }, otherUserId);
+    const followUp = await createFollowUp({
+      applicationId,
+      message: "Thank you for arranging the interview.",
+    }, userId);
+    await createFollowUp({
+      applicationId: otherApplicationId,
+      message: "This follow-up belongs to another user.",
+    }, otherUserId);
+
+    const requestedIds = [applicationId, otherApplicationId];
+    const [responses, schedules, followUps] = await Promise.all([
+      getUserEmployerResponsesForApplications(userId, requestedIds),
+      getUserInterviewSchedulesForApplications(userId, requestedIds),
+      getUserFollowUpsForApplications(userId, requestedIds),
+    ]);
+
+    expect(new Set(responses.map((response) => response.applicationId))).toEqual(new Set([applicationId]));
+    expect(schedules.map((schedule) => schedule.id)).toEqual([interview.id]);
+    expect(followUps.map((item) => item.id)).toEqual([followUp.id]);
   });
 });

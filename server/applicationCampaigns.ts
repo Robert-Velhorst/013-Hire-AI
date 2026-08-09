@@ -1,14 +1,21 @@
-import type { Application, ApplicationApproval, FollowUp, UserProfile } from "../drizzle/schema";
+import type {
+  Application,
+  ApplicationApproval,
+  EmployerResponse,
+  FollowUp,
+  InterviewSchedule,
+  UserProfile,
+} from "../drizzle/schema";
 import {
   getActiveJobs,
   getApplicationCampaign,
-  getEmployerResponses,
   getEducationEntries,
   getInterviewPreparationForJob,
   listUnreadInterviewNotifications,
   listPendingInboxResponseCandidates,
   getUserApplicationDecisions,
   getUserApplications,
+  getUserEmployerResponsesForApplications,
   getUserProfile,
   getUserOfferAttributionReviews,
   getUserSuccessFees,
@@ -28,7 +35,11 @@ import {
 } from "@shared/profileEvidence";
 import { buildAutonomousEvidenceGates } from "@shared/autonomousEvidenceGates";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
-import { getFollowUps, getInterviewSchedules, getUpcomingInterviews } from "./applicationFeatures";
+import {
+  getUpcomingInterviews,
+  getUserFollowUpsForApplications,
+  getUserInterviewSchedulesForApplications,
+} from "./applicationFeatures";
 import {
   getSuccessFeeComplianceQueue,
   getSuccessFeeComplianceSummary,
@@ -62,6 +73,39 @@ function campaignTitle(profile?: Pick<UserProfile, "desiredJobTypes"> | null): s
 }
 
 type UserApplicationRecord = Awaited<ReturnType<typeof getUserApplications>>[number];
+
+interface OperatingApplicationEvidence {
+  followUpsByApplication: Map<number, FollowUp[]>;
+  responsesByApplication: Map<number, EmployerResponse[]>;
+  schedulesByApplication: Map<number, InterviewSchedule[]>;
+}
+
+function groupByApplicationId<T extends { applicationId: number }>(items: T[]) {
+  const grouped = new Map<number, T[]>();
+  for (const item of items) {
+    const existing = grouped.get(item.applicationId) ?? [];
+    existing.push(item);
+    grouped.set(item.applicationId, existing);
+  }
+  return grouped;
+}
+
+async function loadOperatingApplicationEvidence(
+  applications: UserApplicationRecord[],
+  userId: number
+): Promise<OperatingApplicationEvidence> {
+  const applicationIds = applications.map((application) => application.id);
+  const [followUps, responses, schedules] = await Promise.all([
+    getUserFollowUpsForApplications(userId, applicationIds),
+    getUserEmployerResponsesForApplications(userId, applicationIds),
+    getUserInterviewSchedulesForApplications(userId, applicationIds),
+  ]);
+  return {
+    followUpsByApplication: groupByApplicationId(followUps),
+    responsesByApplication: groupByApplicationId(responses),
+    schedulesByApplication: groupByApplicationId(schedules),
+  };
+}
 
 interface FollowUpDeliveryWorkItem {
   followUpId: number;
@@ -159,7 +203,7 @@ function getFollowUpDeliveryWorkItem(
 async function getFollowUpSuppressionState(
   applications: UserApplicationRecord[],
   approvals: ApplicationApproval[],
-  userId: number
+  evidence: OperatingApplicationEvidence
 ): Promise<FollowUpSuppressionState> {
   const activeFollowUpApprovalById = new Map(
     approvals
@@ -175,12 +219,8 @@ async function getFollowUpSuppressionState(
 
   if (activeFollowUpApprovalById.size === 0) return state;
 
-  const followUpsByApplication = await Promise.all(applications.map(async (application) => ({
-    application,
-    followUps: await getFollowUps(application.id, userId),
-  })));
-
-  for (const { application, followUps } of followUpsByApplication) {
+  for (const application of applications) {
+    const followUps = evidence.followUpsByApplication.get(application.id) ?? [];
     if (!["applied", "viewed", "interview"].includes(application.status || "pending")) {
       continue;
     }
@@ -215,15 +255,18 @@ async function getFollowUpSuppressionState(
   return state;
 }
 
-async function getInterviewSchedulingQueue(applications: UserApplicationRecord[], userId: number) {
+function getInterviewSchedulingQueue(
+  applications: UserApplicationRecord[],
+  evidence: OperatingApplicationEvidence
+) {
   const interviewApplications = applications.filter((application) => application.status === "interview");
-  const schedulingState = await Promise.all(interviewApplications.map(async (application) => ({
+  const schedulingState = interviewApplications.map((application) => ({
     application,
     schedulingRequirement: getInterviewSchedulingRequirement(
-      await getInterviewSchedules(application.id, userId),
-      await getEmployerResponses(application.id, userId)
+      evidence.schedulesByApplication.get(application.id) ?? [],
+      evidence.responsesByApplication.get(application.id) ?? []
     ),
-  })));
+  }));
 
   return schedulingState
     .filter((item) => item.schedulingRequirement !== null)
@@ -242,17 +285,21 @@ async function getInterviewSchedulingQueue(applications: UserApplicationRecord[]
     }));
 }
 
-async function getInterviewNotificationQueue(applications: UserApplicationRecord[], userId: number) {
+async function getInterviewNotificationQueue(
+  applications: UserApplicationRecord[],
+  userId: number,
+  evidence: OperatingApplicationEvidence
+) {
   // Validate the complete bounded unread set before applying the command-center limit.
   // Legacy or concurrently retired notifications must not hide a newer verified invite.
   const notifications = await listUnreadInterviewNotifications(userId, 100);
   const applicationsById = new Map(applications.map((application) => [application.id, application]));
 
-  const items = await Promise.all(notifications.map(async (notification) => {
+  const items = notifications.map((notification) => {
     const application = applicationsById.get(notification.applicationId);
     if (!application || application.status !== "interview") return null;
 
-    const response = (await getEmployerResponses(application.id, userId))
+    const response = (evidence.responsesByApplication.get(application.id) ?? [])
       .find((item) => item.id === notification.employerResponseId);
     if (!response || response.responseType !== "interview_invite") return null;
 
@@ -272,25 +319,25 @@ async function getInterviewNotificationQueue(applications: UserApplicationRecord
         location: application.job.location,
       } : null,
     };
-  }));
+  });
 
   return items
     .filter((item): item is NonNullable<typeof item> => item !== null)
     .slice(0, 5);
 }
 
-async function getEmployerResponseQueue(
+function getEmployerResponseQueue(
   applications: UserApplicationRecord[],
-  userId: number,
-  suppressionState: FollowUpSuppressionState
+  suppressionState: FollowUpSuppressionState,
+  evidence: OperatingApplicationEvidence
 ) {
   const actionableStatuses = new Set(["applied", "viewed", "interview"]);
-  const responseState = await Promise.all(applications.map(async (application) => {
+  const responseState = applications.map((application) => {
     if (!actionableStatuses.has(application.status || "pending")) {
       return null;
     }
 
-    const responses = await getEmployerResponses(application.id, userId);
+    const responses = evidence.responsesByApplication.get(application.id) ?? [];
     const latestResponse = responses[0];
     if (
       !latestResponse ||
@@ -316,7 +363,7 @@ async function getEmployerResponseQueue(
         location: application.job.location,
       } : null,
     };
-  }));
+  });
 
   return responseState.filter((item): item is NonNullable<typeof item> => item !== null);
 }
@@ -368,22 +415,23 @@ export async function getAutonomousFollowUpReadiness({
   approvals,
   plan,
   userId,
+  evidence: suppliedEvidence,
 }: {
   applications: UserApplicationRecord[];
   approvals: ApplicationApproval[];
   plan: ReturnType<typeof buildAutonomousPlan>;
   userId: number;
+  evidence?: OperatingApplicationEvidence;
 }) {
   const candidateCount = plan.summary.followUpsDue;
-  const suppressionState = await getFollowUpSuppressionState(applications, approvals, userId);
-  const [interviewSchedulingQueue, interviewOutcomeQueue] = await Promise.all([
-    getInterviewSchedulingQueue(applications, userId),
-    getInterviewOutcomeQueue(applications, userId),
-  ]);
-  const employerResponseQueue = await getEmployerResponseQueue(
+  const evidence = suppliedEvidence ?? await loadOperatingApplicationEvidence(applications, userId);
+  const suppressionState = await getFollowUpSuppressionState(applications, approvals, evidence);
+  const interviewSchedulingQueue = getInterviewSchedulingQueue(applications, evidence);
+  const interviewOutcomeQueue = getInterviewOutcomeQueue(applications, evidence);
+  const employerResponseQueue = getEmployerResponseQueue(
     applications,
-    userId,
-    suppressionState
+    suppressionState,
+    evidence
   );
   const excludedApplicationIds = new Set([
     ...interviewSchedulingQueue.map((item) => item.applicationId),
@@ -448,13 +496,14 @@ async function getInterviewPreparationQueue(userId: number) {
   return items.filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
-async function getInterviewOutcomeQueue(applications: UserApplicationRecord[], userId: number) {
+function getInterviewOutcomeQueue(
+  applications: UserApplicationRecord[],
+  evidence: OperatingApplicationEvidence
+) {
   const interviewApplications = applications.filter((application) => application.status === "interview");
-  const outcomeState = await Promise.all(interviewApplications.map(async (application) => {
-    const [schedules, responses] = await Promise.all([
-      getInterviewSchedules(application.id, userId),
-      getEmployerResponses(application.id, userId),
-    ]);
+  const outcomeState = interviewApplications.map((application) => {
+    const schedules = evidence.schedulesByApplication.get(application.id) ?? [];
+    const responses = evidence.responsesByApplication.get(application.id) ?? [];
     const recordedOutcomeInterviewIds = new Set(
       responses
         .map((response) => response.interviewId)
@@ -476,7 +525,7 @@ async function getInterviewOutcomeQueue(applications: UserApplicationRecord[], u
           location: application.job.location,
         } : null,
       }));
-  }));
+  });
 
   return outcomeState.flat();
 }
@@ -670,15 +719,21 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   });
   const submittedApplications = applications.filter((application) => application.status !== "pending");
   const responseCount = applicationStatusCount(applications, ["viewed", "interview", "offer", "accepted", "rejected"]);
+  const operatingEvidence = await loadOperatingApplicationEvidence(applications, userId);
   const followUpReadiness = await getAutonomousFollowUpReadiness({
     applications,
     approvals: allApprovals,
     plan,
     userId,
+    evidence: operatingEvidence,
   });
   const followUpSuppressionState = followUpReadiness.suppressionState;
   const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
-  const interviewNotificationQueue = await getInterviewNotificationQueue(applications, userId);
+  const interviewNotificationQueue = await getInterviewNotificationQueue(
+    applications,
+    userId,
+    operatingEvidence
+  );
   const interviewPreparationQueue = await getInterviewPreparationQueue(userId);
   const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
   const employerResponseQueue = followUpReadiness.employerResponseQueue;

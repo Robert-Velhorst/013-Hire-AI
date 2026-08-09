@@ -23,6 +23,7 @@ Audit date: 2026-08-08
 | Dashboard opened seven overlapping API queries and its ledger GET wrote campaign state. | Dashboard data now comes from one bounded operating snapshot, recent applications are projected and capped at 10, non-admin requests skip the global admin-review read, and the protected GET does not persist campaign state. |
 | The embedded Vite server lost its root/plugins after production config became command-aware. | CLI and embedded startup now share `createViteConfig`; tests cover build/serve plugin boundaries and a live check verified `/src/main.tsx` is served as JavaScript. |
 | Hot operating queries lacked matching compound indexes, several single-record workflows scanned full tables, and offer reviews queried responses once per approval. | Migration `0036` adds 17 query-aligned indexes. Privacy deletion, admin evidence, and duplicate-source aggregation now use bounded indexed lookups; offer-attribution evidence is loaded in one ownership-scoped batch. A regression test keeps migration and schema declarations aligned. |
+| Operating-ledger queues independently reloaded responses, interview schedules, and follow-ups for each application. | The ledger now performs three ownership-scoped batch reads and groups their results once. Scheduling, outcomes, notifications, reply actions, and follow-up suppression share the same evidence snapshot. |
 
 ## Material unresolved risks
 

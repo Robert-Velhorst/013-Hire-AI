@@ -23,4 +23,19 @@ describe("dashboard performance claims", () => {
     expect(dashboard).not.toContain("trpc.jobs.list.useQuery");
     expect(dashboard).not.toContain("trpc.successFees.getMyFees.useQuery");
   });
+
+  it("batch-loads application evidence once for operating-ledger projections", () => {
+    const campaigns = readFileSync(
+      resolve(process.cwd(), "server", "applicationCampaigns.ts"),
+      "utf8"
+    );
+
+    expect(campaigns).toContain("loadOperatingApplicationEvidence");
+    expect(campaigns).toContain("getUserEmployerResponsesForApplications");
+    expect(campaigns).toContain("getUserInterviewSchedulesForApplications");
+    expect(campaigns).toContain("getUserFollowUpsForApplications");
+    expect(campaigns).not.toMatch(/\bgetEmployerResponses\(/);
+    expect(campaigns).not.toMatch(/\bgetInterviewSchedules\(/);
+    expect(campaigns).not.toMatch(/\bgetFollowUps\(/);
+  });
 });

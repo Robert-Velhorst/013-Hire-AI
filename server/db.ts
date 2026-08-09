@@ -2327,6 +2327,47 @@ export async function getEmployerResponses(applicationId: number, userId: number
     .orderBy(desc(employerResponses.receivedAt));
 }
 
+export async function getUserEmployerResponsesForApplications(
+  userId: number,
+  applicationIds: number[]
+) {
+  const boundedApplicationIds = Array.from(new Set(
+    applicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  ));
+  if (boundedApplicationIds.length === 0) return [] as EmployerResponse[];
+  const requestedApplicationIds = new Set(boundedApplicationIds);
+
+  const db = await getDb();
+  if (!db) {
+    const ownedApplicationIds = new Set(
+      memoryApplications
+        .filter((application) =>
+          application.userId === userId && requestedApplicationIds.has(application.id)
+        )
+        .map((application) => application.id)
+    );
+    return memoryEmployerResponses
+      .filter((response) =>
+        response.userId === userId && ownedApplicationIds.has(response.applicationId)
+      )
+      .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime()) as EmployerResponse[];
+  }
+
+  const rows = await db
+    .select({ response: employerResponses })
+    .from(employerResponses)
+    .innerJoin(applications, and(
+      eq(employerResponses.applicationId, applications.id),
+      eq(employerResponses.userId, applications.userId)
+    ))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.id, boundedApplicationIds)
+    ))
+    .orderBy(desc(employerResponses.receivedAt));
+  return rows.map((row) => row.response);
+}
+
 export async function createInterviewNotification(input: {
   userId: number;
   applicationId: number;
@@ -2525,23 +2566,7 @@ export async function getUserOfferAttributionReviews(userId: number) {
       (approval.entityType === "application" ? approval.entityId : null);
     return applicationId && applicationsById.has(applicationId) ? [applicationId] : [];
   })));
-  const db = await getDb();
-  const responses = applicationIds.length === 0
-    ? []
-    : !db
-      ? memoryEmployerResponses
-        .filter((response) =>
-          response.userId === userId && applicationIds.includes(response.applicationId)
-        )
-        .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime()) as EmployerResponse[]
-      : await db
-        .select()
-        .from(employerResponses)
-        .where(and(
-          eq(employerResponses.userId, userId),
-          inArray(employerResponses.applicationId, applicationIds)
-        ))
-        .orderBy(desc(employerResponses.receivedAt));
+  const responses = await getUserEmployerResponsesForApplications(userId, applicationIds);
   const responsesByApplication = new Map<number, EmployerResponse[]>();
   for (const response of responses) {
     const existing = responsesByApplication.get(response.applicationId) ?? [];
