@@ -33,7 +33,11 @@ import {
   listUserAdminReviewItems,
   upsertApplicationCampaign,
 } from "./db";
-import { buildAutonomousPlan, parseAutonomousPreferences } from "./autonomousOrchestrator";
+import {
+  buildAutonomousPlan,
+  parseAutonomousPreferences,
+  type AutonomousPreferences,
+} from "./autonomousOrchestrator";
 import { calculateProfileReadiness } from "./profileReadiness";
 import { getActiveResume } from "./resumeStorage";
 import {
@@ -632,6 +636,129 @@ export function getConnectorReadinessQueue(input: {
 export interface OperatingLedgerOptions {
   includeAdminReviews?: boolean;
   persistCampaign?: boolean;
+}
+
+export async function getUserAutonomousPlanPreview(
+  userId: number,
+  overrides: AutonomousPreferences = {}
+) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const [
+    profile,
+    workExperiences,
+    educationEntries,
+    skills,
+    applicationWindow,
+    jobs,
+    autonomousPreparationsToday,
+    connectorAccounts,
+    activeResume,
+  ] = await Promise.all([
+    getUserProfile(userId),
+    getWorkExperiences(userId),
+    getEducationEntries(userId),
+    getUserSkills(userId),
+    getUserOperatingApplicationWindow(userId),
+    getActiveJobs(250, 0),
+    countUserAutonomousPreparationsSince(userId, startOfToday),
+    listUserConnectorAccounts(userId),
+    getActiveResume(userId),
+  ]);
+  const jobIds = jobs.map((job) => job.id);
+  const [currentJobApplications, decisions] = await Promise.all([
+    getUserApplicationsForJobs(userId, jobIds),
+    getUserApplicationDecisionsForJobs(userId, jobIds),
+  ]);
+  const initialApplications = Array.from(new Map(
+    [...applicationWindow.items, ...currentJobApplications]
+      .map((application) => [application.id, application] as const)
+  ).values()) as UserApplicationRecord[];
+  const approvalSet = await getUserOperatingApplicationApprovals(
+    userId,
+    initialApplications.map((application) => application.id)
+  );
+  const approvalApplicationIds = approvalSet.items.flatMap((approval) => {
+    const applicationId = approval.applicationId ??
+      (approval.entityType === "application" ? approval.entityId : null);
+    return applicationId ? [applicationId] : [];
+  });
+  const approvalApplications = await getUserApplicationsByIds(userId, approvalApplicationIds);
+  const applications = Array.from(new Map(
+    [...initialApplications, ...approvalApplications]
+      .map((application) => [application.id, application] as const)
+  ).values()) as UserApplicationRecord[];
+
+  const readiness = calculateProfileReadiness({
+    profile: profile ?? undefined,
+    workExperiences,
+    educationEntries,
+    skills,
+    hasActiveResumeArtifact: Boolean(activeResume),
+  });
+  const profileForMatching = resolveProfileCandidateEvidence(profile, skills, workExperiences);
+  const profileEvidence = getProfileEvidenceControlSummary({
+    profile,
+    readiness,
+    hasActiveResumeArtifact: Boolean(activeResume),
+    connectorAccounts: connectorAccounts.map((account) => ({
+      provider: account.provider,
+      status: account.status,
+      externalAccountLabel: account.externalAccountLabel,
+      consentScopes: account.consentScopes,
+      lastVerifiedAt: account.lastVerifiedAt,
+    })),
+  });
+  const connectorReadiness = getConnectorReadinessQueue({
+    profile,
+    applications,
+    providers: profileEvidence.providers,
+    hasActiveResumeArtifact: Boolean(activeResume),
+  });
+  const evidenceGates = buildAutonomousEvidenceGates({ profileEvidence, connectorReadiness });
+  const resolvedPreferences = {
+    ...parseAutonomousPreferences(profile?.preferences),
+    ...overrides,
+  };
+  const plan = buildAutonomousPlan(
+    jobs,
+    profileForMatching,
+    applications as Application[],
+    resolvedPreferences,
+    readiness.signals.hasResume,
+    decisions
+      .filter((decision) => decision.decidedBy === "user")
+      .map((decision) => decision.jobId),
+    { autonomousPreparationsToday }
+  );
+  const followUpReadiness = await getAutonomousFollowUpReadiness({
+    applications,
+    approvals: approvalSet.items,
+    plan,
+    userId,
+  });
+
+  return {
+    ...plan,
+    summary: {
+      ...plan.summary,
+      followUpsActionReady: followUpReadiness.actionReadyCount,
+      followUpsBlocked: followUpReadiness.blockedCount,
+    },
+    nextActions: getActionReadyFollowUpNextActions(plan, followUpReadiness),
+    profileEvidence,
+    connectorReadiness,
+    evidenceGates,
+    operatingScope: {
+      applicationsLoaded: applications.length,
+      applicationLimit: applicationWindow.limit,
+      applicationsTruncated: applicationWindow.hasMore,
+      jobsLoaded: jobs.length,
+      pendingApprovalsLoaded: approvalSet.items.filter((approval) => approval.status === "pending").length,
+      pendingApprovalsTotal: approvalSet.pendingTotal,
+      pendingApprovalsTruncated: approvalSet.pendingHasMore,
+    },
+  };
 }
 
 export async function getUserOperatingLedger(userId: number, options: OperatingLedgerOptions = {}) {

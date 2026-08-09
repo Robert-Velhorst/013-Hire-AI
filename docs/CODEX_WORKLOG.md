@@ -291,3 +291,10 @@
 - Replaced the Applications page's complete approval-history request with an owner-scoped query for its current, at-most-250 application window and a hard 2,000-row response ceiling.
 - Preserved every approval state needed by pipeline, submission, follow-up, and legacy application controls while excluding unrequested and cross-user records.
 - Added database/API behavior coverage and a frontend/backend wiring contract. Desktop/mobile browser QA, all 940 active tests, TypeScript, and the production bundle pass.
+
+## 2026-08-09 - Bounded autonomous preview planning
+
+- Replaced the preview route's complete application, decision, and approval history reads with the same bounded operating primitives used by autonomous scheduling.
+- Preserved exact current-job history, user-decision locks, database-counted daily limits, profile evidence, connector gates, and follow-up readiness while exposing truncation through `operatingScope`.
+- Added a 251-application scale regression, cross-user decision isolation, and a route/service wiring contract.
+- Verified the live planner and preference refresh at desktop/mobile breakpoints with no overflow or browser errors; all 943 active tests, TypeScript, and the production bundle pass.

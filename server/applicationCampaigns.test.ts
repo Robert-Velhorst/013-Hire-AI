@@ -11,6 +11,7 @@ vi.mock("./resumeStorage", async (importOriginal) => ({
 import {
   getActionReadyFollowUpNextActions,
   getLocationPolicyNextActions,
+  getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
 import { createFollowUp, getFollowUps, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
@@ -67,6 +68,54 @@ describe("application campaign operating ledger", () => {
       evidenceGates: expect.any(Array),
     });
     expect(await getApplicationCampaign(userId)).toBeFalsy();
+  });
+
+  it("keeps preview decisions owner-scoped to the current job set", async () => {
+    const userId = 99021;
+    const otherUserId = 99022;
+    await Promise.all([
+      createApplicationDecision({
+        userId,
+        jobId: 1,
+        decision: "ignore",
+        reviewRequired: 0,
+        decidedBy: "user",
+      }),
+      createApplicationDecision({
+        userId: otherUserId,
+        jobId: 2,
+        decision: "ignore",
+        reviewRequired: 0,
+        decidedBy: "user",
+      }),
+    ]);
+
+    const preview = await getUserAutonomousPlanPreview(userId);
+
+    expect(preview.decisions.find((decision) => decision.jobId === 1)?.userDecisionLocked).toBe(true);
+    expect(preview.decisions.find((decision) => decision.jobId === 2)?.userDecisionLocked).toBe(false);
+    expect(preview.operatingScope.jobsLoaded).toBeLessThanOrEqual(250);
+    expect(preview.operatingScope.applicationLimit).toBe(250);
+  });
+
+  it("reports preview truncation instead of hydrating an oversized active history", async () => {
+    const userId = 99023;
+    for (let index = 0; index < 251; index += 1) {
+      await createApplication({
+        userId,
+        jobId: 40_000 + index,
+        status: "applied",
+        notes: "Historical confirmed application.",
+      });
+    }
+
+    const preview = await getUserAutonomousPlanPreview(userId);
+
+    expect(preview.operatingScope).toMatchObject({
+      applicationsLoaded: 250,
+      applicationLimit: 250,
+      applicationsTruncated: true,
+    });
   });
 
   it("keeps exact totals while bounding a large active operating history", async () => {

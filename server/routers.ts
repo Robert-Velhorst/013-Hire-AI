@@ -3502,65 +3502,8 @@ export const appRouter = router({
         createFollowUps: z.boolean().optional(),
       }).optional())
       .query(async ({ ctx, input }) => {
-        const {
-          getActiveJobs,
-          getUserProfile,
-          getUserApplications,
-          getUserApplicationDecisions,
-          listUserApplicationApprovals,
-        } = await import("./db");
-        const { buildAutonomousPlan, parseAutonomousPreferences } = await import("./autonomousOrchestrator");
-        const { getAutonomousEvidenceContext } = await import("./autonomousEvidence");
-        const {
-          getActionReadyFollowUpNextActions,
-          getAutonomousFollowUpReadiness,
-        } = await import("./applicationCampaigns");
-        const [jobList, profile, applications, decisions, approvals] = await Promise.all([
-          getActiveJobs(250, 0),
-          getUserProfile(ctx.user.id),
-          getUserApplications(ctx.user.id),
-          getUserApplicationDecisions(ctx.user.id),
-          listUserApplicationApprovals(ctx.user.id, "all"),
-        ]);
-        const resolvedPreferences = {
-          ...parseAutonomousPreferences(profile?.preferences),
-          ...(input || {}),
-        };
-
-        const evidenceContext = await getAutonomousEvidenceContext(ctx.user.id, {
-          profile,
-          applications,
-        });
-        const plan = buildAutonomousPlan(
-          jobList,
-          evidenceContext.profileForMatching,
-          applications as any,
-          resolvedPreferences,
-          evidenceContext.readiness.signals.hasResume,
-          decisions
-            .filter((decision) => decision.decidedBy === "user")
-            .map((decision) => decision.jobId)
-        );
-        const followUpReadiness = await getAutonomousFollowUpReadiness({
-          applications,
-          approvals,
-          plan,
-          userId: ctx.user.id,
-        });
-        const nextActions = getActionReadyFollowUpNextActions(plan, followUpReadiness);
-
-        return {
-          ...plan,
-          summary: {
-            ...plan.summary,
-            followUpsActionReady: followUpReadiness.actionReadyCount,
-            followUpsBlocked: followUpReadiness.blockedCount,
-          },
-          nextActions,
-          profileEvidence: evidenceContext.profileEvidence,
-          connectorReadiness: evidenceContext.connectorReadiness,
-          evidenceGates: evidenceContext.evidenceGates,
-        };
+        const { getUserAutonomousPlanPreview } = await import("./applicationCampaigns");
+        return await getUserAutonomousPlanPreview(ctx.user.id, input || {});
       }),
     run: protectedProcedure
       .input(z.object({
