@@ -72,4 +72,16 @@ describe("Drizzle migration journal", () => {
       );
     }
   });
+
+  it("keeps the due job-alert index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0037_job_alert_due_index.sql"),
+      "utf8"
+    );
+    const indexName = "job_alerts_active_frequency_triggered_idx";
+
+    expect(schema).toContain(`index("${indexName}")`);
+    expect(migration).toContain(`\`${indexName}\``);
+  });
 });

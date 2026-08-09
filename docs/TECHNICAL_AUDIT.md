@@ -36,6 +36,7 @@ Audit date: 2026-08-08
 | Employer reply preparation loaded every response for an application to select one target. | Reply preparation now retrieves either the explicit owned response or the newest owned replyable response with one bounded query; cross-user targets are rejected. |
 | Interview preparation verified ownership and then loaded every schedule to select one future interview. | The successful path now joins the owned application to future scheduled/rescheduled interviews, orders by start time, and returns one row. Error semantics remain explicit. |
 | Autonomous follow-up safety loaded responses, schedules, and follow-up history separately for every candidate. | One run now batch-loads each ownership-scoped evidence type once, groups rows by application, and reuses them across safety and cooldown decisions. |
+| Every job-alert refresh loaded all active alerts, jobs, and platforms, even when no alert was due, and collected every matching job. | The scheduler now selects only due alerts through an indexed frequency/cutoff predicate, returns before job loading when idle, and uses first-match short-circuiting. |
 
 ## Material unresolved risks
 

@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 818 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 820 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -67,6 +67,8 @@ Employer reply preparation now resolves an explicit response or the newest reply
 Interview preparation context now uses one joined ownership-scoped query to select only the earliest future scheduled or rescheduled interview. The no-interview and missing-application outcomes remain distinct, and the development-memory path retains the same ordering semantics.
 
 Autonomous follow-up processing now loads employer responses, interview schedules, and prior follow-ups once for all candidate applications, then groups that owned evidence locally. Existing safety-block and duplicate-cooldown regressions continue to cover the same decisions without per-candidate query fan-out.
+
+Job-alert refresh now applies frequency cutoffs in the database using migration `0037`'s `(is_active, frequency, last_triggered)` index. An idle cycle no longer loads jobs or platforms, and active cycles stop testing jobs after the first match required to refresh an alert.
 
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
 

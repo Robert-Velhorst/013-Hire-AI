@@ -3,7 +3,7 @@
  * Handles saved jobs, application notes, interview scheduling, and follow-up emails
  */
 
-import { eq, and, desc, asc, sql, inArray, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNull, lte, or } from "drizzle-orm";
 import {
   createApplicationApproval,
   createAdminReviewItem,
@@ -3573,11 +3573,25 @@ export async function processJobAlerts() {
     return { processed, externalNotifications: 0 as const };
   }
 
-  // Get all active alerts
+  const now = new Date();
+  const instantCutoff = new Date(now.getTime() - 60 * 60 * 1000);
+  const dailyCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const weeklyCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const alerts = await db
     .select()
     .from(jobAlerts)
-    .where(eq(jobAlerts.isActive, 1));
+    .where(and(
+      eq(jobAlerts.isActive, 1),
+      or(
+        isNull(jobAlerts.lastTriggered),
+        and(eq(jobAlerts.frequency, "instant"), lte(jobAlerts.lastTriggered, instantCutoff)),
+        and(eq(jobAlerts.frequency, "daily"), lte(jobAlerts.lastTriggered, dailyCutoff)),
+        and(eq(jobAlerts.frequency, "weekly"), lte(jobAlerts.lastTriggered, weeklyCutoff))
+      )
+    ));
+  if (alerts.length === 0) {
+    return { processed: 0, externalNotifications: 0 as const };
+  }
 
   const [activeJobs, platforms] = await Promise.all([
     db.select().from(jobs).where(and(
@@ -3592,10 +3606,9 @@ export async function processJobAlerts() {
   const platformNamesById = new Map(platforms.map((platform) => [platform.id, platform.name]));
   let processed = 0;
 
-  const now = new Date();
   for (const alert of alerts) {
     if (isJobAlertDue(alert, now)) {
-      const matchingJobs = activeJobs.filter((job) => isJobListingCurrent(job, now) && matchesJobAlert({
+      const hasMatchingJob = activeJobs.some((job) => isJobListingCurrent(job, now) && matchesJobAlert({
         ...job,
         platformName: platformNamesById.get(job.platformId),
       }, {
@@ -3606,7 +3619,7 @@ export async function processJobAlerts() {
         jobTypes: alert.jobTypes,
       }));
 
-      if (matchingJobs.length > 0) {
+      if (hasMatchingJob) {
         // Matching jobs remain available in the command center. External alerts are
         // reserved for deterministic interview-invite evidence.
         await db

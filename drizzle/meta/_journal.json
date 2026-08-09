@@ -260,6 +260,13 @@
       "when": 1786237200000,
       "tag": "0036_operating_query_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1786323600000,
+      "tag": "0037_job_alert_due_index",
+      "breakpoints": true
     }
   ]
 }

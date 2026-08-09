@@ -801,7 +801,9 @@ export const jobAlerts = mysqlTable("job_alerts", {
   lastTriggered: timestamp("last_triggered"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("job_alerts_active_frequency_triggered_idx").on(table.isActive, table.frequency, table.lastTriggered),
+]);
 
 export type JobPlatform = typeof jobPlatforms.$inferSelect;
 export type Job = typeof jobs.$inferSelect;

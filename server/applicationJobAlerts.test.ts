@@ -101,6 +101,17 @@ describe("job alert processing", () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
+  it("does not load jobs or platforms when no alert is due", async () => {
+    mocks.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve([]) }),
+    });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+
+    await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
+    expect(mocks.select).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it("keeps a user-scoped alert ledger available without a configured database", async () => {
     const userId = 91234;
     mocks.getDb.mockResolvedValue(null);
