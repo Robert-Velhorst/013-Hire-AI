@@ -208,6 +208,11 @@ describe("Scraping API", () => {
         intervalMinutes: expect.any(Number),
         maxJobsPerRun: expect.any(Number),
       });
+      expect(result.executionPolicy).toMatchObject({
+        scrapeTimeoutMs: expect.any(Number),
+        maxConcurrentScrapes: expect.any(Number),
+        serializedPerPlatform: true,
+      });
       expect(result.supportedPlatforms).toContain("RemoteOK");
     }, 10_000);
 

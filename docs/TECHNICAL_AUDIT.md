@@ -41,6 +41,7 @@ Audit date: 2026-08-08
 | CI verified only Ubuntu despite Windows 11 being a required standalone deployment target. | A dedicated Windows runner now installs from the lockfile, type-checks, parses both launchers, runs network and HAI contract tests, and builds the production bundle. |
 | The dependency graph contained a critical Vitest advisory, a high nested-Vite Windows path advisory, and an ignored Nano ID override. | Vitest/Vite are patched, Nano ID 3 is forced to 3.3.17 through active workspace settings, and the advisory gate covers moderate or higher severity. |
 | Remaining moderate runtime/tooling advisories affected Mermaid, DOMPurify, PostCSS, and esbuild, while pnpm 10 and 11 interpreted override locations differently. | Local and CI resolution now use pnpm 11, workspace overrides pin every patched path, only esbuild install scripts are allowed, and CI rejects moderate-or-higher advisories. |
+| A source timeout abandoned the manager result but did not cancel the underlying fetch; fixed-delay retries ignored provider pacing and retried permanent HTTP failures. | Every network adapter now receives an abort signal, source scans are serialized, concurrency/deadlines are bounded, and transient-only retries apply abortable exponential and `Retry-After` pacing. Production doctor requires an explicit scheduled-source allowlist. |
 
 ## Material unresolved risks
 

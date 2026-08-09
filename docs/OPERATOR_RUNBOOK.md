@@ -17,7 +17,9 @@ For native production startup on Windows 11, use `npm.cmd run start:windows`. It
 
 ## Database and workers
 
-Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default; enable only approved sources and set an explicit source allowlist where needed.
+Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default. Before enabling it, set an explicit `JOB_SCRAPING_ENABLED_PLATFORMS` allowlist, verify each source policy, and choose bounded `JOB_SCRAPING_MAX_CONCURRENT_SOURCES` (1-10) and `JOB_SCRAPING_SOURCE_TIMEOUT_MS` (5,000-300,000). Production doctor rejects scheduled discovery without an allowlist or with invalid traffic limits.
+
+Each source adapter applies its own minimum request interval. Transient network, HTTP 408/425/429, and 5xx failures use bounded exponential backoff and honor `Retry-After` up to five minutes. Permanent HTTP failures are not retried. One source cannot have overlapping scans, cross-source concurrency is capped, and a source deadline aborts its underlying fetch rather than only abandoning the result. The Admin source-health view reports the effective concurrency and timeout policy.
 
 ## Database backup and restore
 

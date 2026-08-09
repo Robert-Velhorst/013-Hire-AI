@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * JustRemote scraper
@@ -15,11 +15,7 @@ export class JustRemoteScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
@@ -39,23 +35,22 @@ export class JustRemoteScraper extends BaseScraper {
 
       for (const category of categories) {
         try {
-          await this.rateLimit();
+      await this.rateLimit(options?.signal);
           const url = `${this.config.baseUrl}/${category}`;
 
           const response = await this.retry(async () => {
-            const res = await fetch(url, {
+          const res = await fetch(url, {
+            signal: options?.signal,
               headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               },
             });
 
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
+          this.assertResponseOk(res);
 
             return res.text();
-          });
+          }, { signal: options?.signal });
 
           const parsedJobs = this.parseJobListings(response);
 

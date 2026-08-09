@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * LinkedIn Jobs scraper
@@ -17,17 +17,13 @@ export class LinkedInScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       // LinkedIn's public job search API endpoint
       const keywords = options?.keywords || "remote";
@@ -39,18 +35,17 @@ export class LinkedInScraper extends BaseScraper {
       try {
         const response = await this.retry(async () => {
           const res = await fetch(apiUrl, {
+            signal: options?.signal,
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             },
           });
 
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
+          this.assertResponseOk(res);
 
           return res.text();
-        });
+        }, { signal: options?.signal });
 
         // Parse HTML response for job listings
         const parsedJobs = this.parseJobListings(response);

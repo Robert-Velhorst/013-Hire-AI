@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * Indeed scraper
@@ -16,17 +16,13 @@ export class IndeedScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       // Indeed has RSS feeds for job searches
       const query = options?.keywords || "remote";
@@ -38,18 +34,17 @@ export class IndeedScraper extends BaseScraper {
       try {
         const response = await this.retry(async () => {
           const res = await fetch(rssUrl, {
+            signal: options?.signal,
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
               "Accept": "application/rss+xml, application/xml, text/xml, */*",
             },
           });
 
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
+          this.assertResponseOk(res);
 
           return res.text();
-        });
+        }, { signal: options?.signal });
 
         const parsedJobs = this.parseRSS(response);
         this.log(`Found ${parsedJobs.length} jobs from RSS`);

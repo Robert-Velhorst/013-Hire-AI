@@ -6,7 +6,7 @@ Statuses use the prompt's definitions. `Partial` means the repository has real c
 | --- | --- | --- |
 | 000-005 integrity, audit, product, critical path, architecture/data model | Implemented | Repository audit, Drizzle schema, critical path, and this evidence set. |
 | 006-014 configuration, auth, authorization, API, UI, provider truthfulness | Partial | Production configuration fails closed; real OAuth/provider authorization is not configured locally. |
-| 015-019 files, workers, idempotency, rates, audit | Partial | Upload validation, scheduler controls, idempotency, and audit ledgers exist. Provider quotas/rate limits require per-provider production values. |
+| 015-019 files, workers, idempotency, rates, audit | Partial | Upload validation, scheduler controls, idempotency, audit ledgers, per-source pacing/serialization, cancellation, bounded concurrency/deadlines, and selective backoff exist. Live provider quota acceptance still requires approved per-provider production values. |
 | 020-027 dashboard, forms, search, import, AI, review, notifications | Implemented | Reachable React/tRPC workflow with review and evidence gates; providers remain review-first. |
 | 028-030 privacy, web security, secrets | Partial | Authenticated export, deletion review/cancellation, audit attribution, exhaustive retention inventory, admin-only count preview, and baseline headers exist. Approved retention periods and verified scrub/delete/revoke execution remain. |
 | 031-036 local dev, Docker, migrations, doctor, health, diagnostics | Partial | Dev scripts, Windows-native checked startup, loopback/default binding, migration journal, doctor, health/readiness, and Dockerfile exist. Target-machine database and container checks remain environment work. |

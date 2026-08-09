@@ -61,6 +61,8 @@ export const ENV = {
   jobScrapingSchedulerEnabled: readBooleanFeatureFlag(process.env.JOB_SCRAPING_SCHEDULER_ENABLED, false),
   jobScrapingIntervalMinutes: readBoundedInteger("JOB_SCRAPING_INTERVAL_MINUTES", 60, 5, 1440),
   jobScrapingMaxJobsPerRun: readBoundedInteger("JOB_SCRAPING_MAX_JOBS_PER_RUN", 100, 10, 1000),
+  jobScrapingSourceTimeoutMs: readBoundedInteger("JOB_SCRAPING_SOURCE_TIMEOUT_MS", 90_000, 5_000, 300_000),
+  jobScrapingMaxConcurrentSources: readBoundedInteger("JOB_SCRAPING_MAX_CONCURRENT_SOURCES", 3, 1, 10),
   jobScrapingEnabledPlatforms: readOptionalCsv("JOB_SCRAPING_ENABLED_PLATFORMS"),
 };
 

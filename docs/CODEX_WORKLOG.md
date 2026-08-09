@@ -80,7 +80,7 @@
 - Verified the dependency audit reports no high or critical advisories.
 - Aligned local and CI dependency resolution on pnpm 11, restricted install scripts to esbuild, patched Mermaid/DOMPurify/PostCSS/esbuild transitive paths, and raised CI enforcement to moderate severity.
 - Verified `pnpm security:audit` reports no known vulnerabilities at any severity.
-- Passed TypeScript and the full regression suite: 162 files and 837 tests.
+- Passed TypeScript and the full regression suite: 163 files and 846 tests.
 
 ## 2026-08-09 - Database recovery pass
 
@@ -88,3 +88,11 @@
 - Backups now publish only complete, non-empty dumps with a versioned manifest, byte count, and SHA-256 checksum; failed runs remove partial bundles.
 - Restore now fails before database mutation on malformed or modified bundles, database-name mismatch, or missing target-specific confirmation.
 - Added operator procedures and adversarial tests for first-run backup directories, tampering, target mismatch, and confirmation enforcement.
+
+## 2026-08-09 - Discovery traffic-control pass
+
+- Propagated abort signals through every network scraper so source deadlines cancel active fetches.
+- Serialized overlapping scans per source while retaining a configurable 1-10 cross-source concurrency cap.
+- Replaced unconditional fixed-delay retries with transient-only exponential backoff, bounded `Retry-After` handling, and abortable per-source pacing.
+- Added production doctor enforcement for explicit scheduled-source allowlisting and valid timeout/concurrency settings.
+- Exposed the effective execution policy through the admin API and source-health UI, with cross-adapter regression coverage.

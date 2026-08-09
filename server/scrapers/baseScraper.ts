@@ -20,9 +20,57 @@ export interface ScrapeResult {
   scrapedAt: Date;
 }
 
+export interface ScrapeRequestOptions {
+  keywords?: string;
+  location?: string;
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+export class ScraperHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly retryAfterMs: number | null,
+  ) {
+    super(`HTTP ${status}`);
+    this.name = "ScraperHttpError";
+  }
+}
+
+function abortError() {
+  const error = new Error("Source request was cancelled.");
+  error.name = "AbortError";
+  return error;
+}
+
+function wait(delayMs: number, signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(abortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+export function parseRetryAfterMs(value: string | null, now = Date.now()): number | null {
+  if (!value?.trim()) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(Math.ceil(seconds * 1000), 300_000);
+  const date = Date.parse(value);
+  if (!Number.isFinite(date)) return null;
+  return Math.min(Math.max(date - now, 0), 300_000);
+}
+
 export abstract class BaseScraper {
   protected config: ScraperConfig;
   protected lastRequestTime: number = 0;
+  private requestSlot: Promise<void> = Promise.resolve();
 
   constructor(config: ScraperConfig) {
     this.config = config;
@@ -35,25 +83,24 @@ export abstract class BaseScraper {
   /**
    * Main scraping method - must be implemented by each platform scraper
    */
-  abstract scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult>;
+  abstract scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult>;
 
   /**
    * Rate limiting helper
    */
-  protected async rateLimit(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-
-    if (timeSinceLastRequest < this.config.rateLimit) {
-      const waitTime = this.config.rateLimit - timeSinceLastRequest;
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
+  protected async rateLimit(signal?: AbortSignal): Promise<void> {
+    let release = () => {};
+    const previous = this.requestSlot;
+    this.requestSlot = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      const waitTime = this.config.rateLimit - (Date.now() - this.lastRequestTime);
+      if (waitTime > 0) await wait(waitTime, signal);
+      if (signal?.aborted) throw abortError();
+      this.lastRequestTime = Date.now();
+    } finally {
+      release();
     }
-
-    this.lastRequestTime = Date.now();
   }
 
   /**
@@ -61,18 +108,29 @@ export abstract class BaseScraper {
    */
   protected async retry<T>(
     fn: () => Promise<T>,
-    retries: number = this.config.maxRetries
+    options: { retries?: number; signal?: AbortSignal } = {}
   ): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      if (retries > 0) {
-        console.log(`Retrying... (${retries} attempts left)`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return this.retry(fn, retries - 1);
+    const retries = options.retries ?? this.config.maxRetries;
+    for (let attempt = 0; ; attempt++) {
+      if (options.signal?.aborted) throw abortError();
+      try {
+        return await fn();
+      } catch (error) {
+        const retryable = error instanceof ScraperHttpError
+          ? [408, 425, 429].includes(error.status) || error.status >= 500
+          : error instanceof TypeError;
+        if (!retryable || attempt >= retries || options.signal?.aborted) throw error;
+        const exponentialDelay = Math.min(1000 * (2 ** attempt), 30_000);
+        const retryAfterMs = error instanceof ScraperHttpError ? error.retryAfterMs ?? 0 : 0;
+        await wait(Math.max(exponentialDelay, retryAfterMs), options.signal);
+        await this.rateLimit(options.signal);
       }
-      throw error;
     }
+  }
+
+  protected assertResponseOk(response: Response): void {
+    if (response.ok) return;
+    throw new ScraperHttpError(response.status, parseRetryAfterMs(response.headers.get("retry-after")));
   }
 
   /**

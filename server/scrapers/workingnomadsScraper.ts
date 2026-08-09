@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * Working Nomads scraper
@@ -15,33 +15,28 @@ export class WorkingNomadsScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       // Working Nomads has a public API
       const response = await this.retry(async () => {
-        const res = await fetch(this.config.baseUrl, {
+          const res = await fetch(this.config.baseUrl, {
+            signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
             "Accept": "application/json",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+          this.assertResponseOk(res);
 
         return res.json();
-      });
+      }, { signal: options?.signal });
 
       const rawJobs = Array.isArray(response) ? response : [];
       this.log(`Found ${rawJobs.length} jobs`);

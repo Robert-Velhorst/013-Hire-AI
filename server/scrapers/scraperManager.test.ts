@@ -131,9 +131,13 @@ describe("scraper manager platform restrictions", () => {
 
   it("times out one source without preventing a healthy source from completing", async () => {
     const manager = new ScraperManager({ scrapeTimeoutMs: 5, maxConcurrentScrapes: 2 });
+    let slowSignal: AbortSignal | undefined;
     const slow = {
       getPlatformId: () => 1,
-      scrape: vi.fn().mockImplementation(() => new Promise(() => {})),
+      scrape: vi.fn().mockImplementation((options?: { signal?: AbortSignal }) => {
+        slowSignal = options?.signal;
+        return new Promise(() => {});
+      }),
     } as unknown as BaseScraper;
     const healthy = createScraper(2);
     const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
@@ -143,6 +147,7 @@ describe("scraper manager platform restrictions", () => {
     const result = await manager.scrapeAll();
 
     expect(result.platformResults["Slow source"].errors).toEqual(["Scrape timed out after 5ms"]);
+    expect(slowSignal?.aborted).toBe(true);
     expect(result.platformResults["Healthy source"].errors).toEqual([]);
     expect(healthy.scrape).toHaveBeenCalledOnce();
     expect(mocks.recordPlatformScrapeOutcome).toHaveBeenCalledWith(2, {
@@ -152,6 +157,38 @@ describe("scraper manager platform restrictions", () => {
     expect(mocks.recordPlatformScrapeOutcome).toHaveBeenCalledWith(1, {
       jobCount: 0,
       errors: ["Scrape timed out after 5ms"],
+    });
+  });
+
+  it("serializes overlapping runs for the same platform", async () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 5_000, maxConcurrentScrapes: 3 });
+    let releaseFirst = () => {};
+    const firstResult = new Promise<{ jobs: []; errors: []; scrapedAt: Date }>((resolve) => {
+      releaseFirst = () => resolve({ jobs: [], errors: [], scrapedAt: new Date() });
+    });
+    const source = {
+      getPlatformId: () => 7,
+      scrape: vi.fn()
+        .mockImplementationOnce(() => firstResult)
+        .mockResolvedValueOnce({ jobs: [], errors: [], scrapedAt: new Date() }),
+    } as unknown as BaseScraper;
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Serialized source", source);
+
+    const first = manager.scrapePlatform("Serialized source");
+    const second = manager.scrapePlatform("Serialized source");
+    await vi.waitFor(() => expect(source.scrape).toHaveBeenCalledOnce());
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(source.scrape).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports the effective bounded execution policy", () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 12_345, maxConcurrentScrapes: 4 });
+    expect(manager.getExecutionPolicy()).toEqual({
+      scrapeTimeoutMs: 12_345,
+      maxConcurrentScrapes: 4,
+      serializedPerPlatform: true,
     });
   });
 

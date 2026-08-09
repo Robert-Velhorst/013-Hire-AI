@@ -25,11 +25,12 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 162 files, 837 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 163 files, 846 tests |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Database recovery contract | `server/databaseRecovery.test.ts` | Passed: streaming backup, checksum verification, credential exclusion, tamper rejection, target matching, and explicit restore confirmation |
+| Discovery traffic contract | `server/discoveryTrafficPolicy.test.ts`; scraper unit tests | Passed: cancellation propagation, deadline abort, source serialization, bounded concurrency, selective retry/backoff, `Retry-After`, and production allowlisting |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
 | Diff whitespace audit | `git diff --check` | Passed |
@@ -83,6 +84,8 @@ The supply-chain pass removed the critical Vitest advisory and high nested-Vite 
 The follow-up supply-chain pass aligned all environments on pnpm 11, explicitly limited dependency build scripts to esbuild, and patched Mermaid 11.16.1, DOMPurify 3.4.13, PostCSS 8.5.23, and the nested esbuild path. The registry audit reports no known vulnerabilities, and CI now rejects moderate-or-higher advisories.
 
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
+
+Discovery execution now has one active scan per source, a configurable bounded cross-source worker pool, abortable source deadlines, adapter-level minimum pacing, and transient-only backoff. HTTP 408/425/429 and 5xx responses can retry, `Retry-After` is capped at five minutes, permanent HTTP failures stop immediately, and production startup diagnostics reject a scheduled scanner without an explicit approved-source allowlist.
 
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
 

@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * RemoteOK scraper
@@ -15,32 +15,27 @@ export class RemoteOKScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       // RemoteOK has a public API
       const response = await this.retry(async () => {
-        const res = await fetch(this.config.baseUrl, {
+          const res = await fetch(this.config.baseUrl, {
+            signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+          this.assertResponseOk(res);
 
         return res.json();
-      });
+      }, { signal: options?.signal });
 
       // RemoteOK API returns an array of jobs
       // First item is metadata, rest are jobs

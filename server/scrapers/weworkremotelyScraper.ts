@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * We Work Remotely scraper
@@ -15,17 +15,12 @@ export class WeWorkRemotelyScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
 
       // We Work Remotely has RSS feeds for different categories
       const categories = [
@@ -43,23 +38,22 @@ export class WeWorkRemotelyScraper extends BaseScraper {
 
       for (const category of categories) {
         try {
-          await this.rateLimit();
+          await this.rateLimit(options?.signal);
           const rssUrl = `${this.config.baseUrl}/categories/${category}.rss`;
           
           const response = await this.retry(async () => {
-            const res = await fetch(rssUrl, {
+          const res = await fetch(rssUrl, {
+            signal: options?.signal,
               headers: {
                 "User-Agent": "Hire.AI Job Aggregator",
                 "Accept": "application/rss+xml, application/xml, text/xml",
               },
             });
 
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
+          this.assertResponseOk(res);
 
             return res.text();
-          });
+          }, { signal: options?.signal });
 
           // Parse RSS XML
           const parsedJobs = this.parseRSS(response);

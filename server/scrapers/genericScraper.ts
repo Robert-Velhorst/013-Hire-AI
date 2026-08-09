@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult, type ScraperConfig } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult, type ScraperConfig } from "./baseScraper";
 import { getLocationPreferenceFit } from "../../shared/locationEligibility";
 import { normalizeSalary } from "../jobNormalization";
 
@@ -41,11 +41,7 @@ export class GenericScraper extends BaseScraper {
     this.selectors = config.selectors || {};
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     switch (this.scraperType) {
       case "rss":
         return this.scrapeRSS(options);
@@ -57,34 +53,29 @@ export class GenericScraper extends BaseScraper {
     }
   }
 
-  private async scrapeRSS(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  private async scrapeRSS(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting RSS scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       const url = this.feedUrl || `${this.config.baseUrl}/feed/`;
 
       const response = await this.retry(async () => {
         const res = await fetch(url, {
+          signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
             "Accept": "application/rss+xml, application/xml, text/xml, */*",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+        this.assertResponseOk(res);
 
         return res.text();
-      });
+      }, { signal: options?.signal });
 
       const parsedJobs = this.parseRSS(response);
 
@@ -108,34 +99,29 @@ export class GenericScraper extends BaseScraper {
     return { jobs, errors, scrapedAt: new Date() };
   }
 
-  private async scrapeAPI(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  private async scrapeAPI(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting API scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       const url = this.buildApiUrl(options);
 
       const response = await this.retry(async () => {
         const res = await fetch(url, {
+          signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
             "Accept": "application/json",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+        this.assertResponseOk(res);
 
         return res.json();
-      });
+      }, { signal: options?.signal });
 
       const rawJobs = Array.isArray(response) ? response : response.jobs || response.data || [];
 
@@ -176,32 +162,27 @@ export class GenericScraper extends BaseScraper {
     return { jobs, errors, scrapedAt: new Date() };
   }
 
-  private async scrapeHTML(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  private async scrapeHTML(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting HTML scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       const response = await this.retry(async () => {
         const res = await fetch(this.config.baseUrl, {
+          signal: options?.signal,
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+        this.assertResponseOk(res);
 
         return res.text();
-      });
+      }, { signal: options?.signal });
 
       // Generic HTML parsing - looks for common job listing patterns
       const parsedJobs = this.parseHTML(response);

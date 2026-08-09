@@ -1,4 +1,4 @@
-import { BaseScraper, type ScrapeResult } from "./baseScraper";
+import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
 
 /**
  * Jobspresso scraper
@@ -15,35 +15,30 @@ export class JobspressoScraper extends BaseScraper {
     });
   }
 
-  async scrape(options?: {
-    keywords?: string;
-    location?: string;
-    limit?: number;
-  }): Promise<ScrapeResult> {
+  async scrape(options?: ScrapeRequestOptions): Promise<ScrapeResult> {
     const errors: string[] = [];
     const jobs: any[] = [];
 
     try {
       this.log("Starting scrape...");
-      await this.rateLimit();
+      await this.rateLimit(options?.signal);
 
       // Jobspresso has an RSS feed
       const rssUrl = `${this.config.baseUrl}/feed/`;
 
       const response = await this.retry(async () => {
-        const res = await fetch(rssUrl, {
+          const res = await fetch(rssUrl, {
+            signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
             "Accept": "application/rss+xml, application/xml, text/xml",
           },
         });
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+          this.assertResponseOk(res);
 
         return res.text();
-      });
+      }, { signal: options?.signal });
 
       const parsedJobs = this.parseRSS(response);
       this.log(`Found ${parsedJobs.length} jobs from RSS`);

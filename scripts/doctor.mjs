@@ -47,6 +47,26 @@ check(
   String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "scanner endpoint configured" : "required before production document uploads"
 );
 
+const scrapingEnabled = String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "").trim().toLowerCase() === "true";
+const scrapingAllowlist = String(process.env.JOB_SCRAPING_ENABLED_PLATFORMS || "").split(",").map(value => value.trim()).filter(Boolean);
+const scrapingConcurrency = Number.parseInt(String(process.env.JOB_SCRAPING_MAX_CONCURRENT_SOURCES || "3"), 10);
+const scrapingTimeout = Number.parseInt(String(process.env.JOB_SCRAPING_SOURCE_TIMEOUT_MS || "90000"), 10);
+const scrapingPolicyValid = Number.isInteger(scrapingConcurrency)
+  && scrapingConcurrency >= 1
+  && scrapingConcurrency <= 10
+  && Number.isInteger(scrapingTimeout)
+  && scrapingTimeout >= 5_000
+  && scrapingTimeout <= 300_000;
+check(
+  "discovery traffic policy",
+  !scrapingPolicyValid || (isProduction && scrapingEnabled && scrapingAllowlist.length === 0) ? "fail" : scrapingEnabled && scrapingAllowlist.length === 0 ? "warn" : "pass",
+  !scrapingPolicyValid
+    ? "concurrency must be 1-10 and source timeout must be 5000-300000ms"
+    : scrapingEnabled
+      ? `${scrapingConcurrency} concurrent source(s), ${scrapingTimeout}ms timeout, ${scrapingAllowlist.length || "no"} allowlisted source(s)`
+      : "scheduler disabled; bounded defaults configured"
+);
+
 const haiEnabled = String(process.env.HAI_CONNECTOR_ENABLED || "").trim().toLowerCase() === "true";
 const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "").trim();
 const haiUserId = Number.parseInt(String(process.env.HAI_CONNECTOR_USER_ID || "").trim(), 10);

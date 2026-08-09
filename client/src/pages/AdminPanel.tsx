@@ -554,6 +554,8 @@ export default function AdminPanel() {
                       ["Failed cycles", scrapingStatus?.scheduler.totalFailedRuns ?? 0],
                       ["Jobs saved", scrapingStatus?.scheduler.totalJobsScraped ?? 0],
                       ["Alert matches", scrapingStatus?.scheduler.lastJobAlertsProcessed ?? 0],
+                      ["Concurrent source cap", scrapingStatus?.executionPolicy.maxConcurrentScrapes ?? 0],
+                      ["Source timeout", `${Math.round((scrapingStatus?.executionPolicy.scrapeTimeoutMs ?? 0) / 1000)}s`],
                       ["Current attention signals", (scrapingStatus?.coverage.freshSourceIssues ?? scraperSourceOutcomes.freshIssues) + (scrapingStatus?.scheduler.errors.length ?? 0) + (scrapingStatus?.coverage.unavailableConfiguredSources ?? 0)],
                     ].map(([label, value]) => (
                       <div key={String(label)} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">

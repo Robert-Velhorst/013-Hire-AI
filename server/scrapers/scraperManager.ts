@@ -1,4 +1,4 @@
-import type { BaseScraper, ScrapeResult } from "./baseScraper";
+import type { BaseScraper, ScrapeRequestOptions, ScrapeResult } from "./baseScraper";
 import { getScraperForPlatform, getSupportedPlatforms, hasScraper } from "./index";
 import { ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
 import { jobDuplicates, jobs, jobPlatforms } from "../../drizzle/schema";
@@ -7,6 +7,7 @@ import { samplePlatforms } from "../sampleData";
 import { findBestJobDuplicateCandidate } from "../jobDeduplication";
 import { isJobListingCurrent } from "../../shared/jobListingFreshness";
 import { getPlatformDiscoveryPolicy, isAutomatedDiscoveryPlatform, isCatalogedPlatform } from "./platformCatalog";
+import { ENV } from "../_core/env";
 
 export interface ScrapeOptions {
   keywords?: string;
@@ -84,10 +85,11 @@ export class ScraperManager {
   private initializationErrors: Map<string, string> = new Map();
   private readonly scrapeTimeoutMs: number;
   private readonly maxConcurrentScrapes: number;
+  private readonly platformRunTails = new Map<string, Promise<void>>();
 
   constructor(options: ScraperManagerOptions = {}) {
-    this.scrapeTimeoutMs = Math.max(1, Math.floor(options.scrapeTimeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS));
-    this.maxConcurrentScrapes = Math.max(1, Math.floor(options.maxConcurrentScrapes ?? DEFAULT_MAX_CONCURRENT_SCRAPES));
+    this.scrapeTimeoutMs = Math.min(300_000, Math.max(1, Math.floor(options.scrapeTimeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS)));
+    this.maxConcurrentScrapes = Math.min(10, Math.max(1, Math.floor(options.maxConcurrentScrapes ?? DEFAULT_MAX_CONCURRENT_SCRAPES)));
   }
 
   /**
@@ -159,6 +161,14 @@ export class ScraperManager {
     return this.initializationErrors.get(platformName) ?? null;
   }
 
+  getExecutionPolicy() {
+    return {
+      scrapeTimeoutMs: this.scrapeTimeoutMs,
+      maxConcurrentScrapes: this.maxConcurrentScrapes,
+      serializedPerPlatform: true,
+    } as const;
+  }
+
   /**
    * Check if a platform has a scraper
    */
@@ -169,15 +179,25 @@ export class ScraperManager {
   private async scrapeWithDeadline(
     platformName: string,
     scraper: BaseScraper,
-    options?: { keywords?: string; location?: string; limit?: number }
+    options?: ScrapeRequestOptions
   ): Promise<ScrapeResult> {
+    const previousRun = this.platformRunTails.get(platformName) ?? Promise.resolve();
+    let releaseRun = () => {};
+    const currentRun = new Promise<void>((resolve) => { releaseRun = resolve; });
+    this.platformRunTails.set(platformName, currentRun);
+    await previousRun;
+
+    const controller = new AbortController();
     let timeout: NodeJS.Timeout | undefined;
     try {
       const result = await Promise.race([
-        scraper.scrape(options),
+        scraper.scrape({ ...options, signal: controller.signal }),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
-            () => reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`)),
+            () => {
+              reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
+              controller.abort();
+            },
             this.scrapeTimeoutMs
           );
         }),
@@ -195,6 +215,10 @@ export class ScraperManager {
       return result;
     } finally {
       if (timeout) clearTimeout(timeout);
+      releaseRun();
+      if (this.platformRunTails.get(platformName) === currentRun) {
+        this.platformRunTails.delete(platformName);
+      }
     }
   }
 
@@ -463,7 +487,10 @@ let scraperManagerInstance: ScraperManager | null = null;
 
 export async function getScraperManager(): Promise<ScraperManager> {
   if (!scraperManagerInstance) {
-    scraperManagerInstance = new ScraperManager();
+    scraperManagerInstance = new ScraperManager({
+      scrapeTimeoutMs: ENV.jobScrapingSourceTimeoutMs,
+      maxConcurrentScrapes: ENV.jobScrapingMaxConcurrentSources,
+    });
     await scraperManagerInstance.initialize();
   }
   return scraperManagerInstance;
