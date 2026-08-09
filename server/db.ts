@@ -2876,6 +2876,42 @@ export async function listPendingInboxResponseCandidates(userId: number) {
     .orderBy(desc(inboxResponseCandidates.receivedAt));
 }
 
+export async function getPendingInboxResponseCandidatePage(userId: number, requestedLimit = 100) {
+  const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryInboxResponseCandidates
+      .filter((candidate) => candidate.userId === userId && candidate.status === "pending")
+      .sort((left, right) =>
+        right.receivedAt.getTime() - left.receivedAt.getTime() || right.id - left.id
+      ) as InboxResponseCandidate[];
+    return {
+      items: rows.slice(0, limit),
+      total: rows.length,
+      limit,
+      hasMore: rows.length > limit,
+    };
+  }
+  const condition = and(
+    eq(inboxResponseCandidates.userId, userId),
+    eq(inboxResponseCandidates.status, "pending")
+  );
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(inboxResponseCandidates)
+      .where(condition)
+      .orderBy(desc(inboxResponseCandidates.receivedAt))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(inboxResponseCandidates)
+      .where(condition),
+  ]);
+  const total = Number(totalRows[0]?.count ?? 0);
+  return { items: rows, total, limit, hasMore: total > rows.length };
+}
+
 export async function getInboxResponseCandidate(candidateId: number, userId: number) {
   const db = await getDb();
   if (!db) {

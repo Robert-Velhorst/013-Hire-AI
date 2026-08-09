@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded inbox-response command-center reads
+
+- Replaced full pending mailbox-candidate hydration with an indexed 100-item operating page and exact owner-scoped count.
+- Added explicit inbox queue truncation metadata while preserving exact dashboard and next-action totals.
+- Wired frontend review counters to exact ledger metrics so bounded queues no longer underreport pending work.
+
 ## 2026-08-09 - Aggregate success-fee command-center reads
 
 - Replaced autonomous-ledger success-fee history hydration with exact account aggregates for counts, monthly totals, deadlines, and compliance status.

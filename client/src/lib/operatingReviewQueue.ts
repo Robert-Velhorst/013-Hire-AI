@@ -85,6 +85,21 @@ export interface OperatingReviewQueueInput {
     successFeeCompliance?: unknown[];
     connectorReadiness?: unknown[];
   } | null;
+  metrics?: {
+    pendingApprovals?: number | null;
+    reviewRequiredDecisions?: number | null;
+    interviewSchedulingNeeded?: number | null;
+    interviewPreparationNeeded?: number | null;
+    interviewOutcomesNeeded?: number | null;
+    inboxResponseCandidates?: number | null;
+    employerResponsesNeedingReply?: number | null;
+    followUpsDue?: number | null;
+    approvedFollowUpsReadyToSend?: number | null;
+    followUpDeliveryReconciliation?: number | null;
+    evidenceGates?: number | null;
+    connectorReadiness?: number | null;
+    openAdminReviews?: number | null;
+  } | null;
   canReviewAdminItems?: boolean | null;
   readiness?: {
     blockers?: unknown[];
@@ -426,21 +441,23 @@ export function getReviewDecisionResolutionCopy(
 }
 
 export function getOperatingReviewQueueCounts(input?: OperatingReviewQueueInput | null) {
-  const pendingApprovals = input?.queues?.pendingApprovals?.length ?? 0;
-  const reviewDecisions = input?.queues?.reviewDecisions?.length ?? 0;
-  const interviewScheduling = input?.queues?.interviewScheduling?.length ?? 0;
-  const interviewPreparationNeeded = input?.queues?.interviewPreparationNeeded?.length ?? 0;
-  const interviewOutcomesNeeded = input?.queues?.interviewOutcomesNeeded?.length ?? 0;
-  const inboxResponseCandidates = input?.queues?.inboxResponseCandidates?.length ?? 0;
-  const employerResponsesNeedingReply = input?.queues?.employerResponsesNeedingReply?.length ?? 0;
-  const followUpsDue = input?.queues?.followUpsDue?.length ?? 0;
-  const approvedFollowUpsReadyToSend = input?.queues?.approvedFollowUpsReadyToSend?.length ?? 0;
-  const followUpDeliveryReconciliation = input?.queues?.followUpDeliveryReconciliation?.length ?? 0;
-  const evidenceGates = input?.queues?.evidenceGates?.length ?? 0;
+  const exactCount = (value: number | null | undefined, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+  const pendingApprovals = exactCount(input?.metrics?.pendingApprovals, input?.queues?.pendingApprovals?.length ?? 0);
+  const reviewDecisions = exactCount(input?.metrics?.reviewRequiredDecisions, input?.queues?.reviewDecisions?.length ?? 0);
+  const interviewScheduling = exactCount(input?.metrics?.interviewSchedulingNeeded, input?.queues?.interviewScheduling?.length ?? 0);
+  const interviewPreparationNeeded = exactCount(input?.metrics?.interviewPreparationNeeded, input?.queues?.interviewPreparationNeeded?.length ?? 0);
+  const interviewOutcomesNeeded = exactCount(input?.metrics?.interviewOutcomesNeeded, input?.queues?.interviewOutcomesNeeded?.length ?? 0);
+  const inboxResponseCandidates = exactCount(input?.metrics?.inboxResponseCandidates, input?.queues?.inboxResponseCandidates?.length ?? 0);
+  const employerResponsesNeedingReply = exactCount(input?.metrics?.employerResponsesNeedingReply, input?.queues?.employerResponsesNeedingReply?.length ?? 0);
+  const followUpsDue = exactCount(input?.metrics?.followUpsDue, input?.queues?.followUpsDue?.length ?? 0);
+  const approvedFollowUpsReadyToSend = exactCount(input?.metrics?.approvedFollowUpsReadyToSend, input?.queues?.approvedFollowUpsReadyToSend?.length ?? 0);
+  const followUpDeliveryReconciliation = exactCount(input?.metrics?.followUpDeliveryReconciliation, input?.queues?.followUpDeliveryReconciliation?.length ?? 0);
+  const evidenceGates = exactCount(input?.metrics?.evidenceGates, input?.queues?.evidenceGates?.length ?? 0);
   const successFeeCompliance = input?.queues?.successFeeCompliance?.length ?? 0;
-  const connectorReadiness = input?.queues?.connectorReadiness?.length ?? 0;
+  const connectorReadiness = exactCount(input?.metrics?.connectorReadiness, input?.queues?.connectorReadiness?.length ?? 0);
   const adminReviews = input?.canReviewAdminItems === true
-    ? input?.queues?.adminReviews?.length ?? 0
+    ? exactCount(input?.metrics?.openAdminReviews, input?.queues?.adminReviews?.length ?? 0)
     : 0;
   const profileBlockers = input?.readiness?.blockers?.length ?? 0;
   const profileWarnings = input?.readiness?.warnings?.length ?? 0;

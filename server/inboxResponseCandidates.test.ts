@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getPendingInboxResponseCandidatePage,
   listPendingInboxResponseCandidates,
   resolveInboxResponseCandidateBySourceReference,
   upsertInboxResponseCandidate,
@@ -40,5 +41,45 @@ describe("inbox response candidate ledger", () => {
       status: "confirmed",
     })).resolves.toEqual(expect.objectContaining({ status: "dismissed" }));
     await expect(listPendingInboxResponseCandidates(userId)).resolves.toEqual([]);
+  });
+
+  it("keeps an exact owner-scoped total while bounding the operating page", async () => {
+    const userId = 99702;
+    const otherUserId = 99703;
+    for (let index = 0; index < 103; index += 1) {
+      await upsertInboxResponseCandidate({
+        userId,
+        applicationId: 20_000 + index,
+        provider: "gmail",
+        messageId: `candidate-99702-${index}`,
+        receivedAt: new Date(1_800_000_000_000 + index),
+        suggestedResponseType: "other",
+        confidence: "medium",
+      });
+    }
+    await upsertInboxResponseCandidate({
+      userId: otherUserId,
+      applicationId: 30_000,
+      provider: "outlook",
+      messageId: "candidate-other-owner",
+      receivedAt: new Date(1_900_000_000_000),
+      suggestedResponseType: "other",
+      confidence: "medium",
+    });
+
+    await expect(getPendingInboxResponseCandidatePage(userId)).resolves.toMatchObject({
+      total: 103,
+      limit: 100,
+      hasMore: true,
+      items: expect.any(Array),
+    });
+    const page = await getPendingInboxResponseCandidatePage(userId, 3);
+    expect(page.items).toHaveLength(3);
+    expect(page.items.every((candidate) => candidate.userId === userId)).toBe(true);
+    expect(page.items.map((candidate) => candidate.messageId)).toEqual([
+      "candidate-99702-102",
+      "candidate-99702-101",
+      "candidate-99702-100",
+    ]);
   });
 });

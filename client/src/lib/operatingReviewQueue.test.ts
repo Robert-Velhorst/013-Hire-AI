@@ -184,6 +184,28 @@ describe("operating review queue helpers", () => {
     });
   });
 
+  it("uses exact ledger metrics when rendered queues are bounded", () => {
+    const counts = getOperatingReviewQueueCounts({
+      metrics: {
+        pendingApprovals: 105,
+        inboxResponseCandidates: 103,
+        followUpsDue: 12,
+      },
+      queues: {
+        pendingApprovals: Array.from({ length: 5 }),
+        inboxResponseCandidates: Array.from({ length: 5 }),
+        followUpsDue: Array.from({ length: 5 }),
+      },
+    });
+
+    expect(counts).toMatchObject({
+      pendingApprovals: 105,
+      inboxResponseCandidates: 103,
+      followUpsDue: 12,
+      total: 220,
+    });
+  });
+
   it("blocks the queue on uncertain mailbox delivery before a new send handoff", () => {
     const summary = getReviewQueueControlSummary({
       queues: {

@@ -11,7 +11,7 @@ import {
   getApplicationCampaign,
   getEducationEntries,
   listUnreadInterviewNotifications,
-  listPendingInboxResponseCandidates,
+  getPendingInboxResponseCandidatePage,
   countUserAutonomousPreparationsSince,
   getUserApplicationPage,
   getUserApplicationSummary,
@@ -780,7 +780,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     successFeeSummary,
     connectorAccounts,
     activeResume,
-    inboxResponseCandidates,
+    inboxResponseCandidatePage,
     existingCampaign,
   ] = await Promise.all([
     getUserProfile(userId),
@@ -799,7 +799,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getUserSuccessFeeSummary(userId),
     listUserConnectorAccounts(userId),
     getActiveResume(userId),
-    listPendingInboxResponseCandidates(userId),
+    getPendingInboxResponseCandidatePage(userId),
     getApplicationCampaign(userId),
   ]);
   const [currentJobApplications, currentJobDecisions] = await Promise.all([
@@ -939,7 +939,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     providers: profileEvidence.providers,
     hasActiveResumeArtifact: Boolean(activeResume),
   });
-  const inboxResponseCandidateQueue = inboxResponseCandidates.map((candidate) => {
+  const inboxResponseCandidateQueue = inboxResponseCandidatePage.items.map((candidate) => {
     const application = applicationsById.get(candidate.applicationId);
     return {
       ...candidate,
@@ -979,8 +979,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewNotificationQueue.length > 0
       ? `Review ${interviewNotificationQueue.length} verified interview invite${interviewNotificationQueue.length === 1 ? "" : "s"}.`
       : "",
-    inboxResponseCandidates.length > 0
-      ? `Confirm or dismiss ${inboxResponseCandidates.length} inbox response candidate${inboxResponseCandidates.length === 1 ? "" : "s"} before changing application status.`
+    inboxResponseCandidatePage.total > 0
+      ? `Confirm or dismiss ${inboxResponseCandidatePage.total} inbox response candidate${inboxResponseCandidatePage.total === 1 ? "" : "s"} before changing application status.`
       : "",
     interviewPreparationQueue.length > 0
       ? `Prepare for ${interviewPreparationQueue.length} upcoming interview${interviewPreparationQueue.length === 1 ? "" : "s"}.`
@@ -1100,6 +1100,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: successFeeOperatingSet.limit,
       hasMore: successFeeOperatingSet.hasMore,
     },
+    inboxResponseCandidateScope: {
+      loaded: inboxResponseCandidatePage.items.length,
+      limit: inboxResponseCandidatePage.limit,
+      hasMore: inboxResponseCandidatePage.hasMore,
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,
@@ -1114,7 +1119,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       employerResponsesNeedingReply: employerResponseQueue.length,
       interviews: applicationSummary.interview,
       unreadInterviewNotifications: interviewNotificationQueue.length,
-      inboxResponseCandidates: inboxResponseCandidateQueue.length,
+      inboxResponseCandidates: inboxResponseCandidatePage.total,
       interviewSchedulingNeeded: interviewSchedulingQueue.length,
       interviewPreparationNeeded: interviewPreparationQueue.length,
       interviewOutcomesNeeded: interviewOutcomeQueue.length,

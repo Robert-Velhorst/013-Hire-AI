@@ -58,6 +58,7 @@ export interface CommandCenterLedgerInput extends OperatingReviewQueueInput {
     unreadInterviewNotifications?: number | null;
     interviewPreparationNeeded?: number | null;
     interviewOutcomesNeeded?: number | null;
+    inboxResponseCandidates?: number | null;
     employerResponsesNeedingReply?: number | null;
     followUpsDue?: number | null;
     approvedFollowUpsReadyToSend?: number | null;
