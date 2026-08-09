@@ -24,14 +24,50 @@ describe("voice transcription resource policy", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(transcribeAudio({ audioUrl: "https://audio.example.local/input.mp3" })).resolves.toEqual({
+    await expect(transcribeAudio({ audioUrl: "https://8.8.8.8/input.mp3" })).resolves.toEqual({
       error: "Audio file exceeds maximum size limit",
       code: "FILE_TOO_LARGE",
       details: "Maximum allowed size is 16MB",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("https://audio.example.local/input.mp3", expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith("https://8.8.8.8/input.mp3", expect.objectContaining({
       signal: expect.any(AbortSignal),
+      redirect: "error",
     }));
+  });
+
+  it.each([
+    "http://example.com/input.mp3",
+    "https://localhost/input.mp3",
+    "https://127.0.0.1/input.mp3",
+    "https://10.0.0.8/input.mp3",
+    "https://[::1]/input.mp3",
+  ])("rejects unsafe remote audio URL %s before fetching", async (audioUrl) => {
+    ENV.forgeApiUrl = "https://forge.example.local";
+    ENV.forgeApiKey = "forge-test-key";
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await transcribeAudio({ audioUrl });
+
+    expect(result).toMatchObject({ code: "SERVICE_ERROR" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-audio response before uploading it to the transcription provider", async () => {
+    ENV.forgeApiUrl = "https://forge.example.local";
+    ENV.forgeApiKey = "forge-test-key";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("<html></html>", {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(transcribeAudio({ audioUrl: "https://8.8.8.8/input.mp3" })).resolves.toEqual({
+      error: "Remote file is not a supported audio format",
+      code: "INVALID_FORMAT",
+      details: "Use MP3, MP4/M4A, OGG, WAV, or WebM audio.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

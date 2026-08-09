@@ -35,8 +35,18 @@ import {
   readBoundedResponseText,
   ResponseSizeLimitError,
 } from "./outboundRequest";
+import { requirePublicHttpsUrl } from "./publicUrl";
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+const ALLOWED_AUDIO_MIME_TYPES = new Set([
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/wave",
+  "audio/webm",
+  "audio/x-m4a",
+]);
 
 export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
@@ -105,8 +115,10 @@ export async function transcribeAudio(
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const response = await fetch(options.audioUrl, {
+      const audioUrl = await requirePublicHttpsUrl(options.audioUrl);
+      const response = await fetch(audioUrl, {
         signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+        redirect: "error",
       });
       if (!response.ok) {
         return {
@@ -117,7 +129,17 @@ export async function transcribeAudio(
       }
       
       audioBuffer = Buffer.from(await readBoundedResponseBytes(response, MAX_AUDIO_BYTES));
-      mimeType = response.headers.get('content-type') || 'audio/mpeg';
+      mimeType = (response.headers.get("content-type") ?? "")
+        .split(";", 1)[0]
+        .trim()
+        .toLowerCase();
+      if (!ALLOWED_AUDIO_MIME_TYPES.has(mimeType)) {
+        return {
+          error: "Remote file is not a supported audio format",
+          code: "INVALID_FORMAT",
+          details: "Use MP3, MP4/M4A, OGG, WAV, or WebM audio.",
+        };
+      }
     } catch (error) {
       if (error instanceof ResponseSizeLimitError) {
         return {
@@ -129,7 +151,7 @@ export async function transcribeAudio(
       return {
         error: "Failed to fetch audio file",
         code: "SERVICE_ERROR",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: "Remote audio could not be retrieved securely."
       };
     }
 
@@ -170,6 +192,7 @@ export async function transcribeAudio(
       },
       body: formData,
       signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
+      redirect: "error",
     });
 
     if (!response.ok) {
