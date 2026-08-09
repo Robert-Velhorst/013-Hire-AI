@@ -215,7 +215,7 @@ export const applications = mysqlTable("applications", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("applications_user_job_unique").on(table.userId, table.jobId),
-  index("applications_user_created_idx").on(table.userId, table.createdAt),
+  index("applications_user_created_idx").on(table.userId, table.createdAt, table.id),
 ]);
 
 /**

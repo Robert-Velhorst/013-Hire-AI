@@ -191,7 +191,7 @@ function getFollowUpDeliveryWorkItem(
     deliveryProvider: followUp.deliveryProvider || null,
     deliveryRecipient: followUp.deliveryRecipient || null,
     deliveryFailureMessage: followUp.deliveryFailureMessage || null,
-    job: application.job ? {
+    job: application.job?.id != null && application.job.title != null && application.job.company != null ? {
       id: application.job.id,
       title: application.job.title,
       company: application.job.company,

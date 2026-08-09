@@ -114,4 +114,19 @@ describe("Drizzle migration journal", () => {
     expect(schema).toContain(`index("${indexName}")`);
     expect(migration).toContain(`\`${indexName}\``);
   });
+
+  it("keeps the application ledger cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0039_application_ledger_cursor.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("applications_user_created_idx").on(table.userId, table.createdAt, table.id)'
+    );
+    expect(migration).toContain(
+      "ADD INDEX `applications_user_created_idx` (`user_id`, `created_at`, `id`)"
+    );
+  });
 });

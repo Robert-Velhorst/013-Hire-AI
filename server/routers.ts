@@ -1173,8 +1173,30 @@ export const appRouter = router({
   // Applications
   applications: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const { getUserApplications } = await import("./db");
-      return await getUserApplications(ctx.user.id);
+      const { getUserApplicationPage } = await import("./db");
+      return (await getUserApplicationPage(ctx.user.id, { limit: 100 })).items;
+    }),
+    listPage: protectedProcedure
+      .input(z.object({
+        limit: z.number().int().min(1).max(100).default(50),
+        cursor: z.object({
+          createdAt: z.date(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getUserApplicationPage } = await import("./db");
+        return await getUserApplicationPage(ctx.user.id, input);
+      }),
+    getSummary: protectedProcedure.query(async ({ ctx }) => {
+      const { getUserApplicationSummary } = await import("./db");
+      return await getUserApplicationSummary(ctx.user.id);
+    }),
+    getById: protectedProcedure
+      .input(z.object({ applicationId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getUserApplicationById } = await import("./db");
+        return await getUserApplicationById(ctx.user.id, input.applicationId);
     }),
     create: protectedProcedure
       .input(

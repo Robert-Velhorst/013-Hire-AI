@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { parseApplicationDeepLink } from "@/lib/applicationDeepLinks";
@@ -110,6 +110,10 @@ function defaultInterviewDateTimeLocal() {
 export default function Applications() {
   const { user, loading: authLoading } = useAuth();
   const [location, setLocation] = useLocation();
+  const applicationDeepLink = useMemo(() => {
+    const source = location.includes("?") ? location : window.location.search;
+    return parseApplicationDeepLink(source);
+  }, [location]);
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [handledDeepLink, setHandledDeepLink] = useState("");
   const [activeTab, setActiveTab] = useState<ApplicationPipelineTab>("all");
@@ -156,8 +160,26 @@ export default function Applications() {
   const [offerDeclineConfirmed, setOfferDeclineConfirmed] = useState(false);
   const [offerDeclineNote, setOfferDeclineNote] = useState("");
 
-  // Fetch applications
-  const { data: applications, isLoading, refetch } = trpc.applications.list.useQuery();
+  const {
+    data: applicationPages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = trpc.applications.listPage.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const applications = useMemo(
+    () => applicationPages?.pages.map((page) => page.items).flat() ?? [],
+    [applicationPages]
+  );
+  const { data: applicationSummary } = trpc.applications.getSummary.useQuery();
+  const { data: deepLinkedApplication } = trpc.applications.getById.useQuery(
+    { applicationId: applicationDeepLink?.applicationId ?? 1 },
+    { enabled: Boolean(applicationDeepLink) }
+  );
   const {
     data: followUps,
     refetch: refetchFollowUps,
@@ -727,15 +749,14 @@ export default function Applications() {
   };
 
   useEffect(() => {
-    if (!applications?.length) return;
-    const deepLinkSource = location.includes("?") ? location : window.location.search;
-    const deepLink = parseApplicationDeepLink(deepLinkSource);
+    const deepLink = applicationDeepLink;
     if (!deepLink) return;
 
     const signature = `${deepLink.applicationId}:${deepLink.action}:${deepLink.interviewId ?? ""}`;
     if (handledDeepLink === signature) return;
 
-    const application = applications.find((item: any) => item.id === deepLink.applicationId);
+    const application = applications.find((item: any) => item.id === deepLink.applicationId)
+      ?? deepLinkedApplication;
     if (!application) return;
 
     setHandledDeepLink(signature);
@@ -773,7 +794,7 @@ export default function Applications() {
     } else if (deepLink.action === "employer-response") {
       setPendingEmployerReplyApplicationId(application.id);
     }
-  }, [applications, handledDeepLink, location]);
+  }, [applicationDeepLink, applications, deepLinkedApplication, handledDeepLink]);
 
   useEffect(() => {
     if (
@@ -896,14 +917,23 @@ export default function Applications() {
 
   // Calculate stats
   const stats = {
-    total: applications?.length || 0,
-    active: groupedApplications.active.length,
-    responseRate: applications?.filter((a: any) => a.status !== "pending").length
-      ? Math.round((applications.filter((a: any) => !["pending", "applied"].includes(a.status)).length / applications.filter((a: any) => a.status !== "pending").length) * 100)
+    total: applicationSummary?.total ?? applications.length,
+    active: applicationSummary?.active ?? groupedApplications.active.length,
+    responseRate: applicationSummary?.submitted
+      ? Math.round((applicationSummary.responded / applicationSummary.submitted) * 100)
       : 0,
-    interviewRate: applications?.filter((a: any) => a.status !== "pending").length
-      ? Math.round((applications.filter((a: any) => ["interview", "offer", "accepted"].includes(a.status)).length / applications.filter((a: any) => a.status !== "pending").length) * 100)
+    interviewRate: applicationSummary?.submitted
+      ? Math.round((applicationSummary.interviewing / applicationSummary.submitted) * 100)
       : 0,
+  };
+  const tabCounts: Record<ApplicationPipelineTab, number> = {
+    all: applicationSummary?.total ?? groupedApplications.all.length,
+    active: applicationSummary?.active ?? groupedApplications.active.length,
+    approvals: groupedApplications.approvals.length,
+    evidence: groupedApplications.evidence.length,
+    interviewing: applicationSummary?.interview ?? groupedApplications.interviewing.length,
+    offered: applicationSummary?.offered ?? groupedApplications.offered.length,
+    closed: applicationSummary?.closed ?? groupedApplications.closed.length,
   };
   const pipelineTone = {
     empty: "border-slate-700 bg-slate-900/50",
@@ -1115,25 +1145,25 @@ export default function Applications() {
         <Tabs value={activeTab} onValueChange={(tab) => setActiveTab(tab as ApplicationPipelineTab)}>
           <TabsList className="h-auto flex-wrap justify-start bg-slate-800/50 border border-slate-700">
             <TabsTrigger value="all" className="data-[state=active]:bg-slate-700">
-              All ({groupedApplications.all.length})
+              All ({tabCounts.all})
             </TabsTrigger>
             <TabsTrigger value="active" className="data-[state=active]:bg-blue-900/50">
-              Active ({groupedApplications.active.length})
+              Active ({tabCounts.active})
             </TabsTrigger>
             <TabsTrigger value="approvals" className="data-[state=active]:bg-amber-900/50">
-              Approvals ({groupedApplications.approvals.length})
+              Approvals ({tabCounts.approvals})
             </TabsTrigger>
             <TabsTrigger value="evidence" className="data-[state=active]:bg-amber-900/50">
-              Evidence ({groupedApplications.evidence.length})
+              Evidence ({tabCounts.evidence})
             </TabsTrigger>
             <TabsTrigger value="interviewing" className="data-[state=active]:bg-amber-900/50">
-              Interviewing ({groupedApplications.interviewing.length})
+              Interviewing ({tabCounts.interviewing})
             </TabsTrigger>
             <TabsTrigger value="offered" className="data-[state=active]:bg-emerald-900/50">
-              Offered ({groupedApplications.offered.length})
+              Offered ({tabCounts.offered})
             </TabsTrigger>
             <TabsTrigger value="closed" className="data-[state=active]:bg-slate-700">
-              Closed ({groupedApplications.closed.length})
+              Closed ({tabCounts.closed})
             </TabsTrigger>
           </TabsList>
 
@@ -1195,6 +1225,24 @@ export default function Applications() {
                     </div>
                   </TabsContent>
                 ))}
+                {hasNextPage && (
+                  <div className="mt-6 flex flex-col items-center gap-2 border-t border-slate-800 pt-5">
+                    <p className="text-sm text-slate-400">
+                      Showing {applications.length} of {applicationSummary?.total ?? applications.length} applications
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                    >
+                      {isFetchingNextPage ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Load older applications
+                    </Button>
+                  </div>
+                )}
               </>
             )}
           </div>

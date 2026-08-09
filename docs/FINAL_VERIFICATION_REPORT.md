@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 168 files, 875 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 169 files, 877 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
@@ -37,6 +37,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Fails closed when required production configuration or a platform-appropriate scanner is absent; native Windows Defender is detected for standalone operation |
 | Windows document scanning | Native `MpCmdRun.exe` smoke through `scanSensitiveUpload` | Passed with a clean `windows_defender` verdict and temporary-file cleanup |
 | Authenticated browser shell | Playwright desktop and 390 x 844 mobile smoke | Passed: dashboard-to-review navigation, one primary landmark, named brand/account controls, clean console, and no horizontal dashboard overflow |
+| Application ledger paging | `server/applicationPagination.test.ts`; `server/migrationJournal.test.ts` | Passed: deterministic same-timestamp cursor traversal, whole-ledger aggregate counts, exact ownership isolation, 100-row API ceiling, and schema/migration index alignment |
 | Diff whitespace audit | `git diff --check` | Passed |
 
 ## Runtime and UI evidence

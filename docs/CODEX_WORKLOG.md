@@ -127,3 +127,11 @@
 - Added exact-confirmation admin controls for provider/object cleanup and evidence controls for unsupported provider revocation.
 - Made private-object deletion idempotent when storage already reports the object missing.
 - Applied all 39 migrations to clean MySQL 8.4 and verified plan idempotency, no copied token/object values, lease-protected cleanup, manual action, and `ready_for_database` transition.
+
+## 2026-08-09 - Application ledger scalability pass
+
+- Replaced the primary unbounded application-list read with stable 50-row keyset pages capped at 100 rows per request.
+- Added one-query whole-ledger aggregates and an exact ownership-scoped deep-link lookup so counts and direct navigation do not depend on loaded pages.
+- Replaced the platform-name scalar lookup with a joined projection and added migration `0039` for the `(user_id, created_at, id)` cursor index.
+- Added same-timestamp traversal, aggregate, cross-owner, and migration-alignment regressions; passed 169 test files and 877 tests, TypeScript, production build, dependency audit, and the development doctor.
+- A local disposable MySQL initialization did not reach its final TCP server within the fixed probe window; the existing health-gated container CI remains the authoritative clean 40-migration acceptance for this increment.

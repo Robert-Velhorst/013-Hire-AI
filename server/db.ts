@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -1711,12 +1711,7 @@ const userApplicationSelection = {
     salaryCurrency: jobs.salaryCurrency,
     jobType: jobs.jobType,
     platformId: jobs.platformId,
-    platformName: sql<string | null>`(
-      SELECT ${jobPlatforms.name}
-      FROM ${jobPlatforms}
-      WHERE ${jobPlatforms.id} = ${jobs.platformId}
-      LIMIT 1
-    )`,
+    platformName: jobPlatforms.name,
     applicationUrl: jobs.applicationUrl,
     sourceUrl: jobs.sourceUrl,
   },
@@ -1746,6 +1741,7 @@ export async function getUserApplicationById(userId: number, applicationId: numb
     .select(userApplicationSelection)
     .from(applications)
     .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
     .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
     .limit(1);
   return rows[0] ?? null;
@@ -1764,6 +1760,7 @@ export async function getPendingUserApplicationForJob(userId: number, jobId: num
     .select(userApplicationSelection)
     .from(applications)
     .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
     .where(and(
       eq(applications.userId, userId),
       eq(applications.jobId, jobId),
@@ -1784,8 +1781,117 @@ export async function getUserApplications(userId: number) {
     .select(userApplicationSelection)
     .from(applications)
     .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
     .where(eq(applications.userId, userId))
-    .orderBy(desc(applications.createdAt));
+    .orderBy(desc(applications.createdAt), desc(applications.id));
+}
+
+export type ApplicationPageCursor = {
+  createdAt: Date;
+  id: number;
+};
+
+export async function getUserApplicationPage(
+  userId: number,
+  input: { limit?: number; cursor?: ApplicationPageCursor } = {}
+) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const ordered = memoryApplications
+      .filter((application) => application.userId === userId)
+      .sort((left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id
+      );
+    const afterCursor = input.cursor
+      ? ordered.filter((application) =>
+          application.createdAt < input.cursor!.createdAt ||
+          (application.createdAt.getTime() === input.cursor!.createdAt.getTime() && application.id < input.cursor!.id)
+        )
+      : ordered;
+    const pageRows = afterCursor.slice(0, limit + 1);
+    const hasMore = pageRows.length > limit;
+    const items = pageRows.slice(0, limit).map(projectMemoryApplication);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last
+        ? { createdAt: last.createdAt, id: last.id }
+        : null,
+    };
+  }
+
+  const cursorCondition = input.cursor
+    ? or(
+        lt(applications.createdAt, input.cursor.createdAt),
+        and(
+          eq(applications.createdAt, input.cursor.createdAt),
+          lt(applications.id, input.cursor.id)
+        )
+      )
+    : undefined;
+  const rows = await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+    .where(and(eq(applications.userId, userId), cursorCondition))
+    .orderBy(desc(applications.createdAt), desc(applications.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: hasMore && last
+      ? { createdAt: last.createdAt, id: last.id }
+      : null,
+  };
+}
+
+export async function getUserApplicationSummary(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryApplications.filter((application) => application.userId === userId);
+    const submitted = rows.filter((application) => application.status !== "pending").length;
+    return {
+      total: rows.length,
+      active: rows.filter((application) => ["pending", "applied", "viewed", "interview"].includes(application.status ?? "pending")).length,
+      submitted,
+      responded: rows.filter((application) => !["pending", "applied"].includes(application.status ?? "pending")).length,
+      interviewing: rows.filter((application) => ["interview", "offer", "accepted"].includes(application.status ?? "pending")).length,
+      interview: rows.filter((application) => application.status === "interview").length,
+      offered: rows.filter((application) => ["offer", "accepted"].includes(application.status ?? "pending")).length,
+      closed: rows.filter((application) => ["rejected", "withdrawn"].includes(application.status ?? "pending")).length,
+    };
+  }
+
+  const [row] = await db
+    .select({
+      total: sql<number>`COUNT(*)`,
+      active: sql<number>`COALESCE(SUM(${applications.status} IN ('pending', 'applied', 'viewed', 'interview')), 0)`,
+      submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
+      responded: sql<number>`COALESCE(SUM(${applications.status} NOT IN ('pending', 'applied')), 0)`,
+      interviewing: sql<number>`COALESCE(SUM(${applications.status} IN ('interview', 'offer', 'accepted')), 0)`,
+      interview: sql<number>`COALESCE(SUM(${applications.status} = 'interview'), 0)`,
+      offered: sql<number>`COALESCE(SUM(${applications.status} IN ('offer', 'accepted')), 0)`,
+      closed: sql<number>`COALESCE(SUM(${applications.status} IN ('rejected', 'withdrawn')), 0)`,
+    })
+    .from(applications)
+    .where(eq(applications.userId, userId));
+
+  return Object.fromEntries(
+    Object.entries(row ?? {}).map(([key, value]) => [key, Number(value)])
+  ) as {
+    total: number;
+    active: number;
+    submitted: number;
+    responded: number;
+    interviewing: number;
+    interview: number;
+    offered: number;
+    closed: number;
+  };
 }
 
 export async function updateApplicationStatus(
