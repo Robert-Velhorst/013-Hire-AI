@@ -4,6 +4,7 @@ import {
   createAuditEvent,
   getAuditEventsForEntity,
   getAuditEventsForUser,
+  listActiveAdminReviewItemsForEntity,
   listAdminReviewItems,
   listUserAdminReviewItems,
   resolveAdminReviewItem,
@@ -158,5 +159,52 @@ describe("audit and admin review ledger", () => {
     expect(activeReviews.some((review) => review.title === "Closed user review")).toBe(false);
     expect(activeReviews.some((review) => review.title === "Other user review")).toBe(false);
     expect(limitedReviews).toHaveLength(1);
+  });
+
+  it("loads active reviews for one owned entity without scanning unrelated reviews", async () => {
+    const userId = 97007;
+    const otherUserId = 97008;
+    const targetVerificationId = 88001;
+    const target = await createAdminReviewItem({
+      userId,
+      entityType: "verification",
+      entityId: targetVerificationId,
+      category: "verification_overdue",
+      status: "open",
+      priority: "high",
+      title: "Target verification review",
+    });
+    await createAdminReviewItem({
+      userId,
+      entityType: "verification",
+      entityId: 88002,
+      category: "verification_overdue",
+      status: "open",
+      priority: "medium",
+      title: "Different verification review",
+    });
+    await createAdminReviewItem({
+      userId: otherUserId,
+      entityType: "verification",
+      entityId: targetVerificationId,
+      category: "verification_overdue",
+      status: "open",
+      priority: "critical",
+      title: "Other user's verification review",
+    });
+
+    const reviews = await listActiveAdminReviewItemsForEntity(
+      userId,
+      "verification",
+      targetVerificationId
+    );
+
+    expect(reviews.map((review) => review.id)).toEqual([Number(target.insertId)]);
+    expect(reviews[0]).toMatchObject({
+      userId,
+      entityType: "verification",
+      entityId: targetVerificationId,
+      status: "open",
+    });
   });
 });

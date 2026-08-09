@@ -2942,6 +2942,38 @@ export async function listUserAdminReviewItems(
     .limit(boundedLimit);
 }
 
+export async function listActiveAdminReviewItemsForEntity(
+  userId: number,
+  entityType: AdminReviewItem["entityType"],
+  entityId: number
+) {
+  const activeStatuses: AdminReviewItem["status"][] = ["open", "in_progress"];
+  const db = await getDb();
+  if (!db) {
+    return memoryAdminReviewItems
+      .filter((item) =>
+        item.userId === userId &&
+        item.entityType === entityType &&
+        item.entityId === entityId &&
+        activeStatuses.includes(item.status)
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, 100);
+  }
+
+  return await db
+    .select()
+    .from(adminReviewItems)
+    .where(and(
+      eq(adminReviewItems.userId, userId),
+      eq(adminReviewItems.entityType, entityType),
+      eq(adminReviewItems.entityId, entityId),
+      inArray(adminReviewItems.status, activeStatuses)
+    ))
+    .orderBy(desc(adminReviewItems.createdAt))
+    .limit(100);
+}
+
 export async function getLatestPrivacyDeletionReview(userId: number) {
   const db = await getDb();
   if (!db) {

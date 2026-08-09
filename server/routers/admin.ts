@@ -7,6 +7,7 @@ import {
   getDb,
   getAdminMemoryFallback,
   getAdminReviewEvidenceSnapshot,
+  listActiveAdminReviewItemsForEntity,
   listAdminReviewItems,
   resolveAdminReviewItem,
 } from "../db";
@@ -510,11 +511,10 @@ export const adminRouter = router({
       const reviewResolution = input.approved
         ? "Employment verification approved by admin review."
         : `Employment verification rejected by admin review${input.notes ? `: ${input.notes}` : "."}`;
-      const reviewItems = await listAdminReviewItems("all");
-      const activeVerificationReviewItems = reviewItems.filter((item) =>
-        item.entityType === "verification" &&
-        item.entityId === input.verificationId &&
-        (item.status === "open" || item.status === "in_progress")
+      const activeVerificationReviewItems = await listActiveAdminReviewItemsForEntity(
+        verification.userId,
+        "verification",
+        input.verificationId
       );
 
       await Promise.all(activeVerificationReviewItems.map((item) =>

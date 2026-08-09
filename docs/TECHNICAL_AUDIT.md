@@ -27,6 +27,7 @@ Audit date: 2026-08-08
 | Upcoming interview preparation checked for existing material once per interview. | Upcoming interviews and user preparations are loaded once in parallel, then matched by job ID in memory. |
 | Offer-attribution projection reloaded applications, approvals, and responses already present in the operating snapshot. | The projection accepts preloaded data, re-filters it by authenticated user, and reuses the ledger's evidence snapshot. Campaign and post-evidence reads also run in parallel. |
 | Admin operating snapshots loaded the global review table and filtered it locally. | The snapshot now requests at most 100 open/in-progress items for the affected user through the indexed `(user_id, status)` path. The separate global admin queue remains available for administrative operations. |
+| Employment-verification resolution loaded the global review table to locate one entity's active reviews. | Resolution now requests only open/in-progress review items matching the affected user, verification entity type, and verification ID. The administrative global queue remains unchanged. |
 
 ## Material unresolved risks
 

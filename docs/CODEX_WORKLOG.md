@@ -63,4 +63,5 @@
 - Reused the ledger's preloaded applications, approvals, and employer responses for offer-attribution projection, while filtering every supplied row by user ownership and running remaining post-evidence projections concurrently.
 - Moved the application-campaign row into the initial parallel snapshot read.
 - Replaced the admin operating ledger's global review-table read with a capped user/status query backed by the existing `(user_id, status)` index.
-- Passed TypeScript and the full regression suite: 159 files and 809 tests.
+- Replaced employment-verification resolution's global review-table scan with an exact affected-user/entity lookup for active review items.
+- Passed TypeScript and the full regression suite: 159 files and 810 tests.

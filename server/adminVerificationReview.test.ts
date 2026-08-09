@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     createAdminReviewItem: vi.fn(),
     createAuditEvent: vi.fn(),
     getDb: vi.fn(),
+    listActiveAdminReviewItemsForEntity: vi.fn(),
     listAdminReviewItems: vi.fn(),
     resolveAdminReviewItem: vi.fn(),
   };
@@ -37,6 +38,7 @@ vi.mock("./db", () => ({
   createAdminReviewItem: mocks.createAdminReviewItem,
   createAuditEvent: mocks.createAuditEvent,
   getDb: mocks.getDb,
+  listActiveAdminReviewItemsForEntity: mocks.listActiveAdminReviewItemsForEntity,
   listAdminReviewItems: mocks.listAdminReviewItems,
   resolveAdminReviewItem: mocks.resolveAdminReviewItem,
 }));
@@ -80,28 +82,12 @@ describe("admin verification review lifecycle", () => {
       status: "pending",
     }]);
     mocks.updateWhere.mockResolvedValue([{ affectedRows: 1 }]);
-    mocks.listAdminReviewItems.mockResolvedValue([
+    mocks.listActiveAdminReviewItemsForEntity.mockResolvedValue([
       {
         id: 901,
         userId: 42,
         entityType: "verification",
         entityId: 7001,
-        category: "verification_overdue",
-        status: "open",
-      },
-      {
-        id: 902,
-        userId: 42,
-        entityType: "verification",
-        entityId: 7001,
-        category: "verification_overdue",
-        status: "resolved",
-      },
-      {
-        id: 903,
-        userId: 42,
-        entityType: "verification",
-        entityId: 9999,
         category: "verification_overdue",
         status: "open",
       },
@@ -119,6 +105,8 @@ describe("admin verification review lifecycle", () => {
     });
 
     expect(result).toEqual({ success: true, approved: true });
+    expect(mocks.listActiveAdminReviewItemsForEntity).toHaveBeenCalledWith(42, "verification", 7001);
+    expect(mocks.listAdminReviewItems).not.toHaveBeenCalled();
     expect(mocks.resolveAdminReviewItem).toHaveBeenCalledTimes(1);
     expect(mocks.resolveAdminReviewItem).toHaveBeenCalledWith(
       901,
@@ -139,6 +127,8 @@ describe("admin verification review lifecycle", () => {
     });
 
     expect(result).toEqual({ success: true, approved: false });
+    expect(mocks.listActiveAdminReviewItemsForEntity).toHaveBeenCalledWith(42, "verification", 7001);
+    expect(mocks.listAdminReviewItems).not.toHaveBeenCalled();
     expect(mocks.resolveAdminReviewItem).toHaveBeenCalledTimes(1);
     expect(mocks.resolveAdminReviewItem).toHaveBeenCalledWith(
       901,

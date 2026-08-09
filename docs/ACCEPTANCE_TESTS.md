@@ -22,5 +22,6 @@
 | Operating evidence batching | `client/src/lib/dashboardPerformanceClaims.test.ts`; `server/responseInterviewMemory.test.ts` | Responses, schedules, and follow-ups are loaded through three shared batch paths, mixed application IDs return only owned records, and interview preparation uses one user-level lookup. |
 | Preloaded offer attribution | `server/applicationApprovals.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | The operating ledger reuses its existing application, approval, and response data; mixed-user supplied rows are filtered to the authenticated user. |
 | Scoped admin snapshot | `server/auditAdminReview.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | Admin operating-ledger reads are capped at 100 active items for the requested user and cannot include another user's or closed review records. |
+| Scoped verification review | `server/auditAdminReview.test.ts`; `server/adminVerificationReview.test.ts` | Employment-verification decisions load and resolve only active reviews for the affected user and verification without reading the global admin queue. |
 
 Expected outcomes are enforced through tests where practical. Provider callbacks, real S3 objects, Stripe webhook delivery, and legal/compliance flows require credentials and controlled external verification.
