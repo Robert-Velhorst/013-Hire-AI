@@ -2661,6 +2661,40 @@ export async function findEmployerResponseBySourceReference(input: {
   return result[0];
 }
 
+export async function findEmployerResponseSourceReferences(input: {
+  userId: number;
+  source: EmployerResponse["source"];
+  sourceReferences: string[];
+}) {
+  const sourceReferences = Array.from(new Set(
+    input.sourceReferences.filter((sourceReference) => sourceReference.length > 0)
+  ));
+  if (sourceReferences.length === 0) return [];
+
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(sourceReferences);
+    return Array.from(new Set(memoryEmployerResponses
+      .filter((response) =>
+        response.userId === input.userId &&
+        response.source === input.source &&
+        typeof response.sourceReference === "string" &&
+        requested.has(response.sourceReference)
+      )
+      .map((response) => response.sourceReference as string)));
+  }
+
+  const rows = await db
+    .select({ sourceReference: employerResponses.sourceReference })
+    .from(employerResponses)
+    .where(and(
+      eq(employerResponses.userId, input.userId),
+      eq(employerResponses.source, input.source),
+      inArray(employerResponses.sourceReference, sourceReferences)
+    ));
+  return rows.flatMap((row) => row.sourceReference ? [row.sourceReference] : []);
+}
+
 export async function upsertInboxResponseCandidate(candidate: InsertInboxResponseCandidate) {
   const db = await getDb();
   if (!db) {

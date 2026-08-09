@@ -6,7 +6,7 @@ import {
 
 const now = new Date("2026-07-13T12:00:00.000Z");
 const mocks = {
-  findEmployerResponseBySourceReference: vi.fn(),
+  findEmployerResponseSourceReferences: vi.fn(),
   getConnectorAuthorization: vi.fn(),
   getUserApplications: vi.fn(),
   listUserConnectorAccounts: vi.fn(),
@@ -42,7 +42,7 @@ function options(fetcher: typeof fetch) {
 describe("inbox response discovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.findEmployerResponseBySourceReference.mockResolvedValue(undefined);
+    mocks.findEmployerResponseSourceReferences.mockResolvedValue([]);
     mocks.listUserConnectorAccounts.mockResolvedValue([connectedInbox("gmail")]);
     mocks.getConnectorAuthorization.mockResolvedValue({
       encryptedAccessToken: "encrypted-access",
@@ -88,7 +88,7 @@ describe("inbox response discovery", () => {
   });
 
   it("does not rediscover a Gmail message already recorded in the employer-response ledger", async () => {
-    mocks.findEmployerResponseBySourceReference.mockResolvedValue({ id: 991, applicationId: 701 });
+    mocks.findEmployerResponseSourceReferences.mockResolvedValue(["gmail:gmail-701"]);
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-701" }] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -101,10 +101,38 @@ describe("inbox response discovery", () => {
       }), { status: 200 }));
 
     await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher))).resolves.toEqual([]);
-    expect(mocks.findEmployerResponseBySourceReference).toHaveBeenCalledWith({
+    expect(mocks.findEmployerResponseSourceReferences).toHaveBeenCalledWith({
       userId: 700,
       source: "email",
-      sourceReference: "gmail:gmail-701",
+      sourceReferences: ["gmail:gmail-701"],
+    });
+  });
+
+  it("checks all matched message references in one ownership-scoped database lookup", async () => {
+    mocks.findEmployerResponseSourceReferences.mockResolvedValue(["gmail:gmail-recorded"]);
+    const message = (hour: string) => new Response(JSON.stringify({
+      snippet: "Acme Analytics would like to discuss your application.",
+      payload: { headers: [
+        { name: "From", value: "recruiter@acme.example" },
+        { name: "Subject", value: "Acme Analytics application update" },
+        { name: "Date", value: `Sun, 13 Jul 2026 ${hour}:00:00 +0000` },
+      ] },
+    }), { status: 200 });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        messages: [{ id: "gmail-recorded" }, { id: "gmail-new" }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(message("10"))
+      .mockResolvedValueOnce(message("11"));
+
+    const candidates = await discoverInboxResponseCandidates(700, "gmail", options(fetcher));
+
+    expect(candidates.map((candidate) => candidate.messageId)).toEqual(["gmail-new"]);
+    expect(mocks.findEmployerResponseSourceReferences).toHaveBeenCalledOnce();
+    expect(mocks.findEmployerResponseSourceReferences).toHaveBeenCalledWith({
+      userId: 700,
+      source: "email",
+      sourceReferences: ["gmail:gmail-recorded", "gmail:gmail-new"],
     });
   });
 
@@ -187,7 +215,7 @@ describe("inbox response discovery", () => {
     }), { status: 200 }));
 
     await expect(discoverInboxResponseCandidates(700, "outlook", options(fetcher))).resolves.toEqual([]);
-    expect(mocks.findEmployerResponseBySourceReference).not.toHaveBeenCalled();
+    expect(mocks.findEmployerResponseSourceReferences).not.toHaveBeenCalled();
   });
 
   it("renews an expired Gmail grant before scanning recruiting messages", async () => {

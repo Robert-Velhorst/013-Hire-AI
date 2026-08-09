@@ -257,3 +257,9 @@
 - Added aggregate process runtime-health totals and latest occurrence time to HAI status while retaining individual failure labels behind the administrator-only diagnostics endpoint.
 - Versioned the expanded read-only HAI Agent Card as 1.1.0 and added resource/privacy contract coverage.
 - Passed focused HAI/privacy tests, TypeScript, the complete regression suite, and the production bundle check.
+
+## 2026-08-09 - Batched inbox response deduplication
+
+- Replaced the Gmail/Outlook response scanner's per-candidate existence queries with one deduplicated lookup over the existing user/source/reference unique index.
+- Preserved exact source-reference behavior and added direct coverage for tenant isolation, duplicate inputs, mixed recorded/new messages, and empty scans.
+- Passed focused worker/database tests, TypeScript, the complete regression suite, and the production bundle check.

@@ -7,7 +7,7 @@ import {
   type OAuthConnectorProvider,
 } from "./connectorOAuth";
 import {
-  findEmployerResponseBySourceReference,
+  findEmployerResponseSourceReferences,
   getConnectorAuthorization,
   getUserApplications,
   listUserConnectorAccounts,
@@ -37,7 +37,7 @@ const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const INBOX_RESPONSE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type InboxResponseDiscoveryDependencies = {
-  findEmployerResponseBySourceReference: typeof findEmployerResponseBySourceReference;
+  findEmployerResponseSourceReferences: typeof findEmployerResponseSourceReferences;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getUserApplications: typeof getUserApplications;
   listUserConnectorAccounts: typeof listUserConnectorAccounts;
@@ -50,7 +50,7 @@ export type InboxResponseDiscoveryDependencies = {
 };
 
 const defaults: InboxResponseDiscoveryDependencies = {
-  findEmployerResponseBySourceReference,
+  findEmployerResponseSourceReferences,
   getConnectorAuthorization,
   getUserApplications,
   listUserConnectorAccounts,
@@ -233,15 +233,14 @@ async function excludeRecordedInboxResponses(
   candidates: InboxResponseCandidate[],
   dependencies: InboxResponseDiscoveryDependencies
 ) {
-  const unrecorded = await Promise.all(candidates.map(async (candidate) => {
-    const existing = await dependencies.findEmployerResponseBySourceReference({
-      userId,
-      source: "email",
-      sourceReference: `${candidate.provider}:${candidate.messageId}`,
-    });
-    return existing ? null : candidate;
+  if (candidates.length === 0) return candidates;
+  const references = candidates.map((candidate) => `${candidate.provider}:${candidate.messageId}`);
+  const recorded = new Set(await dependencies.findEmployerResponseSourceReferences({
+    userId,
+    source: "email",
+    sourceReferences: references,
   }));
-  return unrecorded.filter((candidate): candidate is InboxResponseCandidate => candidate !== null);
+  return candidates.filter((candidate) => !recorded.has(`${candidate.provider}:${candidate.messageId}`));
 }
 
 function gmailHeaders(payload: Record<string, unknown>) {
