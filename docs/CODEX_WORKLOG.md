@@ -67,4 +67,5 @@
 - Replaced user-wide approval reads in standalone application lifecycle and admin evidence paths with an ownership-scoped application lookup that retains legacy entity links.
 - Replaced admin evidence's full application and decision history reads with exact owned-record lookups and parallel evidence assembly.
 - Replaced standalone lifecycle and approval-resolution list scans with exact owned application and approval lookups across confirmation, response, interview, follow-up, withdrawal, acceptance, and offer-decline paths.
+- Replaced three preparation-route application-history scans with an exact pending `(user, canonical job)` lookup backed by the existing unique key.
 - Passed TypeScript and the full regression suite: 159 files and 815 tests.

@@ -1194,7 +1194,7 @@ export const appRouter = router({
           getUserProfile,
           getUserSkills,
           getWorkExperiences,
-          getUserApplications,
+          getPendingUserApplicationForJob,
         } = await import("./db");
         const canonicalJobId = await getCanonicalJobId(input.jobId);
         if (canonicalJobId === null) {
@@ -1231,9 +1231,7 @@ export const appRouter = router({
         ]);
         const profileForMaterial = resolveProfileCandidateEvidence(profile, skills, workExperiences);
         const { buildReviewApplicationMaterial } = await import("./applicationMaterialDraft");
-        const existingApplication = (await getUserApplications(ctx.user.id)).find((application) =>
-          application.jobId === input.jobId && (application.status || "pending") === "pending"
-        );
+        const existingApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
         const existingArtifacts = existingApplication
           ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id).catch(() => null)
           : null;
@@ -1352,6 +1350,7 @@ export const appRouter = router({
           getApplicationLedgerArtifacts,
           getJobById,
           getCanonicalJobId,
+          getPendingUserApplicationForJob,
           getUserApplications,
           getUserProfile,
           getUserSkills,
@@ -1463,9 +1462,7 @@ export const appRouter = router({
           : null;
         const { buildReviewApplicationMaterial } = await import("./applicationMaterialDraft");
         const existingPreparedApplication = createsPreparedApplication
-          ? (await getUserApplications(ctx.user.id)).find((application) =>
-            application.jobId === input.jobId && (application.status || "pending") === "pending"
-          )
+          ? await getPendingUserApplicationForJob(ctx.user.id, input.jobId)
           : null;
         const existingPreparedArtifacts = existingPreparedApplication
           ? await getApplicationLedgerArtifacts(existingPreparedApplication.id, ctx.user.id).catch(() => null)
@@ -3586,7 +3583,7 @@ export const appRouter = router({
           createApplicationApproval,
           getCanonicalJobId,
           getApplicationLedgerArtifacts,
-          getUserApplications,
+          getPendingUserApplicationForJob,
         } = await import("./db");
         const {
           applyToJob,
@@ -3641,9 +3638,7 @@ export const appRouter = router({
           resumeUrl: activeResume.fileUrl,
           resumeFileKey: activeResume.fileKey,
         };
-        const existingApplication = (await getUserApplications(ctx.user.id)).find((application) =>
-          application.jobId === input.jobId && (application.status || "pending") === "pending"
-        );
+        const existingApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
         const existingArtifacts = existingApplication
           ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id).catch(() => null)
           : null;

@@ -1752,6 +1752,28 @@ export async function getUserApplicationById(userId: number, applicationId: numb
   return rows[0] ?? null;
 }
 
+export async function getPendingUserApplicationForJob(userId: number, jobId: number) {
+  const db = await getDb();
+  if (!db) {
+    const application = memoryApplications.find((item) =>
+      item.userId === userId && item.jobId === jobId && item.status === "pending"
+    );
+    return application ? projectMemoryApplication(application) : null;
+  }
+
+  const rows = await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .where(and(
+      eq(applications.userId, userId),
+      eq(applications.jobId, jobId),
+      eq(applications.status, "pending")
+    ))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getUserApplications(userId: number) {
   const db = await getDb();
   if (!db) {

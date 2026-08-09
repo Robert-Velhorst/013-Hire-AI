@@ -31,6 +31,7 @@ Audit date: 2026-08-08
 | Standalone application lifecycle and admin evidence paths loaded every approval owned by a user before filtering one application. | A shared ownership-scoped lookup now loads only approvals linked by application ID or the legacy application-entity relationship. Submission confirmation, response cleanup, withdrawal, offer acceptance, follow-up completion, and evidence rendering use it. |
 | Admin evidence loaded every application and decision for the affected user to identify one reviewed record. | Reusable owned application-ID and user/job decision lookups now use primary/unique keys. Evidence loads the application with approvals in parallel, then its artifacts with the exact decision in parallel. |
 | Standalone lifecycle and approval mutations repeatedly loaded complete user application or approval collections to authorize one record. | Submission confirmation, response recording, interview and follow-up ownership, withdrawal, offer acceptance, approval resolution, and offer decline now use exact `(user, id)` lookups. Collection reads remain only where the workflow actually processes a set. |
+| Application create, decision, and portal-preparation routes loaded all user applications to find one existing pending job record. | Each route canonicalizes the job and queries the existing unique `(user_id, job_id)` record with pending status directly, preserving duplicate-source idempotency without a history scan. |
 
 ## Material unresolved risks
 

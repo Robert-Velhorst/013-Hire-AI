@@ -66,6 +66,8 @@ Admin evidence also retrieves its application by owned primary key and its decis
 
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
 
+Application create, decision, and portal-preparation routes now check for an existing pending application through the unique user/canonical-job key. Existing duplicate-source and preparation-idempotency regressions pass without loading application history.
+
 ## Release blockers and scope boundaries
 
 - A production database, migration run, backups, restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment.

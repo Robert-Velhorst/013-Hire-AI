@@ -16,6 +16,7 @@ import {
   createApplicationDecision,
   getApplicationLedgerArtifacts,
   getAuditEventsForUser,
+  getPendingUserApplicationForJob,
   getUserApplicationById,
   getUserApplicationDecisionForJob,
   getUserApplications,
@@ -168,6 +169,13 @@ describe("application decision ledger", () => {
       jobId: 2,
     });
     await expect(getUserApplicationById(otherUserId, applicationId)).resolves.toBeNull();
+    await expect(getPendingUserApplicationForJob(userId, 2)).resolves.toMatchObject({
+      id: applicationId,
+      userId,
+      jobId: 2,
+      status: "pending",
+    });
+    await expect(getPendingUserApplicationForJob(otherUserId, 2)).resolves.toBeNull();
     await expect(getUserApplicationDecisionForJob(userId, 2)).resolves.toMatchObject({
       userId,
       jobId: 2,

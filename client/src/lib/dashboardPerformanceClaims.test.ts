@@ -90,5 +90,8 @@ describe("dashboard performance claims", () => {
     expect(approvalResolution).not.toContain("getUserApplications");
     expect(offerDecline).toContain("getUserApplicationById");
     expect(offerDecline).not.toContain("getUserApplications");
+    expect(router.match(/getPendingUserApplicationForJob\(ctx\.user\.id, input\.jobId\)/g))
+      .toHaveLength(3);
+    expect(router).not.toContain("(await getUserApplications(ctx.user.id)).find");
   });
 });
