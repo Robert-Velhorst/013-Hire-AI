@@ -20,7 +20,7 @@ The current baseline also includes a versioned privacy metadata export, a user-o
 
 Windows-native startup now performs a production audit and health check, server binding defaults to loopback, a reserved ngrok tunnel can be health-verified, and an optional local/private HAI A2A connector exposes aggregate read-only status. These controls are implemented contracts, not evidence that a specific Windows host, ngrok domain, or HAI deployment has passed live acceptance.
 
-English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account headers, saved jobs, job alerts, team governance, and not-found handling. Remaining workflow-page copy still requires translation plus native-speaker and accessibility review.
+English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account headers, settings and privacy controls, saved jobs, job alerts, team governance, and not-found handling. Remaining workflow-page copy still requires translation plus native-speaker and accessibility review.
 
 Account-backed workspaces now provide owner, administrator, and member roles; email-bound expiring invitations; single-owner transfer; bounded membership; audited role changes; and safe archival. Workspace membership intentionally does not share candidate profiles, documents, applications, or other candidate-domain records. That boundary requires a separate product and privacy design before collaboration can extend beyond governance.
 
@@ -67,6 +67,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Added a bounded Arbeitnow API adapter that ingests only explicit remote records, preserves the required provider backlink, and shares the atomic hourly polling controls; deployment still requires operator/legal acceptance of the current provider terms.
 - Extended the persisted English/Dutch preference through saved jobs, job alerts, and not-found handling, including locale-aware dates, dynamic messages, and accessible alert controls.
 - Localized the reusable account header and Team governance workflow, including role labels, invitations, membership changes, ownership transfer, archive confirmations, dates, and icon-only accessibility names.
+- Localized the complete Settings workflow, including preference controls, privacy export, retention-safe deletion review status and confirmations, feedback messages, and accessible control names; the page now reuses the shared account header.
 
 ## Still required before production
 

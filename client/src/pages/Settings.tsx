@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, Shield, Zap, Globe, Settings as SettingsIcon, LogOut, User, ChevronLeft, Loader2, Trash2 } from "lucide-react";
+import { Activity, Shield, Zap, Globe, ChevronLeft, Loader2, Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
@@ -12,13 +12,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useLocale } from "@/contexts/LocaleContext";
 import { localeLabels, SUPPORTED_LOCALES, type SupportedLocale } from "@shared/localization";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import AppHeader from "@/components/AppHeader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function Settings() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const { locale, setLocale, t } = useLocale();
@@ -52,21 +46,21 @@ export default function Settings() {
   });
   const requestDeletion = trpc.privacy.requestDeletion.useMutation({
     onSuccess: () => {
-      toast.success("Deletion review requested");
+      toast.success(t("deletionReviewRequested"));
       utils.privacy.getDeletionRequest.invalidate();
     },
-    onError: (error) => toast.error(error.message || "Unable to request deletion review"),
+    onError: (error) => toast.error(error.message || t("deletionReviewRequestFailed")),
   });
   const cancelDeletionRequest = trpc.privacy.cancelDeletionRequest.useMutation({
     onSuccess: () => {
-      toast.success("Deletion request cancelled");
+      toast.success(t("deletionRequestCancelled"));
       utils.privacy.getDeletionRequest.invalidate();
     },
-    onError: (error) => toast.error(error.message || "Unable to cancel deletion request"),
+    onError: (error) => toast.error(error.message || t("deletionRequestCancelFailed")),
   });
   const updateProfile = trpc.profile.update.useMutation({
-    onSuccess: () => toast.success("Settings saved"),
-    onError: (error) => toast.error(error.message || "Failed to save settings"),
+    onSuccess: () => toast.success(t("settingsSaved")),
+    onError: (error) => toast.error(error.message || t("settingsSaveFailed")),
   });
   const updateLocale = trpc.auth.updateLocale.useMutation({
     onSuccess: ({ locale: savedLocale }) => {
@@ -96,12 +90,6 @@ export default function Settings() {
     }
   }, [profile?.preferences]);
 
-  const handleLogout = async () => {
-    await logout();
-    setLocation("/");
-    toast.success("Logged out successfully");
-  };
-
   const handleSaveSettings = () => {
     let existingPreferences: Record<string, unknown> = {};
     try {
@@ -123,7 +111,7 @@ export default function Settings() {
   const handleExportData = async () => {
     const result = await privacyExport.refetch();
     if (!result.data) {
-      toast.error("Unable to create the data export. Try again shortly.");
+      toast.error(t("dataExportFailed"));
       return;
     }
     const exportData = {
@@ -141,24 +129,24 @@ export default function Settings() {
     anchor.download = `hire-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    toast.success("Data export created. Sensitive document bytes and connector credentials are excluded.");
+    toast.success(t("dataExportCreated"));
   };
 
   const deletionRequestActive = deletionRequest?.status === "open" || deletionRequest?.status === "in_progress";
   const deletionStatusText = deletionRequestActive
-    ? "Your request is awaiting operator review. No data has been deleted."
+    ? t("deletionStatusOpen")
     : deletionRequest?.status === "resolved"
-      ? "An operator recorded a retention decision. This status does not mean that data was deleted."
+      ? t("deletionStatusResolved")
       : deletionRequest?.status === "dismissed"
-        ? "The previous deletion request was cancelled or closed without deletion."
-        : "No account deletion review is currently open.";
+        ? t("deletionStatusDismissed")
+        : t("deletionStatusNone");
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Activity className="h-12 w-12 text-cyan-400 animate-pulse mx-auto mb-4" />
-          <p className="text-slate-400">Loading settings...</p>
+          <p className="text-slate-400">{t("loadingSettings")}</p>
         </div>
       </div>
     );
@@ -170,73 +158,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <header className="border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setLocation("/")}>
-            <Activity className="h-8 w-8 text-cyan-400" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-              Hire.AI
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              className="text-slate-300 hover:text-white"
-              onClick={() => setLocation("/dashboard")}
-            >
-              Dashboard
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-slate-300 hover:text-white"
-              onClick={() => setLocation("/profile")}
-            >
-              Profile
-            </Button>
-            
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600">
-                  <span className="text-white font-semibold">
-                    {user?.name?.charAt(0).toUpperCase() || "U"}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800" align="end">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium text-white">{user?.name || "User"}</p>
-                  <p className="text-xs text-slate-400">{user?.email}</p>
-                </div>
-                <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem 
-                  className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
-                  onClick={() => setLocation("/profile")}
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="text-cyan-400 bg-cyan-500/10 focus:bg-cyan-500/20 focus:text-cyan-400 cursor-pointer"
-                  onClick={() => setLocation("/settings")}
-                >
-                  <SettingsIcon className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem 
-                  className="text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
+      <AppHeader currentPage="settings" />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Back Button */}
@@ -246,12 +168,12 @@ export default function Settings() {
           onClick={() => setLocation("/dashboard")}
         >
           <ChevronLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
+          {t("backToDashboard")}
         </Button>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-          <p className="text-slate-400">Manage application preparation and job scanning preferences</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t("settings")}</h1>
+          <p className="text-slate-400">{t("settingsDescription")}</p>
         </div>
 
         <div className="space-y-6">
@@ -290,41 +212,44 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Zap className="h-5 w-5 text-cyan-400" />
-                Application Preparation
+                {t("applicationPreparation")}
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Configure how Hire.AI prepares matching jobs for your review
+                {t("applicationPreparationDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-white">Accelerated Preparation</Label>
+                  <Label htmlFor="accelerated-preparation" className="text-white">{t("acceleratedPreparation")}</Label>
                   <p className="text-sm text-slate-400">
-                    Automatically prepare high-fit applications for final review
+                    {t("acceleratedPreparationDescription")}
                   </p>
                 </div>
                 <Switch
+                  id="accelerated-preparation"
                   checked={autoApply}
                   onCheckedChange={setAutoApply}
+                  aria-label={t("acceleratedPreparation")}
                 />
               </div>
               
               <div className="space-y-2">
-                <Label className="text-white">Max Preparations Per Day</Label>
+                <Label className="text-white">{t("maxPreparationsPerDay")}</Label>
                 <Select value={maxApplicationsPerDay} onValueChange={setMaxApplicationsPerDay}>
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white" aria-label={t("maximumPreparationsLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="5" className="text-white">5 applications</SelectItem>
-                    <SelectItem value="10" className="text-white">10 applications</SelectItem>
-                    <SelectItem value="20" className="text-white">20 applications</SelectItem>
-                    <SelectItem value="25" className="text-white">25 applications</SelectItem>
+                    {[5, 10, 20, 25].map((count) => (
+                      <SelectItem key={count} value={String(count)} className="text-white">
+                        {t("applicationsCount", { count })}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-slate-500">
-                  Keep the daily review queue focused and manageable
+                  {t("dailyReviewQueueDescription")}
                 </p>
               </div>
             </CardContent>
@@ -335,24 +260,24 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Globe className="h-5 w-5 text-blue-400" />
-                Job Scanning
+                {t("jobScanning")}
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Configure how often we scan for new job opportunities
+                {t("jobScanningDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label className="text-white">Scan Frequency</Label>
+                <Label className="text-white">{t("scanFrequency")}</Label>
                 <Select value={scanFrequency} onValueChange={setScanFrequency}>
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white" aria-label={t("scanFrequency")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="hourly" className="text-white">Every hour</SelectItem>
-                    <SelectItem value="continuous" className="text-white">Every 15 minutes</SelectItem>
-                    <SelectItem value="daily" className="text-white">Once daily</SelectItem>
-                    <SelectItem value="twice-daily" className="text-white">Twice daily</SelectItem>
+                    <SelectItem value="hourly" className="text-white">{t("everyHour")}</SelectItem>
+                    <SelectItem value="continuous" className="text-white">{t("everyFifteenMinutes")}</SelectItem>
+                    <SelectItem value="daily" className="text-white">{t("onceDaily")}</SelectItem>
+                    <SelectItem value="twice-daily" className="text-white">{t("twiceDaily")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -364,17 +289,17 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Shield className="h-5 w-5 text-green-400" />
-                Privacy & Security
+                {t("privacySecurity")}
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Manage your data and account security
+                {t("privacySecurityDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-4 rounded-lg bg-slate-800/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-white font-medium">Export Your Data</p>
-                  <p className="text-sm text-slate-400">Download your profile, records, preferences, and audit history. Private file bytes and connector credentials remain excluded.</p>
+                  <p className="text-white font-medium">{t("exportYourData")}</p>
+                  <p className="text-sm text-slate-400">{t("exportDataDescription")}</p>
                 </div>
                 <Button
                   variant="outline"
@@ -383,14 +308,14 @@ export default function Settings() {
                   disabled={privacyExport.isFetching}
                 >
                   {privacyExport.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Export
+                  {t("export")}
                 </Button>
               </div>
               <div className="flex flex-col gap-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium text-white">Account deletion review</p>
+                  <p className="font-medium text-white">{t("accountDeletionReview")}</p>
                   <p className="mt-1 text-sm text-slate-400">
-                    Request an operator review of account erasure and legal retention. Active billing, disputes, verification records, or legal holds may require limited evidence to remain.
+                    {t("accountDeletionReviewDescription")}
                   </p>
                   <p className="mt-2 text-xs text-slate-500" data-testid="privacy-deletion-status">
                     {deletionStatusText}
@@ -405,23 +330,23 @@ export default function Settings() {
                         disabled={cancelDeletionRequest.isPending}
                       >
                         {cancelDeletionRequest.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Cancel request
+                        {t("cancelRequest")}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="border-slate-800 bg-slate-900 text-white">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Cancel the deletion review?</AlertDialogTitle>
+                        <AlertDialogTitle>{t("cancelDeletionReviewTitle")}</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-400">
-                          This closes the open request. It does not change any existing retention or account records.
+                          {t("cancelDeletionReviewDescription")}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">Keep request</AlertDialogCancel>
+                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">{t("keepRequest")}</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-slate-700 text-white hover:bg-slate-600"
                           onClick={() => cancelDeletionRequest.mutate()}
                         >
-                          Cancel request
+                          {t("cancelRequest")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -435,23 +360,23 @@ export default function Settings() {
                         disabled={requestDeletion.isPending}
                       >
                         {requestDeletion.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                        Request review
+                        {t("requestReview")}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="border-slate-800 bg-slate-900 text-white">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Request account deletion review?</AlertDialogTitle>
+                        <AlertDialogTitle>{t("requestDeletionReviewTitle")}</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-400">
-                          Hire.AI will open a high-priority operator review. This does not immediately delete data or override active payment, dispute, verification, or legal retention obligations.
+                          {t("requestDeletionReviewDescription")}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">Cancel</AlertDialogCancel>
+                        <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">{t("cancel")}</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-red-600 text-white hover:bg-red-700"
                           onClick={() => requestDeletion.mutate({})}
                         >
-                          Request review
+                          {t("requestReview")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -468,7 +393,7 @@ export default function Settings() {
               className="border-slate-700 text-slate-300"
               onClick={() => setLocation("/dashboard")}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               className="bg-gradient-to-r from-cyan-500 to-blue-600"
@@ -476,7 +401,7 @@ export default function Settings() {
               disabled={updateProfile.isPending}
             >
               {updateProfile.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Settings
+              {t("saveSettings")}
             </Button>
           </div>
         </div>

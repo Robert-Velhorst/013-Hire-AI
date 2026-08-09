@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Settings and privacy localization
+
+- Replaced the Settings route's duplicated English-only account header with the shared localized header.
+- Localized preference controls, privacy export, deletion-review status and confirmations, loading and feedback states in English and Dutch.
+- Added accessible labels to the accelerated-preparation, preparation-limit, and scan-frequency controls without changing review-gated deletion behavior.
+
 ## 2026-08-09 - Team and shared-header localization
 
 - Removed the English-only account header left visible on localized routes and wired its menu, accessibility names, fallback identity, and logout feedback to the persisted locale.

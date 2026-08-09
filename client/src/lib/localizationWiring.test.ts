@@ -17,6 +17,11 @@ describe("localization wiring", () => {
     expect(layout).toContain("t(item.labelKey)");
     expect(settings).toContain("trpc.auth.updateLocale.useMutation");
     expect(settings).toContain("SUPPORTED_LOCALES.map");
+    expect(settings).toContain('<AppHeader currentPage="settings" />');
+    expect(settings).toContain('t("accountDeletionReviewDescription")');
+    expect(settings).toContain('t("requestDeletionReviewDescription")');
+    expect(settings).toContain('aria-label={t("scanFrequency")}');
+    expect(settings).not.toContain("Request an operator review of account erasure");
     expect(appHeader).toContain('aria-label={t("openAccountMenu")}');
     expect(appHeader).toContain('t("signOut")');
   });
@@ -39,5 +44,7 @@ describe("localization wiring", () => {
     expect(jobAlerts).not.toContain("â€¢");
     expect(translate("en", "daysAgo", { count: 3 })).toBe("3 days ago");
     expect(translate("nl", "savedOn", { date: "gisteren" })).toBe("Opgeslagen gisteren");
+    expect(translate("en", "applicationsCount", { count: 10 })).toBe("10 applications");
+    expect(translate("nl", "deletionStatusOpen")).toContain("geen gegevens verwijderd");
   });
 });
