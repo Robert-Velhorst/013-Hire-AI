@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact follow-up readiness aggregates
+
+- Moved total due-candidate and held-follow-up counts into the exact owner-scoped drafting query instead of deriving them from the 250-application planning window.
+- Removed redundant dashboard hydration of bulk responses, schedules, follow-ups, approved approvals, and approval-linked applications.
+- Reduced the dashboard pending-approval page to five records while preserving its exact total and kept the autonomous preview's focused safety evaluation unchanged.
+
 ## 2026-08-09 - Exact bounded review queues
 
 - Reduced admin and review-decision dashboard hydration from 100 records to five while preserving database-counted totals.

@@ -18,9 +18,16 @@ describe("follow-up drafting aggregate ledger wiring", () => {
     expect(page).toContain("NOT ${hasCancelledInterviewSchedule}");
     expect(page).toContain("outcome_response.interview_id = completed_interview.id");
     expect(page).toContain("COUNT(*)");
+    expect(page).toContain("candidateTotal");
+    expect(page).toContain("blockedTotal");
     expect(page).toContain(".limit(limit)");
     expect(campaigns).toContain("getFollowUpDraftingPage(userId, 5, now)");
-    expect(campaigns).toContain("followUpsDue: followUpDraftingPage.total");
+    expect(campaigns).toContain("followUpsDue: followUpDraftingPage.candidateTotal");
+    expect(campaigns).toContain("followUpsBlocked: followUpDraftingPage.blockedTotal");
+    const ledger = campaigns.slice(campaigns.indexOf("export async function getUserOperatingLedger"));
+    expect(ledger).not.toContain("loadOperatingApplicationEvidence(applications, userId)");
+    expect(ledger).not.toContain("getAutonomousFollowUpReadiness({");
+    expect(ledger).toContain("getUserOperatingApplicationApprovals(\n    userId,\n    [],\n    5");
   });
 
   it("keeps the active-draft lookup index aligned with migration 0053", () => {

@@ -1566,8 +1566,9 @@ describe("application campaign operating ledger", () => {
         notes: `Recent planning-window application ${index + 1}.`,
       });
     }
+    let heldApplicationId = 0;
     for (let index = 0; index < 6; index += 1) {
-      await createApplication({
+      const application = await createApplication({
         userId,
         jobId: 1800 + index,
         status: index % 2 === 0 ? "applied" : "viewed",
@@ -1575,7 +1576,12 @@ describe("application campaign operating ledger", () => {
         lastActivity: oldDate,
         notes: `Quiet application ${index + 1} needs a draft.`,
       });
+      if (index === 0) heldApplicationId = Number(application.insertId);
     }
+    await createFollowUp({
+      applicationId: heldApplicationId,
+      message: "This existing draft keeps one due candidate on hold.",
+    }, userId);
     const foreignApplication = await createApplication({
       userId: otherUserId,
       jobId: 1900,
@@ -1589,14 +1595,25 @@ describe("application campaign operating ledger", () => {
     const page = await getFollowUpDraftingPage(userId, 5);
     const ledger = await getUserOperatingLedger(userId);
 
-    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page).toMatchObject({
+      total: 5,
+      candidateTotal: 6,
+      blockedTotal: 1,
+      limit: 5,
+      hasMore: false,
+    });
     expect(page.items).toHaveLength(5);
     expect(page.items.some((item) => item.applicationId === foreignApplicationId)).toBe(false);
     expect(ledger.applicationOverview.operatingWindow).toMatchObject({ loaded: 250, hasMore: true });
-    expect(ledger.metrics.followUpsDue).toBe(6);
+    expect(ledger.metrics.followUpsDue).toBe(5);
     expect(ledger.queues.followUpsDue).toHaveLength(5);
-    expect(ledger.followUpDraftingScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
-    expect(ledger.planSummary.followUpsActionReady).toBe(6);
-    expect(ledger.nextActions).toContain("Draft 6 timely follow-up messages.");
+    expect(ledger.followUpDraftingScope).toEqual({ loaded: 5, limit: 5, hasMore: false });
+    expect(ledger.followUpReadiness).toEqual({ candidateCount: 6, actionReadyCount: 5, blockedCount: 1 });
+    expect(ledger.planSummary).toMatchObject({
+      followUpsDue: 6,
+      followUpsActionReady: 5,
+      followUpsBlocked: 1,
+    });
+    expect(ledger.nextActions).toContain("Draft 5 timely follow-up messages.");
   });
 });

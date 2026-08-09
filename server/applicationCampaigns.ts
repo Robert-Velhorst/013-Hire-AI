@@ -776,24 +776,15 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   ).values()) as UserApplicationRecord[];
   const approvalSet = await getUserOperatingApplicationApprovals(
     userId,
-    initialApplications.map((application) => application.id)
+    [],
+    5
   );
-  const approvalApplicationIds = approvalSet.items.flatMap((approval) => {
-    const applicationId = approval.applicationId ??
-      (approval.entityType === "application" ? approval.entityId : null);
-    return applicationId ? [applicationId] : [];
-  });
-  const approvalApplications = await getUserApplicationsByIds(userId, approvalApplicationIds);
-  const applications = Array.from(new Map(
-    [...initialApplications, ...approvalApplications]
-      .map((application) => [application.id, application] as const)
-  ).values()) as UserApplicationRecord[];
+  const applications = initialApplications;
   const decisions = Array.from(new Map(
     [...reviewDecisionPage.items, ...currentJobDecisions]
       .map((decision) => [decision.id, decision] as const)
   ).values());
-  const allApprovals = approvalSet.items;
-  const approvals = allApprovals.filter((approval) => approval.status === "pending");
+  const approvals = approvalSet.items;
   const pendingApprovalCount = approvalSet.pendingTotal;
   const campaignStatus = existingCampaign?.status ?? "active";
 
@@ -851,9 +842,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
         : null,
     };
   });
-  const operatingEvidence = await loadOperatingApplicationEvidence(applications, userId);
   const [
-    followUpReadiness,
     interviewNotificationQueue,
     interviewSchedulingPage,
     employerResponseReplyPage,
@@ -863,26 +852,24 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewOutcomePage,
     successFeeOperatingSet,
   ] = await Promise.all([
-    getAutonomousFollowUpReadiness({
-      applications,
-      approvals: allApprovals,
-      plan,
-      userId,
-      evidence: operatingEvidence,
-    }),
     getInterviewNotificationQueue(userId),
     getInterviewSchedulingPage(userId, 5),
     getEmployerResponseReplyPage(userId, 5),
     getFollowUpDeliveryOperatingQueues(userId, 5),
     preferences.createFollowUps === true
       ? getFollowUpDraftingPage(userId, 5, now)
-      : Promise.resolve({ items: [], total: 0, limit: 5, hasMore: false }),
+      : Promise.resolve({
+          items: [],
+          total: 0,
+          candidateTotal: 0,
+          blockedTotal: 0,
+          limit: 5,
+          hasMore: false,
+        }),
     getInterviewPreparationQueue(userId),
     getInterviewOutcomePage(userId, 5),
     getUserSuccessFeeOperatingItems(userId),
   ]);
-  const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
-  const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
   const employerResponseQueue = employerResponseReplyPage.items;
   const successFeeCompliance = getSuccessFeeComplianceSummaryFromAggregates(
     successFeeSummary,
@@ -894,8 +881,14 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   const followUpDeliveryReconciliation = followUpDeliveryQueues.reconciliation.items;
   const actionReadyPlanSummary = {
     ...plan.summary,
+    followUpsDue: followUpDraftingPage.candidateTotal,
     followUpsActionReady: followUpDraftingPage.total,
-    followUpsBlocked: followUpReadiness.blockedCount,
+    followUpsBlocked: followUpDraftingPage.blockedTotal,
+  };
+  const followUpReadiness = {
+    candidateCount: followUpDraftingPage.candidateTotal,
+    actionReadyCount: followUpDraftingPage.total,
+    blockedCount: followUpDraftingPage.blockedTotal,
   };
   const connectorReadinessQueue = getConnectorReadinessQueue({
     profile,

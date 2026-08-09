@@ -2369,6 +2369,8 @@ export async function getFollowUpDraftingPage(
         } : null,
       })),
       total: candidates.length,
+      candidateTotal: dueApplications.length,
+      blockedTotal: Math.max(0, dueApplications.length - candidates.length),
       limit,
       hasMore: candidates.length > limit,
     };
@@ -2466,6 +2468,7 @@ export async function getFollowUpDraftingPage(
       AND NOT ${hasMissingInterviewOutcome}
     ))`
   );
+  const dueCondition = and(eq(applications.userId, userId), dueTiming);
   const selection = {
     applicationId: applications.id,
     jobId: applications.jobId,
@@ -2473,7 +2476,7 @@ export async function getFollowUpDraftingPage(
     daysSinceActivity,
     job: { id: jobs.id, title: jobs.title, company: jobs.company, location: jobs.location },
   };
-  const [rows, countRows] = await Promise.all([
+  const [rows, countRows, candidateCountRows] = await Promise.all([
     db
       .select(selection)
       .from(applications)
@@ -2482,6 +2485,7 @@ export async function getFollowUpDraftingPage(
       .orderBy(desc(daysSinceActivity), asc(applications.id))
       .limit(limit),
     db.select({ count: sql<number>`COUNT(*)` }).from(applications).where(condition),
+    db.select({ count: sql<number>`COUNT(*)` }).from(applications).where(dueCondition),
   ]);
   const items = rows.map((row) => ({
     ...row,
@@ -2489,7 +2493,15 @@ export async function getFollowUpDraftingPage(
     daysSinceActivity: Number(row.daysSinceActivity),
   }));
   const total = Number(countRows[0]?.count ?? 0);
-  return { items, total, limit, hasMore: total > items.length };
+  const candidateTotal = Number(candidateCountRows[0]?.count ?? 0);
+  return {
+    items,
+    total,
+    candidateTotal,
+    blockedTotal: Math.max(0, candidateTotal - total),
+    limit,
+    hasMore: total > items.length,
+  };
 }
 
 async function getMemoryUpcomingInterviewContexts(
