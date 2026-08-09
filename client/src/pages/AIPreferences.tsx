@@ -66,7 +66,7 @@ export default function AIPreferences() {
     enabled: isAuthenticated,
     refetchInterval: 60000,
   });
-  const updateProfile = trpc.profile.update.useMutation({
+  const updatePreferences = trpc.profile.updatePreferences.useMutation({
     onSuccess: () => {
       toast.success("AI preferences saved");
       refetchPlan();
@@ -114,26 +114,16 @@ export default function AIPreferences() {
   }, [profile?.preferences]);
 
   const handleSaveSettings = () => {
-    let existingPreferences: Record<string, unknown> = {};
-    try {
-      existingPreferences = profile?.preferences ? JSON.parse(profile.preferences) : {};
-    } catch {
-      existingPreferences = {};
-    }
-
-    updateProfile.mutate({
-      preferences: JSON.stringify({
-        ...existingPreferences,
-        autonomousEnabled,
-        mode: autoApplyEnabled ? "auto_apply" : "review_first",
-        dailyApplicationLimit: Number(maxApplicationsPerDay),
-        minMatchScore: Number(minMatchScore),
-        remoteOnly,
-        requireHumanReview,
-        allowUnsupportedATS,
-        createFollowUps,
-        scanFrequency,
-      }),
+    updatePreferences.mutate({
+      autonomousEnabled,
+      mode: autoApplyEnabled ? "auto_apply" : "review_first",
+      dailyApplicationLimit: Number(maxApplicationsPerDay),
+      minMatchScore: Number(minMatchScore),
+      remoteOnly,
+      requireHumanReview,
+      allowUnsupportedATS,
+      createFollowUps,
+      scanFrequency: scanFrequency as "continuous" | "hourly" | "daily" | "twice-daily",
     });
   };
 
@@ -388,10 +378,10 @@ export default function AIPreferences() {
             {/* Save Button */}
             <Button
               onClick={handleSaveSettings}
-              disabled={updateProfile.isPending}
+              disabled={updatePreferences.isPending}
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
             >
-              {updateProfile.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {updatePreferences.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save AI Preferences
             </Button>
           </div>

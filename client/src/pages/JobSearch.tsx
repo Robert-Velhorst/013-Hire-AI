@@ -22,7 +22,6 @@ import { formatJobSalary } from "@/lib/jobSalary";
 import {
   getJobSearchAutonomousPolicy,
   isJobSearchAutonomousPolicyDirty,
-  mergeJobSearchAutonomousPolicy,
 } from "@/lib/jobSearchAutonomousPolicy";
 import {
   countActiveJobSearchFilters,
@@ -281,7 +280,7 @@ export default function JobSearch() {
     },
     onError: () => toast.error("Autonomous run failed"),
   });
-  const saveJobSearchPolicyMutation = trpc.profile.update.useMutation({
+  const saveJobSearchPolicyMutation = trpc.profile.updatePreferences.useMutation({
     onSuccess: async () => {
       toast.success("Sourcing policy saved");
       await Promise.all([
@@ -500,7 +499,7 @@ export default function JobSearch() {
 
   const handleSaveJobSearchPolicy = () => {
     saveJobSearchPolicyMutation.mutate({
-      preferences: mergeJobSearchAutonomousPolicy(profileData?.preferences, jobSearchPolicyDraft),
+      ...jobSearchPolicyDraft,
     });
   };
 

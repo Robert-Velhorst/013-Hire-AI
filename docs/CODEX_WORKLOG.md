@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Concurrent preference persistence
+
+- Added a strict `profile.updatePreferences` contract for autonomy, sourcing, and scheduler controls.
+- Serialized preference patches on the account owner row and merged them against current server state in one transaction.
+- Migrated Settings, AI Preferences, and Job Search away from stale client-side whole-blob replacement and added router plus wiring regressions.
+
 ## 2026-08-09 - Settings and privacy localization
 
 - Replaced the Settings route's duplicated English-only account header with the shared localized header.

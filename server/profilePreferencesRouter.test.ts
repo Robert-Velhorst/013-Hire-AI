@@ -24,6 +24,29 @@ function createContext(userId: number): TrpcContext {
 }
 
 describe("profile search preference router", () => {
+  it("merges validated preference patches without dropping unrelated controls", async () => {
+    const userId = 190080;
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await caller.profile.update({
+      preferences: JSON.stringify({ autonomousEnabled: true, futureControl: "retained" }),
+    });
+    await caller.profile.updatePreferences({
+      mode: "review_first",
+      dailyApplicationLimit: 12,
+    });
+    await caller.profile.updatePreferences({ scanFrequency: "hourly" });
+
+    const saved = JSON.parse((await getUserProfile(userId))?.preferences || "{}");
+    expect(saved).toEqual({
+      autonomousEnabled: true,
+      futureControl: "retained",
+      mode: "review_first",
+      dailyApplicationLimit: 12,
+      scanFrequency: "hourly",
+    });
+  });
+
   it("persists and clears autonomous search targets without retaining stale values", async () => {
     const userId = 190081;
     const caller = appRouter.createCaller(createContext(userId));

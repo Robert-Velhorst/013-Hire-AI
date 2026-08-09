@@ -58,8 +58,11 @@ export default function Settings() {
     },
     onError: (error) => toast.error(error.message || t("deletionRequestCancelFailed")),
   });
-  const updateProfile = trpc.profile.update.useMutation({
-    onSuccess: () => toast.success(t("settingsSaved")),
+  const updatePreferences = trpc.profile.updatePreferences.useMutation({
+    onSuccess: async () => {
+      await utils.profile.get.invalidate();
+      toast.success(t("settingsSaved"));
+    },
     onError: (error) => toast.error(error.message || t("settingsSaveFailed")),
   });
   const updateLocale = trpc.auth.updateLocale.useMutation({
@@ -91,20 +94,10 @@ export default function Settings() {
   }, [profile?.preferences]);
 
   const handleSaveSettings = () => {
-    let existingPreferences: Record<string, unknown> = {};
-    try {
-      existingPreferences = profile?.preferences ? JSON.parse(profile.preferences) : {};
-    } catch {
-      existingPreferences = {};
-    }
-
-    updateProfile.mutate({
-      preferences: JSON.stringify({
-        ...existingPreferences,
-        mode: autoApply ? "auto_apply" : "review_first",
-        dailyApplicationLimit: Number(maxApplicationsPerDay),
-        scanFrequency,
-      }),
+    updatePreferences.mutate({
+      mode: autoApply ? "auto_apply" : "review_first",
+      dailyApplicationLimit: Number(maxApplicationsPerDay),
+      scanFrequency: scanFrequency as "continuous" | "hourly" | "daily" | "twice-daily",
     });
   };
 
@@ -398,9 +391,9 @@ export default function Settings() {
             <Button
               className="bg-gradient-to-r from-cyan-500 to-blue-600"
               onClick={handleSaveSettings}
-              disabled={updateProfile.isPending}
+              disabled={updatePreferences.isPending}
             >
-              {updateProfile.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {updatePreferences.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t("saveSettings")}
             </Button>
           </div>

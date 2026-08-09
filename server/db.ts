@@ -1333,6 +1333,50 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
   }
 }
 
+export async function patchUserProfilePreferences(
+  userId: number,
+  patch: Record<string, boolean | number | string>
+) {
+  const db = await getDb();
+  if (!db) {
+    const existing = memoryProfiles.get(userId);
+    let current: Record<string, unknown> = {};
+    try {
+      const parsed = existing?.preferences ? JSON.parse(existing.preferences) : {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) current = parsed;
+    } catch {
+      current = {};
+    }
+    const preferences = JSON.stringify({ ...current, ...patch });
+    await upsertUserProfile({ userId, preferences });
+    return preferences;
+  }
+
+  return db.transaction(async (tx) => {
+    // Lock the stable owner row so concurrent tabs merge against the latest profile state.
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+    const rows = await tx
+      .select({ id: userProfiles.id, preferences: userProfiles.preferences })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, userId))
+      .limit(1);
+    let current: Record<string, unknown> = {};
+    try {
+      const parsed = rows[0]?.preferences ? JSON.parse(rows[0].preferences) : {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) current = parsed;
+    } catch {
+      current = {};
+    }
+    const preferences = JSON.stringify({ ...current, ...patch });
+    if (rows[0]) {
+      await tx.update(userProfiles).set({ preferences }).where(eq(userProfiles.id, rows[0].id));
+    } else {
+      await tx.insert(userProfiles).values({ userId, preferences });
+    }
+    return preferences;
+  });
+}
+
 export const PUBLIC_SOCIAL_PLATFORMS = ["facebook", "twitter"] as const;
 export type PublicSocialPlatform = typeof PUBLIC_SOCIAL_PLATFORMS[number];
 

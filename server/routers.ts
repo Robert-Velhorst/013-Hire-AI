@@ -777,6 +777,24 @@ export const appRouter = router({
         return { success: true, matchRefresh };
       }),
 
+    updatePreferences: protectedProcedure
+      .input(z.object({
+        autonomousEnabled: z.boolean().optional(),
+        mode: z.enum(["review_first", "auto_apply"]).optional(),
+        dailyApplicationLimit: z.number().int().min(1).max(100).optional(),
+        minMatchScore: z.number().int().min(0).max(100).optional(),
+        remoteOnly: z.boolean().optional(),
+        requireHumanReview: z.boolean().optional(),
+        allowUnsupportedATS: z.boolean().optional(),
+        createFollowUps: z.boolean().optional(),
+        scanFrequency: z.enum(["continuous", "hourly", "daily", "twice-daily"]).optional(),
+      }).strict())
+      .mutation(async ({ ctx, input }) => {
+        const { patchUserProfilePreferences } = await import("./db");
+        const preferences = await patchUserProfilePreferences(ctx.user.id, input);
+        return { success: true, preferences };
+      }),
+
     discoverLinkedInIdentity: protectedProcedure
       .mutation(async ({ ctx }) => {
         const { discoverLinkedInIdentity } = await import("./linkedInProfileDiscovery");

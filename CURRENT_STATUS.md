@@ -68,6 +68,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Extended the persisted English/Dutch preference through saved jobs, job alerts, and not-found handling, including locale-aware dates, dynamic messages, and accessible alert controls.
 - Localized the reusable account header and Team governance workflow, including role labels, invitations, membership changes, ownership transfer, archive confirmations, dates, and icon-only accessibility names.
 - Localized the complete Settings workflow, including preference controls, privacy export, retention-safe deletion review status and confirmations, feedback messages, and accessible control names; the page now reuses the shared account header.
+- Replaced browser-side replacement of the shared preference JSON blob with a validated server-side patch transaction used by Settings, AI Preferences, and Job Search, preventing stale tabs from dropping unrelated autonomy controls.
 
 ## Still required before production
 
