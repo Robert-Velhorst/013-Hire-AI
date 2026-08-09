@@ -10,7 +10,6 @@ import {
   getActiveJobs,
   getApplicationCampaign,
   getEducationEntries,
-  getInterviewPreparationForJob,
   listUnreadInterviewNotifications,
   listPendingInboxResponseCandidates,
   getUserApplicationDecisions,
@@ -22,6 +21,7 @@ import {
   getUserSkills,
   getWorkExperiences,
   listUserConnectorAccounts,
+  listInterviewPreparationsForUser,
   listAdminReviewItems,
   listUserApplicationApprovals,
   upsertApplicationCampaign,
@@ -473,10 +473,13 @@ export function getActionReadyFollowUpNextActions(
 }
 
 async function getInterviewPreparationQueue(userId: number) {
-  const upcomingInterviews = await getUpcomingInterviews(userId);
-  const items = await Promise.all(upcomingInterviews.map(async (item) => {
-    const existingPreparation = await getInterviewPreparationForJob(userId, item.application.jobId);
-    if (existingPreparation) return null;
+  const [upcomingInterviews, preparations] = await Promise.all([
+    getUpcomingInterviews(userId),
+    listInterviewPreparationsForUser(userId),
+  ]);
+  const preparedJobIds = new Set(preparations.map((preparation) => preparation.jobId));
+  const items = upcomingInterviews.map((item) => {
+    if (preparedJobIds.has(item.application.jobId)) return null;
 
     return {
       interviewId: item.interview.id,
@@ -491,7 +494,7 @@ async function getInterviewPreparationQueue(userId: number) {
         company: item.job.company,
       } : null,
     };
-  }));
+  });
 
   return items.filter((item): item is NonNullable<typeof item> => item !== null);
 }

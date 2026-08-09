@@ -52,6 +52,8 @@ Migration `0036` adds query-aligned indexes for profile readiness and the operat
 
 The operating ledger now batch-loads employer responses, interview schedules, and follow-ups once per refresh and reuses that ownership-scoped evidence across all related queues. Regression coverage rejects the former per-application calls and verifies that requesting mixed application IDs cannot expose another user's child records.
 
+Upcoming interview preparation also uses one user-scoped preparation read rather than one existence query per interview, while retaining the same queue semantics.
+
 ## Release blockers and scope boundaries
 
 - A production database, migration run, backups, restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment.

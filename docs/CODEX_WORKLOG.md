@@ -59,4 +59,5 @@
 - Corrected the in-memory admin-review store to expose the same complete row contract as MySQL, removing optional-status defects in privacy routes and admin evidence rendering.
 - Batched offer-attribution evidence into one ownership-scoped response query and replaced repeated application searches with indexed in-memory maps.
 - Consolidated operating-ledger child evidence into three ownership-scoped batch reads for responses, interview schedules, and follow-ups. All scheduling, outcome, notification, suppression, and reply projections reuse the grouped result.
+- Replaced one interview-preparation existence query per upcoming interview with one user-scoped preparation read and a local job-ID set.
 - Passed TypeScript and the full regression suite: 159 files and 807 tests.

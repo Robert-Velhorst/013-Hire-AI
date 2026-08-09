@@ -24,6 +24,7 @@ Audit date: 2026-08-08
 | The embedded Vite server lost its root/plugins after production config became command-aware. | CLI and embedded startup now share `createViteConfig`; tests cover build/serve plugin boundaries and a live check verified `/src/main.tsx` is served as JavaScript. |
 | Hot operating queries lacked matching compound indexes, several single-record workflows scanned full tables, and offer reviews queried responses once per approval. | Migration `0036` adds 17 query-aligned indexes. Privacy deletion, admin evidence, and duplicate-source aggregation now use bounded indexed lookups; offer-attribution evidence is loaded in one ownership-scoped batch. A regression test keeps migration and schema declarations aligned. |
 | Operating-ledger queues independently reloaded responses, interview schedules, and follow-ups for each application. | The ledger now performs three ownership-scoped batch reads and groups their results once. Scheduling, outcomes, notifications, reply actions, and follow-up suppression share the same evidence snapshot. |
+| Upcoming interview preparation checked for existing material once per interview. | Upcoming interviews and user preparations are loaded once in parallel, then matched by job ID in memory. |
 
 ## Material unresolved risks
 

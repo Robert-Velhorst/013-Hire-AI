@@ -19,5 +19,5 @@
 | ngrok readiness | ngrok 3.39.8 installed; configuration valid; fail-closed reserved-domain launcher | Partial: reserved HTTPS hostname and public health acceptance pending |
 | Frontend delivery efficiency | Production-only bundle gate; 487-byte HTML shell; lazy route chunks retained | Complete for current production build |
 | Dashboard request efficiency | Seven overlapping queries reduced to one bounded snapshot; GET persistence and non-admin global review reads removed | Complete for dashboard path |
-| Operating query efficiency | Migration 0036; 17 schema-aligned indexes; bounded privacy/deduplication reads; three shared ownership-scoped child-evidence batches per ledger | Complete locally; production migration acceptance pending |
+| Operating query efficiency | Migration 0036; 17 schema-aligned indexes; bounded privacy/deduplication reads; shared child-evidence and interview-preparation batches per ledger | Complete locally; production migration acceptance pending |
 | Hosted deployment and provider acceptance | Requires credentials, a production database, and operator-owned external accounts | Partial |

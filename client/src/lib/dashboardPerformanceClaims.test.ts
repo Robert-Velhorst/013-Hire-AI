@@ -34,8 +34,10 @@ describe("dashboard performance claims", () => {
     expect(campaigns).toContain("getUserEmployerResponsesForApplications");
     expect(campaigns).toContain("getUserInterviewSchedulesForApplications");
     expect(campaigns).toContain("getUserFollowUpsForApplications");
+    expect(campaigns).toContain("listInterviewPreparationsForUser");
     expect(campaigns).not.toMatch(/\bgetEmployerResponses\(/);
     expect(campaigns).not.toMatch(/\bgetInterviewSchedules\(/);
     expect(campaigns).not.toMatch(/\bgetFollowUps\(/);
+    expect(campaigns).not.toMatch(/\bgetInterviewPreparationForJob\(/);
   });
 });
