@@ -39,6 +39,8 @@ const expectedUserOwnedTables = [
   "user_skills",
   "user_projects",
   "job_alerts",
+  "privacy_erasure_runs",
+  "privacy_erasure_tasks",
   "success_fees",
   "employment_verifications",
   "fee_payments",
@@ -74,7 +76,7 @@ describe("privacy retention inventory", () => {
   it("fails when a new direct user-owned schema table is not added to the policy", () => {
     const schemaSource = readFileSync(new URL("../drizzle/schema.ts", import.meta.url), "utf8");
     const schemaTablesWithUserId = [...schemaSource.matchAll(
-      /export const \w+ = mysqlTable\("([^"]+)", \{([\s\S]*?)\n\}\s*(?:,|\);)/g
+      /export const \w+ = mysqlTable\(\s*"([^"]+)",\s*\{([\s\S]*?)\n\s*\}\s*(?:,|\);)/g
     )]
       .filter((match) => /\buserId:\s/.test(match[2]))
       .map((match) => match[1])

@@ -5,6 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
+import { buildPrivacyCleanupConfirmation, canExecutePrivacyCleanup } from "@/lib/privacyErasureControl";
 import {
   getScraperSourceHealthSummary,
   getScraperSourceOutcomeCounts,
@@ -129,6 +130,8 @@ export default function AdminPanel() {
   const [statusNote, setStatusNote] = useState("");
   const [reviewDialog, setReviewDialog] = useState<{ open: boolean; itemId: number | null; status: "resolved" | "dismissed" }>({ open: false, itemId: null, status: "resolved" });
   const [reviewResolution, setReviewResolution] = useState("");
+  const [erasureCleanupConfirmation, setErasureCleanupConfirmation] = useState("");
+  const [manualCleanupEvidence, setManualCleanupEvidence] = useState<Record<number, string>>({});
   const [evidenceDialog, setEvidenceDialog] = useState<{ open: boolean; itemId: number | null }>({ open: false, itemId: null });
   const [scrapingIntervalMinutes, setScrapingIntervalMinutes] = useState("60");
   const [scrapingMaxJobsPerRun, setScrapingMaxJobsPerRun] = useState("100");
@@ -163,6 +166,18 @@ export default function AdminPanel() {
     isLoading: privacyErasurePreviewLoading,
     error: privacyErasurePreviewError,
   } = trpc.admin.previewPrivacyErasure.useQuery(
+    { reviewItemId: evidenceDialog.itemId ?? 0 },
+    {
+      enabled: isAdmin
+        && evidenceDialog.open
+        && evidenceDialog.itemId !== null
+        && reviewEvidence?.reviewItem.category === "privacy_deletion",
+    }
+  );
+  const {
+    data: privacyErasurePlan,
+    refetch: refetchPrivacyErasurePlan,
+  } = trpc.admin.getPrivacyErasurePlan.useQuery(
     { reviewItemId: evidenceDialog.itemId ?? 0 },
     {
       enabled: isAdmin
@@ -252,12 +267,31 @@ export default function AdminPanel() {
     onError: (err) => toast.error(err.message),
   });
   const resolveReviewItem = trpc.admin.resolveReviewItem.useMutation({
-    onSuccess: () => {
-      toast.success("Review item updated");
+    onSuccess: async (result) => {
+      toast.success(result.erasurePlan
+        ? `Review recorded and erasure plan #${result.erasurePlan.run.id} created`
+        : "Review item updated");
       refetchReviewQueue();
       refetchStats();
       setReviewDialog({ open: false, itemId: null, status: "resolved" });
       setReviewResolution("");
+      await refetchPrivacyErasurePlan();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const executePrivacyErasureCleanup = trpc.admin.executePrivacyErasureCleanup.useMutation({
+    onSuccess: async (result) => {
+      toast.success(`External cleanup finished with status ${result.status}`);
+      setErasureCleanupConfirmation("");
+      await refetchPrivacyErasurePlan();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const confirmManualPrivacyCleanup = trpc.admin.confirmManualPrivacyCleanup.useMutation({
+    onSuccess: async (_result, variables) => {
+      toast.success("Manual provider cleanup evidence recorded");
+      setManualCleanupEvidence((current) => ({ ...current, [variables.taskId]: "" }));
+      await refetchPrivacyErasurePlan();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1380,8 +1414,89 @@ export default function AdminPanel() {
                         ))}
                       </div>
                       <p className="mt-3 text-xs text-amber-200">
-                        Execution remains disabled until retention periods, provider revocation, object deletion, and transactional scrubbing are approved and verified.
+                        Resolving this review creates a non-destructive, itemized execution plan. It does not revoke providers, delete objects, or change user data.
                       </p>
+                      {privacyErasurePlan && (
+                        <div className="mt-3 space-y-3 border-t border-cyan-500/20 pt-3" data-testid="privacy-erasure-plan">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <div className="text-sm font-medium text-white">Execution plan #{privacyErasurePlan.run.id}</div>
+                              <div className="text-xs text-slate-400">{privacyErasurePlan.tasks.length} itemized task{privacyErasurePlan.tasks.length === 1 ? "" : "s"}</div>
+                            </div>
+                            <StatusBadge status={privacyErasurePlan.run.status} />
+                          </div>
+                          <div className="max-h-40 overflow-y-auto rounded border border-slate-800">
+                            {privacyErasurePlan.tasks.map((task) => (
+                              <div key={task.id} className="grid gap-1 border-b border-slate-800 px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center">
+                                <span className="text-slate-300">
+                                  {task.kind.replaceAll("_", " ")} - {task.provider ?? task.sourceTable}
+                                </span>
+                                <StatusBadge status={task.status} />
+                              </div>
+                            ))}
+                          </div>
+                          {["planned", "cleanup_in_progress", "failed"].includes(privacyErasurePlan.run.status) && (
+                            <div className="space-y-2">
+                              <Label className="text-slate-300">External cleanup confirmation</Label>
+                              <code className="block break-all rounded bg-slate-950 px-2 py-1 text-xs text-cyan-200">
+                                {buildPrivacyCleanupConfirmation(privacyErasurePlan.run.userId, privacyErasurePlan.run.policyVersion)}
+                              </code>
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <Input
+                                  value={erasureCleanupConfirmation}
+                                  onChange={(event) => setErasureCleanupConfirmation(event.target.value)}
+                                  className="border-slate-700 bg-slate-950 text-white"
+                                  aria-label="External cleanup confirmation"
+                                />
+                                <Button
+                                  onClick={() => executePrivacyErasureCleanup.mutate({
+                                    runId: privacyErasurePlan.run.id,
+                                    confirmation: erasureCleanupConfirmation,
+                                  })}
+                                  disabled={executePrivacyErasureCleanup.isPending || !canExecutePrivacyCleanup({
+                                    status: privacyErasurePlan.run.status,
+                                    confirmation: erasureCleanupConfirmation,
+                                    userId: privacyErasurePlan.run.userId,
+                                    policyVersion: privacyErasurePlan.run.policyVersion,
+                                  })}
+                                  className="bg-red-700 hover:bg-red-800"
+                                >
+                                  <Shield className="mr-2 h-4 w-4" />
+                                  Run cleanup
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          {privacyErasurePlan.tasks.filter((task) => task.kind === "provider_revoke" && task.status === "blocked").map((task) => (
+                            <div key={`manual-${task.id}`} className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
+                              <Label className="text-amber-100">Manual {task.provider} cleanup evidence</Label>
+                              <Textarea
+                                value={manualCleanupEvidence[task.id] ?? ""}
+                                onChange={(event) => setManualCleanupEvidence((current) => ({ ...current, [task.id]: event.target.value }))}
+                                className="border-slate-700 bg-slate-950 text-white"
+                                rows={3}
+                              />
+                              <Button
+                                variant="outline"
+                                disabled={confirmManualPrivacyCleanup.isPending || (manualCleanupEvidence[task.id]?.trim().length ?? 0) < 20}
+                                onClick={() => confirmManualPrivacyCleanup.mutate({
+                                  runId: privacyErasurePlan.run.id,
+                                  taskId: task.id,
+                                  evidence: manualCleanupEvidence[task.id] ?? "",
+                                })}
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Confirm provider removal
+                              </Button>
+                            </div>
+                          ))}
+                          {privacyErasurePlan.run.status === "ready_for_database" && (
+                            <p className="text-xs text-green-300">
+                              External cleanup is complete. Transactional database scrubbing is the remaining execution stage.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <p className="mt-3 text-sm text-amber-200">{privacyErasurePreview?.reason}</p>
@@ -1597,7 +1712,7 @@ export default function AdminPanel() {
           </DialogHeader>
           {isPrivacyDeletionDialog ? (
             <p className="text-sm text-amber-200/80">
-              This records a retention decision only. It does not delete account data, revoke providers, or override an active legal hold.
+              A resolved decision records an itemized, restart-safe execution plan. Planning does not delete account data, revoke providers, or override an active legal hold.
             </p>
           ) : null}
           <div>
@@ -1628,7 +1743,7 @@ export default function AdminPanel() {
               }}
             >
               {isPrivacyDeletionDialog
-                ? reviewDialog.status === "resolved" ? "Record review" : "Close request"
+                ? reviewDialog.status === "resolved" ? "Record and plan" : "Close request"
                 : reviewDialog.status === "resolved" ? "Resolve" : "Dismiss"}
             </Button>
           </DialogFooter>

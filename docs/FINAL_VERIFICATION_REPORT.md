@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 166 files, 861 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 863 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
@@ -89,6 +89,8 @@ Admin evidence also retrieves its application by owned primary key and its decis
 Discovery execution now has one active scan per source, a configurable bounded cross-source worker pool, abortable source deadlines, adapter-level minimum pacing, and transient-only backoff. HTTP 408/425/429 and 5xx responses can retry, `Retry-After` is capped at five minutes, permanent HTTP failures stop immediately, and production startup diagnostics reject a scheduled scanner without an explicit approved-source allowlist.
 
 Connector disconnect now disables local access before attempting cleanup. Google, Dropbox, and GitHub use bounded app-scoped revocation; Google cleanup disables both Gmail and Drive because the project grant is shared. Microsoft and LinkedIn return explicit account-side cleanup guidance instead of invoking broad session revocation. Provider failures preserve the encrypted grant for retry and raise audit risk without exposing token or provider-response content.
+
+Privacy review resolution on persistent storage now creates one durable non-destructive run before closing the review. Migration `0038` stores an inventory snapshot and itemized tasks without copying OAuth tokens or private-object keys. Exact-confirmation external cleanup uses a five-minute lease, retry-safe object deletion, scoped connector cleanup, and explicit manual evidence. A clean MySQL 8.4 integration run verified idempotent planning and the transition through `manual_action_required` to `ready_for_database`; transactional database finalization is intentionally not yet exposed.
 
 The production image was built and exercised on Windows Docker Desktop against a clean MySQL 8.4 container. This uncovered and closed four runtime-only defects: a stale pnpm major, omitted workspace overrides, invalid migration statement grouping/identifier length, and a pruned Vite dependency still imported by the server. The corrected image fails closed without configuration, carries an advisory-lock migrator that applied all 38 entries from zero, runs as the non-root Node user, becomes Docker-healthy, reports database-backed production readiness, and serves the frontend. The in-app browser could not attach to the local container page during the final render attempt; HTTP and Docker runtime evidence remain authoritative for this pass.
 

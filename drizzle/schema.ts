@@ -426,6 +426,50 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
   index("admin_review_items_entity_idx").on(table.entityType, table.entityId),
 ]);
 
+/** Durable, non-destructive privacy-erasure planning and execution state. */
+export const privacyErasureRuns = mysqlTable("privacy_erasure_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  reviewItemId: int("review_item_id").notNull(),
+  userId: int("user_id").notNull(),
+  requestedByAdminId: int("requested_by_admin_id").notNull(),
+  policyVersion: varchar("policy_version", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["planned", "cleanup_in_progress", "manual_action_required", "ready_for_database", "database_in_progress", "completed", "failed", "cancelled"]).default("planned").notNull(),
+  inventorySnapshot: text("inventory_snapshot").notNull(),
+  failureSummary: text("failure_summary"),
+  executionLeaseId: varchar("execution_lease_id", { length: 64 }),
+  executionLeaseExpiresAt: timestamp("execution_lease_expires_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("privacy_erasure_runs_review_unique").on(table.reviewItemId),
+  index("privacy_erasure_runs_user_status_idx").on(table.userId, table.status),
+]);
+
+export const privacyErasureTasks = mysqlTable("privacy_erasure_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  runId: int("run_id").notNull(),
+  userId: int("user_id").notNull(),
+  taskKey: varchar("task_key", { length: 255 }).notNull(),
+  kind: mysqlEnum("kind", ["provider_revoke", "private_object_delete", "retention_hold", "database_finalize"]).notNull(),
+  sourceTable: varchar("source_table", { length: 64 }).notNull(),
+  sourceRecordId: int("source_record_id"),
+  sourceColumn: varchar("source_column", { length: 64 }),
+  provider: mysqlEnum("provider", ["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]),
+  status: mysqlEnum("status", ["pending", "blocked", "in_progress", "completed", "failed"]).default("pending").notNull(),
+  attemptCount: int("attempt_count").default(0).notNull(),
+  lastErrorCode: varchar("last_error_code", { length: 120 }),
+  completionEvidence: text("completion_evidence"),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("privacy_erasure_tasks_run_key_unique").on(table.runId, table.taskKey),
+  index("privacy_erasure_tasks_run_status_idx").on(table.runId, table.status),
+  index("privacy_erasure_tasks_user_status_idx").on(table.userId, table.status),
+]);
+
 /**
  * Application Approvals
  * Captures explicit user/admin approval for consequential job-search actions.

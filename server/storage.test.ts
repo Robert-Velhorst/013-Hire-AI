@@ -37,4 +37,15 @@ describe("private storage deletion", () => {
     const { storageDelete } = await import("./storage");
     await expect(storageDelete("resumes/7/resume.pdf")).rejects.toThrow("Storage deletion failed (403 Forbidden)");
   });
+
+  it("treats an already-missing object as an idempotent deletion", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("missing", { status: 404 })) as typeof fetch;
+
+    const { storageDelete } = await import("./storage");
+    await expect(storageDelete("resumes/7/already-gone.pdf")).resolves.toEqual({
+      key: "resumes/7/already-gone.pdf",
+    });
+  });
 });

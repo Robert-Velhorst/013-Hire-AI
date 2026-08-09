@@ -140,6 +140,63 @@ export const adminRouter = router({
       return await buildPrivacyErasurePreview(evidence.reviewItem.userId);
     }),
 
+  getPrivacyErasurePlan: adminProcedure
+    .input(z.object({ reviewItemId: z.number() }))
+    .query(async ({ input }) => {
+      const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
+      if (
+        evidence.reviewItem.category !== "privacy_deletion" ||
+        evidence.reviewItem.entityType !== "user"
+      ) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Erasure plans are available only for privacy deletion reviews." });
+      }
+      const { getPrivacyErasureRunForReview } = await import("../privacyErasurePlanning");
+      return await getPrivacyErasureRunForReview(input.reviewItemId);
+    }),
+
+  executePrivacyErasureCleanup: adminProcedure
+    .input(z.object({
+      runId: z.number().int().positive(),
+      confirmation: z.string().min(1).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { executePrivacyErasureCleanup } = await import("../privacyErasureExecution");
+      const result = await executePrivacyErasureCleanup(input.runId, input.confirmation);
+      await createAuditEvent({
+        userId: result.userId,
+        entityType: "user",
+        entityId: result.userId,
+        action: "privacy_erasure_external_cleanup_run",
+        actor: "admin",
+        source: "admin.executePrivacyErasureCleanup",
+        afterState: JSON.stringify({ runId: input.runId, status: result.status, adminUserId: ctx.user.id }),
+        riskLevel: result.status === "ready_for_database" ? "high" : "critical",
+      });
+      return result;
+    }),
+
+  confirmManualPrivacyCleanup: adminProcedure
+    .input(z.object({
+      runId: z.number().int().positive(),
+      taskId: z.number().int().positive(),
+      evidence: z.string().trim().min(20).max(2000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { confirmManualPrivacyCleanup } = await import("../privacyErasureExecution");
+      const result = await confirmManualPrivacyCleanup(input.runId, input.taskId, input.evidence);
+      await createAuditEvent({
+        userId: result.userId,
+        entityType: "user",
+        entityId: result.userId,
+        action: "privacy_erasure_manual_cleanup_confirmed",
+        actor: "admin",
+        source: "admin.confirmManualPrivacyCleanup",
+        afterState: JSON.stringify({ runId: input.runId, taskId: input.taskId, adminUserId: ctx.user.id }),
+        riskLevel: "critical",
+      });
+      return result;
+    }),
+
   resolveReviewItem: adminProcedure
     .input(z.object({
       reviewItemId: z.number(),
@@ -148,13 +205,18 @@ export const adminRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
+      const isPrivacyDeletion = evidence.reviewItem.category === "privacy_deletion";
+      let erasurePlan = null;
+      if (isPrivacyDeletion && input.status === "resolved" && await getDb()) {
+        const { planPrivacyErasure } = await import("../privacyErasurePlanning");
+        erasurePlan = await planPrivacyErasure(input.reviewItemId, ctx.user.id, { allowUnresolvedReview: true });
+      }
       const result = await resolveAdminReviewItem(
         input.reviewItemId,
         ctx.user.id,
         input.status,
         input.resolution
       );
-      const isPrivacyDeletion = evidence.reviewItem.category === "privacy_deletion";
       await createAuditEvent({
         userId: evidence.reviewItem.userId,
         entityType: isPrivacyDeletion ? "user" : "admin_review",
@@ -168,10 +230,11 @@ export const adminRouter = router({
           resolutionRecorded: true,
           adminUserId: ctx.user.id,
           dataDeleted: false,
+          erasureRunId: erasurePlan?.run.id ?? null,
         }),
         riskLevel: isPrivacyDeletion ? "high" : input.status === "resolved" ? "medium" : "low",
       });
-      return result;
+      return { ...result, erasurePlan };
     }),
 
   // ─── Overview Stats ─────────────────────────────────────────────────────────

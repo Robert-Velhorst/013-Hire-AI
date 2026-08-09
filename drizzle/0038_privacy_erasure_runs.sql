@@ -1,0 +1,42 @@
+CREATE TABLE `privacy_erasure_runs` (
+  `id` int AUTO_INCREMENT NOT NULL,
+  `review_item_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `requested_by_admin_id` int NOT NULL,
+  `policy_version` varchar(64) NOT NULL,
+  `status` enum('planned','cleanup_in_progress','manual_action_required','ready_for_database','database_in_progress','completed','failed','cancelled') NOT NULL DEFAULT 'planned',
+  `inventory_snapshot` text NOT NULL,
+  `failure_summary` text,
+  `execution_lease_id` varchar(64),
+  `execution_lease_expires_at` timestamp,
+  `completed_at` timestamp,
+  `created_at` timestamp NOT NULL DEFAULT (now()),
+  `updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `privacy_erasure_runs_id` PRIMARY KEY(`id`),
+  CONSTRAINT `privacy_erasure_runs_review_unique` UNIQUE(`review_item_id`),
+  INDEX `privacy_erasure_runs_user_status_idx` (`user_id`, `status`)
+);
+--> statement-breakpoint
+CREATE TABLE `privacy_erasure_tasks` (
+  `id` int AUTO_INCREMENT NOT NULL,
+  `run_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `task_key` varchar(255) NOT NULL,
+  `kind` enum('provider_revoke','private_object_delete','retention_hold','database_finalize') NOT NULL,
+  `source_table` varchar(64) NOT NULL,
+  `source_record_id` int,
+  `source_column` varchar(64),
+  `provider` enum('gmail','google_drive','dropbox','outlook','linkedin','github'),
+  `status` enum('pending','blocked','in_progress','completed','failed') NOT NULL DEFAULT 'pending',
+  `attempt_count` int NOT NULL DEFAULT 0,
+  `last_error_code` varchar(120),
+  `completion_evidence` text,
+  `last_attempt_at` timestamp,
+  `completed_at` timestamp,
+  `created_at` timestamp NOT NULL DEFAULT (now()),
+  `updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `privacy_erasure_tasks_id` PRIMARY KEY(`id`),
+  CONSTRAINT `privacy_erasure_tasks_run_key_unique` UNIQUE(`run_id`,`task_key`),
+  INDEX `privacy_erasure_tasks_run_status_idx` (`run_id`, `status`),
+  INDEX `privacy_erasure_tasks_user_status_idx` (`user_id`, `status`)
+);

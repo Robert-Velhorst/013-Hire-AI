@@ -48,8 +48,10 @@ The restore command fails before starting `mysql` when the manifest is malformed
 2. Identify active billing, employment verification, payment recovery, disputes, and legal holds.
 3. Open Review Evidence and inspect the retention/erasure preview. It must use the current policy version, return an authoritative database count, and classify every table.
 4. Record which data is eligible for erasure and the approved retention period and legal basis for everything that must remain.
-5. Treat previewing or resolving the review as decision evidence only; neither action revokes providers, deletes objects, scrubs rows, or erases database records.
-6. Do not report completion until a separately approved executor produces itemized deletion, scrubbing, object-removal, and provider-revocation evidence.
+5. Resolving a review on persistent storage creates one non-destructive run with itemized provider, private-object, retention-hold, and database-finalization tasks.
+6. Type the exact run-specific confirmation in Admin before external cleanup. A five-minute lease prevents concurrent workers; failed tasks remain retryable without exposing provider responses, tokens, or object keys.
+7. Complete Microsoft and LinkedIn account-side removal, then record bounded evidence against each blocked task. Never paste tokens or credentials into evidence.
+8. `ready_for_database` proves external cleanup only. Do not report account erasure until the separately gated transactional database finalizer completes and the final inventory is reconciled.
 
 ## Deployment
 

@@ -119,7 +119,7 @@ export async function storageDelete(relKey: string): Promise<{ key: string }> {
     headers: buildAuthHeaders(apiKey),
   });
 
-  if (!response.ok) {
+  if (!response.ok && response.status !== 404) {
     const message = await response.text().catch(() => response.statusText);
     throw new Error(
       `Storage deletion failed (${response.status} ${response.statusText}): ${message}`

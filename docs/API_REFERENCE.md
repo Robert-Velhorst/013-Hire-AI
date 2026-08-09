@@ -69,7 +69,19 @@ Cancels the current user's open request and records the cancellation. It cannot 
 
 ### `admin.previewPrivacyErasure`
 
-Admin-only query for a privacy-deletion review. Counts every direct and application-linked user-owned table under policy `2026-08-09.v1`, classifies records as `erase`, `scrub_and_retain`, or `retain`, and reports private-object and provider-revocation work. It fails closed in development-memory mode and always returns `executionAllowed: false`; it performs no deletion.
+Admin-only query for a privacy-deletion review. Counts every direct and application-linked user-owned table under policy `2026-08-09.v1`, classifies records as `erase`, `scrub_and_retain`, or `retain`, and reports private-object and provider-revocation work. It fails closed in development-memory mode and performs no deletion.
+
+### `admin.getPrivacyErasurePlan`
+
+Returns the durable run and itemized tasks for a privacy review without returning OAuth tokens or private object keys.
+
+### `admin.executePrivacyErasureCleanup`
+
+Requires exact run-specific confirmation. Claims a five-minute database lease, revokes supported providers, deletes erasable private objects idempotently, and records retry/manual states. It does not execute database scrubbing.
+
+### `admin.confirmManualPrivacyCleanup`
+
+Records bounded evidence for a blocked Microsoft or LinkedIn account-side cleanup task. The run advances to `ready_for_database` only when every external task is complete.
 
 ---
 

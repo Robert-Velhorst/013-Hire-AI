@@ -115,3 +115,11 @@
 - Made Google revocation disable and clean both Gmail and Drive records because the provider invalidates the shared project grant.
 - Kept Microsoft and LinkedIn truthful and narrow: local credentials are removed and account-side removal guidance is returned instead of invoking broad sign-in-session revocation.
 - Retained encrypted grants after provider failure solely for retry, with high-risk audit status and user-visible warning.
+
+## 2026-08-09 - Durable privacy cleanup planning pass
+
+- Added migration `0038` with idempotent erasure runs, secret-free itemized tasks, bounded execution leases, retry state, and manual-cleanup evidence.
+- Made resolved privacy reviews create a non-destructive plan before the review is closed, preventing resolved-without-plan failure.
+- Added exact-confirmation admin controls for provider/object cleanup and evidence controls for unsupported provider revocation.
+- Made private-object deletion idempotent when storage already reports the object missing.
+- Applied all 39 migrations to clean MySQL 8.4 and verified plan idempotency, no copied token/object values, lease-protected cleanup, manual action, and `ready_for_database` transition.

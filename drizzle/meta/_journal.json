@@ -267,6 +267,13 @@
       "when": 1786323600000,
       "tag": "0037_job_alert_due_index",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1786410000000,
+      "tag": "0038_privacy_erasure_runs",
+      "breakpoints": true
     }
   ]
 }
