@@ -140,6 +140,28 @@ describe("Drizzle migration journal", () => {
     expect(upsertSource).not.toContain(".select(");
   });
 
+  it("keeps one latest-state public social profile per user and platform", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const databaseSource = readFileSync(resolve(process.cwd(), "server", "db.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0045_public_social_profile_unique.sql"),
+      "utf8"
+    );
+    const setterSource = databaseSource.slice(
+      databaseSource.indexOf("export async function setPublicSocialProfile"),
+      databaseSource.indexOf("export async function listUserConnectorAccounts")
+    );
+
+    expect(schema).toContain('uniqueIndex("social_profiles_user_platform_unique").on(table.userId, table.platform)');
+    expect(migration).toContain("CREATE TABLE `_migration_0045_social_profile_source`");
+    expect(migration).toContain("GROUP BY `user_id`, `platform`");
+    expect(migration).toContain("ORDER BY `source`.`updated_at` DESC, `source`.`id` DESC LIMIT 1");
+    expect(migration).toContain("WHERE `duplicate`.`id` <> `choice`.`canonical_id`");
+    expect(migration).toContain("ADD UNIQUE INDEX `social_profiles_user_platform_unique` (`user_id`, `platform`)");
+    expect(setterSource).toContain(".onDuplicateKeyUpdate({");
+    expect(setterSource).toContain("LAST_INSERT_ID(${socialMediaProfiles.id})");
+  });
+
   it("keeps the due job-alert index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

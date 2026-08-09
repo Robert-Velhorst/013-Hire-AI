@@ -1461,38 +1461,26 @@ export async function setPublicSocialProfile(input: {
     return created as SocialMediaProfile;
   }
 
-  await db
-    .update(socialMediaProfiles)
-    .set({
+  const write = await db
+    .insert(socialMediaProfiles)
+    .values({
+      userId: input.userId,
+      platform: input.platform,
       profileUrl: input.profileUrl,
       isActive: input.profileUrl === null ? 0 : 1,
-      updatedAt: now,
     })
-    .where(and(
-      eq(socialMediaProfiles.userId, input.userId),
-      eq(socialMediaProfiles.platform, input.platform)
-    ));
+    .onDuplicateKeyUpdate({
+      set: {
+        id: sql`LAST_INSERT_ID(${socialMediaProfiles.id})`,
+        profileUrl: input.profileUrl,
+        isActive: input.profileUrl === null ? 0 : 1,
+        updatedAt: now,
+      },
+    });
 
   if (input.profileUrl === null) return null;
 
-  const existing = await db
-    .select()
-    .from(socialMediaProfiles)
-    .where(and(
-      eq(socialMediaProfiles.userId, input.userId),
-      eq(socialMediaProfiles.platform, input.platform)
-    ))
-    .orderBy(desc(socialMediaProfiles.updatedAt))
-    .limit(1);
-  if (existing[0]) return existing[0];
-
-  const created = await db.insert(socialMediaProfiles).values({
-    userId: input.userId,
-    platform: input.platform,
-    profileUrl: input.profileUrl,
-    isActive: 1,
-  });
-  const id = Number(created[0].insertId);
+  const id = Number(write[0].insertId);
   const profiles = await db
     .select()
     .from(socialMediaProfiles)

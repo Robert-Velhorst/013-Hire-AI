@@ -193,6 +193,7 @@ export const socialMediaProfiles = mysqlTable("social_media_profiles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
+  uniqueIndex("social_profiles_user_platform_unique").on(table.userId, table.platform),
   index("social_media_profiles_user_active_idx").on(table.userId, table.isActive),
 ]);
 

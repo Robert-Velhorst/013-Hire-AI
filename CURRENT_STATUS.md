@@ -72,6 +72,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Localized AI preference controls, activity framing, evidence and policy sections, metrics, scheduler states and counts, quick actions, and locale-aware run times while preserving backend evidence text verbatim.
 - Enforced one candidate profile per account owner with a field-preserving duplicate consolidation migration and atomic runtime upserts.
 - Enforced one interview-preparation record per candidate and job with field-preserving duplicate consolidation and atomic concurrent regeneration.
+- Enforced one public social-profile reference per candidate and platform with latest-state consolidation and atomic writes.
 
 ## Still required before production
 

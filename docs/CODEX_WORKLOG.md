@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Public social-profile integrity invariant
+
+- Added one database-owned Facebook, X/Twitter, or legacy LinkedIn reference per candidate and platform.
+- Consolidated legacy duplicates onto the oldest stable ID while applying the most recently updated active/cleared state.
+- Replaced update/read/insert/read persistence with an atomic insert-or-update and one exact-ID read.
+
 ## 2026-08-09 - Interview preparation concurrency invariant
 
 - Added a database uniqueness contract for each candidate/job preparation pair.
