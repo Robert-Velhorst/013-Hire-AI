@@ -57,4 +57,5 @@
 - Replaced full-table privacy-review and admin-evidence reads with bounded indexed lookups.
 - Replaced the job aggregation source lookup's full duplicate-table scan with indexed direct/group queries.
 - Corrected the in-memory admin-review store to expose the same complete row contract as MySQL, removing optional-status defects in privacy routes and admin evidence rendering.
+- Batched offer-attribution evidence into one ownership-scoped response query and replaced repeated application searches with indexed in-memory maps.
 - Passed TypeScript and the full regression suite: 159 files and 805 tests.

@@ -48,7 +48,7 @@ The production frontend output rendered at desktop (1440 x 900) and mobile (390 
 
 The dashboard now issues one operating-snapshot query instead of seven overlapping requests. Its snapshot exposes exact counts and at most 10 projected recent applications, ordinary users do not trigger global admin-review reads, and the protected GET does not create campaign state. A local development smoke verified the repaired embedded server returns `/src/main.tsx` as JavaScript; browser startup on the loaded host exceeded the acceptance window before a final dashboard screenshot could be captured.
 
-Migration `0036` adds query-aligned indexes for profile readiness and the operating lifecycle. Privacy deletion status and admin evidence now fetch one matching review row, while job aggregation loads only the selected job's duplicate group. This is source- and test-verified locally; execution plans and migration timing still require a production-like database acceptance run.
+Migration `0036` adds query-aligned indexes for profile readiness and the operating lifecycle. Privacy deletion status and admin evidence now fetch one matching review row, job aggregation loads only the selected job's duplicate group, and offer-attribution evidence uses one ownership-scoped batch instead of one response query per approval. This is source- and test-verified locally; execution plans and migration timing still require a production-like database acceptance run.
 
 ## Release blockers and scope boundaries
 

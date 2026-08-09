@@ -2511,31 +2511,59 @@ function parseApprovalPayload(payload?: string | null): Record<string, unknown> 
 }
 
 export async function getUserOfferAttributionReviews(userId: number) {
-  const approvals = (await listUserApplicationApprovals(userId, "pending"))
+  const [pendingApprovals, userApplications] = await Promise.all([
+    listUserApplicationApprovals(userId, "pending"),
+    getUserApplications(userId),
+  ]);
+  const approvals = pendingApprovals
     .filter((approval) => approval.approvalType === "offer_attribution");
-  const userApplications = await getUserApplications(userId);
-
-  const reviews = await Promise.all(approvals.map(async (approval) => {
+  const applicationsById = new Map(
+    userApplications.map((application) => [application.id, application] as const)
+  );
+  const applicationIds = Array.from(new Set(approvals.flatMap((approval) => {
     const applicationId = approval.applicationId ??
       (approval.entityType === "application" ? approval.entityId : null);
-    const application = applicationId
-      ? userApplications.find((item) => item.id === applicationId) ?? null
-      : null;
+    return applicationId && applicationsById.has(applicationId) ? [applicationId] : [];
+  })));
+  const db = await getDb();
+  const responses = applicationIds.length === 0
+    ? []
+    : !db
+      ? memoryEmployerResponses
+        .filter((response) =>
+          response.userId === userId && applicationIds.includes(response.applicationId)
+        )
+        .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime()) as EmployerResponse[]
+      : await db
+        .select()
+        .from(employerResponses)
+        .where(and(
+          eq(employerResponses.userId, userId),
+          inArray(employerResponses.applicationId, applicationIds)
+        ))
+        .orderBy(desc(employerResponses.receivedAt));
+  const responsesByApplication = new Map<number, EmployerResponse[]>();
+  for (const response of responses) {
+    const existing = responsesByApplication.get(response.applicationId) ?? [];
+    existing.push(response);
+    responsesByApplication.set(response.applicationId, existing);
+  }
+
+  const reviews = approvals.map((approval) => {
+    const applicationId = approval.applicationId ??
+      (approval.entityType === "application" ? approval.entityId : null);
+    const application = applicationId ? applicationsById.get(applicationId) ?? null : null;
     const payload = parseApprovalPayload(approval.payload);
     let response: EmployerResponse | null = null;
-    if (applicationId) {
-      try {
-        const responses = await getEmployerResponses(applicationId, userId);
-        const responseId = payload && typeof payload.responseId === "number" &&
-          Number.isInteger(payload.responseId) && payload.responseId > 0
-          ? payload.responseId
-          : null;
-        response = responseId
-          ? responses.find((item) => item.id === responseId && item.responseType === "offer") ?? null
-          : responses.find((item) => item.responseType === "offer") ?? null;
-      } catch {
-        response = null;
-      }
+    if (applicationId && application) {
+      const applicationResponses = responsesByApplication.get(applicationId) ?? [];
+      const responseId = payload && typeof payload.responseId === "number" &&
+        Number.isInteger(payload.responseId) && payload.responseId > 0
+        ? payload.responseId
+        : null;
+      response = responseId
+        ? applicationResponses.find((item) => item.id === responseId && item.responseType === "offer") ?? null
+        : applicationResponses.find((item) => item.responseType === "offer") ?? null;
     }
 
     if (application && !isOfferEligibleApplicationStatus(application.status)) {
@@ -2549,7 +2577,7 @@ export async function getUserOfferAttributionReviews(userId: number) {
       payload,
       recommendedAction: "report_hire" as const,
     };
-  }));
+  });
 
   return reviews.filter((review) => review !== null);
 }
