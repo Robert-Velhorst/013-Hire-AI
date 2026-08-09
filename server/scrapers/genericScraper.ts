@@ -64,7 +64,7 @@ export class GenericScraper extends BaseScraper {
       const url = this.feedUrl || `${this.config.baseUrl}/feed/`;
 
       const response = await this.retry(async () => {
-        const res = await fetch(url, {
+        const res = await this.fetchSource(url, {
           signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
@@ -110,7 +110,7 @@ export class GenericScraper extends BaseScraper {
       const url = this.buildApiUrl(options);
 
       const response = await this.retry(async () => {
-        const res = await fetch(url, {
+        const res = await this.fetchSource(url, {
           signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
@@ -171,7 +171,7 @@ export class GenericScraper extends BaseScraper {
       await this.rateLimit(options?.signal);
 
       const response = await this.retry(async () => {
-        const res = await fetch(this.config.baseUrl, {
+        const res = await this.fetchSource(this.config.baseUrl, {
           signal: options?.signal,
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

@@ -1,6 +1,11 @@
 import type { Job } from "../../drizzle/schema";
 import { normalizeSalary } from "../jobNormalization";
-import { readBoundedResponseJson, readBoundedResponseText } from "../_core/outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "../_core/outboundRequest";
 
 export const SCRAPER_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -134,7 +139,20 @@ export abstract class BaseScraper {
 
   protected assertResponseOk(response: Response): void {
     if (response.ok) return;
+    void response.body?.cancel().catch(() => undefined);
     throw new ScraperHttpError(response.status, parseRetryAfterMs(response.headers.get("retry-after")));
+  }
+
+  protected fetchSource(input: string | URL, init: RequestInit = {}): Promise<Response> {
+    const requestDeadline = outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard);
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, requestDeadline])
+      : requestDeadline;
+    return fetch(input, {
+      ...init,
+      signal,
+      redirect: "error",
+    });
   }
 
   protected readResponseText(response: Response): Promise<string> {

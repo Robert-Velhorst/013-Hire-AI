@@ -25,7 +25,7 @@ export class RemoteOKScraper extends BaseScraper {
 
       // RemoteOK has a public API
       const response = await this.retry(async () => {
-          const res = await fetch(this.config.baseUrl, {
+          const res = await this.fetchSource(this.config.baseUrl, {
             signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",

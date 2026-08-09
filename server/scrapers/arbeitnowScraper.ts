@@ -38,7 +38,7 @@ export class ArbeitnowScraper extends BaseScraper {
       const url = new URL(this.config.baseUrl);
       url.searchParams.set("page", "1");
       const payload = await this.retry(async () => {
-        const response = await fetch(url, {
+        const response = await this.fetchSource(url, {
           signal: options?.signal,
           headers: { "User-Agent": "Hire.AI Job Aggregator" },
         });

@@ -52,7 +52,7 @@ export class JobicyScraper extends BaseScraper {
       if (options?.keywords?.trim()) url.searchParams.set("tag", options.keywords.trim());
 
       const payload = await this.retry(async () => {
-        const response = await fetch(url, {
+        const response = await this.fetchSource(url, {
           signal: options?.signal,
           headers: { "User-Agent": "Hire.AI Job Aggregator" },
         });

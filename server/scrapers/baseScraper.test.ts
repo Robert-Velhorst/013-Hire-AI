@@ -32,9 +32,20 @@ class TestScraper extends BaseScraper {
   readJson<T>(response: Response) {
     return this.readResponseJson<T>(response);
   }
+
+  request(input: string | URL, init?: RequestInit) {
+    return this.fetchSource(input, init);
+  }
+
+  assertHealthy(response: Response) {
+    return this.assertResponseOk(response);
+  }
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("base scraper application-link normalization", () => {
   const scraper = new TestScraper({
@@ -72,6 +83,30 @@ describe("base scraper application-link normalization", () => {
     const request = vi.fn().mockRejectedValue(new ScraperHttpError(404, null));
     await expect(scraper.retryRequest(request)).rejects.toMatchObject({ status: 404 });
     expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("blocks source redirects while preserving manager cancellation", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+
+    await scraper.request("https://jobs.example.com/feed", { signal: controller.signal });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://jobs.example.com/feed", expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
+    const requestSignal = fetchMock.mock.calls[0][1]?.signal;
+    controller.abort();
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it("cancels a rejected response body before retry handling", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }), { status: 503 });
+
+    expect(() => scraper.assertHealthy(response)).toThrow(ScraperHttpError);
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
   });
 
   it("honors bounded Retry-After guidance for transient provider failures", async () => {

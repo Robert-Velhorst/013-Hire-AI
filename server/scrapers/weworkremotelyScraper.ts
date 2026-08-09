@@ -42,7 +42,7 @@ export class WeWorkRemotelyScraper extends BaseScraper {
           const rssUrl = `${this.config.baseUrl}/categories/${category}.rss`;
           
           const response = await this.retry(async () => {
-          const res = await fetch(rssUrl, {
+          const res = await this.fetchSource(rssUrl, {
             signal: options?.signal,
               headers: {
                 "User-Agent": "Hire.AI Job Aggregator",

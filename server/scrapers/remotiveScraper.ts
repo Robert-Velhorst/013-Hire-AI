@@ -31,7 +31,7 @@ export class RemotiveScraper extends BaseScraper {
       }
 
       const response = await this.retry(async () => {
-          const res = await fetch(url, {
+          const res = await this.fetchSource(url, {
             signal: options?.signal,
           headers: {
             "User-Agent": "Hire.AI Job Aggregator",
