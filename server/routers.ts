@@ -1227,6 +1227,15 @@ export const appRouter = router({
         const { getUserApplicationPage } = await import("./db");
         return await getUserApplicationPage(ctx.user.id, input);
       }),
+    listAcceptedOffers: protectedProcedure
+      .input(z.object({ applicationId: z.number().int().positive().optional() }).strict())
+      .query(async ({ ctx, input }) => {
+        const { getUserAcceptedApplications } = await import("./db");
+        return await getUserAcceptedApplications(ctx.user.id, {
+          limit: 100,
+          includeApplicationId: input.applicationId,
+        });
+      }),
     getSummary: protectedProcedure.query(async ({ ctx }) => {
       const { getUserApplicationSummary } = await import("./db");
       return await getUserApplicationSummary(ctx.user.id);

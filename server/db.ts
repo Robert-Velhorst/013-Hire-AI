@@ -2147,7 +2147,7 @@ export async function getUserApplicationsForJobs(userId: number, requestedJobIds
 export async function getUserApplicationsByIds(userId: number, requestedApplicationIds: number[]) {
   const applicationIds = Array.from(new Set(
     requestedApplicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
-  )).slice(0, 100);
+  )).slice(0, 500);
   if (applicationIds.length === 0) return [];
 
   const db = await getDb();
@@ -2166,6 +2166,54 @@ export async function getUserApplicationsByIds(userId: number, requestedApplicat
       eq(applications.userId, userId),
       inArray(applications.id, applicationIds)
     ));
+}
+
+export async function getUserAcceptedApplications(
+  userId: number,
+  options: { limit?: number; includeApplicationId?: number } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 100), 1), 100);
+  const db = await getDb();
+  const sortAccepted = <T extends { lastActivity?: Date | null; createdAt: Date; id: number }>(rows: T[]) =>
+    rows.sort((left, right) =>
+      (right.lastActivity ?? right.createdAt).getTime() - (left.lastActivity ?? left.createdAt).getTime() ||
+      right.id - left.id
+    );
+
+  if (!db) {
+    const accepted = sortAccepted(memoryApplications
+      .filter((application) => application.userId === userId && application.status === "accepted"))
+      .slice(0, limit);
+    const included = options.includeApplicationId
+      ? memoryApplications.find((application) =>
+          application.id === options.includeApplicationId &&
+          application.userId === userId &&
+          application.status === "accepted"
+        )
+      : undefined;
+    return Array.from(new Map(
+      [...(included ? [included] : []), ...accepted].map((application) => [application.id, projectMemoryApplication(application)])
+    ).values());
+  }
+
+  const activityAt = sql<Date>`COALESCE(${applications.lastActivity}, ${applications.createdAt})`;
+  const [accepted, included] = await Promise.all([
+    db
+      .select(userApplicationSelection)
+      .from(applications)
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+      .where(and(eq(applications.userId, userId), eq(applications.status, "accepted")))
+      .orderBy(desc(activityAt), desc(applications.id))
+      .limit(limit),
+    options.includeApplicationId
+      ? getUserApplicationById(userId, options.includeApplicationId)
+      : Promise.resolve(null),
+  ]);
+  return Array.from(new Map([
+    ...(included?.status === "accepted" ? [[included.id, included] as const] : []),
+    ...accepted.map((application) => [application.id, application] as const),
+  ]).values());
 }
 
 export async function countUserAutonomousPreparationsSince(userId: number, since: Date) {

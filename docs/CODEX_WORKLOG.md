@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact accepted-offer and memory ownership reads
+
+- Replaced the report-hire dialog's general application-history request with an indexed, 100-item accepted-offer query that also preserves an explicitly linked accepted application.
+- Removed three memory-runtime full-history ownership scans from interview and follow-up workflows in favor of exact ID reads capped at the ledger's 500-application operating set.
+- Aligned the shared exact-ID helper with the combined active-window/current-job contract so valid rows are not silently omitted between memory and database runtimes.
+
 ## 2026-08-09 - Bounded success-fee operating window
 
 - Replaced account-wide success-fee reads on Billing with stable cursor pagination while retaining exact aggregate totals, compliance counts, deadlines, and the next actionable verification record.

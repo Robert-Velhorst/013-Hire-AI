@@ -21,7 +21,7 @@ import {
   getApplicationLedgerArtifacts,
   getJobById,
   getUserApplicationById,
-  getUserApplications,
+  getUserApplicationsByIds,
   listUserApplicationApprovalsForApplication,
   markUnreadInterviewNotificationsReadForApplication,
   resolveApplicationApproval,
@@ -1677,13 +1677,13 @@ export async function getUserInterviewSchedulesForApplications(
 ) {
   const boundedApplicationIds = Array.from(new Set(
     applicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
-  ));
+  )).slice(0, 500);
   if (boundedApplicationIds.length === 0) return [] as InterviewSchedule[];
   const requestedApplicationIds = new Set(boundedApplicationIds);
 
   const db = await getDb();
   if (!db) {
-    const applicationsForUser = await getUserApplications(userId);
+    const applicationsForUser = await getUserApplicationsByIds(userId, boundedApplicationIds);
     const ownedApplicationIds = new Set(
       applicationsForUser
         .filter((application) => requestedApplicationIds.has(application.id))
@@ -1710,18 +1710,27 @@ export async function getUpcomingInterviews(userId: number) {
   const db = await getDb();
   const now = new Date();
   if (!db) {
-    const applicationsForUser = await getUserApplications(userId);
-    const applicationsById = new Map(applicationsForUser.map((application) => [application.id, application]));
-    const upcoming = memoryInterviewSchedules
+    const candidates = memoryInterviewSchedules
       .filter((interview) =>
         (interview.status === "scheduled" || interview.status === "rescheduled") &&
-        interview.scheduledAt >= now &&
-        applicationsById.has(interview.applicationId)
+        interview.scheduledAt >= now
       )
-      .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
-      .slice(0, 10);
-
-    return await Promise.all(upcoming.map(async (interview) => {
+      .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
+    const applicationsById = new Map<number, Awaited<ReturnType<typeof getUserApplicationsByIds>>[number]>();
+    const ownedUpcoming: typeof candidates = [];
+    for (let offset = 0; offset < candidates.length && ownedUpcoming.length < 10; offset += 500) {
+      const chunk = candidates.slice(offset, offset + 500);
+      const ownedApplications = await getUserApplicationsByIds(
+        userId,
+        chunk.map((interview) => interview.applicationId)
+      );
+      for (const application of ownedApplications) applicationsById.set(application.id, application);
+      for (const interview of chunk) {
+        if (applicationsById.has(interview.applicationId)) ownedUpcoming.push(interview);
+        if (ownedUpcoming.length === 10) break;
+      }
+    }
+    return await Promise.all(ownedUpcoming.map(async (interview) => {
       const application = applicationsById.get(interview.applicationId)!;
       const job = await getJobById(application.jobId);
       return {
@@ -2547,13 +2556,13 @@ export async function getUserFollowUpsForApplications(
 ) {
   const boundedApplicationIds = Array.from(new Set(
     applicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
-  ));
+  )).slice(0, 500);
   if (boundedApplicationIds.length === 0) return [] as FollowUp[];
   const requestedApplicationIds = new Set(boundedApplicationIds);
 
   const db = await getDb();
   if (!db) {
-    const applicationsForUser = await getUserApplications(userId);
+    const applicationsForUser = await getUserApplicationsByIds(userId, boundedApplicationIds);
     const ownedApplicationIds = new Set(
       applicationsForUser
         .filter((application) => requestedApplicationIds.has(application.id))
