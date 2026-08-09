@@ -3546,6 +3546,60 @@ export async function getUserOfferAttributionReviews(
   return reviews.filter((review) => review !== null);
 }
 
+export async function getUserOfferAttributionReviewsForApplications(
+  userId: number,
+  requestedApplicationIds: number[]
+) {
+  const applicationIds = Array.from(new Set(
+    requestedApplicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  )).slice(0, 250);
+  if (applicationIds.length === 0) return [];
+
+  const requested = new Set(applicationIds);
+  const [applicationRows, approvalRows] = await Promise.all([
+    getUserApplicationsByIds(userId, applicationIds),
+    (async () => {
+      const db = await getDb();
+      if (!db) {
+        return memoryApplicationApprovals
+          .filter((approval) =>
+            approval.userId === userId &&
+            approval.status === "pending" &&
+            approval.approvalType === "offer_attribution" &&
+            ((approval.applicationId != null && requested.has(approval.applicationId)) ||
+              (approval.entityType === "application" && requested.has(approval.entityId)))
+          )
+          .sort((left, right) =>
+            right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id
+          )
+          .slice(0, 500) as ApplicationApproval[];
+      }
+      return await db
+        .select()
+        .from(applicationApprovals)
+        .where(and(
+          eq(applicationApprovals.userId, userId),
+          eq(applicationApprovals.status, "pending"),
+          eq(applicationApprovals.approvalType, "offer_attribution"),
+          or(
+            inArray(applicationApprovals.applicationId, applicationIds),
+            and(
+              eq(applicationApprovals.entityType, "application"),
+              inArray(applicationApprovals.entityId, applicationIds)
+            )
+          )
+        ))
+        .orderBy(desc(applicationApprovals.createdAt), desc(applicationApprovals.id))
+        .limit(500);
+    })(),
+  ]);
+
+  return await getUserOfferAttributionReviews(userId, {
+    approvals: approvalRows,
+    applications: applicationRows,
+  });
+}
+
 export async function getUserOfferAttributionReviewPage(userId: number, requestedLimit = 5) {
   const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
   const db = await getDb();

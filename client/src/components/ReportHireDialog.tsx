@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,11 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
     { applicationId },
     { enabled: open }
   );
-  const { data: offerAttributionReviews = [] } = trpc.successFees.getOfferAttributionReviews.useQuery(undefined, { enabled: open });
+  const applicationIds = useMemo(() => applications.map((application) => application.id), [applications]);
+  const { data: offerAttributionReviews = [] } = trpc.successFees.listOfferAttributionReviewsForApplications.useQuery(
+    { applicationIds },
+    { enabled: open && applicationIds.length > 0 }
+  );
   const linkedApplication = applications.find((application: any) => application.id === selectedApplicationId);
   const selectableApplications = applications;
   const selectedAttributionReview = offerAttributionReviews.find((review: any) => {

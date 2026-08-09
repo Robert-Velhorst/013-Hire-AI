@@ -203,7 +203,8 @@ export default function Billing() {
     [paymentPages]
   );
   const { data: paymentSummary } = trpc.successFees.getPaymentSummary.useQuery();
-  const { data: offerAttributionReviews = [] } = trpc.successFees.getOfferAttributionReviews.useQuery();
+  const { data: offerAttributionReviewPage } = trpc.successFees.getOfferAttributionReviewPage.useQuery({ limit: 25 });
+  const offerAttributionReviews = offerAttributionReviewPage?.items ?? [];
 
   const reportEmploymentEnded = trpc.successFees.reportEmploymentEnded.useMutation({
     onSuccess: (data) => {
@@ -521,6 +522,22 @@ export default function Billing() {
                   </div>
                 );
               })}
+              {offerAttributionReviewPage?.hasMore && (
+                <div className="flex flex-col gap-2 border-t border-amber-500/20 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-amber-200">
+                    Showing 25 of {offerAttributionReviewPage.total} pending reviews.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-amber-500/30 text-amber-200 hover:bg-amber-500/10"
+                    onClick={() => setLocation("/applications")}
+                  >
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    Open Applications
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

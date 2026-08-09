@@ -6,7 +6,8 @@ import {
   createAuditEvent,
   dismissOfferAttributionAdminReviews,
   getDb,
-  getUserOfferAttributionReviews,
+  getUserOfferAttributionReviewPage,
+  getUserOfferAttributionReviewsForApplications,
   getUserFeePaymentPage,
   getUserActiveMonthlyFeeTotalsByCurrency,
   getUserPaidTotalsByCurrency,
@@ -697,10 +698,17 @@ export const successFeesRouter = router({
       return { feeId: fee.id, checkoutUrl, checkoutSource, billingApprovalId: approvalId };
     }),
 
-  // Show offer responses/approvals that should be converted into reported hires.
-  getOfferAttributionReviews: protectedProcedure.query(async ({ ctx }) => {
-    return await getUserOfferAttributionReviews(ctx.user.id);
-  }),
+  getOfferAttributionReviewPage: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(25) }).strict())
+    .query(async ({ ctx, input }) => getUserOfferAttributionReviewPage(ctx.user.id, input.limit)),
+
+  listOfferAttributionReviewsForApplications: protectedProcedure
+    .input(z.object({
+      applicationIds: z.array(z.number().int().positive()).max(250),
+    }).strict())
+    .query(async ({ ctx, input }) =>
+      getUserOfferAttributionReviewsForApplications(ctx.user.id, input.applicationIds)
+    ),
 
   getPaymentPage: protectedProcedure
     .input(z.object({

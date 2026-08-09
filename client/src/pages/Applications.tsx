@@ -234,7 +234,10 @@ export default function Applications() {
   const {
     data: offerAttributionReviews = [],
     refetch: refetchOfferAttributionReviews,
-  } = trpc.successFees.getOfferAttributionReviews.useQuery(undefined, { enabled: Boolean(user) });
+  } = trpc.successFees.listOfferAttributionReviewsForApplications.useQuery(
+    { applicationIds: approvalApplicationIds },
+    { enabled: Boolean(user) && approvalApplicationIds.length > 0 }
+  );
 
   // Update status mutation (for withdraw)
   const updateStatusMutation = trpc.applications.updateStatus.useMutation({

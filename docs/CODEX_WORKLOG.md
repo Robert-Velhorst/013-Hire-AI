@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Scoped offer-attribution review reads
+
+- Replaced interactive offer-review history scans with exact owner/application reads for Applications and the report-hire dialog.
+- Bounded Billing's review panel to the newest 25 eligible pending reviews while retaining an exact total and a truthful overflow path to Applications.
+- Removed the unused full-history API route and retained the separate five-item autonomous-planning aggregate.
+
 ## 2026-08-09 - Cursor-paged, currency-correct payment history
 
 - Replaced Billing's complete payment-ledger read with owner-scoped 50-record cursor pages and incremental loading.
