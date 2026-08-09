@@ -4863,19 +4863,21 @@ export async function processJobAlerts() {
   }
 
   const checkedAlertIds = alerts.map((alert) => alert.id);
-  await db
-    .update(jobAlerts)
-    .set({ lastCheckedAt: now })
-    .where(inArray(jobAlerts.id, checkedAlertIds));
-
-  if (matchedAlertIds.length > 0) {
-    // Matching jobs remain available in the command center. External alerts are
-    // reserved for deterministic interview-invite evidence.
-    await db
+  await db.transaction(async (tx) => {
+    await tx
       .update(jobAlerts)
-      .set({ lastTriggered: now })
-      .where(inArray(jobAlerts.id, matchedAlertIds));
-  }
+      .set({ lastCheckedAt: now })
+      .where(inArray(jobAlerts.id, checkedAlertIds));
+
+    if (matchedAlertIds.length > 0) {
+      // Matching jobs remain available in the command center. External alerts are
+      // reserved for deterministic interview-invite evidence.
+      await tx
+        .update(jobAlerts)
+        .set({ lastTriggered: now })
+        .where(inArray(jobAlerts.id, matchedAlertIds));
+    }
+  });
 
   return { processed: matchedAlertIds.length, externalNotifications: 0 as const };
 }

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   limit: vi.fn(),
   set: vi.fn(),
   where: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("./db", async (importOriginal) => ({
@@ -41,6 +42,7 @@ describe("job alert processing", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.transaction.mockImplementation(async (callback) => callback({ update: mocks.update }));
   });
 
   it("records a matching alert refresh without sending an external notification", async () => {
@@ -74,12 +76,13 @@ describe("job alert processing", () => {
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 7, name: "Remote OK" }]) });
     mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
-    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
     expect(mocks.update).toHaveBeenCalledTimes(2);
     expect(mocks.where).toHaveBeenCalledTimes(2);
     expect(mocks.limit).toHaveBeenCalledWith(250);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
 
   it("does not mark an alert as refreshed when active jobs miss its criteria", async () => {
@@ -112,7 +115,7 @@ describe("job alert processing", () => {
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 3, name: "We Work Remotely" }]) });
     mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
-    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
     expect(mocks.update).toHaveBeenCalledTimes(1);
@@ -120,7 +123,7 @@ describe("job alert processing", () => {
 
   it("does not load jobs or platforms when no alert is due", async () => {
     mocks.select.mockReturnValueOnce(dueAlertRows([]));
-    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
     expect(mocks.select).toHaveBeenCalledTimes(1);
@@ -158,7 +161,7 @@ describe("job alert processing", () => {
         updatedAt: new Date(),
       }]));
     mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
-    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
     expect(mocks.select).toHaveBeenCalledTimes(4);
