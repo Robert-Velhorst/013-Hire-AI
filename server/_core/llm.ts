@@ -6,6 +6,7 @@ import {
   readBoundedResponseJson,
   readBoundedResponseText,
 } from "./outboundRequest";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -216,10 +217,10 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
+const resolveApiBaseUrl = () =>
   ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+    ? ENV.forgeApiUrl
+    : "https://forge.manus.im";
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
@@ -319,7 +320,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
+  const response = await fetch(buildTrustedServiceUrl(resolveApiBaseUrl(), "v1/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -327,6 +328,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     },
     body: JSON.stringify(payload),
     signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
+    redirect: "error",
   });
 
   if (!response.ok) {

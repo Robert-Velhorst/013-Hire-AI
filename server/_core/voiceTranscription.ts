@@ -36,6 +36,7 @@ import {
   ResponseSizeLimitError,
 } from "./outboundRequest";
 import { requirePublicHttpsUrl } from "./publicUrl";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 const ALLOWED_AUDIO_MIME_TYPES = new Set([
@@ -175,14 +176,7 @@ export async function transcribeAudio(
     formData.append("prompt", prompt);
 
     // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/")
-      ? ENV.forgeApiUrl
-      : `${ENV.forgeApiUrl}/`;
-    
-    const fullUrl = new URL(
-      "v1/audio/transcriptions",
-      baseUrl
-    ).toString();
+    const fullUrl = buildTrustedServiceUrl(ENV.forgeApiUrl, "v1/audio/transcriptions");
 
     const response = await fetch(fullUrl, {
       method: "POST",

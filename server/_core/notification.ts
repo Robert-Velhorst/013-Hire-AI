@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
 import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 export type NotificationPayload = {
   title: string;
@@ -16,15 +17,8 @@ const trimValue = (value: string): string => value.trim();
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const buildEndpointUrl = (baseUrl: string): string => {
-  const normalizedBase = baseUrl.endsWith("/")
-    ? baseUrl
-    : `${baseUrl}/`;
-  return new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    normalizedBase
-  ).toString();
-};
+const buildEndpointUrl = (baseUrl: string): string =>
+  buildTrustedServiceUrl(baseUrl, "webdevtoken.v1.WebDevService/SendNotification");
 
 const validatePayload = (input: NotificationPayload): NotificationPayload => {
   if (!isNonEmptyString(input.title)) {
@@ -98,6 +92,7 @@ export async function notifyOwner(
       },
       body: JSON.stringify({ title, content }),
       signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.notification),
+      redirect: "error",
     });
 
     if (!response.ok) {

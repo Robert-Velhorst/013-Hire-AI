@@ -12,6 +12,7 @@ import {
   readBoundedResponseJson,
   readBoundedResponseText,
 } from "./outboundRequest";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 export type DataApiCallOptions = {
   query?: Record<string, unknown>;
@@ -32,8 +33,7 @@ export async function callDataApi(
   }
 
   // Build the full URL by appending the service path to the base URL
-  const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-  const fullUrl = new URL("webdevtoken.v1.WebDevService/CallApi", baseUrl).toString();
+  const fullUrl = buildTrustedServiceUrl(ENV.forgeApiUrl, "webdevtoken.v1.WebDevService/CallApi");
 
   const response = await fetch(fullUrl, {
     method: "POST",
@@ -51,6 +51,7 @@ export async function callDataApi(
       multipart_form_data: options.formData,
     }),
     signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+    redirect: "error",
   });
 
   if (!response.ok) {

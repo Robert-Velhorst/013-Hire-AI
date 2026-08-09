@@ -15,6 +15,7 @@ import {
   readBoundedResponseJson,
   readBoundedResponseText,
 } from "./outboundRequest";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 // ============================================================================
 // Configuration
@@ -66,7 +67,7 @@ export async function makeRequest<T = unknown>(
   const { baseUrl, apiKey } = getMapsConfig();
 
   // Construct full URL: baseUrl + /v1/maps/proxy + endpoint
-  const url = new URL(`${baseUrl}/v1/maps/proxy${endpoint}`);
+  const url = new URL(buildTrustedServiceUrl(baseUrl, `v1/maps/proxy${endpoint}`));
 
   // Add API key as query parameter (standard Google Maps API authentication)
   url.searchParams.append("key", apiKey);
@@ -85,6 +86,7 @@ export async function makeRequest<T = unknown>(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+    redirect: "error",
   });
 
   if (!response.ok) {

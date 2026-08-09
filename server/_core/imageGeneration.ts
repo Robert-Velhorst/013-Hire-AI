@@ -24,6 +24,7 @@ import {
   readBoundedResponseJson,
   readBoundedResponseText,
 } from "./outboundRequest";
+import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -49,13 +50,7 @@ export async function generateImage(
   }
 
   // Build the full URL by appending the service path to the base URL
-  const baseUrl = ENV.forgeApiUrl.endsWith("/")
-    ? ENV.forgeApiUrl
-    : `${ENV.forgeApiUrl}/`;
-  const fullUrl = new URL(
-    "images.v1.ImageService/GenerateImage",
-    baseUrl
-  ).toString();
+  const fullUrl = buildTrustedServiceUrl(ENV.forgeApiUrl, "images.v1.ImageService/GenerateImage");
 
   const response = await fetch(fullUrl, {
     method: "POST",
@@ -70,6 +65,7 @@ export async function generateImage(
       original_images: options.originalImages || [],
     }),
     signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
+    redirect: "error",
   });
 
   if (!response.ok) {

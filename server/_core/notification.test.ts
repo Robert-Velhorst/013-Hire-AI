@@ -52,6 +52,7 @@ describe("owner notification delivery", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       signal: expect.any(AbortSignal),
+      redirect: "error",
     }));
   });
 });
