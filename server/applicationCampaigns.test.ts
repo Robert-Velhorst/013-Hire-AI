@@ -146,6 +146,12 @@ describe("application campaign operating ledger", () => {
     });
     expect(ledger.applicationOverview.recent).toHaveLength(10);
     expect(ledger.metrics.trackedApplications).toBe(260);
+    expect(ledger.queues.connectorReadiness).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "inbox-response-monitoring",
+        affectedApplications: 260,
+      }),
+    ]));
     expect(ledger.nextActions).toContain(
       "Processing is safely limited to the 250 oldest active applications in this cycle."
     );

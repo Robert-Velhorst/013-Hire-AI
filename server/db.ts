@@ -2300,6 +2300,9 @@ export async function getUserApplicationSummary(userId: number) {
       total: rows.length,
       prepared: rows.filter((application) => application.status === "pending").length,
       active: rows.filter((application) => ["pending", "applied", "viewed", "interview"].includes(application.status ?? "pending")).length,
+      responseMonitoring: rows.filter((application) =>
+        ["applied", "viewed", "interview"].includes(application.status ?? "pending")
+      ).length,
       submitted,
       responded: rows.filter((application) => !["pending", "applied"].includes(application.status ?? "pending")).length,
       responseSignals: rows.filter((application) => ["viewed", "interview", "offer", "accepted", "rejected"].includes(application.status ?? "pending")).length,
@@ -2315,6 +2318,7 @@ export async function getUserApplicationSummary(userId: number) {
       total: sql<number>`COUNT(*)`,
       prepared: sql<number>`COALESCE(SUM(${applications.status} = 'pending'), 0)`,
       active: sql<number>`COALESCE(SUM(${applications.status} IN ('pending', 'applied', 'viewed', 'interview')), 0)`,
+      responseMonitoring: sql<number>`COALESCE(SUM(${applications.status} IN ('applied', 'viewed', 'interview')), 0)`,
       submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
       responded: sql<number>`COALESCE(SUM(${applications.status} NOT IN ('pending', 'applied')), 0)`,
       responseSignals: sql<number>`COALESCE(SUM(${applications.status} IN ('viewed', 'interview', 'offer', 'accepted', 'rejected')), 0)`,
@@ -2332,6 +2336,7 @@ export async function getUserApplicationSummary(userId: number) {
     total: number;
     prepared: number;
     active: number;
+    responseMonitoring: number;
     submitted: number;
     responded: number;
     responseSignals: number;
@@ -2931,31 +2936,57 @@ export async function getPendingInboxResponseCandidatePage(userId: number, reque
       .sort((left, right) =>
         right.receivedAt.getTime() - left.receivedAt.getTime() || right.id - left.id
       ) as InboxResponseCandidate[];
+    const ownedApplications: Array<Awaited<ReturnType<typeof getUserApplicationsByIds>>[number]> = [];
+    const applicationIds = Array.from(new Set(rows.map((candidate) => candidate.applicationId)));
+    for (let offset = 0; offset < applicationIds.length; offset += 500) {
+      ownedApplications.push(...await getUserApplicationsByIds(userId, applicationIds.slice(offset, offset + 500)));
+    }
+    const applicationsById = new Map(ownedApplications.map((application) => [application.id, application]));
+    const ownedRows = rows.filter((candidate) => applicationsById.has(candidate.applicationId));
+    const pageRows = ownedRows.slice(0, limit);
     return {
-      items: rows.slice(0, limit),
-      total: rows.length,
+      items: pageRows.flatMap((candidate) => {
+        const application = applicationsById.get(candidate.applicationId);
+        if (!application) return [];
+        return [{
+          ...candidate,
+          job: application.job?.id != null ? application.job as Job : null,
+        }];
+      }),
+      total: ownedRows.length,
       limit,
-      hasMore: rows.length > limit,
+      hasMore: ownedRows.length > limit,
     };
   }
   const condition = and(
     eq(inboxResponseCandidates.userId, userId),
-    eq(inboxResponseCandidates.status, "pending")
+    eq(inboxResponseCandidates.status, "pending"),
+    eq(applications.userId, userId)
   );
   const [rows, totalRows] = await Promise.all([
     db
-      .select()
+      .select({ candidate: inboxResponseCandidates, job: jobs })
       .from(inboxResponseCandidates)
+      .innerJoin(applications, and(
+        eq(inboxResponseCandidates.applicationId, applications.id),
+        eq(inboxResponseCandidates.userId, applications.userId)
+      ))
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
       .where(condition)
       .orderBy(desc(inboxResponseCandidates.receivedAt))
       .limit(limit),
     db
       .select({ count: sql<number>`COUNT(*)` })
       .from(inboxResponseCandidates)
+      .innerJoin(applications, and(
+        eq(inboxResponseCandidates.applicationId, applications.id),
+        eq(inboxResponseCandidates.userId, applications.userId)
+      ))
       .where(condition),
   ]);
   const total = Number(totalRows[0]?.count ?? 0);
-  return { items: rows, total, limit, hasMore: total > rows.length };
+  const items = rows.map((row) => ({ ...row.candidate, job: row.job ?? null }));
+  return { items, total, limit, hasMore: total > items.length };
 }
 
 export async function getInboxResponseCandidate(candidateId: number, userId: number) {

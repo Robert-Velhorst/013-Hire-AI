@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  createApplication,
   getPendingInboxResponseCandidatePage,
   listPendingInboxResponseCandidates,
   resolveInboxResponseCandidateBySourceReference,
   upsertInboxResponseCandidate,
 } from "./db";
+import { sampleJobs } from "./sampleData";
 
 describe("inbox response candidate ledger", () => {
   it("deduplicates candidate discovery and removes a dismissed message from the pending queue", async () => {
@@ -47,9 +49,14 @@ describe("inbox response candidate ledger", () => {
     const userId = 99702;
     const otherUserId = 99703;
     for (let index = 0; index < 103; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: index === 102 ? sampleJobs[0].id : 20_000 + index,
+        status: "applied",
+      });
       await upsertInboxResponseCandidate({
         userId,
-        applicationId: 20_000 + index,
+        applicationId: Number(application.insertId),
         provider: "gmail",
         messageId: `candidate-99702-${index}`,
         receivedAt: new Date(1_800_000_000_000 + index),
@@ -57,9 +64,14 @@ describe("inbox response candidate ledger", () => {
         confidence: "medium",
       });
     }
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 30_000,
+      status: "applied",
+    });
     await upsertInboxResponseCandidate({
       userId: otherUserId,
-      applicationId: 30_000,
+      applicationId: Number(foreignApplication.insertId),
       provider: "outlook",
       messageId: "candidate-other-owner",
       receivedAt: new Date(1_900_000_000_000),
@@ -81,5 +93,10 @@ describe("inbox response candidate ledger", () => {
       "candidate-99702-101",
       "candidate-99702-100",
     ]);
+    expect(page.items[0].job).toMatchObject({
+      id: sampleJobs[0].id,
+      title: sampleJobs[0].title,
+      company: sampleJobs[0].company,
+    });
   });
 });

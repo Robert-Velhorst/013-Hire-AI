@@ -544,6 +544,7 @@ export function getConnectorReadinessQueue(input: {
   applications: UserApplicationRecord[];
   providers: ProfileEvidenceProvider[];
   hasActiveResumeArtifact: boolean;
+  responseMonitoringApplications?: number;
 }) {
   const providerById = new Map(input.providers.map((provider) => [provider.id, provider]));
   const items = input.providers
@@ -564,7 +565,8 @@ export function getConnectorReadinessQueue(input: {
     const provider = providerById.get(providerId as ProfileEvidenceProvider["id"]);
     return providerIsConnected(provider);
   });
-  const responseApplications = activeResponseApplicationCount(input.applications);
+  const responseApplications = input.responseMonitoringApplications ??
+    activeResponseApplicationCount(input.applications);
   if (responseApplications > 0 && !hasConnectedInbox) {
     items.push(connectorReadinessItem({
       id: "inbox-response-monitoring",
@@ -763,7 +765,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getUserOfferAttributionReviewPage(userId, 5),
     listUserConnectorAccounts(userId),
     getActiveResume(userId),
-    getPendingInboxResponseCandidatePage(userId),
+    getPendingInboxResponseCandidatePage(userId, 5),
     getApplicationCampaign(userId),
   ]);
   const [currentJobApplications, currentJobDecisions] = await Promise.all([
@@ -895,12 +897,18 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     applications,
     providers: profileEvidence.providers,
     hasActiveResumeArtifact: Boolean(activeResume),
+    responseMonitoringApplications: applicationSummary.responseMonitoring,
   });
   const inboxResponseCandidateQueue = inboxResponseCandidatePage.items.map((candidate) => {
     const application = applicationsById.get(candidate.applicationId);
     return {
       ...candidate,
-      job: application?.job ? {
+      job: candidate.job ? {
+        id: candidate.job.id,
+        title: candidate.job.title,
+        company: candidate.job.company,
+        location: candidate.job.location,
+      } : application?.job ? {
         id: application.job.id,
         title: application.job.title,
         company: application.job.company,

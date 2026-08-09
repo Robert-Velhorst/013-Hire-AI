@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact connector impact and bounded inbox candidates
+
+- Added an exact owner-scoped application aggregate for inbox response monitoring instead of counting only the bounded operating window.
+- Reduced dashboard inbox-candidate hydration from 100 records to five while retaining the database-counted total and truncation metadata.
+- Added a 260-application regression proving connector impact remains exact beyond the operating window.
+
 ## 2026-08-09 - Exact follow-up readiness aggregates
 
 - Moved total due-candidate and held-follow-up counts into the exact owner-scoped drafting query instead of deriving them from the 250-application planning window.

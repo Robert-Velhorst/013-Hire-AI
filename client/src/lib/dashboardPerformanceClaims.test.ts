@@ -155,6 +155,8 @@ describe("dashboard performance claims", () => {
     expect(campaigns).toContain("getUserOperatingApplicationWindow(userId)");
     expect(campaigns).toContain("getUserApplicationsForJobs(");
     expect(campaigns).toContain("getUserApplicationSummary(userId)");
+    expect(campaigns).toContain("responseMonitoringApplications: applicationSummary.responseMonitoring");
+    expect(campaigns).toContain("getPendingInboxResponseCandidatePage(userId, 5)");
     expect(campaigns).toContain("getUserOperatingApplicationApprovals(");
     expect(campaigns).toContain("getUserReviewDecisionPage(userId, 5)");
     expect(campaigns).not.toContain("getUserApplications(userId)");

@@ -60,6 +60,7 @@ describe("application ledger pagination", () => {
       submitted: 3,
       responded: 2,
       responseSignals: 2,
+      responseMonitoring: 2,
       interviewing: 1,
       interview: 1,
       offered: 0,

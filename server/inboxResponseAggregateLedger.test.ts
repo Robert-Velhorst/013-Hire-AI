@@ -5,8 +5,9 @@ import { describe, expect, it } from "vitest";
 describe("inbox-response aggregate ledger wiring", () => {
   it("uses the bounded page and exact count in the operating ledger", () => {
     const campaigns = readFileSync(resolve(process.cwd(), "server/applicationCampaigns.ts"), "utf8");
-    expect(campaigns).toContain("getPendingInboxResponseCandidatePage(userId)");
+    expect(campaigns).toContain("getPendingInboxResponseCandidatePage(userId, 5)");
     expect(campaigns).not.toContain("listPendingInboxResponseCandidates(userId)");
+    expect(campaigns).toContain("job: candidate.job ?");
     expect(campaigns).toContain("inboxResponseCandidatePage.total");
     expect(campaigns).toContain("inboxResponseCandidateScope");
   });
