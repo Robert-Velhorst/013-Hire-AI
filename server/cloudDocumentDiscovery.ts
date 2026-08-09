@@ -13,6 +13,13 @@ import {
   upsertUserConnectorAccount,
 } from "./db";
 import { getMimeTypeFromExtension } from "./resumeStorage";
+import {
+  outboundRequestSignal,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseBytes,
+  readBoundedResponseJson,
+  ResponseSizeLimitError,
+} from "./_core/outboundRequest";
 
 export const CLOUD_DOCUMENT_PROVIDERS = ["google_drive", "dropbox"] as const;
 export type CloudDocumentProvider = typeof CLOUD_DOCUMENT_PROVIDERS[number];
@@ -34,6 +41,7 @@ export type DownloadedCloudDocument = {
 
 const MAX_DISCOVERED_DOCUMENTS = 50;
 const MAX_RESUME_BYTES = 10 * 1024 * 1024;
+const MAX_DOCUMENT_METADATA_BYTES = 1024 * 1024;
 const REFRESH_WINDOW_MS = 60_000;
 const CLOUD_DOCUMENT_READ_SCOPE = "files.content.read_resume_candidates";
 
@@ -300,6 +308,8 @@ export async function discoverCloudResumeDocuments(
       fields: "files(id,name,mimeType,size,modifiedTime)",
     }), {
       headers: { Authorization: `Bearer ${accessToken}` },
+      redirect: "error",
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
     })
     : await fetcher("https://api.dropboxapi.com/2/files/list_folder", {
       method: "POST",
@@ -308,9 +318,19 @@ export async function discoverCloudResumeDocuments(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ path: "", recursive: true, include_deleted: false, limit: MAX_DISCOVERED_DOCUMENTS }),
+      redirect: "error",
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
     });
   if (!response.ok) await throwCloudApiError(userId, account, provider, response.status, dependencies);
-  const payload = await response.json() as unknown;
+  let payload: unknown;
+  try {
+    payload = await readBoundedResponseJson<unknown>(response, MAX_DOCUMENT_METADATA_BYTES);
+  } catch (error) {
+    if (error instanceof ResponseSizeLimitError) {
+      throw new Error(`${cloudProviderLabel(provider)} returned too much document metadata.`);
+    }
+    throw error;
+  }
   await markCloudAccessVerified(userId, account, now, dependencies);
   const documents = provider === "google_drive"
     ? parseGoogleDriveDocuments(payload)
@@ -340,6 +360,8 @@ export async function downloadCloudResumeDocument(
   const response = document.provider === "google_drive"
     ? await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(document.sourceId)}?alt=media`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      redirect: "error",
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
     })
     : await fetcher("https://content.dropboxapi.com/2/files/download", {
       method: "POST",
@@ -347,10 +369,20 @@ export async function downloadCloudResumeDocument(
         Authorization: `Bearer ${accessToken}`,
         "Dropbox-API-Arg": JSON.stringify({ path: document.sourceId }),
       },
+      redirect: "error",
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
     });
   if (!response.ok) await throwCloudApiError(userId, account, document.provider, response.status, dependencies);
-  const data = Buffer.from(await response.arrayBuffer());
-  if (data.length === 0 || data.length > MAX_RESUME_BYTES) {
+  let data: Buffer;
+  try {
+    data = Buffer.from(await readBoundedResponseBytes(response, MAX_RESUME_BYTES));
+  } catch (error) {
+    if (error instanceof ResponseSizeLimitError) {
+      throw new Error("The selected cloud document must be between 1 byte and 10MB.");
+    }
+    throw error;
+  }
+  if (data.length === 0) {
     throw new Error("The selected cloud document must be between 1 byte and 10MB.");
   }
   await markCloudAccessVerified(userId, account, now, dependencies);

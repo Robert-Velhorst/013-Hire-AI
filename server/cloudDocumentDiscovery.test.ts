@@ -79,7 +79,11 @@ describe("cloud resume discovery", () => {
     }]);
     expect(fetcher).toHaveBeenCalledWith(
       expect.stringContaining("www.googleapis.com/drive/v3/files"),
-      expect.objectContaining({ headers: { Authorization: "Bearer provider-access-token" } })
+      expect.objectContaining({
+        headers: { Authorization: "Bearer provider-access-token" },
+        redirect: "error",
+        signal: expect.any(AbortSignal),
+      })
     );
     expect(mocks.upsertUserConnectorAccount).toHaveBeenCalledWith(expect.objectContaining({
       status: "connected",
@@ -148,6 +152,58 @@ describe("cloud resume discovery", () => {
     }, discoveryOptions(fetcher))).rejects.toThrow("selected cloud document is not a supported resume file");
 
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("downloads a bounded resume with provider redirects disabled", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("resume-bytes", {
+      status: 200,
+      headers: { "content-type": "application/pdf" },
+    }));
+
+    await expect(downloadCloudResumeDocument(501, {
+      provider: "google_drive",
+      sourceId: "resume-pdf",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: 12,
+      modifiedAt: null,
+    }, discoveryOptions(fetcher))).resolves.toMatchObject({
+      fileName: "Resume.pdf",
+      mimeType: "application/pdf",
+      data: Buffer.from("resume-bytes"),
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining("resume-pdf?alt=media"),
+      expect.objectContaining({ redirect: "error", signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it("rejects an oversized declared resume before buffering provider content", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("not-read", {
+      status: 200,
+      headers: { "content-length": String(10 * 1024 * 1024 + 1) },
+    }));
+
+    await expect(downloadCloudResumeDocument(501, {
+      provider: "google_drive",
+      sourceId: "resume-pdf",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: null,
+      modifiedAt: null,
+    }, discoveryOptions(fetcher))).rejects.toThrow("between 1 byte and 10MB");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized discovery metadata without verifying the connector", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher)))
+      .rejects.toThrow("returned too much document metadata");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalled();
   });
 
   it("refuses discovery when connector verification is stale before reading provider data", async () => {
