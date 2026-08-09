@@ -24,5 +24,6 @@
 | Scoped admin snapshot | `server/auditAdminReview.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | Admin operating-ledger reads are capped at 100 active items for the requested user and cannot include another user's or closed review records. |
 | Scoped verification review | `server/auditAdminReview.test.ts`; `server/adminVerificationReview.test.ts` | Employment-verification decisions load and resolve only active reviews for the affected user and verification without reading the global admin queue. |
 | Scoped application approvals | `server/applicationApprovals.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | Standalone lifecycle and admin evidence reads include only approvals linked to the affected user's application, including legacy application-entity records. |
+| Exact admin evidence | `server/applicationDecisions.test.ts`; `server/devReviewQueueSeed.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | Review evidence retrieves one owned application and one user/job decision, preserves cross-owner isolation, and avoids full application or decision history reads. |
 
 Expected outcomes are enforced through tests where practical. Provider callbacks, real S3 objects, Stripe webhook delivery, and legal/compliance flows require credentials and controlled external verification.

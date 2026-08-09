@@ -12,9 +12,12 @@ vi.mock("./resumeStorage", async (importOriginal) => ({
 
 import { appRouter } from "./routers";
 import {
+  createApplication,
   createApplicationDecision,
   getApplicationLedgerArtifacts,
   getAuditEventsForUser,
+  getUserApplicationById,
+  getUserApplicationDecisionForJob,
   getUserApplications,
   getUserApplicationDecisions,
   listAdminReviewItems,
@@ -133,6 +136,48 @@ describe("application decision ledger", () => {
     });
 
     expect(await getUserApplications(userId)).toHaveLength(0);
+  });
+
+  it("loads one application and decision only for their owner", async () => {
+    const userId = 94008;
+    const otherUserId = 94009;
+    const application = await createApplication({
+      userId,
+      jobId: 2,
+      status: "pending",
+    });
+    const applicationId = Number(application.insertId);
+    await createApplicationDecision({
+      userId,
+      jobId: 2,
+      decision: "review",
+      decisionReason: "Target decision.",
+      decidedBy: "system",
+    });
+    await createApplicationDecision({
+      userId: otherUserId,
+      jobId: 2,
+      decision: "ignore",
+      decisionReason: "Different owner's decision.",
+      decidedBy: "user",
+    });
+
+    await expect(getUserApplicationById(userId, applicationId)).resolves.toMatchObject({
+      id: applicationId,
+      userId,
+      jobId: 2,
+    });
+    await expect(getUserApplicationById(otherUserId, applicationId)).resolves.toBeNull();
+    await expect(getUserApplicationDecisionForJob(userId, 2)).resolves.toMatchObject({
+      userId,
+      jobId: 2,
+      decision: "review",
+    });
+    await expect(getUserApplicationDecisionForJob(otherUserId, 2)).resolves.toMatchObject({
+      userId: otherUserId,
+      jobId: 2,
+      decision: "ignore",
+    });
   });
 
   it("refuses direct or decision preparation for missing and expired jobs", async () => {

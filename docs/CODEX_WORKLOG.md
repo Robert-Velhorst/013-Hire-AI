@@ -65,4 +65,5 @@
 - Replaced the admin operating ledger's global review-table read with a capped user/status query backed by the existing `(user_id, status)` index.
 - Replaced employment-verification resolution's global review-table scan with an exact affected-user/entity lookup for active review items.
 - Replaced user-wide approval reads in standalone application lifecycle and admin evidence paths with an ownership-scoped application lookup that retains legacy entity links.
-- Passed TypeScript and the full regression suite: 159 files and 812 tests.
+- Replaced admin evidence's full application and decision history reads with exact owned-record lookups and parallel evidence assembly.
+- Passed TypeScript and the full regression suite: 159 files and 814 tests.

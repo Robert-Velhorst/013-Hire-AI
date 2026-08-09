@@ -53,4 +53,18 @@ describe("dashboard performance claims", () => {
     expect(features).toContain("listUserApplicationApprovalsForApplication");
     expect(features).not.toContain("listUserApplicationApprovals(userId, \"all\")");
   });
+
+  it("builds admin review evidence from exact owned records", () => {
+    const database = readFileSync(resolve(process.cwd(), "server", "db.ts"), "utf8");
+    const evidenceFunction = database.slice(
+      database.indexOf("export async function getAdminReviewEvidenceSnapshot"),
+      database.indexOf("export async function resolveAdminReviewItem")
+    );
+
+    expect(evidenceFunction).toContain("getUserApplicationById");
+    expect(evidenceFunction).toContain("getUserApplicationDecisionForJob");
+    expect(evidenceFunction).toContain("listUserApplicationApprovalsForApplication");
+    expect(evidenceFunction).not.toContain("getUserApplications(");
+    expect(evidenceFunction).not.toContain("getUserApplicationDecisions(");
+  });
 });

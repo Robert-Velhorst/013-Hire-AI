@@ -29,6 +29,7 @@ Audit date: 2026-08-08
 | Admin operating snapshots loaded the global review table and filtered it locally. | The snapshot now requests at most 100 open/in-progress items for the affected user through the indexed `(user_id, status)` path. The separate global admin queue remains available for administrative operations. |
 | Employment-verification resolution loaded the global review table to locate one entity's active reviews. | Resolution now requests only open/in-progress review items matching the affected user, verification entity type, and verification ID. The administrative global queue remains unchanged. |
 | Standalone application lifecycle and admin evidence paths loaded every approval owned by a user before filtering one application. | A shared ownership-scoped lookup now loads only approvals linked by application ID or the legacy application-entity relationship. Submission confirmation, response cleanup, withdrawal, offer acceptance, follow-up completion, and evidence rendering use it. |
+| Admin evidence loaded every application and decision for the affected user to identify one reviewed record. | Reusable owned application-ID and user/job decision lookups now use primary/unique keys. Evidence loads the application with approvals in parallel, then its artifacts with the exact decision in parallel. |
 
 ## Material unresolved risks
 

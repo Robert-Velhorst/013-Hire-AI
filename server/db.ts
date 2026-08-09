@@ -1689,56 +1689,78 @@ export async function createApplication(application: InsertApplication) {
   };
 }
 
+const userApplicationSelection = {
+  id: applications.id,
+  userId: applications.userId,
+  jobId: applications.jobId,
+  status: applications.status,
+  appliedDate: applications.appliedDate,
+  lastActivity: applications.lastActivity,
+  coverLetter: applications.coverLetter,
+  customResume: applications.customResume,
+  notes: applications.notes,
+  isAutoApplied: applications.isAutoApplied,
+  createdAt: applications.createdAt,
+  updatedAt: applications.updatedAt,
+  job: {
+    id: jobs.id,
+    title: jobs.title,
+    company: jobs.company,
+    location: jobs.location,
+    salaryMin: jobs.salaryMin,
+    salaryMax: jobs.salaryMax,
+    salaryCurrency: jobs.salaryCurrency,
+    jobType: jobs.jobType,
+    platformId: jobs.platformId,
+    platformName: sql<string | null>`(
+      SELECT ${jobPlatforms.name}
+      FROM ${jobPlatforms}
+      WHERE ${jobPlatforms.id} = ${jobs.platformId}
+      LIMIT 1
+    )`,
+    applicationUrl: jobs.applicationUrl,
+    sourceUrl: jobs.sourceUrl,
+  },
+};
+
+function projectMemoryApplication(application: (typeof memoryApplications)[number]) {
+  const job = sampleJobs.find((item) => item.id === application.jobId);
+  return {
+    ...application,
+    job: job ? {
+      ...job,
+      platformName: samplePlatforms.find((platform) => platform.id === job.platformId)?.name ?? null,
+    } : undefined,
+  };
+}
+
+export async function getUserApplicationById(userId: number, applicationId: number) {
+  const db = await getDb();
+  if (!db) {
+    const application = memoryApplications.find((item) =>
+      item.id === applicationId && item.userId === userId
+    );
+    return application ? projectMemoryApplication(application) : null;
+  }
+
+  const rows = await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getUserApplications(userId: number) {
   const db = await getDb();
   if (!db) {
     return memoryApplications
       .filter((application) => application.userId === userId)
-      .map((application) => {
-        const job = sampleJobs.find((item) => item.id === application.jobId);
-        return {
-          ...application,
-          job: job ? {
-            ...job,
-            platformName: samplePlatforms.find((platform) => platform.id === job.platformId)?.name ?? null,
-          } : undefined,
-        };
-      });
+      .map(projectMemoryApplication);
   }
   return await db
-    .select({
-      id: applications.id,
-      userId: applications.userId,
-      jobId: applications.jobId,
-      status: applications.status,
-      appliedDate: applications.appliedDate,
-      lastActivity: applications.lastActivity,
-      coverLetter: applications.coverLetter,
-      customResume: applications.customResume,
-      notes: applications.notes,
-      isAutoApplied: applications.isAutoApplied,
-      createdAt: applications.createdAt,
-      updatedAt: applications.updatedAt,
-      job: {
-        id: jobs.id,
-        title: jobs.title,
-        company: jobs.company,
-        location: jobs.location,
-        salaryMin: jobs.salaryMin,
-        salaryMax: jobs.salaryMax,
-        salaryCurrency: jobs.salaryCurrency,
-        jobType: jobs.jobType,
-        platformId: jobs.platformId,
-        platformName: sql<string | null>`(
-          SELECT ${jobPlatforms.name}
-          FROM ${jobPlatforms}
-          WHERE ${jobPlatforms.id} = ${jobs.platformId}
-          LIMIT 1
-        )`,
-        applicationUrl: jobs.applicationUrl,
-        sourceUrl: jobs.sourceUrl,
-      },
-    })
+    .select(userApplicationSelection)
     .from(applications)
     .leftJoin(jobs, eq(applications.jobId, jobs.id))
     .where(eq(applications.userId, userId))
@@ -1864,41 +1886,68 @@ export async function createApplicationDecision(decision: InsertApplicationDecis
   };
 }
 
+const userApplicationDecisionSelection = {
+  id: applicationDecisions.id,
+  userId: applicationDecisions.userId,
+  jobId: applicationDecisions.jobId,
+  decision: applicationDecisions.decision,
+  decisionReason: applicationDecisions.decisionReason,
+  matchScore: applicationDecisions.matchScore,
+  riskLevel: applicationDecisions.riskLevel,
+  reviewRequired: applicationDecisions.reviewRequired,
+  reviewReason: applicationDecisions.reviewReason,
+  decidedBy: applicationDecisions.decidedBy,
+  createdAt: applicationDecisions.createdAt,
+  updatedAt: applicationDecisions.updatedAt,
+  job: {
+    id: jobs.id,
+    title: jobs.title,
+    company: jobs.company,
+    location: jobs.location,
+    applicationUrl: jobs.applicationUrl,
+    sourceUrl: jobs.sourceUrl,
+  },
+};
+
+function projectMemoryApplicationDecision(decision: (typeof memoryApplicationDecisions)[number]) {
+  return {
+    ...decision,
+    job: sampleJobs.find((job) => job.id === decision.jobId),
+  };
+}
+
+export async function getUserApplicationDecisionForJob(userId: number, jobId: number) {
+  const db = await getDb();
+  if (!db) {
+    const decision = memoryApplicationDecisions.find((item) =>
+      item.userId === userId && item.jobId === jobId
+    );
+    return decision ? projectMemoryApplicationDecision(decision) : null;
+  }
+
+  const rows = await db
+    .select(userApplicationDecisionSelection)
+    .from(applicationDecisions)
+    .leftJoin(jobs, eq(applicationDecisions.jobId, jobs.id))
+    .where(and(
+      eq(applicationDecisions.userId, userId),
+      eq(applicationDecisions.jobId, jobId)
+    ))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getUserApplicationDecisions(userId: number) {
   const db = await getDb();
   if (!db) {
     return memoryApplicationDecisions
       .filter((decision) => decision.userId === userId)
-      .map((decision) => ({
-        ...decision,
-        job: sampleJobs.find((job) => job.id === decision.jobId),
-      }))
+      .map(projectMemoryApplicationDecision)
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
   return await db
-    .select({
-      id: applicationDecisions.id,
-      userId: applicationDecisions.userId,
-      jobId: applicationDecisions.jobId,
-      decision: applicationDecisions.decision,
-      decisionReason: applicationDecisions.decisionReason,
-      matchScore: applicationDecisions.matchScore,
-      riskLevel: applicationDecisions.riskLevel,
-      reviewRequired: applicationDecisions.reviewRequired,
-      reviewReason: applicationDecisions.reviewReason,
-      decidedBy: applicationDecisions.decidedBy,
-      createdAt: applicationDecisions.createdAt,
-      updatedAt: applicationDecisions.updatedAt,
-      job: {
-        id: jobs.id,
-        title: jobs.title,
-        company: jobs.company,
-        location: jobs.location,
-        applicationUrl: jobs.applicationUrl,
-        sourceUrl: jobs.sourceUrl,
-      },
-    })
+    .select(userApplicationDecisionSelection)
     .from(applicationDecisions)
     .leftJoin(jobs, eq(applicationDecisions.jobId, jobs.id))
     .where(eq(applicationDecisions.userId, userId))
@@ -3138,17 +3187,16 @@ export async function getAdminReviewEvidenceSnapshot(reviewItemId: number) {
   let decision: Awaited<ReturnType<typeof getUserApplicationDecisions>>[number] | null = null;
 
   if (reviewItem.entityType === "application") {
-    const applicationsForUser = await getUserApplications(reviewItem.userId);
-    application = applicationsForUser.find((item) => item.id === reviewItem.entityId) ?? null;
-    approvals = await listUserApplicationApprovalsForApplication(
-      reviewItem.userId,
-      reviewItem.entityId
-    );
+    [application, approvals] = await Promise.all([
+      getUserApplicationById(reviewItem.userId, reviewItem.entityId),
+      listUserApplicationApprovalsForApplication(reviewItem.userId, reviewItem.entityId),
+    ]);
 
     if (application) {
-      artifacts = await getApplicationLedgerArtifacts(reviewItem.entityId, reviewItem.userId);
-      const decisions = await getUserApplicationDecisions(reviewItem.userId);
-      decision = decisions.find((item) => item.jobId === application?.jobId) ?? null;
+      [artifacts, decision] = await Promise.all([
+        getApplicationLedgerArtifacts(reviewItem.entityId, reviewItem.userId),
+        getUserApplicationDecisionForJob(reviewItem.userId, application.jobId),
+      ]);
     }
   }
 
