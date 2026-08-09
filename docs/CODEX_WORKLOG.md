@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact verified interview-notification queue
+
+- Replaced broad unread-notification hydration plus in-memory validation with one owner-scoped joined query over current interview applications and invite evidence.
+- Added an exact actionable alert total, a five-record operating page, and explicit truncation metadata.
+- Kept stale, closed, foreign-owner, and non-invite records out of command-center counts at the query boundary.
+
 ## 2026-08-09 - Exact bounded interview-preparation queue
 
 - Replaced full user preparation-history hydration with an owner-scoped anti-join over upcoming scheduled interviews.

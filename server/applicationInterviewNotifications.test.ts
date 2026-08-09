@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
 import { recordEmployerResponse, scheduleInterview } from "./applicationFeatures";
 import { INTERVIEW_INVITE_SOURCE_REFERENCE_REQUIRED_MESSAGE, OFFER_SOURCE_REFERENCE_REQUIRED_MESSAGE } from "./applicationResponses";
-import { getAuditEventsForEntity, createApplication, getUserApplications, listUnreadInterviewNotifications, updateApplicationStatus } from "./db";
+import { getAuditEventsForEntity, createApplication, getUnreadInterviewNotificationPage, getUserApplications, listUnreadInterviewNotifications, updateApplicationStatus } from "./db";
 import { getUserOperatingLedger } from "./applicationCampaigns";
 import { appRouter } from "./routers";
 
@@ -250,5 +250,38 @@ describe("interview notification ledger", () => {
       }),
     ]);
     expect(ledger.metrics.unreadInterviewNotifications).toBe(1);
+  });
+
+  it("keeps an exact owner-scoped total while bounding verified interview alerts", async () => {
+    const userId = 99177;
+    for (let index = 0; index < 7; index += 1) {
+      const application = await createApplication({ userId, jobId: 100 + index, status: "applied" });
+      await recordEmployerResponse({
+        applicationId: Number(application.insertId),
+        responseType: "interview_invite",
+        source: "email",
+        sourceReference: `gmail-interview-scale-99177-${index}`,
+        summary: `Verified interview invitation ${index + 1}.`,
+      }, userId);
+    }
+    const otherApplication = await createApplication({ userId: 99178, jobId: 200, status: "applied" });
+    await recordEmployerResponse({
+      applicationId: Number(otherApplication.insertId),
+      responseType: "interview_invite",
+      source: "email",
+      sourceReference: "gmail-interview-other-owner-99178",
+      summary: "Another user's verified interview invitation.",
+    }, 99178);
+
+    const page = await getUnreadInterviewNotificationPage(userId);
+    const ledger = await getUserOperatingLedger(userId, { persistCampaign: false });
+
+    expect(page).toMatchObject({ total: 7, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.every((item) => item.applicationId !== Number(otherApplication.insertId))).toBe(true);
+    expect(ledger.metrics.unreadInterviewNotifications).toBe(7);
+    expect(ledger.queues.interviewNotifications).toHaveLength(5);
+    expect(ledger.interviewNotificationScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
+    expect(ledger.nextActions).toContain("Review 7 verified interview invites.");
   });
 });

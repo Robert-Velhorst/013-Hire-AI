@@ -10,7 +10,7 @@ import {
   getActiveJobs,
   getApplicationCampaign,
   getEducationEntries,
-  listUnreadInterviewNotifications,
+  getUnreadInterviewNotificationPage,
   getPendingInboxResponseCandidatePage,
   countUserAutonomousPreparationsSince,
   getUserApplicationPage,
@@ -297,44 +297,9 @@ function getInterviewSchedulingQueue(
 }
 
 async function getInterviewNotificationQueue(
-  applications: UserApplicationRecord[],
-  userId: number,
-  evidence: OperatingApplicationEvidence
+  userId: number
 ) {
-  // Validate the complete bounded unread set before applying the command-center limit.
-  // Legacy or concurrently retired notifications must not hide a newer verified invite.
-  const notifications = await listUnreadInterviewNotifications(userId, 100);
-  const applicationsById = new Map(applications.map((application) => [application.id, application]));
-
-  const items = notifications.map((notification) => {
-    const application = applicationsById.get(notification.applicationId);
-    if (!application || application.status !== "interview") return null;
-
-    const response = (evidence.responsesByApplication.get(application.id) ?? [])
-      .find((item) => item.id === notification.employerResponseId);
-    if (!response || response.responseType !== "interview_invite") return null;
-
-    return {
-      notificationId: notification.id,
-      applicationId: application.id,
-      jobId: application.jobId,
-      employerResponseId: response.id,
-      notificationType: notification.notificationType,
-      createdAt: notification.createdAt,
-      receivedAt: response.receivedAt,
-      summary: response.summary,
-      job: application.job ? {
-        id: application.job.id,
-        title: application.job.title,
-        company: application.job.company,
-        location: application.job.location,
-      } : null,
-    };
-  });
-
-  return items
-    .filter((item): item is NonNullable<typeof item> => item !== null)
-    .slice(0, 5);
+  return await getUnreadInterviewNotificationPage(userId);
 }
 
 function getEmployerResponseQueue(
@@ -904,7 +869,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       applications,
       employerResponses,
     }),
-    getInterviewNotificationQueue(applications, userId, operatingEvidence),
+    getInterviewNotificationQueue(userId),
     getInterviewPreparationQueue(userId),
     getUserSuccessFeeOperatingItems(userId),
   ]);
@@ -968,8 +933,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewSchedulingQueue.length > 0
       ? `Review ${interviewSchedulingQueue.length} interview scheduling item${interviewSchedulingQueue.length === 1 ? "" : "s"} before follow-up automation continues.`
       : "",
-    interviewNotificationQueue.length > 0
-      ? `Review ${interviewNotificationQueue.length} verified interview invite${interviewNotificationQueue.length === 1 ? "" : "s"}.`
+    interviewNotificationQueue.total > 0
+      ? `Review ${interviewNotificationQueue.total} verified interview invite${interviewNotificationQueue.total === 1 ? "" : "s"}.`
       : "",
     inboxResponseCandidatePage.total > 0
       ? `Confirm or dismiss ${inboxResponseCandidatePage.total} inbox response candidate${inboxResponseCandidatePage.total === 1 ? "" : "s"} before changing application status.`
@@ -1102,6 +1067,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: interviewPreparationQueue.limit,
       hasMore: interviewPreparationQueue.hasMore,
     },
+    interviewNotificationScope: {
+      loaded: interviewNotificationQueue.items.length,
+      limit: interviewNotificationQueue.limit,
+      hasMore: interviewNotificationQueue.hasMore,
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,
@@ -1115,7 +1085,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       employerResponses: applicationSummary.responseSignals,
       employerResponsesNeedingReply: employerResponseQueue.length,
       interviews: applicationSummary.interview,
-      unreadInterviewNotifications: interviewNotificationQueue.length,
+      unreadInterviewNotifications: interviewNotificationQueue.total,
       inboxResponseCandidates: inboxResponseCandidatePage.total,
       interviewSchedulingNeeded: interviewSchedulingQueue.length,
       interviewPreparationNeeded: interviewPreparationQueue.total,
@@ -1142,7 +1112,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       pendingApprovals: approvals.slice(0, 5),
       adminReviews: userAdminReviews.slice(0, 5),
       reviewDecisions: reviewDecisionQueue.slice(0, 5),
-      interviewNotifications: interviewNotificationQueue,
+      interviewNotifications: interviewNotificationQueue.items,
       inboxResponseCandidates: inboxResponseCandidateQueue.slice(0, 5),
       interviewScheduling: interviewSchedulingQueue.slice(0, 5),
       interviewPreparationNeeded: interviewPreparationQueue.items.slice(0, 5),

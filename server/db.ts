@@ -3873,6 +3873,90 @@ export async function listUserAdminReviewItems(
     .limit(boundedLimit);
 }
 
+export async function getUnreadInterviewNotificationPage(userId: number, requestedLimit = 5) {
+  const limit = Math.min(50, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    const candidates = memoryApplicationNotifications.flatMap((notification) => {
+      if (notification.userId !== userId || notification.readAt) return [];
+      const application = memoryApplications.find((item) =>
+        item.id === notification.applicationId &&
+        item.userId === userId &&
+        item.status === "interview"
+      );
+      const response = memoryEmployerResponses.find((item) =>
+        item.id === notification.employerResponseId &&
+        item.applicationId === notification.applicationId &&
+        item.userId === userId &&
+        item.responseType === "interview_invite"
+      );
+      return application && response ? [{ notification, application, response }] : [];
+    }).sort((left, right) =>
+      right.notification.createdAt.getTime() - left.notification.createdAt.getTime() ||
+      right.notification.id - left.notification.id
+    );
+    const items = await Promise.all(candidates.slice(0, limit).map(async ({ notification, application, response }) => {
+      const job = await getJobById(application.jobId);
+      return {
+        notificationId: notification.id,
+        applicationId: application.id,
+        jobId: application.jobId,
+        employerResponseId: response.id,
+        notificationType: notification.notificationType,
+        createdAt: notification.createdAt,
+        receivedAt: response.receivedAt,
+        summary: response.summary,
+        job: job ? { id: job.id, title: job.title, company: job.company, location: job.location } : null,
+      };
+    }));
+    return { items, total: candidates.length, limit, hasMore: candidates.length > items.length };
+  }
+  const notificationJoin = and(
+    eq(applicationNotifications.applicationId, applications.id),
+    eq(applicationNotifications.userId, applications.userId)
+  );
+  const responseJoin = and(
+    eq(applicationNotifications.employerResponseId, employerResponses.id),
+    eq(employerResponses.applicationId, applications.id),
+    eq(employerResponses.userId, applications.userId)
+  );
+  const condition = and(
+    eq(applicationNotifications.userId, userId),
+    isNull(applicationNotifications.readAt),
+    eq(applications.status, "interview"),
+    eq(employerResponses.responseType, "interview_invite")
+  );
+  const [items, totalRows] = await Promise.all([
+    db
+      .select({
+        notificationId: applicationNotifications.id,
+        applicationId: applications.id,
+        jobId: applications.jobId,
+        employerResponseId: employerResponses.id,
+        notificationType: applicationNotifications.notificationType,
+        createdAt: applicationNotifications.createdAt,
+        receivedAt: employerResponses.receivedAt,
+        summary: employerResponses.summary,
+        job: { id: jobs.id, title: jobs.title, company: jobs.company, location: jobs.location },
+      })
+      .from(applicationNotifications)
+      .innerJoin(applications, notificationJoin)
+      .innerJoin(employerResponses, responseJoin)
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(condition)
+      .orderBy(desc(applicationNotifications.createdAt), desc(applicationNotifications.id))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(applicationNotifications)
+      .innerJoin(applications, notificationJoin)
+      .innerJoin(employerResponses, responseJoin)
+      .where(condition),
+  ]);
+  const total = Number(totalRows[0]?.count ?? 0);
+  return { items, total, limit, hasMore: total > items.length };
+}
+
 export async function listActiveAdminReviewItemsForEntity(
   userId: number,
   entityType: AdminReviewItem["entityType"],
