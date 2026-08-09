@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Aggregate success-fee command-center reads
+
+- Replaced autonomous-ledger success-fee history hydration with exact account aggregates for counts, monthly totals, deadlines, and compliance status.
+- Added a priority-ordered, owner-scoped action query capped at 100 fee records, with explicit queue truncation metadata.
+- Kept offer-attribution action details scoped to the ledger's bounded approval/application evidence set.
+
 ## 2026-08-09 - Exact accepted-offer and memory ownership reads
 
 - Replaced the report-hire dialog's general application-history request with an indexed, 100-item accepted-offer query that also preserves an explicitly linked accepted application.

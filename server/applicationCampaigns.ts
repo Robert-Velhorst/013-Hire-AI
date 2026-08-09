@@ -25,7 +25,8 @@ import {
   getUserEmployerResponsesForApplications,
   getUserProfile,
   getUserOfferAttributionReviews,
-  getUserSuccessFees,
+  getUserSuccessFeeOperatingItems,
+  getUserSuccessFeeSummary,
   getUserSkills,
   getWorkExperiences,
   listUserConnectorAccounts,
@@ -53,7 +54,7 @@ import {
 } from "./applicationFeatures";
 import {
   getSuccessFeeComplianceQueue,
-  getSuccessFeeComplianceSummary,
+  getSuccessFeeComplianceSummaryFromAggregates,
 } from "./successFeeCompliance";
 import { getInterviewSchedulingRequirement } from "./interviewScheduling";
 
@@ -776,7 +777,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     jobs,
     adminReviews,
     reviewDecisionPage,
-    successFees,
+    successFeeSummary,
     connectorAccounts,
     activeResume,
     inboxResponseCandidates,
@@ -795,7 +796,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       ? listUserAdminReviewItems(userId, ["open", "in_progress"], 100)
       : Promise.resolve([]),
     getUserReviewDecisionPage(userId),
-    getUserSuccessFees(userId),
+    getUserSuccessFeeSummary(userId),
     listUserConnectorAccounts(userId),
     getActiveResume(userId),
     listPendingInboxResponseCandidates(userId),
@@ -897,6 +898,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     offerAttributionReviews,
     interviewNotificationQueue,
     interviewPreparationQueue,
+    successFeeOperatingSet,
   ] = await Promise.all([
     getAutonomousFollowUpReadiness({
       applications,
@@ -912,13 +914,17 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     }),
     getInterviewNotificationQueue(applications, userId, operatingEvidence),
     getInterviewPreparationQueue(userId),
+    getUserSuccessFeeOperatingItems(userId),
   ]);
   const followUpSuppressionState = followUpReadiness.suppressionState;
   const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
   const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
   const employerResponseQueue = followUpReadiness.employerResponseQueue;
-  const successFeeCompliance = getSuccessFeeComplianceSummary(successFees, offerAttributionReviews);
-  const successFeeComplianceQueue = getSuccessFeeComplianceQueue(successFees, offerAttributionReviews);
+  const successFeeCompliance = getSuccessFeeComplianceSummaryFromAggregates(
+    successFeeSummary,
+    offerAttributionReviews.length
+  );
+  const successFeeComplianceQueue = getSuccessFeeComplianceQueue(successFeeOperatingSet.items, offerAttributionReviews);
   const followUpDueQueue = followUpReadiness.actionReadyQueue;
   const approvedFollowUpsReadyToSend = followUpSuppressionState.approvedFollowUpsReadyToSend;
   const followUpDeliveryReconciliation = followUpSuppressionState.followUpDeliveryReconciliation;
@@ -1088,6 +1094,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
         coverLetter: application.coverLetter,
         job: application.job,
       })),
+    },
+    successFeeOperatingScope: {
+      loaded: successFeeOperatingSet.items.length,
+      limit: successFeeOperatingSet.limit,
+      hasMore: successFeeOperatingSet.hasMore,
     },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {

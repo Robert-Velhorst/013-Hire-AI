@@ -53,6 +53,11 @@ export interface SuccessFeeComplianceSummary {
   nextAction: string;
 }
 
+export type SuccessFeeComplianceAggregates = Omit<
+  SuccessFeeComplianceSummary,
+  "status" | "pendingOfferAttributions" | "daysUntilNextVerification" | "label" | "nextAction"
+>;
+
 export interface SuccessFeeComplianceQueueItem {
   type: SuccessFeeComplianceQueueItemType;
   priority: "medium" | "high" | "critical";
@@ -188,6 +193,60 @@ export function getSuccessFeeComplianceSummary(
     monthlyFeeCents: 0,
     nextVerificationDue: null,
     daysUntilNextVerification: null,
+    label: pendingOfferAttributions > 0 ? "Needs attention" : "No active fees",
+    nextAction: pendingOfferAttributions > 0
+      ? "Review offer attribution and report hires that came through Hire.AI."
+      : "Report a hire only after an offer is accepted.",
+  };
+}
+
+export function getSuccessFeeComplianceSummaryFromAggregates(
+  aggregates: SuccessFeeComplianceAggregates,
+  pendingOfferAttributions = 0,
+  now = new Date()
+): SuccessFeeComplianceSummary {
+  const nextVerificationDue = coerceDate(aggregates.nextVerificationDue);
+  const summary = {
+    ...aggregates,
+    nextVerificationDue,
+    pendingOfferAttributions,
+    daysUntilNextVerification: daysUntil(nextVerificationDue, now),
+  };
+  if (pendingOfferAttributions > 0 || aggregates.disputedFees > 0 || aggregates.suspendedFees > 0 || aggregates.pausedFees > 0 || aggregates.overdueVerifications > 0) {
+    return {
+      ...summary,
+      status: "needs_attention",
+      label: "Needs attention",
+      nextAction: pendingOfferAttributions > 0
+        ? "Review offer attribution and report hires that came through Hire.AI."
+        : aggregates.disputedFees > 0
+          ? "Resolve the disputed success-fee record through review before billing enforcement advances."
+          : aggregates.suspendedFees > 0
+            ? "Resolve the suspended success-fee payment before billing enforcement advances."
+            : aggregates.pausedFees > 0
+              ? "Review the paused success-fee record before billing resumes."
+              : "Submit overdue employment verification proof.",
+    };
+  }
+  if (aggregates.pendingVerification > 0 || aggregates.dueSoonVerifications > 0) {
+    return {
+      ...summary,
+      status: "due_soon",
+      label: "Verification pending",
+      nextAction: "Keep offer proof and verification documents ready for review.",
+    };
+  }
+  if (aggregates.activeFees > 0) {
+    return {
+      ...summary,
+      status: "clear",
+      label: "Current",
+      nextAction: "No success-fee compliance action is due right now.",
+    };
+  }
+  return {
+    ...summary,
+    status: pendingOfferAttributions > 0 ? "needs_attention" : "none",
     label: pendingOfferAttributions > 0 ? "Needs attention" : "No active fees",
     nextAction: pendingOfferAttributions > 0
       ? "Review offer attribution and report hires that came through Hire.AI."

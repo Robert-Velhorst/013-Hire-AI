@@ -3519,6 +3519,53 @@ export async function getUserSuccessFeeSummary(userId: number) {
   };
 }
 
+export async function getUserSuccessFeeOperatingItems(userId: number, requestedLimit = 100) {
+  const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 100);
+  const now = new Date();
+  const dueSoonCutoff = new Date(now.getTime() + 14 * 86_400_000);
+  const isActionable = (fee: SuccessFee) =>
+    ["disputed", "suspended", "paused", "pending_verification"].includes(fee.status) ||
+    (fee.status === "active" && fee.nextVerificationDue != null && fee.nextVerificationDue <= dueSoonCutoff);
+  const priority = (fee: SuccessFee) => {
+    if (fee.status === "disputed") return 0;
+    if (fee.status === "suspended" || fee.status === "paused") return 1;
+    if (fee.nextVerificationDue && fee.nextVerificationDue < now) return 0;
+    if (fee.nextVerificationDue && fee.nextVerificationDue <= dueSoonCutoff) return 1;
+    return 2;
+  };
+  const db = await getDb();
+  if (!db) {
+    const rows = (memorySuccessFees as SuccessFee[])
+      .filter((fee) => fee.userId === userId && isActionable(fee))
+      .sort((left, right) =>
+        priority(left) - priority(right) ||
+        (left.nextVerificationDue?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+          (right.nextVerificationDue?.getTime() ?? Number.MAX_SAFE_INTEGER) ||
+        left.id - right.id
+      );
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit, limit };
+  }
+  const priorityOrder = sql<number>`case
+    when ${successFees.status} = 'disputed' then 0
+    when ${successFees.status} in ('suspended', 'paused') then 1
+    when ${successFees.nextVerificationDue} < now() then 0
+    when ${successFees.nextVerificationDue} <= ${dueSoonCutoff} then 1
+    else 2 end`;
+  const rows = await db
+    .select()
+    .from(successFees)
+    .where(and(
+      eq(successFees.userId, userId),
+      or(
+        inArray(successFees.status, ["disputed", "suspended", "paused", "pending_verification"]),
+        and(eq(successFees.status, "active"), lte(successFees.nextVerificationDue, dueSoonCutoff))
+      )
+    ))
+    .orderBy(asc(priorityOrder), asc(successFees.nextVerificationDue), asc(successFees.id))
+    .limit(limit + 1);
+  return { items: rows.slice(0, limit), hasMore: rows.length > limit, limit };
+}
+
 export async function touchApplicationActivity(
   applicationId: number,
   userId: number,
