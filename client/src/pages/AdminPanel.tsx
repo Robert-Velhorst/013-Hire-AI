@@ -5,6 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
+import { openExternalUrl } from "@/lib/externalUrl";
 import {
   buildPrivacyCleanupConfirmation,
   buildPrivacyDatabaseConfirmation,
@@ -280,6 +281,13 @@ export default function AdminPanel() {
       refetchOperatingCounts();
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  const verificationDocumentDownload = trpc.admin.getVerificationDocumentDownloadUrl.useMutation({
+    onSuccess: (data) => {
+      if (!openExternalUrl(data.url)) toast.error("The verification download URL is invalid.");
+    },
+    onError: (err) => toast.error(err.message || "Could not open the verification document"),
   });
   const resolveReviewItem = trpc.admin.resolveReviewItem.useMutation({
     onSuccess: async (result) => {
@@ -1157,16 +1165,16 @@ export default function AdminPanel() {
                           <div className="text-xs text-slate-500 mt-1">
                             Submitted: {formatDate(v.submittedAt)} · Salary: ${v.monthlySalary?.toLocaleString()}/mo
                           </div>
-                          {v.documentUrl && (
-                            <a
-                              href={v.documentUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                          {v.hasDocument && (
+                            <button
+                              type="button"
+                              onClick={() => verificationDocumentDownload.mutate({ verificationId: v.id })}
+                              disabled={verificationDocumentDownload.isPending && verificationDocumentDownload.variables?.verificationId === v.id}
                               className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 inline-flex items-center gap-1"
                             >
                               <FileText className="h-3 w-3" />
                               View Document
-                            </a>
+                            </button>
                           )}
                         </div>
                         <div className="flex gap-2 shrink-0">

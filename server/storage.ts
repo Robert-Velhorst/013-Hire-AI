@@ -45,7 +45,21 @@ async function buildDownloadUrl(
     method: "GET",
     headers: buildAuthHeaders(apiKey),
   });
-  return (await response.json()).url;
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `Storage download URL retrieval failed (${response.status} ${response.statusText}): ${message}`
+    );
+  }
+  const value = (await response.json()) as { url?: unknown };
+  if (typeof value.url !== "string") {
+    throw new Error("Storage download URL response did not include a URL.");
+  }
+  const url = new URL(value.url);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("Storage download URL must use HTTP or HTTPS.");
+  }
+  return url.toString();
 }
 
 function ensureTrailingSlash(value: string): string {

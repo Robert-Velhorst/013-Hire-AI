@@ -12,6 +12,7 @@ import {
   getReportHireEvidenceSummary,
   type ReportHireEvidenceState,
 } from "@/lib/reportHireEvidence";
+import { openExternalUrl } from "@/lib/externalUrl";
 import { toast } from "sonner";
 import { Upload, FileText, CheckCircle, AlertCircle, Briefcase, DollarSign, Calendar } from "lucide-react";
 
@@ -81,7 +82,9 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
   const reportHire = trpc.successFees.reportHire.useMutation({
     onSuccess: (data) => {
       if (data.checkoutUrl) {
-        window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+        if (!openExternalUrl(data.checkoutUrl)) {
+          toast.error("The hire was recorded, but Stripe returned an invalid Checkout URL.");
+        }
       }
       setStep("success");
       onSuccess?.();

@@ -33,6 +33,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { PROFILE_EVIDENCE_LIMITS } from "@shared/profileEvidenceLimits";
 import { trpc } from "@/lib/trpc";
+import { openExternalUrl } from "@/lib/externalUrl";
 import {
   getProfileEvidenceControlSummary,
   getMailboxSendConsentScope,
@@ -979,9 +980,7 @@ export default function Profile() {
                     disabled={resumeDownload.isFetching}
                     onClick={async () => {
                       const result = await resumeDownload.refetch();
-                      if (result.data?.url) {
-                        window.open(result.data.url, "_blank", "noopener,noreferrer");
-                      } else {
+                      if (!openExternalUrl(result.data?.url)) {
                         toast.error("A secure download link could not be created");
                       }
                     }}

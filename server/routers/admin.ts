@@ -26,6 +26,7 @@ import { eq, desc, and, lt, sql, isNotNull, or } from "drizzle-orm";
 import { getStripeClient } from "../stripeClient";
 import { buildPrivacyErasurePreview } from "../privacyRetention";
 import { getOperationalFailureSnapshot } from "../operationalFailureLog";
+import { storageGet } from "../storage";
 
 type StripeSynchronizedFeeStatus = "not_required" | "paused" | "resumed" | "cancelled";
 
@@ -930,7 +931,7 @@ export const adminRouter = router({
         successFeeId: employmentVerifications.successFeeId,
         userId: employmentVerifications.userId,
         verificationType: employmentVerifications.verificationType,
-        documentUrl: employmentVerifications.documentUrl,
+        hasDocument: sql<boolean>`${employmentVerifications.documentKey} IS NOT NULL`,
         documentType: employmentVerifications.documentType,
         status: employmentVerifications.status,
         submittedAt: employmentVerifications.submittedAt,
@@ -949,6 +950,45 @@ export const adminRouter = router({
 
     return verifications;
   }),
+
+  getVerificationDocumentDownloadUrl: adminProcedure
+    .input(z.object({ verificationId: z.number().int().positive() }).strict())
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [verification] = await db
+        .select({
+          id: employmentVerifications.id,
+          userId: employmentVerifications.userId,
+          documentKey: employmentVerifications.documentKey,
+        })
+        .from(employmentVerifications)
+        .where(eq(employmentVerifications.id, input.verificationId))
+        .limit(1);
+      if (!verification?.documentKey) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Verification document not found." });
+      }
+      try {
+        const { url } = await storageGet(verification.documentKey);
+        await createAuditEvent({
+          userId: verification.userId,
+          entityType: "verification",
+          entityId: verification.id,
+          action: "verification_document_download_requested",
+          actor: "admin",
+          source: "admin.getVerificationDocumentDownloadUrl",
+          afterState: JSON.stringify({ adminUserId: ctx.user.id }),
+          riskLevel: "medium",
+        });
+        return { url };
+      } catch {
+        console.error("[Admin] Verification document download URL could not be created.");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The private verification document is temporarily unavailable.",
+        });
+      }
+    }),
 
   // ─── Payment History ─────────────────────────────────────────────────────────
   listPayments: adminProcedure

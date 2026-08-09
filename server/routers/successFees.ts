@@ -18,7 +18,7 @@ import {
 import { applicationApprovals, applications, successFees, employmentVerifications, users, type SuccessFee } from "../../drizzle/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { isAcceptedOfferApplicationStatus } from "@shared/offerEligibility";
-import { storagePut } from "../storage";
+import { storageGet, storagePut } from "../storage";
 import { validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
 import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
@@ -43,6 +43,14 @@ const calendarDate = z.string().trim()
     const parsed = new Date(Date.UTC(year, month - 1, day));
     return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
   }, "Use a real calendar date.");
+
+function toUserSuccessFeeView(fee: SuccessFee) {
+  const { offerLetterKey, offerLetterUrl, stripeCheckoutSessionId, stripePriceId, ...view } = fee;
+  return {
+    ...view,
+    hasOfferLetter: Boolean(offerLetterKey),
+  };
+}
 
 function assertSuccessFeeTermsAccepted(user: {
   tosAcceptedAt?: Date | null;
@@ -524,15 +532,55 @@ export const successFeesRouter = router({
       limit: z.number().int().min(1).max(100).default(50),
       cursor: z.object({ createdAt: z.coerce.date(), id: z.number().int().positive() }).strict().optional(),
     }).strict())
-    .query(async ({ ctx, input }) => getUserSuccessFeePage(ctx.user.id, input)),
+    .query(async ({ ctx, input }) => {
+      const page = await getUserSuccessFeePage(ctx.user.id, input);
+      return { ...page, items: page.items.map(toUserSuccessFeeView) };
+    }),
 
   listForApplications: protectedProcedure
     .input(z.object({ applicationIds: z.array(z.number().int().positive()).max(250) }).strict())
-    .query(async ({ ctx, input }) => getUserSuccessFeesForApplications(ctx.user.id, input.applicationIds)),
+    .query(async ({ ctx, input }) => {
+      const fees = await getUserSuccessFeesForApplications(ctx.user.id, input.applicationIds);
+      return fees.map(toUserSuccessFeeView);
+    }),
 
   getMyFeeSummary: protectedProcedure.query(async ({ ctx }) => {
     return await getUserSuccessFeeSummary(ctx.user.id);
   }),
+
+  getOfferLetterDownloadUrl: protectedProcedure
+    .input(z.object({ successFeeId: z.number().int().positive() }).strict())
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [fee] = await db
+        .select({ id: successFees.id, offerLetterKey: successFees.offerLetterKey })
+        .from(successFees)
+        .where(and(eq(successFees.id, input.successFeeId), eq(successFees.userId, ctx.user.id)))
+        .limit(1);
+      if (!fee?.offerLetterKey) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Offer letter not found." });
+      }
+      try {
+        const { url } = await storageGet(fee.offerLetterKey);
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "success_fee",
+          entityId: fee.id,
+          action: "offer_letter_download_requested",
+          actor: "user",
+          source: "successFees.getOfferLetterDownloadUrl",
+          riskLevel: "low",
+        });
+        return { url };
+      } catch {
+        console.error("[SuccessFees] Offer letter download URL could not be created.");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The private offer letter is temporarily unavailable.",
+        });
+      }
+    }),
 
   // Reopen an expired Checkout flow without creating another success-fee record.
   retryBillingCheckout: protectedProcedure

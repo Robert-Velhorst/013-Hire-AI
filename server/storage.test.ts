@@ -65,4 +65,40 @@ describe("private storage deletion", () => {
       key: "resumes/7/already-gone.pdf",
     });
   });
+
+  it("returns an authenticated HTTP download URL for a normalized private key", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      url: "https://private.example/download/signed",
+    }), { status: 200 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { storageGet } = await import("./storage");
+    await expect(storageGet("/offer-letters/7/offer.pdf")).resolves.toEqual({
+      key: "offer-letters/7/offer.pdf",
+      url: "https://private.example/download/signed",
+    });
+    const [url, request] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe("https://storage.example.local/api/v1/storage/downloadUrl?path=offer-letters%2F7%2Foffer.pdf");
+    expect(request.headers).toEqual({ Authorization: "Bearer storage-test-key" });
+  });
+
+  it("rejects failed or unsafe private download responses", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response("denied", {
+      status: 403,
+      statusText: "Forbidden",
+    })) as typeof fetch;
+    const { storageGet } = await import("./storage");
+    await expect(storageGet("verifications/7/proof.pdf")).rejects.toThrow("retrieval failed (403 Forbidden)");
+
+    vi.resetModules();
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      url: "javascript:alert(1)",
+    }), { status: 200 })) as typeof fetch;
+    const unsafeStorage = await import("./storage");
+    await expect(unsafeStorage.storageGet("verifications/7/proof.pdf")).rejects.toThrow("HTTP or HTTPS");
+  });
 });

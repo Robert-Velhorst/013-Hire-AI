@@ -15,6 +15,7 @@ import {
   type EmploymentEndReportResultLike,
 } from "@/lib/employmentEndControl";
 import { getSuccessFeeComplianceAction, getSuccessFeeComplianceSummaryFromAggregates, type SuccessFeeComplianceRisk } from "@/lib/successFeeCompliance";
+import { openExternalUrl } from "@/lib/externalUrl";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -218,7 +219,10 @@ export default function Billing() {
   const retryBillingCheckout = trpc.successFees.retryBillingCheckout.useMutation({
     onSuccess: (data) => {
       if (data.checkoutUrl) {
-        window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+        if (!openExternalUrl(data.checkoutUrl)) {
+          toast.error("Stripe returned an invalid Checkout URL.");
+          return;
+        }
       }
       toast.success("Secure Stripe Checkout opened. No new success-fee record or subscription was created by Hire.AI.");
       refetchFees();
@@ -227,8 +231,17 @@ export default function Billing() {
   });
 
   const getBillingPortal = trpc.successFees.getBillingPortalUrl.useMutation({
-    onSuccess: (data) => window.open(data.url, "_blank"),
+    onSuccess: (data) => {
+      if (!openExternalUrl(data.url)) toast.error("The billing portal returned an invalid URL.");
+    },
     onError: (err) => toast.error(err.message || "Could not open billing portal"),
+  });
+
+  const offerLetterDownload = trpc.successFees.getOfferLetterDownloadUrl.useMutation({
+    onSuccess: (data) => {
+      if (!openExternalUrl(data.url)) toast.error("The offer letter download URL is invalid.");
+    },
+    onError: (err) => toast.error(err.message || "Could not open the offer letter"),
   });
 
   const activeFees = fees.filter(f => ["active", "pending_verification"].includes(f.status));
@@ -630,12 +643,17 @@ export default function Billing() {
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                         <Calendar className="w-3.5 h-3.5" />
                         Started {new Date(fee.startDate).toLocaleDateString()}
-                        {fee.offerLetterUrl && (
+                        {fee.hasOfferLetter && (
                           <>
                             <span className="text-gray-600">·</span>
-                            <a href={fee.offerLetterUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:underline flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => offerLetterDownload.mutate({ successFeeId: fee.id })}
+                              disabled={offerLetterDownload.isPending && offerLetterDownload.variables?.successFeeId === fee.id}
+                              className="text-cyan-500 hover:underline disabled:opacity-60 flex items-center gap-0.5"
+                            >
                               <FileText className="w-3 h-3" /> Offer Letter
-                            </a>
+                            </button>
                           </>
                         )}
                       </div>
