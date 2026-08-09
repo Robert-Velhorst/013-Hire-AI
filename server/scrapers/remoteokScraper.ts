@@ -34,7 +34,7 @@ export class RemoteOKScraper extends BaseScraper {
 
           this.assertResponseOk(res);
 
-        return res.json();
+        return this.readResponseJson(res);
       }, { signal: options?.signal });
 
       // RemoteOK API returns an array of jobs

@@ -74,7 +74,7 @@ export class GenericScraper extends BaseScraper {
 
         this.assertResponseOk(res);
 
-        return res.text();
+        return this.readResponseText(res);
       }, { signal: options?.signal });
 
       const parsedJobs = this.parseRSS(response);
@@ -120,7 +120,7 @@ export class GenericScraper extends BaseScraper {
 
         this.assertResponseOk(res);
 
-        return res.json();
+        return this.readResponseJson<any>(res);
       }, { signal: options?.signal });
 
       const rawJobs = Array.isArray(response) ? response : response.jobs || response.data || [];
@@ -181,7 +181,7 @@ export class GenericScraper extends BaseScraper {
 
         this.assertResponseOk(res);
 
-        return res.text();
+        return this.readResponseText(res);
       }, { signal: options?.signal });
 
       // Generic HTML parsing - looks for common job listing patterns

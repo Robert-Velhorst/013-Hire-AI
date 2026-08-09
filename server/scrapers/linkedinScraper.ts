@@ -44,7 +44,7 @@ export class LinkedInScraper extends BaseScraper {
 
           this.assertResponseOk(res);
 
-          return res.text();
+          return this.readResponseText(res);
         }, { signal: options?.signal });
 
         // Parse HTML response for job listings

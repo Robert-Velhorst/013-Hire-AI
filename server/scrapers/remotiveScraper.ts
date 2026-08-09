@@ -40,7 +40,7 @@ export class RemotiveScraper extends BaseScraper {
 
           this.assertResponseOk(res);
 
-        return res.json();
+        return this.readResponseJson(res);
       }, { signal: options?.signal });
 
       const rawJobs = response.jobs || [];

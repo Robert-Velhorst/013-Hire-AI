@@ -9,9 +9,7 @@ afterEach(() => {
 
 describe("Remotive salary ingestion", () => {
   it("normalizes international salary formats before persisting a source job", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
         jobs: [{
           id: 44,
           title: "Platform Engineer",
@@ -23,8 +21,7 @@ describe("Remotive salary ingestion", () => {
           publication_date: "2026-07-13T10:00:00.000Z",
           salary: "EUR 60.000 - 75.000 annually",
         }],
-      }),
-    }) as typeof fetch;
+      }), { status: 200 })) as typeof fetch;
 
     const result = await new RemotiveScraper(44).scrape();
 

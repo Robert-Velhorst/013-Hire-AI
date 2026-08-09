@@ -1,5 +1,8 @@
 import type { Job } from "../../drizzle/schema";
 import { normalizeSalary } from "../jobNormalization";
+import { readBoundedResponseJson, readBoundedResponseText } from "../_core/outboundRequest";
+
+export const SCRAPER_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * Base scraper class for job platforms
@@ -132,6 +135,14 @@ export abstract class BaseScraper {
   protected assertResponseOk(response: Response): void {
     if (response.ok) return;
     throw new ScraperHttpError(response.status, parseRetryAfterMs(response.headers.get("retry-after")));
+  }
+
+  protected readResponseText(response: Response): Promise<string> {
+    return readBoundedResponseText(response, SCRAPER_RESPONSE_MAX_BYTES);
+  }
+
+  protected readResponseJson<T = any>(response: Response): Promise<T> {
+    return readBoundedResponseJson<T>(response, SCRAPER_RESPONSE_MAX_BYTES);
   }
 
   /**

@@ -9,9 +9,7 @@ afterEach(() => {
 
 describe("generic scraper structured job extraction", () => {
   it("normalizes JSON-LD JobPosting data before falling back to HTML heuristics", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => `
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(`
         <script type="application/ld+json">
           {"@context":"https://schema.org","@graph":[{
             "@type":"JobPosting",
@@ -27,8 +25,7 @@ describe("generic scraper structured job extraction", () => {
             "baseSalary":{"currency":"USD","value":{"minValue":"140000","maxValue":180000}}
           }]}
         </script>
-      `,
-    }) as typeof fetch;
+      `, { status: 200 })) as typeof fetch;
     const scraper = new GenericScraper({
       platformName: "Structured Test Source",
       platformId: 72,
@@ -58,14 +55,11 @@ describe("generic scraper structured job extraction", () => {
   });
 
   it("annualizes locale-formatted JSON-LD compensation before source jobs are persisted", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => `
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(`
         <script type="application/ld+json">
           {"@type":"JobPosting","title":"European Platform Engineer","url":"/jobs/european-platform-engineer","hiringOrganization":{"name":"European Systems"},"jobLocationType":"TELECOMMUTE","baseSalary":{"currency":"EUR","value":{"minValue":"40","maxValue":"50","unitText":"HOUR"}}}
         </script>
-      `,
-    }) as typeof fetch;
+      `, { status: 200 })) as typeof fetch;
     const scraper = new GenericScraper({
       platformName: "Structured EU Test Source",
       platformId: 76,
@@ -86,10 +80,10 @@ describe("generic scraper structured job extraction", () => {
   });
 
   it("ignores malformed structured data and resolves heuristic HTML links against a nested source URL", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => '<script type="application/ld+json">{not-json}</script><article class="job"><h2>Fallback Engineer</h2><a href="/jobs/fallback">Apply</a></article>',
-    }) as typeof fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      '<script type="application/ld+json">{not-json}</script><article class="job"><h2>Fallback Engineer</h2><a href="/jobs/fallback">Apply</a></article>',
+      { status: 200 }
+    )) as typeof fetch;
     const scraper = new GenericScraper({
       platformName: "Fallback Test Source",
       platformId: 73,
@@ -109,15 +103,12 @@ describe("generic scraper structured job extraction", () => {
   });
 
   it("keeps relative RSS links usable and excludes unsafe application destinations", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => `
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(`
         <rss><channel>
           <item><title>Safe Writer - Example Press</title><link>roles/writer</link><guid>writer-1</guid></item>
           <item><title>Unsafe Writer - Example Press</title><link>javascript:alert(1)</link><guid>writer-2</guid></item>
         </channel></rss>
-      `,
-    }) as typeof fetch;
+      `, { status: 200 })) as typeof fetch;
     const scraper = new GenericScraper({
       platformName: "RSS Test Source",
       platformId: 74,
@@ -139,9 +130,7 @@ describe("generic scraper structured job extraction", () => {
   });
 
   it("preserves configured API query parameters and excludes known location conflicts", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
         jobs: [
           {
             id: "eu-platform",
@@ -167,8 +156,7 @@ describe("generic scraper structured job extraction", () => {
             url: "https://jobs.example.com/us-platform",
           },
         ],
-      }),
-    }) as typeof fetch;
+      }), { status: 200 })) as typeof fetch;
     const scraper = new GenericScraper({
       platformName: "API Test Source",
       platformId: 75,

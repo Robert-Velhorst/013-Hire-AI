@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BaseScraper, parseRetryAfterMs, ScraperHttpError, type ScrapeResult } from "./baseScraper";
+import {
+  BaseScraper,
+  parseRetryAfterMs,
+  SCRAPER_RESPONSE_MAX_BYTES,
+  ScraperHttpError,
+  type ScrapeResult,
+} from "./baseScraper";
+import { ResponseSizeLimitError } from "../_core/outboundRequest";
 
 class TestScraper extends BaseScraper {
   async scrape(): Promise<ScrapeResult> {
@@ -16,6 +23,14 @@ class TestScraper extends BaseScraper {
 
   retryRequest<T>(fn: () => Promise<T>, signal?: AbortSignal) {
     return this.retry(fn, { signal });
+  }
+
+  readText(response: Response) {
+    return this.readResponseText(response);
+  }
+
+  readJson<T>(response: Response) {
+    return this.readResponseJson<T>(response);
   }
 }
 
@@ -99,5 +114,21 @@ describe("base scraper application-link normalization", () => {
     expect(parseRetryAfterMs("9999")).toBe(300_000);
     expect(parseRetryAfterMs("Wed, 21 Oct 2026 07:28:00 GMT", Date.parse("2026-10-21T07:27:58Z"))).toBe(2_000);
     expect(parseRetryAfterMs("invalid")).toBeNull();
+  });
+
+  it("parses healthy text feeds and JSON APIs within the shared response budget", async () => {
+    await expect(scraper.readText(new Response("<rss />"))).resolves.toBe("<rss />");
+    await expect(scraper.readJson<{ jobs: number }>(new Response(JSON.stringify({ jobs: 2 }))))
+      .resolves.toEqual({ jobs: 2 });
+  });
+
+  it.each([
+    ["text", (response: Response) => scraper.readText(response)],
+    ["JSON", (response: Response) => scraper.readJson(response)],
+  ])("rejects an oversized declared %s source response", async (_format, read) => {
+    const response = new Response("{}", {
+      headers: { "content-length": String(SCRAPER_RESPONSE_MAX_BYTES + 1) },
+    });
+    await expect(read(response)).rejects.toBeInstanceOf(ResponseSizeLimitError);
   });
 });

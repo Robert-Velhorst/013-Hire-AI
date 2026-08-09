@@ -57,7 +57,7 @@ export class JobicyScraper extends BaseScraper {
           headers: { "User-Agent": "Hire.AI Job Aggregator" },
         });
         this.assertResponseOk(response);
-        return response.json() as Promise<{ jobs?: unknown }>;
+        return this.readResponseJson<{ jobs?: unknown }>(response);
       }, { signal: options?.signal });
 
       const rawJobs = Array.isArray(payload.jobs) ? payload.jobs as JobicyJob[] : [];

@@ -49,7 +49,7 @@ export class JustRemoteScraper extends BaseScraper {
 
           this.assertResponseOk(res);
 
-            return res.text();
+            return this.readResponseText(res);
           }, { signal: options?.signal });
 
           const parsedJobs = this.parseJobListings(response);

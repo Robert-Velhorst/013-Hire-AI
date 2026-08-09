@@ -43,7 +43,7 @@ export class IndeedScraper extends BaseScraper {
 
           this.assertResponseOk(res);
 
-          return res.text();
+          return this.readResponseText(res);
         }, { signal: options?.signal });
 
         const parsedJobs = this.parseRSS(response);
