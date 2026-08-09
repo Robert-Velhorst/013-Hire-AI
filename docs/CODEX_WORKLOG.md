@@ -122,6 +122,7 @@
 - Added separately confirmed transactional database finalization with policy-coverage drift protection, rollback/retry behavior, account pseudonymization, erasable-record deletion, retained-ledger scrubbing, regulated-record preservation, and clean-MySQL acceptance.
 - Centralized sensitive-document scanning at the storage boundary, added authenticated and timeout-bounded HTTP scanning for cloud deployments, native Microsoft Defender scanning for Windows standalone, and removed the unused direct resume-storage bypass.
 - Added credential-safe Docker MySQL client support to backup/restore and completed a two-container isolated recovery drill with checksum, migration, table, and sentinel reconciliation.
+- Removed nested primary landmarks from the shared routed shell, made brand/account navigation screen-reader and keyboard identifiable, and fixed a browser-confirmed 390-pixel dashboard overflow caused by sentence-length status badges.
 - Made resolved privacy reviews create a non-destructive plan before the review is closed, preventing resolved-without-plan failure.
 - Added exact-confirmation admin controls for provider/object cleanup and evidence controls for unsupported provider revocation.
 - Made private-object deletion idempotent when storage already reports the object missing.

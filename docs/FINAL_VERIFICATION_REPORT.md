@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 872 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 168 files, 875 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
@@ -36,6 +36,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Fails closed when required production configuration or a platform-appropriate scanner is absent; native Windows Defender is detected for standalone operation |
 | Windows document scanning | Native `MpCmdRun.exe` smoke through `scanSensitiveUpload` | Passed with a clean `windows_defender` verdict and temporary-file cleanup |
+| Authenticated browser shell | Playwright desktop and 390 x 844 mobile smoke | Passed: dashboard-to-review navigation, one primary landmark, named brand/account controls, clean console, and no horizontal dashboard overflow |
 | Diff whitespace audit | `git diff --check` | Passed |
 
 ## Runtime and UI evidence
@@ -97,6 +98,8 @@ Privacy review resolution on persistent storage creates one durable non-destruct
 The production image was built and exercised on Windows Docker Desktop against a clean MySQL 8.4 container. This uncovered and closed four runtime-only defects: a stale pnpm major, omitted workspace overrides, invalid migration statement grouping/identifier length, and a pruned Vite dependency still imported by the server. The corrected image fails closed without configuration, carries an advisory-lock migrator that applies all 39 entries from zero, runs as the non-root Node user, becomes Docker-healthy, reports database-backed production readiness, and serves the frontend. The in-app browser could not attach to the local container page during the final render attempt; HTTP and Docker runtime evidence remain authoritative for this pass.
 
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
+
+The authenticated dashboard and review queue were exercised in a real Chromium session at desktop and 390 x 844 mobile sizes. The pass found a nested `main` landmark in the shared sidebar shell, non-keyboard brand navigation, an avatar control named only by its initial, and a 460-pixel sentence badge inside a 390-pixel dashboard. The shared landmark, both header variants, and the long dashboard badges now retain one primary landmark, explicit accessible control names, keyboard focus, and exact viewport-width rendering with no console warnings. This is bounded product evidence, not an independent WCAG certification.
 
 Application create, decision, and portal-preparation routes now check for an existing pending application through the unique user/canonical-job key. Existing duplicate-source and preparation-idempotency regressions pass without loading application history.
 

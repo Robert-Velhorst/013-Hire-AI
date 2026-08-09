@@ -35,12 +35,17 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
   return (
     <header className="border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setLocation("/")}>
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+          onClick={() => setLocation("/")}
+          aria-label="Hire.AI home"
+        >
           <Activity className="h-8 w-8 text-cyan-400" />
           <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             Hire.AI
           </span>
-        </div>
+        </button>
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -53,7 +58,11 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600">
+              <Button
+                variant="ghost"
+                className="relative h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600"
+                aria-label="Open account menu"
+              >
                 <span className="text-white font-semibold">
                   {user?.name?.charAt(0).toUpperCase() || "U"}
                 </span>
