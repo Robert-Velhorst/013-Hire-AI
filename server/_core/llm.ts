@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -319,6 +320,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
       authorization: `Bearer ${ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
   });
 
   if (!response.ok) {

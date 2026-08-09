@@ -26,6 +26,14 @@
  * ```
  */
 import { ENV } from "./env";
+import {
+  outboundRequestSignal,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseBytes,
+  ResponseSizeLimitError,
+} from "./outboundRequest";
+
+const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 
 export type TranscribeOptions = {
   audioUrl: string; // URL to the audio file (e.g., S3 URL)
@@ -94,7 +102,9 @@ export async function transcribeAudio(
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const response = await fetch(options.audioUrl);
+      const response = await fetch(options.audioUrl, {
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      });
       if (!response.ok) {
         return {
           error: "Failed to download audio file",
@@ -103,19 +113,16 @@ export async function transcribeAudio(
         };
       }
       
-      audioBuffer = Buffer.from(await response.arrayBuffer());
+      audioBuffer = Buffer.from(await readBoundedResponseBytes(response, MAX_AUDIO_BYTES));
       mimeType = response.headers.get('content-type') || 'audio/mpeg';
-      
-      // Check file size (16MB limit)
-      const sizeMB = audioBuffer.length / (1024 * 1024);
-      if (sizeMB > 16) {
+    } catch (error) {
+      if (error instanceof ResponseSizeLimitError) {
         return {
           error: "Audio file exceeds maximum size limit",
           code: "FILE_TOO_LARGE",
-          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
+          details: "Maximum allowed size is 16MB",
         };
       }
-    } catch (error) {
       return {
         error: "Failed to fetch audio file",
         code: "SERVICE_ERROR",
@@ -159,6 +166,7 @@ export async function transcribeAudio(
         "Accept-Encoding": "identity",
       },
       body: formData,
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
     });
 
     if (!response.ok) {

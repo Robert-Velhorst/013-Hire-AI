@@ -69,6 +69,7 @@ describe("private storage deletion", () => {
     expect(url.toString()).toBe("https://storage.example.local/api/v1/storage/delete?path=resumes%2F7%2Fresume.pdf");
     expect(request.method).toBe("DELETE");
     expect(request.headers).toEqual({ Authorization: "Bearer storage-test-key" });
+    expect(request.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("does not hide failed object cleanup", async () => {
@@ -110,6 +111,7 @@ describe("private storage deletion", () => {
     const [url, request] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.toString()).toBe("https://storage.example.local/api/v1/storage/downloadUrl?path=offer-letters%2F7%2Foffer.pdf");
     expect(request.headers).toEqual({ Authorization: "Bearer storage-test-key" });
+    expect(request.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("rejects failed or unsafe private download responses", async () => {

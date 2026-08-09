@@ -2,6 +2,7 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from "./_core/env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./_core/outboundRequest";
 import { scanSensitiveUpload } from "./uploadValidation";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
@@ -44,6 +45,7 @@ async function buildDownloadUrl(
   const response = await fetch(downloadApiUrl, {
     method: "GET",
     headers: buildAuthHeaders(apiKey),
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
   if (!response.ok) {
     const message = await response.text().catch(() => response.statusText);
@@ -135,6 +137,7 @@ export async function storagePut(
     method: "POST",
     headers: buildAuthHeaders(apiKey),
     body: formData,
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
 
   if (!response.ok) {
@@ -168,6 +171,7 @@ export async function storageDelete(relKey: string): Promise<{ key: string }> {
   const response = await fetch(buildDeleteUrl(baseUrl, key), {
     method: "DELETE",
     headers: buildAuthHeaders(apiKey),
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
 
   if (!response.ok && response.status !== 404) {

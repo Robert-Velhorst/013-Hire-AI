@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
 
 export type NotificationPayload = {
   title: string;
@@ -96,6 +97,7 @@ export async function notifyOwner(
         "connect-protocol-version": "1",
       },
       body: JSON.stringify({ title, content }),
+      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.notification),
     });
 
     if (!response.ok) {

@@ -8,6 +8,7 @@
  */
 
 import { ENV } from "./env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
 
 // ============================================================================
 // Configuration
@@ -77,6 +78,7 @@ export async function makeRequest<T = unknown>(
       "Content-Type": "application/json",
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
 
   if (!response.ok) {

@@ -17,6 +17,7 @@
  */
 import { storagePut } from "server/storage";
 import { ENV } from "./env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -62,6 +63,7 @@ export async function generateImage(
       prompt: options.prompt,
       original_images: options.originalImages || [],
     }),
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.generation),
   });
 
   if (!response.ok) {

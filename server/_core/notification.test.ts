@@ -41,4 +41,17 @@ describe("owner notification delivery", () => {
     expect(warn).toHaveBeenCalledWith(NOTIFICATION_DELIVERY_FAILURE);
     expect(JSON.stringify(warn.mock.calls)).not.toContain("provider-secret");
   });
+
+  it("bounds provider delivery with an abort signal", async () => {
+    ENV.forgeApiUrl = "https://notifications.example.local";
+    ENV.forgeApiKey = "notification-key";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(notifyOwner({ title: "Ledger review", content: "Follow-up needs approval." })).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }));
+  });
 });

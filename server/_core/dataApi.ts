@@ -5,6 +5,7 @@
  *   })
  */
 import { ENV } from "./env";
+import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
 
 export type DataApiCallOptions = {
   query?: Record<string, unknown>;
@@ -43,6 +44,7 @@ export async function callDataApi(
       path_params: options.pathParams,
       multipart_form_data: options.formData,
     }),
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
 
   if (!response.ok) {
