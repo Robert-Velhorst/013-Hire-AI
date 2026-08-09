@@ -160,6 +160,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   experience: text("experience"),
   education: text("education"),
   preferences: text("preferences"),
+  autonomousEnabled: int("autonomous_enabled").default(0).notNull(),
   desiredJobTypes: text("desired_job_types"),
   desiredLocations: text("desired_locations"),
   salaryExpectationMin: int("salary_expectation_min"),
@@ -176,6 +177,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("user_profiles_user_unique").on(table.userId),
+  index("user_profiles_autonomous_user_idx").on(table.autonomousEnabled, table.userId),
 ]);
 
 /**

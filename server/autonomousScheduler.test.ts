@@ -131,4 +131,26 @@ describe("AutonomousScheduler", () => {
     ]);
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("autonomous-worker-secret");
   });
+
+  it("processes enrolled users in bounded keyset pages", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      userId: index + 1,
+      preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+    }));
+    mocks.getProfilesWithAutonomousPreferences
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce([{
+        userId: 101,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+      }]);
+    mocks.runScheduledAutonomousForUser.mockResolvedValue(null);
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    expect(mocks.getProfilesWithAutonomousPreferences).toHaveBeenNthCalledWith(1, 0, 100);
+    expect(mocks.getProfilesWithAutonomousPreferences).toHaveBeenNthCalledWith(2, 100, 100);
+    expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(101);
+    expect(scheduler.getStatus().enrolledUsers).toBe(101);
+  });
 });

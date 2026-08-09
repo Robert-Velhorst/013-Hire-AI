@@ -484,6 +484,13 @@
       "when": 1786498140000,
       "tag": "0068_job_alert_check_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1786498200000,
+      "tag": "0069_autonomous_profile_schedule_index",
+      "breakpoints": true
     }
   ]
 }

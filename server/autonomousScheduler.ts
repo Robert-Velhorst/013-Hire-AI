@@ -3,6 +3,7 @@ import { getAutonomousScanIntervalMs, parseAutonomousPreferences } from "./auton
 import { AUTONOMOUS_RUN_FAILURE, runScheduledAutonomousForUser } from "./autonomousService";
 
 const AUTONOMOUS_SCHEDULER_FAILURE = "Autonomous scheduler cycle could not complete.";
+const AUTONOMOUS_PROFILE_PAGE_SIZE = 100;
 
 interface AutonomousSchedulerStatus {
   isStarted: boolean;
@@ -123,79 +124,86 @@ export class AutonomousScheduler {
     this.status.inboxMonitoringFailures = 0;
     this.status.failedActions = 0;
     try {
-      const profiles = await getProfilesWithAutonomousPreferences();
-      this.status.enrolledUsers = profiles.length;
+      this.status.enrolledUsers = 0;
+      let afterUserId = 0;
+      while (true) {
+        const profiles = await getProfilesWithAutonomousPreferences(afterUserId, AUTONOMOUS_PROFILE_PAGE_SIZE);
+        this.status.enrolledUsers += profiles.length;
+        for (const profile of profiles) {
+          const preferences = parseAutonomousPreferences(profile.preferences);
+          if (!preferences.autonomousEnabled) continue;
+          const frequency = preferences.scanFrequency || "daily";
+          const interval = getAutonomousScanIntervalMs(frequency);
 
-      for (const profile of profiles) {
-        const preferences = parseAutonomousPreferences(profile.preferences);
-        if (!preferences.autonomousEnabled) continue;
-        const frequency = preferences.scanFrequency || "daily";
-        const interval = getAutonomousScanIntervalMs(frequency);
-
-        try {
-          const result = await runScheduledAutonomousForUser(profile.userId, interval);
-          if (result) {
-            const jobsQueued =
-              result.queuedApplicationRecords +
-              result.queuedReviewRecords +
-              result.queuedManualRecords;
-            this.status.usersRun += 1;
-            this.status.jobsQueued += jobsQueued;
-            this.status.followUpDraftsQueued += result.queuedFollowUps;
-            this.status.duplicateFollowUpsSkipped += result.skippedDuplicateFollowUps;
-            this.status.resumeEvidenceBlockedActions += result.skippedResumeEvidenceActions || 0;
-            this.status.profileReadinessBlockedActions += result.skippedProfileReadinessActions || 0;
-            this.status.evidenceGatedActions += result.skippedEvidenceGatedActions;
-            this.status.emptySourceActionsSkipped += result.skippedEmptySourceActions || 0;
-            this.status.userDecisionLockedJobs += result.userDecisionLockedJobs || 0;
-            this.status.inboxProvidersScanned += result.inboxProvidersScanned || 0;
-            this.status.inboxReauthorizationRequired += result.inboxReauthorizationRequired || 0;
-            this.status.inboxCandidatesDiscovered += result.inboxCandidatesDiscovered || 0;
-            this.status.inboxMonitoringFailures += result.inboxMonitoringFailures || 0;
-            this.status.failedActions += result.failedActions;
+          try {
+            const result = await runScheduledAutonomousForUser(profile.userId, interval);
+            if (result) {
+              const jobsQueued =
+                result.queuedApplicationRecords +
+                result.queuedReviewRecords +
+                result.queuedManualRecords;
+              this.status.usersRun += 1;
+              this.status.jobsQueued += jobsQueued;
+              this.status.followUpDraftsQueued += result.queuedFollowUps;
+              this.status.duplicateFollowUpsSkipped += result.skippedDuplicateFollowUps;
+              this.status.resumeEvidenceBlockedActions += result.skippedResumeEvidenceActions || 0;
+              this.status.profileReadinessBlockedActions += result.skippedProfileReadinessActions || 0;
+              this.status.evidenceGatedActions += result.skippedEvidenceGatedActions;
+              this.status.emptySourceActionsSkipped += result.skippedEmptySourceActions || 0;
+              this.status.userDecisionLockedJobs += result.userDecisionLockedJobs || 0;
+              this.status.inboxProvidersScanned += result.inboxProvidersScanned || 0;
+              this.status.inboxReauthorizationRequired += result.inboxReauthorizationRequired || 0;
+              this.status.inboxCandidatesDiscovered += result.inboxCandidatesDiscovered || 0;
+              this.status.inboxMonitoringFailures += result.inboxMonitoringFailures || 0;
+              this.status.failedActions += result.failedActions;
+              this.userRunStatuses.set(profile.userId, {
+                lastRunAt: new Date(),
+                jobsQueued,
+                followUpDraftsQueued: result.queuedFollowUps,
+                duplicateFollowUpsSkipped: result.skippedDuplicateFollowUps,
+                resumeEvidenceBlockedActions: result.skippedResumeEvidenceActions || 0,
+                profileReadinessBlockedActions: result.skippedProfileReadinessActions || 0,
+                evidenceGatedActions: result.skippedEvidenceGatedActions,
+                emptySourceActionsSkipped: result.skippedEmptySourceActions || 0,
+                userDecisionLockedJobs: result.userDecisionLockedJobs || 0,
+                inboxProvidersScanned: result.inboxProvidersScanned || 0,
+                inboxReauthorizationRequired: result.inboxReauthorizationRequired || 0,
+                inboxCandidatesDiscovered: result.inboxCandidatesDiscovered || 0,
+                inboxMonitoringFailures: result.inboxMonitoringFailures || 0,
+                failedActions: result.failedActions,
+                errorCount: result.failedActions,
+              });
+              if (result.failedActions > 0) {
+                this.status.errors.push(
+                  `User ${profile.userId}: ${result.failedActions} autonomous action${result.failedActions === 1 ? "" : "s"} failed`
+                );
+              }
+            }
+          } catch {
             this.userRunStatuses.set(profile.userId, {
               lastRunAt: new Date(),
-              jobsQueued,
-              followUpDraftsQueued: result.queuedFollowUps,
-              duplicateFollowUpsSkipped: result.skippedDuplicateFollowUps,
-              resumeEvidenceBlockedActions: result.skippedResumeEvidenceActions || 0,
-              profileReadinessBlockedActions: result.skippedProfileReadinessActions || 0,
-              evidenceGatedActions: result.skippedEvidenceGatedActions,
-              emptySourceActionsSkipped: result.skippedEmptySourceActions || 0,
-              userDecisionLockedJobs: result.userDecisionLockedJobs || 0,
-              inboxProvidersScanned: result.inboxProvidersScanned || 0,
-              inboxReauthorizationRequired: result.inboxReauthorizationRequired || 0,
-              inboxCandidatesDiscovered: result.inboxCandidatesDiscovered || 0,
-              inboxMonitoringFailures: result.inboxMonitoringFailures || 0,
-              failedActions: result.failedActions,
-              errorCount: result.failedActions,
+              jobsQueued: 0,
+              followUpDraftsQueued: 0,
+              duplicateFollowUpsSkipped: 0,
+              resumeEvidenceBlockedActions: 0,
+              profileReadinessBlockedActions: 0,
+              evidenceGatedActions: 0,
+              emptySourceActionsSkipped: 0,
+              userDecisionLockedJobs: 0,
+              inboxProvidersScanned: 0,
+              inboxReauthorizationRequired: 0,
+              inboxCandidatesDiscovered: 0,
+              inboxMonitoringFailures: 0,
+              failedActions: 0,
+              errorCount: 1,
             });
-            if (result.failedActions > 0) {
-              this.status.errors.push(
-                `User ${profile.userId}: ${result.failedActions} autonomous action${result.failedActions === 1 ? "" : "s"} failed`
-              );
-            }
+            this.status.errors.push(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
           }
-        } catch {
-          this.userRunStatuses.set(profile.userId, {
-            lastRunAt: new Date(),
-            jobsQueued: 0,
-            followUpDraftsQueued: 0,
-            duplicateFollowUpsSkipped: 0,
-            resumeEvidenceBlockedActions: 0,
-            profileReadinessBlockedActions: 0,
-            evidenceGatedActions: 0,
-            emptySourceActionsSkipped: 0,
-            userDecisionLockedJobs: 0,
-            inboxProvidersScanned: 0,
-            inboxReauthorizationRequired: 0,
-            inboxCandidatesDiscovered: 0,
-            inboxMonitoringFailures: 0,
-            failedActions: 0,
-            errorCount: 1,
-          });
-          this.status.errors.push(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
-        }
+          }
+        if (profiles.length < AUTONOMOUS_PROFILE_PAGE_SIZE) break;
+        const nextUserId = profiles[profiles.length - 1]?.userId ?? afterUserId;
+        if (nextUserId <= afterUserId) throw new Error("Autonomous profile pagination did not advance.");
+        afterUserId = nextUserId;
       }
     } catch {
       this.status.errors.push(AUTONOMOUS_SCHEDULER_FAILURE);

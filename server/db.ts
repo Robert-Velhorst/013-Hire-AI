@@ -1087,7 +1087,8 @@ export async function getUserProfile(userId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getProfilesWithAutonomousPreferences() {
+export async function getProfilesWithAutonomousPreferences(afterUserId = 0, requestedLimit = 100) {
+  const limit = Math.max(1, Math.min(250, Math.trunc(requestedLimit) || 100));
   const db = await getDb();
   if (!db) {
     return Array.from(memoryProfiles.values())
@@ -1101,10 +1102,13 @@ export async function getProfilesWithAutonomousPreferences() {
       .map((profile) => ({
         userId: profile.userId,
         preferences: profile.preferences,
-      }));
+      }))
+      .filter((profile) => profile.userId > afterUserId)
+      .sort((left, right) => left.userId - right.userId)
+      .slice(0, limit);
   }
 
-  const candidates = await db
+  return await db
     .select({
       userId: userProfiles.userId,
       preferences: userProfiles.preferences,
@@ -1112,19 +1116,13 @@ export async function getProfilesWithAutonomousPreferences() {
     .from(userProfiles)
     .innerJoin(users, eq(userProfiles.userId, users.id))
     .where(and(
-      sql`${userProfiles.preferences} IS NOT NULL`,
-      sql`TRIM(${userProfiles.preferences}) <> ''`,
+      gt(userProfiles.userId, afterUserId),
+      eq(userProfiles.autonomousEnabled, 1),
       eq(users.accountStatus, "active"),
       sql`${users.tosAcceptedAt} IS NOT NULL`
-    ));
-
-  return candidates.filter((profile) => {
-    try {
-      return JSON.parse(profile.preferences || "{}").autonomousEnabled === true;
-    } catch {
-      return false;
-    }
-  });
+    ))
+    .orderBy(asc(userProfiles.userId))
+    .limit(limit);
 }
 
 export async function getAutonomousUserEligibility(userId: number): Promise<{
@@ -1394,6 +1392,14 @@ export async function renewAutonomousRunLease(userId: number, leaseToken: string
   return Number(result[0].affectedRows) > 0;
 }
 
+function autonomousPreferenceEnabled(preferences: string | null | undefined) {
+  try {
+    return JSON.parse(preferences || "{}").autonomousEnabled === true ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function upsertUserProfile(profile: InsertUserProfile) {
   const db = await getDb();
   if (!db) {
@@ -1405,6 +1411,9 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
       experience: profile.experience ?? existing?.experience ?? null,
       education: profile.education ?? existing?.education ?? null,
       preferences: profile.preferences ?? existing?.preferences ?? null,
+      autonomousEnabled: profile.preferences !== undefined
+        ? autonomousPreferenceEnabled(profile.preferences)
+        : existing?.autonomousEnabled ?? 0,
       desiredJobTypes: profile.desiredJobTypes !== undefined ? profile.desiredJobTypes : existing?.desiredJobTypes ?? null,
       desiredLocations: profile.desiredLocations !== undefined ? profile.desiredLocations : existing?.desiredLocations ?? null,
       salaryExpectationMin: profile.salaryExpectationMin !== undefined ? profile.salaryExpectationMin : existing?.salaryExpectationMin ?? null,
@@ -1423,10 +1432,13 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
     return;
   }
 
-  const { id: _id, userId: _userId, ...updates } = profile;
+  const normalizedProfile = profile.preferences === undefined
+    ? profile
+    : { ...profile, autonomousEnabled: autonomousPreferenceEnabled(profile.preferences) };
+  const { id: _id, userId: _userId, ...updates } = normalizedProfile;
   await db
     .insert(userProfiles)
-    .values(profile)
+    .values(normalizedProfile)
     .onDuplicateKeyUpdate({
       set: Object.keys(updates).length > 0 ? updates : { userId: profile.userId },
     });
@@ -1467,10 +1479,11 @@ export async function patchUserProfilePreferences(
       current = {};
     }
     const preferences = JSON.stringify({ ...current, ...patch });
+    const autonomousEnabled = autonomousPreferenceEnabled(preferences);
     if (rows[0]) {
-      await tx.update(userProfiles).set({ preferences }).where(eq(userProfiles.id, rows[0].id));
+      await tx.update(userProfiles).set({ preferences, autonomousEnabled }).where(eq(userProfiles.id, rows[0].id));
     } else {
-      await tx.insert(userProfiles).values({ userId, preferences });
+      await tx.insert(userProfiles).values({ userId, preferences, autonomousEnabled });
     }
     return preferences;
   });

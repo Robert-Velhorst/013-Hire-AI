@@ -197,6 +197,23 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("`check_lease_until`");
   });
 
+  it("keeps the autonomous profile scheduling index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0069_autonomous_profile_schedule_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('autonomousEnabled: int("autonomous_enabled").default(0).notNull()');
+    expect(schema).toContain(
+      'index("user_profiles_autonomous_user_idx").on(table.autonomousEnabled, table.userId)'
+    );
+    expect(migration).toContain(
+      "ADD INDEX `user_profiles_autonomous_user_idx` (`autonomous_enabled`, `user_id`)"
+    );
+    expect(migration).toContain("IF(JSON_VALID(`preferences`), `preferences`, '{}')");
+  });
+
   it("keeps the application ledger cursor index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(
