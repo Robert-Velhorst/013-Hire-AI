@@ -64,4 +64,5 @@
 - Moved the application-campaign row into the initial parallel snapshot read.
 - Replaced the admin operating ledger's global review-table read with a capped user/status query backed by the existing `(user_id, status)` index.
 - Replaced employment-verification resolution's global review-table scan with an exact affected-user/entity lookup for active review items.
-- Passed TypeScript and the full regression suite: 159 files and 810 tests.
+- Replaced user-wide approval reads in standalone application lifecycle and admin evidence paths with an ownership-scoped application lookup that retains legacy entity links.
+- Passed TypeScript and the full regression suite: 159 files and 812 tests.

@@ -20,7 +20,7 @@ import {
   getApplicationLedgerArtifacts,
   getJobById,
   getUserApplications,
-  listUserApplicationApprovals,
+  listUserApplicationApprovalsForApplication,
   markUnreadInterviewNotificationsReadForApplication,
   resolveApplicationApproval,
   touchApplicationActivity,
@@ -391,7 +391,7 @@ export async function confirmApplicationSubmission(input: ConfirmSubmissionInput
     }
 
     const confirmedAt = new Date();
-    const submissionApproval = (await listUserApplicationApprovals(userId, "all")).find((approval) =>
+    const submissionApproval = (await listUserApplicationApprovalsForApplication(userId, input.applicationId)).find((approval) =>
       approval.entityType === "application" &&
       approval.entityId === input.applicationId &&
       approval.approvalType === "application_submission"
@@ -820,7 +820,7 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
 
     const cancelledFollowUpApprovalIds: number[] = [];
     if (shouldCancelUnsentFollowUpApprovals(response.responseType)) {
-      const unsentFollowUpApprovals = (await listUserApplicationApprovals(userId, "all")).filter((approval) =>
+      const unsentFollowUpApprovals = (await listUserApplicationApprovalsForApplication(userId, input.applicationId)).filter((approval) =>
         approval.applicationId === input.applicationId &&
         approval.entityType === "follow_up" &&
         approval.approvalType === "follow_up_send" &&
@@ -873,7 +873,7 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
     const cancelledOfferAttributionApprovalIds: number[] = [];
     const dismissedOfferAttributionReviewIds: number[] = [];
     if (shouldRetireOfferAttribution(currentStatus, response.responseType)) {
-      const staleApprovals = (await listUserApplicationApprovals(userId, "all")).filter((approval) =>
+      const staleApprovals = (await listUserApplicationApprovalsForApplication(userId, input.applicationId)).filter((approval) =>
         approval.applicationId === input.applicationId &&
         approval.entityType === "application" &&
         approval.entityId === input.applicationId &&
@@ -2590,7 +2590,7 @@ export async function withdrawApplication(
     const unsentFollowUpIds = new Set(
       followUpsForApplication.filter((followUp) => !followUp.sentDate).map((followUp) => followUp.id)
     );
-    const cancellableApprovals = (await listUserApplicationApprovals(userId, "all")).filter((approval) =>
+    const cancellableApprovals = (await listUserApplicationApprovalsForApplication(userId, applicationId)).filter((approval) =>
       approval.applicationId === applicationId &&
       isWithdrawalCancellableApproval(approval, unsentFollowUpIds, cancelOfferAttribution)
     );
@@ -2924,7 +2924,7 @@ export async function acceptOfferApplication(applicationId: number, userId: numb
         .filter((followUp) => !followUp.sentDate)
         .map((followUp) => followUp.id)
     );
-    const cancelledFollowUpApprovals = (await listUserApplicationApprovals(userId, "all")).filter((approval) =>
+    const cancelledFollowUpApprovals = (await listUserApplicationApprovalsForApplication(userId, applicationId)).filter((approval) =>
       approval.applicationId === applicationId &&
       approval.entityType === "follow_up" &&
       approval.approvalType === "follow_up_send" &&
@@ -3127,7 +3127,7 @@ export async function markFollowUpSent(followUpId: number, userId: number, deliv
     const application = await getFollowUpApplication(followUp.applicationId, userId);
     assertFollowUpAllowed(application.status || "pending");
 
-    const approvals = await listUserApplicationApprovals(userId, "all");
+    const approvals = await listUserApplicationApprovalsForApplication(userId, followUp.applicationId);
     const approval = approvals.find((item) =>
       item.entityType === "follow_up" &&
       item.entityId === followUpId &&

@@ -43,4 +43,14 @@ describe("dashboard performance claims", () => {
     expect(campaigns).not.toMatch(/\bgetFollowUps\(/);
     expect(campaigns).not.toMatch(/\bgetInterviewPreparationForJob\(/);
   });
+
+  it("keeps application lifecycle approval reads scoped to one application", () => {
+    const features = readFileSync(
+      resolve(process.cwd(), "server", "applicationFeatures.ts"),
+      "utf8"
+    );
+
+    expect(features).toContain("listUserApplicationApprovalsForApplication");
+    expect(features).not.toContain("listUserApplicationApprovals(userId, \"all\")");
+  });
 });

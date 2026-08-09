@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 810 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 812 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -59,6 +59,8 @@ Offer-attribution review generation now reuses the ledger's owned applications, 
 Admin operating snapshots no longer load the global review table. They use a capped user/status lookup for active items, with regressions covering ownership, closed-status exclusion, and result limiting.
 
 Employment-verification decisions also avoid the global review queue. They resolve only active review items matching the affected user and verification, with route-level coverage proving the global queue is not called.
+
+Standalone application lifecycle actions and admin evidence no longer load a user's complete approval history to inspect one application. The shared scoped read enforces ownership, includes direct and legacy entity-linked records, and is covered against unrelated applications and users.
 
 ## Release blockers and scope boundaries
 

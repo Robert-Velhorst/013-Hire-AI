@@ -3140,11 +3140,10 @@ export async function getAdminReviewEvidenceSnapshot(reviewItemId: number) {
   if (reviewItem.entityType === "application") {
     const applicationsForUser = await getUserApplications(reviewItem.userId);
     application = applicationsForUser.find((item) => item.id === reviewItem.entityId) ?? null;
-    approvals = (await listUserApplicationApprovals(reviewItem.userId, "all"))
-      .filter((approval) =>
-        approval.applicationId === reviewItem.entityId ||
-        (approval.entityType === "application" && approval.entityId === reviewItem.entityId)
-      );
+    approvals = await listUserApplicationApprovalsForApplication(
+      reviewItem.userId,
+      reviewItem.entityId
+    );
 
     if (application) {
       artifacts = await getApplicationLedgerArtifacts(reviewItem.entityId, reviewItem.userId);
@@ -3307,6 +3306,37 @@ export async function listUserApplicationApprovals(
     .select()
     .from(applicationApprovals)
     .where(and(...conditions))
+    .orderBy(desc(applicationApprovals.createdAt));
+}
+
+export async function listUserApplicationApprovalsForApplication(
+  userId: number,
+  applicationId: number
+) {
+  const db = await getDb();
+  if (!db) {
+    return memoryApplicationApprovals
+      .filter((approval) =>
+        approval.userId === userId &&
+        (approval.applicationId === applicationId ||
+          (approval.entityType === "application" && approval.entityId === applicationId))
+      )
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime()) as ApplicationApproval[];
+  }
+
+  return await db
+    .select()
+    .from(applicationApprovals)
+    .where(and(
+      eq(applicationApprovals.userId, userId),
+      or(
+        eq(applicationApprovals.applicationId, applicationId),
+        and(
+          eq(applicationApprovals.entityType, "application"),
+          eq(applicationApprovals.entityId, applicationId)
+        )
+      )
+    ))
     .orderBy(desc(applicationApprovals.createdAt));
 }
 
