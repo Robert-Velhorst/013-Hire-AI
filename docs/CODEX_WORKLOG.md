@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Cursor-paged public job catalog
+
+- Replaced Job Search's 250-record offset read with deterministic 50-record cursor pages ordered by posted time, creation time, and ID.
+- Added an index-backed public page contract with explicit handling for listings without a posted date and incremental loading in the UI.
+- Chunked owner-scoped application-decision lookups so loading beyond 250 jobs remains within the API's bounded input contract.
+
 ## 2026-08-09 - Transactional, cursor-paged resume history
 
 - Serialized resume version assignment, activation, and deletion on the stable account row to prevent concurrent duplicate versions or multiple active resumes.

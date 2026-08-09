@@ -133,11 +133,21 @@ export default function JobSearch() {
   const deferredJobSearchFilters = useDeferredValue(jobSearchFilters);
 
   // The API applies the same canonical filter contract before pagination.
-  const { data: jobsList, isLoading: jobsLoading, refetch: refetchJobs } = trpc.jobs.list.useQuery({
-    limit: 250,
-    offset: 0,
-    filters: deferredJobSearchFilters,
-  });
+  const {
+    data: jobPages,
+    isLoading: jobsLoading,
+    isFetchingNextPage: jobsFetchingNextPage,
+    hasNextPage: hasMoreJobs,
+    fetchNextPage: fetchMoreJobs,
+    refetch: refetchJobs,
+  } = trpc.jobs.listPage.useInfiniteQuery(
+    { limit: 50, filters: deferredJobSearchFilters },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const jobsList = useMemo(
+    () => jobPages?.pages.flatMap((page) => page.items) ?? [],
+    [jobPages]
+  );
   const visibleJobIds = useMemo(
     () => (jobsList || []).map((job) => job.id),
     [jobsList]
@@ -170,12 +180,25 @@ export default function JobSearch() {
     },
     { enabled: Boolean(user) }
   );
-  const {
-    data: applicationDecisions = [],
-    refetch: refetchApplicationDecisions,
-  } = trpc.applications.listDecisions.useQuery({ jobIds: visibleJobIds }, {
-    enabled: Boolean(user) && visibleJobIds.length > 0,
-  });
+  const visibleJobIdChunks = useMemo(() => {
+    const chunks: number[][] = [];
+    for (let index = 0; index < visibleJobIds.length; index += 250) {
+      chunks.push(visibleJobIds.slice(index, index + 250));
+    }
+    return chunks;
+  }, [visibleJobIds]);
+  const applicationDecisionQueries = trpc.useQueries((queries) =>
+    visibleJobIdChunks.map((jobIds) => queries.applications.listDecisions(
+      { jobIds },
+      { enabled: Boolean(user) && jobIds.length > 0 }
+    ))
+  );
+  const applicationDecisions = useMemo<any[]>(
+    () => applicationDecisionQueries.flatMap((query) => (query.data ?? []) as any[]),
+    [applicationDecisionQueries]
+  );
+  const refetchApplicationDecisions = () =>
+    Promise.all(applicationDecisionQueries.map((query) => query.refetch()));
   const {
     data: jobMatches = [],
     refetch: refetchJobMatches,
@@ -690,7 +713,7 @@ export default function JobSearch() {
           <div>
             <h1 className="text-2xl font-bold text-white">Job Search</h1>
             <p className="text-slate-400">
-              {filteredJobs.length} jobs found across {platformsData?.length || 0} platforms
+              {filteredJobs.length} jobs loaded across {platformsData?.length || 0} platforms
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1196,6 +1219,19 @@ export default function JobSearch() {
                     )}
                   </div>
                 </TabsContent>
+                {hasMoreJobs && (
+                  <div className="mt-5 flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fetchMoreJobs()}
+                      disabled={jobsFetchingNextPage}
+                    >
+                      {jobsFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Load more jobs
+                    </Button>
+                  </div>
+                )}
               </>
             )}
           </div>

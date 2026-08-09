@@ -81,6 +81,15 @@ describe("jobs router", () => {
     expect(jobs.length).toBeLessThanOrEqual(10);
   });
 
+  it("should expose bounded cursor pagination for the public catalog", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+
+    const page = await caller.jobs.listPage({ limit: 10 });
+
+    expect(page.items.length).toBeLessThanOrEqual(10);
+    expect(page.nextCursor === null || page.nextCursor.id > 0).toBe(true);
+  });
+
   it("reports canonical discovery status without exposing scraper controls", async () => {
     const caller = appRouter.createCaller(createPublicContext());
 

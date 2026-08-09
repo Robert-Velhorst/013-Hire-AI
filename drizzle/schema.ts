@@ -130,7 +130,7 @@ export const jobs = mysqlTable("jobs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
-  index("jobs_active_posted_created_idx").on(table.isActive, table.postedDate, table.createdAt),
+  index("jobs_active_posted_created_cursor_idx").on(table.isActive, table.postedDate, table.createdAt, table.id),
   index("jobs_platform_external_idx").on(table.platformId, table.externalId),
 ]);
 

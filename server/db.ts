@@ -810,6 +810,101 @@ export async function getActiveJobs(limit = 100, offset = 0, filters: Partial<Jo
   return filterJobListings(listingRows, resolvedFilters, now);
 }
 
+export type ActiveJobPageCursor = {
+  postedDate: Date | null;
+  createdAt: Date;
+  id: number;
+};
+
+export async function getActiveJobPage(
+  input: {
+    limit?: number;
+    cursor?: ActiveJobPageCursor;
+    filters?: Partial<JobSearchFilterState>;
+  } = {}
+) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const now = new Date();
+  const resolvedFilters = resolveJobSearchFilters(input.filters ?? {});
+  const db = await getDb();
+
+  if (!db) {
+    const ordered = filterJobListings(sampleJobs
+      .filter((job) => isJobListingCurrent(job, now) && !sampleDuplicateJobIds.has(job.id)), resolvedFilters, now)
+      .sort((a, b) => {
+        const postedDifference = (b.postedDate?.getTime() ?? Number.NEGATIVE_INFINITY) -
+          (a.postedDate?.getTime() ?? Number.NEGATIVE_INFINITY);
+        if (postedDifference !== 0) return postedDifference;
+        const createdDifference = b.createdAt.getTime() - a.createdAt.getTime();
+        return createdDifference !== 0 ? createdDifference : b.id - a.id;
+      });
+    const afterCursor = input.cursor
+      ? ordered.filter((job) => {
+          const postedTime = job.postedDate?.getTime() ?? Number.NEGATIVE_INFINITY;
+          const cursorPostedTime = input.cursor!.postedDate?.getTime() ?? Number.NEGATIVE_INFINITY;
+          return postedTime < cursorPostedTime ||
+            (postedTime === cursorPostedTime && (
+              job.createdAt < input.cursor!.createdAt ||
+              (job.createdAt.getTime() === input.cursor!.createdAt.getTime() && job.id < input.cursor!.id)
+            ));
+        })
+      : ordered;
+    const pageRows = afterCursor.slice(0, limit + 1);
+    const items = pageRows.slice(0, limit);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: pageRows.length > limit && last
+        ? { postedDate: last.postedDate, createdAt: last.createdAt, id: last.id }
+        : null,
+    };
+  }
+
+  const conditions: SQL[] = [
+    eq(jobs.isActive, 1),
+    currentListingCondition(now),
+    canonicalJobCondition,
+  ];
+  addJobSearchFilterConditions(conditions, resolvedFilters, now);
+  if (input.cursor) {
+    const position = input.cursor.postedDate
+      ? or(
+          lt(jobs.postedDate, input.cursor.postedDate),
+          isNull(jobs.postedDate),
+          and(
+            eq(jobs.postedDate, input.cursor.postedDate),
+            or(
+              lt(jobs.createdAt, input.cursor.createdAt),
+              and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
+            )
+          )
+        )
+      : and(
+          isNull(jobs.postedDate),
+          or(
+            lt(jobs.createdAt, input.cursor.createdAt),
+            and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
+          )
+        );
+    if (position) conditions.push(position);
+  }
+
+  const pageRows = await db
+    .select()
+    .from(jobs)
+    .where(and(...conditions))
+    .orderBy(desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id))
+    .limit(limit + 1);
+  const items = filterJobListings(pageRows.slice(0, limit), resolvedFilters, now);
+  const lastScanned = pageRows[Math.min(limit, pageRows.length) - 1];
+  return {
+    items,
+    nextCursor: pageRows.length > limit && lastScanned
+      ? { postedDate: lastScanned.postedDate, createdAt: lastScanned.createdAt, id: lastScanned.id }
+      : null,
+  };
+}
+
 export async function getJobById(jobId: number) {
   const db = await getDb();
   if (!db) return sampleJobs.find((job) => job.id === jobId);

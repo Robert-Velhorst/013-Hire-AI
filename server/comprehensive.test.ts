@@ -186,6 +186,9 @@ describe("Jobs Router", () => {
     const authedCaller = appRouter.createCaller(createMockContext());
 
     await expect(publicCaller.jobs.list({ limit: 10, offset: 0 })).resolves.toEqual(expect.any(Array));
+    await expect(publicCaller.jobs.listPage({ limit: 10 })).resolves.toMatchObject({
+      items: expect.any(Array),
+    });
     await expect(publicCaller.jobs.search({ title: "engineer", limit: 10, offset: 0 })).resolves.toEqual(expect.any(Array));
     await expect(authedCaller.jobs.getSavedJobPage({ limit: 10 })).resolves.toMatchObject({
       items: expect.any(Array),

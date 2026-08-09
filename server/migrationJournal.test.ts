@@ -74,7 +74,6 @@ describe("Drizzle migration journal", () => {
       "utf8"
     );
     const expectedIndexes = [
-      "jobs_active_posted_created_idx",
       "jobs_platform_external_idx",
       "social_media_profiles_user_active_idx",
       "applications_user_created_idx",
@@ -253,6 +252,23 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain(
       "CREATE INDEX `user_resumes_user_version_cursor_idx` ON `user_resumes` (`user_id`, `version`, `id`)"
     );
+  });
+
+  it("keeps the public job-catalog cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0059_job_catalog_cursor_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("jobs_active_posted_created_cursor_idx").on(table.isActive, table.postedDate, table.createdAt, table.id)'
+    );
+    expect(migration).toContain(
+      "CREATE INDEX `jobs_active_posted_created_cursor_idx` ON `jobs` (`is_active`,`posted_date`,`created_at`,`id`)"
+    );
+    expect(migration).toContain("DROP INDEX `jobs_active_posted_created_idx`");
+    expect(schema).not.toContain('index("jobs_active_posted_created_idx")');
   });
 
   it("keeps the bounded operating-window index aligned with the schema", () => {

@@ -56,6 +56,7 @@ const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
 const boundedFilterText = z.string().trim().min(1).max(200);
 const jobListPageSize = z.number().int().min(1).max(250);
+const jobCatalogPageSize = z.number().int().min(1).max(100);
 const jobSearchFiltersInput = z.object({
   query: z.string().trim().max(200).optional(),
   location: z.string().trim().max(200).optional(),
@@ -570,6 +571,22 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { getActiveJobs } = await import("./db");
         return await getActiveJobs(input.limit, input.offset, input.filters);
+      }),
+    listPage: publicProcedure
+      .input(
+        z.object({
+          limit: jobCatalogPageSize.optional().default(50),
+          cursor: z.object({
+            postedDate: z.date().nullable(),
+            createdAt: z.date(),
+            id: z.number().int().positive(),
+          }).optional(),
+          filters: jobSearchFiltersInput,
+        })
+      )
+      .query(async ({ input }) => {
+        const { getActiveJobPage } = await import("./db");
+        return await getActiveJobPage(input);
       }),
     search: publicProcedure
       .input(

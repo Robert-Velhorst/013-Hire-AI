@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getActiveJobs } from "./db";
+import { getActiveJobPage, getActiveJobs } from "./db";
 import { sampleJobs } from "./sampleData";
 
 const injectedJobIds: number[] = [];
@@ -12,6 +12,16 @@ afterEach(() => {
 });
 
 describe("canonical job list filters", () => {
+  it("pages the public catalog without repeating cursor rows", async () => {
+    const first = await getActiveJobPage({ limit: 1 });
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await getActiveJobPage({ limit: 1, cursor: first.nextCursor! });
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0].id).not.toBe(first.items[0].id);
+  });
+
   it("filters canonical jobs before pagination in the memory runtime", async () => {
     const jobs = await getActiveJobs(250, 0, {
       visaSponsorshipOnly: true,
