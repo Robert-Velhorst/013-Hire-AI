@@ -666,7 +666,9 @@ export const interviewPreparation = mysqlTable("interview_preparation", {
   coachingTips: text("coaching_tips"),
   companyInsights: text("company_insights"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("interview_prep_user_job_unique").on(table.userId, table.jobId),
+]);
 
 /**
  * Follow-ups

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Interview preparation concurrency invariant
+
+- Added a database uniqueness contract for each candidate/job preparation pair.
+- Consolidated legacy duplicate preparations into the oldest stable record while retaining the newest available questions, coaching tips, and company insights.
+- Replaced the lookup-then-insert write with one atomic insert-or-update statement that returns the stable preparation ID under concurrent autonomous runs.
+
 ## 2026-08-09 - Candidate profile ownership invariant
 
 - Added a data-preserving migration that consolidates duplicate `user_profiles` rows field by field onto the oldest stable profile ID.

@@ -117,6 +117,29 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("ADD UNIQUE INDEX `user_profiles_user_unique` (`user_id`)");
   });
 
+  it("enforces one data-preserving interview preparation per user and job", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const databaseSource = readFileSync(resolve(process.cwd(), "server", "db.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0044_interview_preparation_unique.sql"),
+      "utf8"
+    );
+    const upsertSource = databaseSource.slice(
+      databaseSource.indexOf("export async function upsertInterviewPreparation"),
+      databaseSource.indexOf("export async function getInterviewPreparationForJob")
+    );
+
+    expect(schema).toContain('uniqueIndex("interview_prep_user_job_unique").on(table.userId, table.jobId)');
+    expect(migration).toContain("CREATE TABLE `_migration_0044_interview_prep_source`");
+    expect(migration).toContain("GROUP BY `user_id`, `job_id`");
+    expect(migration).toContain("ORDER BY `source`.`created_at` DESC, `source`.`id` DESC LIMIT 1");
+    expect(migration).toContain("WHERE `duplicate`.`id` <> `choice`.`canonical_id`");
+    expect(migration).toContain("ADD UNIQUE INDEX `interview_prep_user_job_unique` (`user_id`, `job_id`)");
+    expect(upsertSource).toContain(".onDuplicateKeyUpdate({");
+    expect(upsertSource).toContain("LAST_INSERT_ID(${interviewPreparation.id})");
+    expect(upsertSource).not.toContain(".select(");
+  });
+
   it("keeps the due job-alert index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

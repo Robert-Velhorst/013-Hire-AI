@@ -4176,30 +4176,22 @@ export async function upsertInterviewPreparation(preparation: InsertInterviewPre
     return { insertId: record.id, existing: false };
   }
 
-  const existing = await db
-    .select({ id: interviewPreparation.id })
-    .from(interviewPreparation)
-    .where(and(
-      eq(interviewPreparation.userId, preparation.userId),
-      eq(interviewPreparation.jobId, preparation.jobId)
-    ))
-    .orderBy(desc(interviewPreparation.createdAt))
-    .limit(1);
-
-  if (existing[0]) {
-    await db
-      .update(interviewPreparation)
-      .set({
+  const result = await db
+    .insert(interviewPreparation)
+    .values(preparation)
+    .onDuplicateKeyUpdate({
+      set: {
+        id: sql`LAST_INSERT_ID(${interviewPreparation.id})`,
         questions: preparation.questions ?? null,
         coachingTips: preparation.coachingTips ?? null,
         companyInsights: preparation.companyInsights ?? null,
-      })
-      .where(eq(interviewPreparation.id, existing[0].id));
-    return { insertId: existing[0].id, existing: true };
-  }
+      },
+    });
 
-  const result = await db.insert(interviewPreparation).values(preparation);
-  return { insertId: Number(result[0].insertId), existing: false };
+  return {
+    insertId: Number(result[0].insertId),
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function getInterviewPreparationForJob(userId: number, jobId: number) {
