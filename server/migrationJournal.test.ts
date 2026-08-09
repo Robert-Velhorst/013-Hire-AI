@@ -271,6 +271,21 @@ describe("Drizzle migration journal", () => {
     expect(schema).not.toContain('index("jobs_active_posted_created_idx")');
   });
 
+  it("keeps the payment-history cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0060_fee_payment_cursor_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("fee_payments_user_created_id_idx").on(table.userId, table.createdAt, table.id)'
+    );
+    expect(migration).toContain(
+      "CREATE INDEX `fee_payments_user_created_id_idx` ON `fee_payments` (`user_id`,`created_at`,`id`)"
+    );
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

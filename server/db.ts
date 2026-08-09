@@ -30,6 +30,7 @@ import {
   userProjects,
   autonomousRunStates,
   successFees,
+  feePayments,
   type Job,
   type UserProfile,
   type SocialMediaProfile,
@@ -54,7 +55,8 @@ import {
   type EducationEntry,
   type UserSkill,
   type UserProject,
-  type SuccessFee
+  type SuccessFee,
+  type FeePayment,
 } from "../drizzle/schema";
 import type { InferInsertModel } from "drizzle-orm";
 import { ENV } from "./_core/env";
@@ -3770,6 +3772,98 @@ export async function getUserSuccessFeePage(
     items,
     nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
   };
+}
+
+export interface FeePaymentPageCursor {
+  createdAt: Date;
+  id: number;
+}
+
+export async function getUserFeePaymentPage(
+  userId: number,
+  options: { limit?: number; cursor?: FeePaymentPageCursor } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 100);
+  const db = await getDb();
+  if (!db) return { items: [] as FeePayment[], nextCursor: null };
+
+  const cursorCondition = options.cursor
+    ? or(
+        lt(feePayments.createdAt, options.cursor.createdAt),
+        and(eq(feePayments.createdAt, options.cursor.createdAt), lt(feePayments.id, options.cursor.id))
+      )
+    : undefined;
+  const rows = await db
+    .select()
+    .from(feePayments)
+    .where(and(eq(feePayments.userId, userId), cursorCondition))
+    .orderBy(desc(feePayments.createdAt), desc(feePayments.id))
+    .limit(limit + 1);
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+  };
+}
+
+export async function getUserPaidTotalsByCurrency(userId: number) {
+  const db = await getDb();
+  if (!db) return [] as Array<{ currency: string; totalCents: number; paymentCount: number }>;
+
+  const normalizedCurrency = sql<string>`upper(${feePayments.currency})`;
+  const rows = await db
+    .select({
+      currency: normalizedCurrency,
+      totalCents: sql<number>`coalesce(sum(${feePayments.amount}), 0)`,
+      paymentCount: sql<number>`count(*)`,
+    })
+    .from(feePayments)
+    .where(and(eq(feePayments.userId, userId), eq(feePayments.status, "paid")))
+    .groupBy(normalizedCurrency)
+    .orderBy(asc(normalizedCurrency));
+  return rows.map((row) => ({
+    currency: row.currency,
+    totalCents: Number(row.totalCents),
+    paymentCount: Number(row.paymentCount),
+  }));
+}
+
+export async function getUserActiveMonthlyFeeTotalsByCurrency(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    const totals = new Map<string, { totalCents: number; arrangementCount: number }>();
+    for (const fee of memorySuccessFees) {
+      if (fee.userId !== userId || !["active", "pending_verification"].includes(fee.status ?? "")) continue;
+      const currency = (fee.currency ?? "USD").toUpperCase();
+      const current = totals.get(currency) ?? { totalCents: 0, arrangementCount: 0 };
+      current.totalCents += fee.monthlyFeeAmount;
+      current.arrangementCount += 1;
+      totals.set(currency, current);
+    }
+    return Array.from(totals, ([currency, total]) => ({ currency, ...total }))
+      .sort((left, right) => left.currency.localeCompare(right.currency));
+  }
+
+  const normalizedCurrency = sql<string>`upper(${successFees.currency})`;
+  const rows = await db
+    .select({
+      currency: normalizedCurrency,
+      totalCents: sql<number>`coalesce(sum(${successFees.monthlyFeeAmount}), 0)`,
+      arrangementCount: sql<number>`count(*)`,
+    })
+    .from(successFees)
+    .where(and(
+      eq(successFees.userId, userId),
+      inArray(successFees.status, ["active", "pending_verification"])
+    ))
+    .groupBy(normalizedCurrency)
+    .orderBy(asc(normalizedCurrency));
+  return rows.map((row) => ({
+    currency: row.currency,
+    totalCents: Number(row.totalCents),
+    arrangementCount: Number(row.arrangementCount),
+  }));
 }
 
 export async function getUserSuccessFeesForApplications(userId: number, applicationIds: number[]) {

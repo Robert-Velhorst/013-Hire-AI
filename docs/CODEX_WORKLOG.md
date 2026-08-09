@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Cursor-paged, currency-correct payment history
+
+- Replaced Billing's complete payment-ledger read with owner-scoped 50-record cursor pages and incremental loading.
+- Added exact paid and active-monthly totals grouped by currency, removing incorrect cross-currency dollar sums from the browser.
+- Added an owner/time/ID payment index and kept complete regulated payment records available for retention and provider reconciliation.
+
 ## 2026-08-09 - Page-aligned job-match reads
 
 - Replaced Job Search's complete account match-ledger read with owner-scoped lookups for only the loaded catalog jobs.

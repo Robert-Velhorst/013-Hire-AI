@@ -22,6 +22,18 @@ import {
   XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck
 } from "lucide-react";
 
+function formatCurrency(cents: number, currency: string) {
+  const normalizedCurrency = currency.trim().toUpperCase();
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCurrency,
+    }).format(cents / 100);
+  } catch {
+    return `${normalizedCurrency} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     pending_verification: { label: "Pending Verification", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
@@ -177,7 +189,20 @@ export default function Billing() {
   );
   const fees = useMemo(() => feePages?.pages.flatMap((page) => page.items) ?? [], [feePages]);
   const { data: feeSummary } = trpc.successFees.getMyFeeSummary.useQuery();
-  const { data: payments = [] } = trpc.successFees.getPaymentHistory.useQuery();
+  const {
+    data: paymentPages,
+    fetchNextPage: fetchNextPaymentPage,
+    hasNextPage: hasNextPaymentPage,
+    isFetchingNextPage: isFetchingNextPaymentPage,
+  } = trpc.successFees.getPaymentPage.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const payments = useMemo(
+    () => paymentPages?.pages.flatMap((page) => page.items) ?? [],
+    [paymentPages]
+  );
+  const { data: paymentSummary } = trpc.successFees.getPaymentSummary.useQuery();
   const { data: offerAttributionReviews = [] } = trpc.successFees.getOfferAttributionReviews.useQuery();
 
   const reportEmploymentEnded = trpc.successFees.reportEmploymentEnded.useMutation({
@@ -206,8 +231,8 @@ export default function Billing() {
   });
 
   const activeFees = fees.filter(f => ["active", "pending_verification"].includes(f.status));
-  const totalMonthlyFees = feeSummary?.monthlyFeeCents ?? 0;
-  const totalPaid = payments.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0);
+  const paidByCurrency = paymentSummary?.paidByCurrency ?? [];
+  const monthlyByCurrency = paymentSummary?.monthlyByCurrency ?? [];
   const complianceSummary = getSuccessFeeComplianceSummaryFromAggregates(
     feeSummary ?? {
       activeFees: 0,
@@ -332,7 +357,15 @@ export default function Billing() {
                 <DollarSign className="w-4 h-4 text-cyan-400" />
                 <span className="text-gray-400 text-sm">Monthly Fees</span>
               </div>
-              <p className="text-2xl font-bold text-white">${(totalMonthlyFees / 100).toFixed(2)}</p>
+              <div className="space-y-1">
+                {monthlyByCurrency.length > 0 ? monthlyByCurrency.map((total, index) => (
+                  <p key={total.currency} className={index === 0 ? "text-2xl font-bold text-white" : "text-sm font-semibold text-gray-300"}>
+                    {formatCurrency(total.totalCents, total.currency)}
+                  </p>
+                )) : (
+                  <p className="text-2xl font-bold text-white">{formatCurrency(0, "USD")}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card className="bg-[#161b22] border-[#21262d]">
@@ -341,7 +374,15 @@ export default function Billing() {
                 <CheckCircle className="w-4 h-4 text-green-400" />
                 <span className="text-gray-400 text-sm">Total Paid</span>
               </div>
-              <p className="text-2xl font-bold text-white">${(totalPaid / 100).toFixed(2)}</p>
+              <div className="space-y-1">
+                {paidByCurrency.length > 0 ? paidByCurrency.map((total, index) => (
+                  <p key={total.currency} className={index === 0 ? "text-2xl font-bold text-white" : "text-sm font-semibold text-gray-300"}>
+                    {formatCurrency(total.totalCents, total.currency)}
+                  </p>
+                )) : (
+                  <p className="text-2xl font-bold text-white">{formatCurrency(0, "USD")}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -644,11 +685,11 @@ export default function Billing() {
                     <div key={payment.id} className="flex items-center justify-between p-4">
                       <div>
                         <p className="text-white text-sm font-medium">
-                          ${(payment.amount / 100).toFixed(2)} {payment.currency}
+                          {formatCurrency(payment.amount, payment.currency)}
                         </p>
                         {payment.periodStart && payment.periodEnd && (
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {new Date(payment.periodStart).toLocaleDateString()} – {new Date(payment.periodEnd).toLocaleDateString()}
+                            {new Date(payment.periodStart).toLocaleDateString()} - {new Date(payment.periodEnd).toLocaleDateString()}
                           </p>
                         )}
                       </div>
@@ -663,6 +704,19 @@ export default function Billing() {
                 </div>
               </CardContent>
             </Card>
+          )}
+          {hasNextPaymentPage && (
+            <div className="flex justify-center pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fetchNextPaymentPage()}
+                disabled={isFetchingNextPaymentPage}
+                className="border-[#30363d] text-gray-300 hover:bg-[#21262d]"
+              >
+                {isFetchingNextPaymentPage ? "Loading..." : "Load older payments"}
+              </Button>
+            </div>
           )}
         </div>
       </div>

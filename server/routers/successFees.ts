@@ -7,11 +7,14 @@ import {
   dismissOfferAttributionAdminReviews,
   getDb,
   getUserOfferAttributionReviews,
+  getUserFeePaymentPage,
+  getUserActiveMonthlyFeeTotalsByCurrency,
+  getUserPaidTotalsByCurrency,
   getUserSuccessFeePage,
   getUserSuccessFeesForApplications,
   getUserSuccessFeeSummary,
 } from "../db";
-import { applicationApprovals, applications, successFees, employmentVerifications, feePayments, users, type SuccessFee } from "../../drizzle/schema";
+import { applicationApprovals, applications, successFees, employmentVerifications, users, type SuccessFee } from "../../drizzle/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { isAcceptedOfferApplicationStatus } from "@shared/offerEligibility";
 import { storagePut } from "../storage";
@@ -699,17 +702,19 @@ export const successFeesRouter = router({
     return await getUserOfferAttributionReviews(ctx.user.id);
   }),
 
-  // Get fee payments history
-  getPaymentHistory: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) return [];
-    const payments = await db
-      .select()
-      .from(feePayments)
-      .where(eq(feePayments.userId, ctx.user.id))
-      .orderBy(desc(feePayments.createdAt));
+  getPaymentPage: protectedProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: z.object({ createdAt: z.coerce.date(), id: z.number().int().positive() }).strict().optional(),
+    }).strict())
+    .query(async ({ ctx, input }) => getUserFeePaymentPage(ctx.user.id, input)),
 
-    return payments;
+  getPaymentSummary: protectedProcedure.query(async ({ ctx }) => {
+    const [paidByCurrency, monthlyByCurrency] = await Promise.all([
+      getUserPaidTotalsByCurrency(ctx.user.id),
+      getUserActiveMonthlyFeeTotalsByCurrency(ctx.user.id),
+    ]);
+    return { paidByCurrency, monthlyByCurrency };
   }),
 
   // Submit quarterly verification document

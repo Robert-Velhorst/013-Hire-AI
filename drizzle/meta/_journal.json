@@ -421,6 +421,13 @@
       "when": 1786497600000,
       "tag": "0059_job_catalog_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1786497660000,
+      "tag": "0060_fee_payment_cursor_index",
+      "breakpoints": true
     }
   ]
 }

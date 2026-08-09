@@ -1063,6 +1063,7 @@ export const feePayments = mysqlTable("fee_payments", {
 }, (table) => [
   uniqueIndex("fee_payments_stripe_invoice_unique").on(table.stripeInvoiceId),
   index("fee_payments_success_fee_status_idx").on(table.successFeeId, table.status),
+  index("fee_payments_user_created_id_idx").on(table.userId, table.createdAt, table.id),
 ]);
 
 /**
