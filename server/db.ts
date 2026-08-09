@@ -2911,27 +2911,26 @@ export async function createInterviewNotification(input: {
     throw new Error("Interview notifications require a recorded interview invitation for the same application.");
   }
 
-  const existing = await db
-    .select()
-    .from(applicationNotifications)
-    .where(eq(applicationNotifications.employerResponseId, input.employerResponseId))
-    .limit(1);
-  if (existing[0]) {
-    return { notification: existing[0], existing: true };
-  }
-
-  const result = await db.insert(applicationNotifications).values({
-    userId: input.userId,
-    applicationId: input.applicationId,
-    employerResponseId: input.employerResponseId,
-    notificationType: "interview_invite",
-  });
+  const result = await db
+    .insert(applicationNotifications)
+    .values({
+      userId: input.userId,
+      applicationId: input.applicationId,
+      employerResponseId: input.employerResponseId,
+      notificationType: "interview_invite",
+    })
+    .onDuplicateKeyUpdate({
+      set: { id: sql`LAST_INSERT_ID(${applicationNotifications.id})` },
+    });
   const notifications = await db
     .select()
     .from(applicationNotifications)
     .where(eq(applicationNotifications.id, Number(result[0].insertId)))
     .limit(1);
-  return { notification: notifications[0], existing: false };
+  return {
+    notification: notifications[0],
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function listUnreadInterviewNotifications(userId: number, limit = 25) {

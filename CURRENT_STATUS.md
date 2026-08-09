@@ -73,6 +73,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Enforced one candidate profile per account owner with a field-preserving duplicate consolidation migration and atomic runtime upserts.
 - Enforced one interview-preparation record per candidate and job with field-preserving duplicate consolidation and atomic concurrent regeneration.
 - Enforced one public social-profile reference per candidate and platform with latest-state consolidation and atomic writes.
+- Added the missing migrated employer-response interview link, serialized provider-backed response ingestion per account, and made interview-alert creation retry-safe, preventing runtime insert failures, duplicate evidence races, and repeated notifications.
 
 ## Still required before production
 

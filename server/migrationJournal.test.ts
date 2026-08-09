@@ -162,6 +162,17 @@ describe("Drizzle migration journal", () => {
     expect(setterSource).toContain("LAST_INSERT_ID(${socialMediaProfiles.id})");
   });
 
+  it("creates the employer-response interview link used by the runtime schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0046_employer_response_interview_link.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('interviewId: int("interview_id")');
+    expect(migration).toContain("ADD COLUMN `interview_id` int NULL");
+  });
+
   it("keeps the due job-alert index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

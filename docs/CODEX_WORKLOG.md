@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-08-09 - Provider-event ingestion idempotency
+
+- Added migration `0046` for the `employer_responses.interview_id` column already required by the runtime schema; a real MySQL workflow drill exposed the missing column.
+- Serialized employer-response evidence ingestion on the owning account row before checking the unique provider source reference.
+- Prevented parallel inbox retries from racing through the absence check and surfacing a duplicate-key failure after partial transactional work.
+- Converted standalone interview-notification creation to an atomic insert-or-return-existing operation tied to deterministic employer evidence.
+
 ## 2026-08-09 - Public social-profile integrity invariant
 
 - Added one database-owned Facebook, X/Twitter, or legacy LinkedIn reference per candidate and platform.

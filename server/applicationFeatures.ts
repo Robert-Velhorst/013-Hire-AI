@@ -29,7 +29,7 @@ import {
   updateApplicationStatus,
   upsertInterviewPreparation,
 } from "./db";
-import { savedJobs, applicationNotes, interviewSchedules, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
+import { savedJobs, applicationNotes, interviewSchedules, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
 import { isJobListingCurrent } from "../shared/jobListingFreshness";
 import { generateInterviewPreparation as generateAiInterviewPreparation } from "./aiMatching";
@@ -1014,6 +1014,14 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
   }
 
   return await db.transaction(async (tx) => {
+    const owner = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .for("update");
+    if (!owner[0]) throw new Error("Account not found.");
+
     const application = await tx
       .select({ id: applications.id, userId: applications.userId, status: applications.status })
       .from(applications)
