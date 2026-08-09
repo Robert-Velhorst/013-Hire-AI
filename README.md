@@ -26,7 +26,7 @@ The current audited status is maintained in [CURRENT_STATUS.md](./CURRENT_STATUS
 
 Native Windows 11 startup, verified ngrok tunnelling, and the restricted HAI A2A connector are documented in [Windows, ngrok, and HAI operation](./docs/WINDOWS_NGROK_HAI.md).
 
-Checksummed MySQL backup and target-confirmed restore commands are documented in the [operator runbook](./docs/OPERATOR_RUNBOOK.md). A real isolated restore drill is required before production deployment.
+Checksummed MySQL backup and target-confirmed restore commands are documented in the [operator runbook](./docs/OPERATOR_RUNBOOK.md). The tooling has passed a local two-container isolated restore drill; repeat it against the actual deployment and off-host retention system before production launch.
 
 ---
 

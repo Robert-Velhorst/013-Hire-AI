@@ -15,6 +15,7 @@ try {
     bundlePath,
     confirmation,
     executable: valueAfter("--mysql") || "mysql",
+    dockerContainer: valueAfter("--docker-container") || process.env.DATABASE_RECOVERY_DOCKER_CONTAINER,
   });
   console.log(`Restored and verified backup into ${result.manifest.database}. Run application reconciliation checks before enabling workers.`);
 } catch (error) {

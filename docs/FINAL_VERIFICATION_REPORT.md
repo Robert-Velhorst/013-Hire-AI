@@ -25,13 +25,14 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 871 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 872 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Database recovery contract | `server/databaseRecovery.test.ts` | Passed: streaming backup, checksum verification, credential exclusion, tamper rejection, target matching, and explicit restore confirmation |
 | Discovery traffic contract | `server/discoveryTrafficPolicy.test.ts`; scraper unit tests | Passed: cancellation propagation, deadline abort, source serialization, bounded concurrency, selective retry/backoff, `Retry-After`, and production allowlisting |
-| Container and fresh database | Docker Desktop; MySQL 8.4; `server/containerPackaging.test.ts`; `server/migrationJournal.test.ts` | Passed: fail-closed doctor, all 38 migrations, advisory-lock release, non-root runtime, Docker health, production readiness, and frontend HTTP 200 |
+| Container and fresh database | Docker Desktop; MySQL 8.4; `server/containerPackaging.test.ts`; `server/migrationJournal.test.ts` | Passed: fail-closed doctor, all 39 migrations, advisory-lock release, non-root runtime, Docker health, production readiness, and frontend HTTP 200 |
+| Isolated database recovery | Separate MySQL 8.4 source/target containers; Docker-client backup/restore mode | Passed: checksum-verified 60,071-byte bundle; source and target matched at 40 tables, 39 migrations, and both sentinel records |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Fails closed when required production configuration or a platform-appropriate scanner is absent; native Windows Defender is detected for standalone operation |
 | Windows document scanning | Native `MpCmdRun.exe` smoke through `scanSensitiveUpload` | Passed with a clean `windows_defender` verdict and temporary-file cleanup |
@@ -93,7 +94,7 @@ Connector disconnect now disables local access before attempting cleanup. Google
 
 Privacy review resolution on persistent storage creates one durable non-destructive run before closing the review. Migration `0038` stores an inventory snapshot and itemized tasks without copying OAuth tokens or private-object keys. Exact-confirmation external cleanup uses a five-minute lease, retry-safe object deletion, scoped connector cleanup, and explicit manual evidence. A separately confirmed database stage transactionally deletes erasable data, scrubs retained ledgers, pseudonymizes the account, and preserves regulated records. Clean MySQL 8.4 acceptance verifies rollback, retry, lease exclusion, and idempotent completion.
 
-The production image was built and exercised on Windows Docker Desktop against a clean MySQL 8.4 container. This uncovered and closed four runtime-only defects: a stale pnpm major, omitted workspace overrides, invalid migration statement grouping/identifier length, and a pruned Vite dependency still imported by the server. The corrected image fails closed without configuration, carries an advisory-lock migrator that applied all 38 entries from zero, runs as the non-root Node user, becomes Docker-healthy, reports database-backed production readiness, and serves the frontend. The in-app browser could not attach to the local container page during the final render attempt; HTTP and Docker runtime evidence remain authoritative for this pass.
+The production image was built and exercised on Windows Docker Desktop against a clean MySQL 8.4 container. This uncovered and closed four runtime-only defects: a stale pnpm major, omitted workspace overrides, invalid migration statement grouping/identifier length, and a pruned Vite dependency still imported by the server. The corrected image fails closed without configuration, carries an advisory-lock migrator that applies all 39 entries from zero, runs as the non-root Node user, becomes Docker-healthy, reports database-backed production readiness, and serves the frontend. The in-app browser could not attach to the local container page during the final render attempt; HTTP and Docker runtime evidence remain authoritative for this pass.
 
 Single-record standalone and mutation paths now reuse exact owned application and approval lookups. This removes collection scans from submission confirmation, employer-response handling, interview/follow-up authorization, withdrawal, offer acceptance, approval resolution, and offer decline while retaining batch reads for genuine collection projections.
 
@@ -103,7 +104,7 @@ Save and ignore decisions use that same exact pending application plus its scope
 
 ## Release blockers and scope boundaries
 
-- A clean MySQL 8.4 migration and container health run are verified locally and repeated in CI. A hosted production database, real backup, isolated restore drill, monitoring, and deployment health checks still require the target environment.
+- Clean MySQL migration, container health, real local backup, and isolated restore are verified. Hosted database backup retention, off-host encryption, monitoring, and deployment health checks still require the target environment.
 - Gmail, Google Drive, Dropbox, Microsoft, LinkedIn, and GitHub integrations require user-owned OAuth applications, credentials, redirect configuration, consent, and live acceptance testing.
 - The HAI connector contract is locally verified, but acceptance against an independently running HAI peer is still required.
 - Public ngrok health and OAuth callback verification require an operator-owned reserved HTTPS hostname.

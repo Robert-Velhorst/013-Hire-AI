@@ -23,7 +23,7 @@ Each source adapter applies its own minimum request interval. Transient network,
 
 ## Database backup and restore
 
-Install compatible MySQL client tools so `mysqldump` and `mysql` are available. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
+Install compatible MySQL client tools so `mysqldump` and `mysql` are available. On Windows with a MySQL Docker container, set `DATABASE_RECOVERY_DOCKER_CONTAINER=<exact-container-name>` or pass `--docker-container <name>`; the tools then run inside that container against its loopback MySQL service. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
 
 1. Disable autonomous and scraping workers and wait for active runs to finish.
 2. Set `DATABASE_URL` for the source database and run `pnpm db:backup`. A successful run creates `backups/<database>-<UTC timestamp>/database.sql` and `manifest.json` only after a non-empty dump is complete.
@@ -31,6 +31,8 @@ Install compatible MySQL client tools so `mysqldump` and `mysql` are available. 
 4. For a restore drill, provision an isolated empty database with the same database name, point `DATABASE_URL` at it, and run `pnpm db:restore -- <backup-directory> --confirm RESTORE:<database>`.
 5. Run `pnpm db:migrate`, `pnpm doctor`, application reconciliation checks, and representative read-only workflows against the restored target. Record the bundle checksum, restore target, timestamps, and results.
 6. Never restore over the active production database as a test. Re-enable workers only after database and provider reconciliation succeeds.
+
+The 2026-08-09 Windows drill used separate `mysql:8.4` source and target containers. A 60,071-byte bundle with SHA-256 `f89d253ede6fa5c9b1825ce0975feed4c91c133e7656ec04de99b40c6870f3e1` restored successfully; both sides reconciled to 40 tables, 39 migration records, one sentinel job, and one sentinel user before both containers were removed.
 
 The restore command fails before starting `mysql` when the manifest is malformed, the dump is missing or changed, the source and target database names differ, or the exact target-specific confirmation is absent. Database backup does not copy private storage objects; the storage provider needs its own versioning and recovery policy.
 

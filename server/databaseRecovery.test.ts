@@ -9,6 +9,7 @@ import {
   dumpArguments,
   expectedRestoreConfirmation,
   parseDatabaseUrl,
+  recoveryCommand,
   restoreDatabaseBackup,
   verifyDatabaseBackup,
 } from "../scripts/lib/database-recovery.mjs";
@@ -47,6 +48,16 @@ describe("database recovery tooling", () => {
     expect(args).not.toContain("p@ss");
     expect(args).toContain("--single-transaction");
     expect(args).toContain("--quick");
+  });
+
+  it("supports MySQL client execution inside an explicitly named Docker container", () => {
+    expect(recoveryCommand("mysqldump", ["--host", "127.0.0.1"], "hire-ai-db"))
+      .toEqual({
+        executable: "docker",
+        args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "mysqldump", "--host", "127.0.0.1"],
+      });
+    expect(() => recoveryCommand("mysql", [], "unsafe container name"))
+      .toThrow("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid");
   });
 
   it.each([

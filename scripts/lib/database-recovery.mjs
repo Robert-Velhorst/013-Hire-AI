@@ -57,6 +57,23 @@ export function mysqlConnectionArguments(connection) {
   return ["--host", connection.host, "--port", connection.port, "--user", connection.user];
 }
 
+export function recoveryCommand(executable, args, dockerContainer) {
+  if (!dockerContainer) return { executable, args };
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(dockerContainer)) {
+    throw new Error("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid.");
+  }
+  return {
+    executable: "docker",
+    args: ["exec", "-i", "-e", "MYSQL_PWD", dockerContainer, executable, ...args],
+  };
+}
+
+function commandConnection(connection, dockerContainer) {
+  return dockerContainer
+    ? { ...connection, host: "127.0.0.1", port: "3306" }
+    : connection;
+}
+
 export function dumpArguments(connection) {
   return [
     ...mysqlConnectionArguments(connection),
@@ -83,9 +100,10 @@ function boundedError(chunks) {
   return Buffer.concat(chunks).toString("utf8").trim().slice(0, 2_000);
 }
 
-export async function runDump({ connection, executable = "mysqldump", outputPath, spawnImpl = spawn }) {
+export async function runDump({ connection, executable = "mysqldump", dockerContainer, outputPath, spawnImpl = spawn }) {
   const output = createWriteStream(outputPath, { flags: "wx", mode: 0o600 });
-  const child = spawnImpl(executable, dumpArguments(connection), {
+  const command = recoveryCommand(executable, dumpArguments(commandConnection(connection, dockerContainer)), dockerContainer);
+  const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),
     shell: false,
     windowsHide: true,
@@ -121,14 +139,14 @@ export async function sha256File(filePath) {
   return hash.digest("hex");
 }
 
-export async function createDatabaseBackup({ databaseUrl, outputRoot = "backups", now = new Date(), executable, spawnImpl } = {}) {
+export async function createDatabaseBackup({ databaseUrl, outputRoot = "backups", now = new Date(), executable, dockerContainer = process.env.DATABASE_RECOVERY_DOCKER_CONTAINER, spawnImpl } = {}) {
   const connection = parseDatabaseUrl(databaseUrl ?? process.env.DATABASE_URL);
   const paths = createBackupPaths(outputRoot, connection.database, now);
   await mkdir(path.resolve(outputRoot), { recursive: true, mode: 0o700 });
   await mkdir(paths.temporaryDirectory, { recursive: false, mode: 0o700 });
 
   try {
-    await runDump({ connection, executable, outputPath: paths.temporaryDumpPath, spawnImpl });
+    await runDump({ connection, executable, dockerContainer, outputPath: paths.temporaryDumpPath, spawnImpl });
     const details = await stat(paths.temporaryDumpPath);
     if (!details.isFile() || details.size === 0) throw new Error("mysqldump produced an empty backup.");
     const checksum = await sha256File(paths.temporaryDumpPath);
@@ -184,7 +202,7 @@ export function expectedRestoreConfirmation(database) {
   return `RESTORE:${database}`;
 }
 
-export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmation, executable = "mysql", spawnImpl = spawn } = {}) {
+export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmation, executable = "mysql", dockerContainer = process.env.DATABASE_RECOVERY_DOCKER_CONTAINER, spawnImpl = spawn } = {}) {
   const connection = parseDatabaseUrl(databaseUrl ?? process.env.DATABASE_URL);
   const verified = await verifyDatabaseBackup(bundlePath);
   if (verified.manifest.database !== connection.database) {
@@ -193,7 +211,12 @@ export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmat
   const expected = expectedRestoreConfirmation(connection.database);
   if (confirmation !== expected) throw new Error(`Restore requires the exact confirmation ${expected}.`);
 
-  const child = spawnImpl(executable, [...mysqlConnectionArguments(connection), connection.database], {
+  const command = recoveryCommand(
+    executable,
+    [...mysqlConnectionArguments(commandConnection(connection, dockerContainer)), connection.database],
+    dockerContainer
+  );
+  const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),
     shell: false,
     windowsHide: true,
