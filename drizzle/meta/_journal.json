@@ -372,6 +372,13 @@
       "when": 1786497180000,
       "tag": "0052_follow_up_delivery_operating_index",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1786497240000,
+      "tag": "0053_follow_up_drafting_operating_index",
+      "breakpoints": true
     }
   ]
 }

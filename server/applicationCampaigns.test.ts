@@ -14,7 +14,7 @@ import {
   getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
-import { createFollowUp, getEmployerResponseReplyPage, getFollowUpDeliveryOperatingQueues, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
+import { createFollowUp, getEmployerResponseReplyPage, getFollowUpDeliveryOperatingQueues, getFollowUpDraftingPage, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
 import {
   createAdminReviewItem,
   createApplication,
@@ -1402,5 +1402,58 @@ describe("application campaign operating ledger", () => {
       ready: { loaded: 5, limit: 5, hasMore: true },
       reconciliation: { loaded: 5, limit: 5, hasMore: true },
     });
+  });
+
+  it("counts draftable follow-ups beyond the planning window without leaking another user", async () => {
+    const userId = 99031;
+    const otherUserId = 99032;
+    const recentDate = new Date();
+    const oldDate = new Date(Date.now() - 8 * 86400000);
+    await upsertUserProfile({
+      userId,
+      preferences: JSON.stringify({ createFollowUps: true }),
+    });
+    for (let index = 0; index < 250; index += 1) {
+      await createApplication({
+        userId,
+        jobId: 1400 + index,
+        status: "applied",
+        appliedDate: recentDate,
+        lastActivity: recentDate,
+        notes: `Recent planning-window application ${index + 1}.`,
+      });
+    }
+    for (let index = 0; index < 6; index += 1) {
+      await createApplication({
+        userId,
+        jobId: 1800 + index,
+        status: index % 2 === 0 ? "applied" : "viewed",
+        appliedDate: oldDate,
+        lastActivity: oldDate,
+        notes: `Quiet application ${index + 1} needs a draft.`,
+      });
+    }
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 1900,
+      status: "applied",
+      appliedDate: oldDate,
+      lastActivity: oldDate,
+      notes: "This quiet application belongs to another user.",
+    });
+    const foreignApplicationId = Number(foreignApplication.insertId);
+
+    const page = await getFollowUpDraftingPage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.some((item) => item.applicationId === foreignApplicationId)).toBe(false);
+    expect(ledger.applicationOverview.operatingWindow).toMatchObject({ loaded: 250, hasMore: true });
+    expect(ledger.metrics.followUpsDue).toBe(6);
+    expect(ledger.queues.followUpsDue).toHaveLength(5);
+    expect(ledger.followUpDraftingScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
+    expect(ledger.planSummary.followUpsActionReady).toBe(6);
+    expect(ledger.nextActions).toContain("Draft 6 timely follow-up messages.");
   });
 });

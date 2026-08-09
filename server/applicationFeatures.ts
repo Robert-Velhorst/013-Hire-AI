@@ -2267,6 +2267,231 @@ export async function getFollowUpDeliveryOperatingQueues(userId: number, request
   };
 }
 
+function followUpDraftingCopy(status: string, daysSinceActivity: number) {
+  if (status === "interview") {
+    return {
+      messageType: daysSinceActivity >= 5 ? "status_check" as const : "thank_you" as const,
+      reason: daysSinceActivity >= 5
+        ? "Interview-stage application has no recent activity and should receive a status check."
+        : "Interview-stage application should receive a thank-you note.",
+    };
+  }
+  return {
+    messageType: daysSinceActivity >= 10 ? "status_check" as const : "reminder" as const,
+    reason: "No recent activity after application submission.",
+  };
+}
+
+export async function getFollowUpDraftingPage(
+  userId: number,
+  requestedLimit = 5,
+  now = new Date()
+) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    type StatusApplication = Awaited<ReturnType<typeof getUserApplicationStatusPage>>["items"][number];
+    const dueApplications: StatusApplication[] = [];
+    for (const status of ["applied", "viewed", "interview"] as const) {
+      let afterId = 0;
+      while (true) {
+        const page = await getUserApplicationStatusPage(userId, status, afterId, 500);
+        for (const application of page.items) {
+          const activity = application.lastActivity || application.appliedDate || application.createdAt;
+          const daysSinceActivity = Math.max(0, Math.floor((now.getTime() - activity.getTime()) / 86400000));
+          if (daysSinceActivity >= (status === "interview" ? 1 : 5)) dueApplications.push(application);
+        }
+        if (!page.hasMore || page.nextAfterId === null) break;
+        afterId = page.nextAfterId;
+      }
+    }
+    const responses = await getUserEmployerResponsesForApplications(
+      userId,
+      dueApplications.map((application) => application.id)
+    );
+    const responsesByApplication = new Map<number, EmployerResponse[]>();
+    for (const response of responses) {
+      const existing = responsesByApplication.get(response.applicationId) ?? [];
+      existing.push(response);
+      responsesByApplication.set(response.applicationId, existing);
+    }
+    const candidates = [] as Array<{
+      application: StatusApplication;
+      daysSinceActivity: number;
+      messageType: "status_check" | "thank_you" | "reminder";
+      reason: string;
+    }>;
+    for (const application of dueApplications) {
+      const applicationResponses = (responsesByApplication.get(application.id) ?? [])
+        .sort((left, right) => right.receivedAt.getTime() - left.receivedAt.getTime() || right.id - left.id);
+      const latestResponse = applicationResponses[0];
+      if (latestResponse && ["employer_question", "other"].includes(latestResponse.responseType)) continue;
+      const applicationSchedules = memoryInterviewSchedules.filter((schedule) => schedule.applicationId === application.id);
+      if (application.status === "interview") {
+        if (getInterviewSchedulingRequirement(applicationSchedules, applicationResponses) !== null) continue;
+        if (applicationSchedules.some((schedule) =>
+          schedule.status === "completed" &&
+          !applicationResponses.some((response) => response.interviewId === schedule.id)
+        )) continue;
+      }
+      const unsentFollowUpIds = new Set(memoryFollowUps
+        .filter((followUp) => followUp.applicationId === application.id && !followUp.sentDate)
+        .map((followUp) => followUp.id));
+      if (unsentFollowUpIds.size > 0) {
+        const approvals = await listUserApplicationApprovalsForApplication(userId, application.id);
+        if (approvals.some((approval) =>
+          approval.entityType === "follow_up" &&
+          unsentFollowUpIds.has(approval.entityId) &&
+          approval.approvalType === "follow_up_send" &&
+          ["pending", "approved"].includes(approval.status)
+        )) continue;
+      }
+      const activity = application.lastActivity || application.appliedDate || application.createdAt;
+      const daysSinceActivity = Math.max(0, Math.floor((now.getTime() - activity.getTime()) / 86400000));
+      candidates.push({ application, daysSinceActivity, ...followUpDraftingCopy(application.status || "pending", daysSinceActivity) });
+    }
+    candidates.sort((left, right) =>
+      right.daysSinceActivity - left.daysSinceActivity || left.application.id - right.application.id
+    );
+    return {
+      items: candidates.slice(0, limit).map(({ application, daysSinceActivity, messageType, reason }) => ({
+        applicationId: application.id,
+        jobId: application.jobId,
+        status: application.status,
+        daysSinceActivity,
+        messageType,
+        reason,
+        job: application.job?.id != null && application.job.title != null && application.job.company != null ? {
+          id: application.job.id,
+          title: application.job.title,
+          company: application.job.company,
+          location: application.job.location,
+        } : null,
+      })),
+      total: candidates.length,
+      limit,
+      hasMore: candidates.length > limit,
+    };
+  }
+
+  const activityAt = sql`COALESCE(${applications.lastActivity}, ${applications.appliedDate}, ${applications.createdAt})`;
+  const daysSinceActivity = sql<number>`TIMESTAMPDIFF(DAY, ${activityAt}, ${now})`;
+  const dueTiming = sql`(
+    (${applications.status} = 'interview' AND ${activityAt} <= DATE_SUB(${now}, INTERVAL 1 DAY)) OR
+    (${applications.status} IN ('applied', 'viewed') AND ${activityAt} <= DATE_SUB(${now}, INTERVAL 5 DAY))
+  )`;
+  const hasActiveDraft = sql`EXISTS (
+    SELECT 1 FROM follow_ups active_follow_up
+    INNER JOIN application_approvals active_approval
+      ON active_approval.entity_type = 'follow_up'
+      AND active_approval.entity_id = active_follow_up.id
+      AND active_approval.user_id = ${userId}
+      AND active_approval.approval_type = 'follow_up_send'
+      AND active_approval.status IN ('pending', 'approved')
+    WHERE active_follow_up.application_id = ${applications.id}
+      AND active_follow_up.sent_date IS NULL
+  )`;
+  const hasLatestReplyableResponse = sql`EXISTS (
+    SELECT 1 FROM employer_responses replyable_response
+    WHERE replyable_response.application_id = ${applications.id}
+      AND replyable_response.user_id = ${userId}
+      AND replyable_response.response_type IN ('employer_question', 'other')
+      AND NOT EXISTS (
+        SELECT 1 FROM employer_responses later_response
+        WHERE later_response.application_id = replyable_response.application_id
+          AND later_response.user_id = replyable_response.user_id
+          AND (
+            later_response.received_at > replyable_response.received_at OR
+            (later_response.received_at = replyable_response.received_at AND later_response.id > replyable_response.id)
+          )
+      )
+  )`;
+  const hasUnconsumedInvite = sql`EXISTS (
+    SELECT 1 FROM employer_responses invite
+    WHERE invite.application_id = ${applications.id}
+      AND invite.user_id = ${userId}
+      AND invite.response_type = 'interview_invite'
+      AND NOT EXISTS (
+        SELECT 1 FROM employer_responses later_invite
+        WHERE later_invite.application_id = invite.application_id
+          AND later_invite.user_id = invite.user_id
+          AND later_invite.response_type = 'interview_invite'
+          AND (later_invite.received_at > invite.received_at OR
+            (later_invite.received_at = invite.received_at AND later_invite.id > invite.id))
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM interview_schedules consumed_schedule
+        WHERE consumed_schedule.application_id = invite.application_id
+          AND (consumed_schedule.employer_response_id = invite.id OR
+            (consumed_schedule.employer_response_id IS NULL AND consumed_schedule.created_at > invite.received_at))
+      )
+  )`;
+  const hasActiveInterviewSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules active_schedule
+    WHERE active_schedule.application_id = ${applications.id}
+      AND active_schedule.status IN ('scheduled', 'rescheduled')
+  )`;
+  const hasCancelledInterviewSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules cancelled_schedule
+    WHERE cancelled_schedule.application_id = ${applications.id}
+      AND cancelled_schedule.status = 'cancelled'
+  )`;
+  const hasCompletedInterviewSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules completed_schedule
+    WHERE completed_schedule.application_id = ${applications.id}
+      AND completed_schedule.status = 'completed'
+  )`;
+  const hasMissingInterviewOutcome = sql`EXISTS (
+    SELECT 1 FROM interview_schedules completed_interview
+    WHERE completed_interview.application_id = ${applications.id}
+      AND completed_interview.status = 'completed'
+      AND NOT EXISTS (
+        SELECT 1 FROM employer_responses outcome_response
+        WHERE outcome_response.user_id = ${userId}
+          AND outcome_response.application_id = ${applications.id}
+          AND outcome_response.interview_id = completed_interview.id
+      )
+  )`;
+  const condition = and(
+    eq(applications.userId, userId),
+    dueTiming,
+    sql`NOT ${hasActiveDraft}`,
+    sql`NOT ${hasLatestReplyableResponse}`,
+    sql`(${applications.status} <> 'interview' OR (
+      NOT ${hasUnconsumedInvite}
+      AND (${hasActiveInterviewSchedule} OR (
+        NOT ${hasCancelledInterviewSchedule}
+        AND ${hasCompletedInterviewSchedule}
+      ))
+      AND NOT ${hasMissingInterviewOutcome}
+    ))`
+  );
+  const selection = {
+    applicationId: applications.id,
+    jobId: applications.jobId,
+    status: applications.status,
+    daysSinceActivity,
+    job: { id: jobs.id, title: jobs.title, company: jobs.company, location: jobs.location },
+  };
+  const [rows, countRows] = await Promise.all([
+    db
+      .select(selection)
+      .from(applications)
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(condition)
+      .orderBy(desc(daysSinceActivity), asc(applications.id))
+      .limit(limit),
+    db.select({ count: sql<number>`COUNT(*)` }).from(applications).where(condition),
+  ]);
+  const items = rows.map((row) => ({
+    ...row,
+    ...followUpDraftingCopy(row.status, Number(row.daysSinceActivity)),
+    daysSinceActivity: Number(row.daysSinceActivity),
+  }));
+  const total = Number(countRows[0]?.count ?? 0);
+  return { items, total, limit, hasMore: total > items.length };
+}
+
 async function getMemoryUpcomingInterviewContexts(
   userId: number,
   now: Date,

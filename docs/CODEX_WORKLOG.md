@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded follow-up drafting queue
+
+- Replaced planning-window drafting counts with an exact owner-scoped due-time query and a five-record command-center page.
+- Preserved active-draft, employer-reply, interview-scheduling, and missing-outcome holds at the database boundary.
+- Added an active-draft lookup index plus scale coverage proving due work beyond the 250-application planning window remains visible.
+
 ## 2026-08-09 - Exact bounded follow-up delivery queues
 
 - Replaced operating-window send-handoff and uncertain-delivery counts with exact owner-scoped aggregates.

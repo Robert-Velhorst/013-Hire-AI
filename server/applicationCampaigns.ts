@@ -50,6 +50,7 @@ import {
   getUpcomingInterviewPreparationPage,
   getEmployerResponseReplyPage,
   getFollowUpDeliveryOperatingQueues,
+  getFollowUpDraftingPage,
   getInterviewOutcomePage,
   getInterviewSchedulingPage,
   getUserFollowUpsForApplications,
@@ -857,6 +858,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewSchedulingPage,
     employerResponseReplyPage,
     followUpDeliveryQueues,
+    followUpDraftingPage,
     interviewPreparationQueue,
     interviewOutcomePage,
     successFeeOperatingSet,
@@ -877,6 +879,9 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getInterviewSchedulingPage(userId, 5),
     getEmployerResponseReplyPage(userId, 5),
     getFollowUpDeliveryOperatingQueues(userId, 5),
+    preferences.createFollowUps === true
+      ? getFollowUpDraftingPage(userId, 5, now)
+      : Promise.resolve({ items: [], total: 0, limit: 5, hasMore: false }),
     getInterviewPreparationQueue(userId),
     getInterviewOutcomePage(userId, 5),
     getUserSuccessFeeOperatingItems(userId),
@@ -889,12 +894,12 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     offerAttributionReviews.length
   );
   const successFeeComplianceQueue = getSuccessFeeComplianceQueue(successFeeOperatingSet.items, offerAttributionReviews);
-  const followUpDueQueue = followUpReadiness.actionReadyQueue;
+  const followUpDueQueue = followUpDraftingPage.items;
   const approvedFollowUpsReadyToSend = followUpDeliveryQueues.ready.items;
   const followUpDeliveryReconciliation = followUpDeliveryQueues.reconciliation.items;
   const actionReadyPlanSummary = {
     ...plan.summary,
-    followUpsActionReady: followUpReadiness.actionReadyCount,
+    followUpsActionReady: followUpDraftingPage.total,
     followUpsBlocked: followUpReadiness.blockedCount,
   };
   const connectorReadinessQueue = getConnectorReadinessQueue({
@@ -929,7 +934,9 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       : "",
     ...getLocationPolicyNextActions(plan),
     ...readiness.nextActions,
-    ...getActionReadyFollowUpNextActions(plan, followUpReadiness),
+    ...(followUpDraftingPage.total > 0
+      ? [`Draft ${followUpDraftingPage.total} timely follow-up message${followUpDraftingPage.total === 1 ? "" : "s"}.`]
+      : getActionReadyFollowUpNextActions(plan, followUpReadiness)),
     pendingApprovalCount > 0 ? `Resolve ${pendingApprovalCount} pending user approval${pendingApprovalCount === 1 ? "" : "s"}.` : "",
     adminReviewPage.total > 0
       ? `${adminReviewPage.total} item${adminReviewPage.total === 1 ? " needs" : "s need"} admin operating review.`
@@ -1101,6 +1108,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
         hasMore: followUpDeliveryQueues.reconciliation.hasMore,
       },
     },
+    followUpDraftingScope: {
+      loaded: followUpDraftingPage.items.length,
+      limit: followUpDraftingPage.limit,
+      hasMore: followUpDraftingPage.hasMore,
+    },
     interviewOutcomeScope: {
       loaded: interviewOutcomePage.items.length,
       limit: interviewOutcomePage.limit,
@@ -1143,7 +1155,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       connectorReadiness: connectorReadinessQueue.length,
       openAdminReviews: adminReviewPage.total,
       reviewRequiredDecisions: reviewDecisionPage.total,
-      followUpsDue: followUpDueQueue.length,
+      followUpsDue: followUpDraftingPage.total,
       policyWarnings: plan.summary.policyWarnings,
       dailyRemaining: plan.summary.dailyRemaining,
     },
