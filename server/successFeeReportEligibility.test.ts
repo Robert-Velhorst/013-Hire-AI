@@ -8,8 +8,9 @@ const mocks = vi.hoisted(() => {
   const storagePut = vi.fn();
   const dismissOfferAttributionAdminReviews = vi.fn();
   const insertResult = [{ insertId: 88 }];
+  const returningId = vi.fn().mockResolvedValue([{ id: 77 }]);
   Object.assign(insertResult, {
-    $returningId: vi.fn().mockResolvedValue([{ id: 77 }]),
+    $returningId: returningId,
   });
   const mockDb = {
     select: vi.fn(() => ({
@@ -44,6 +45,8 @@ const mocks = vi.hoisted(() => {
     selectLimit,
     selectOrderLimit,
     storagePut,
+    storageDelete: vi.fn(),
+    returningId,
     getDb: vi.fn(),
     createAdminReviewItem: vi.fn(),
     createAuditEvent: vi.fn(),
@@ -61,7 +64,10 @@ vi.mock("./db", () => ({
   getUserOfferAttributionReviews: mocks.getUserOfferAttributionReviews,
 }));
 
-vi.mock("./storage", () => ({ storagePut: mocks.storagePut }));
+vi.mock("./storage", () => ({
+  storageDelete: mocks.storageDelete,
+  storagePut: mocks.storagePut,
+}));
 
 vi.mock("./stripeClient", () => ({
   getStripeClient: vi.fn(() => mocks.stripe),
@@ -94,6 +100,8 @@ describe("success fee report-hire eligibility", () => {
     mocks.selectLimit.mockResolvedValue([{ id: 51, status: "pending" }]);
     mocks.selectOrderLimit.mockResolvedValue([]);
     mocks.dismissOfferAttributionAdminReviews.mockResolvedValue({ dismissedReviewIds: [] });
+    mocks.returningId.mockResolvedValue([{ id: 77 }]);
+    mocks.storageDelete.mockResolvedValue({ key: "offer-letters/removed-offer.pdf" });
   });
 
   it("rejects a linked application before uploading proof or creating billing state when no offer exists", async () => {
@@ -192,6 +200,32 @@ describe("success fee report-hire eligibility", () => {
 
     expect(mocks.storagePut).not.toHaveBeenCalled();
     expect(mocks.mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("deletes an uploaded offer letter when the success-fee ledger insert fails", async () => {
+    mocks.selectLimit
+      .mockResolvedValueOnce([{ id: 51, status: "accepted" }])
+      .mockResolvedValueOnce([]);
+    mocks.selectOrderLimit.mockResolvedValueOnce([]);
+    mocks.returningId.mockRejectedValueOnce(new Error("success fee insert failed"));
+    const caller = successFeesRouter.createCaller(createContext(190096));
+
+    await expect(caller.reportHire({
+      employerName: "Example Employer",
+      jobTitle: "Example Role",
+      monthlySalary: 5000,
+      currency: "USD",
+      startDate: "2026-07-10",
+      applicationId: 51,
+      offerLetterBase64: Buffer.from("%PDF-1.4\nreport-hire-proof").toString("base64"),
+      offerLetterMimeType: "application/pdf",
+      offerLetterFileName: "offer.pdf",
+      termsAccepted: true,
+    })).rejects.toThrow("success fee insert failed");
+    expect(mocks.storageDelete).toHaveBeenCalledWith(expect.stringMatching(
+      /^offer-letters\/190096-[A-Za-z0-9_-]{12}-offer\.pdf$/
+    ));
+    expect(mocks.createAuditEvent).not.toHaveBeenCalled();
   });
 
   it("supersedes the source offer review when a linked accepted hire is reported", async () => {

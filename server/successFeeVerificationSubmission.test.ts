@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     createAuditEvent: vi.fn(),
     getDb: vi.fn(),
     getUserOfferAttributionReviews: vi.fn(),
+    storageDelete: vi.fn(),
     storagePut: vi.fn(),
   };
 });
@@ -38,6 +39,7 @@ vi.mock("./db", () => ({
 }));
 
 vi.mock("./storage", () => ({
+  storageDelete: mocks.storageDelete,
   storagePut: mocks.storagePut,
 }));
 
@@ -83,6 +85,7 @@ describe("success fee verification submission", () => {
     mocks.storagePut.mockResolvedValue({
       url: "https://storage.example.local/verifications/proof.txt",
     });
+    mocks.storageDelete.mockResolvedValue({ key: "verifications/removed-proof.txt" });
   });
 
   it("creates audit and admin review handoff for submitted quarterly verification", async () => {
@@ -118,5 +121,22 @@ describe("success fee verification submission", () => {
       priority: "high",
       title: "Quarterly employment verification submitted",
     }));
+  });
+
+  it("deletes an uploaded proof when the verification ledger insert fails", async () => {
+    mocks.insertValues.mockRejectedValueOnce(new Error("verification insert failed"));
+    const caller = successFeesRouter.createCaller(createContext(99221));
+
+    await expect(caller.submitVerification({
+      successFeeId: 44,
+      documentBase64: Buffer.from("continued employment proof").toString("base64"),
+      documentMimeType: "text/plain",
+      documentFileName: "proof.txt",
+      documentType: "employment_letter",
+    })).rejects.toThrow("verification insert failed");
+    expect(mocks.storageDelete).toHaveBeenCalledWith(expect.stringMatching(
+      /^verifications\/99221-[A-Za-z0-9_-]{12}-proof\.txt$/
+    ));
+    expect(mocks.createAuditEvent).not.toHaveBeenCalled();
   });
 });

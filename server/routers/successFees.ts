@@ -18,10 +18,12 @@ import {
 import { applicationApprovals, applications, successFees, employmentVerifications, users, type SuccessFee } from "../../drizzle/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { isAcceptedOfferApplicationStatus } from "@shared/offerEligibility";
-import { storageGet, storagePut } from "../storage";
+import { storageDelete, storageGet, storagePut } from "../storage";
 import { validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
 import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
+import { nanoid } from "nanoid";
+import { logOperationalFailure } from "../operationalFailureLog";
 
 const MIN_MONTHLY_SALARY = 300; // USD
 const FEE_PERCENT = 5;
@@ -257,7 +259,7 @@ export const successFeesRouter = router({
         mimeType: input.offerLetterMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
-      const fileKey = `offer-letters/${userId}-${Date.now()}-${validation.fileName}`;
+      const fileKey = `offer-letters/${userId}-${nanoid(12)}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.offerLetterMimeType);
       const offerLetterUrl = `private://${fileKey}`;
 
@@ -269,22 +271,30 @@ export const successFeesRouter = router({
       const nextVerificationDue = calculateNextVerificationDue(startDate);
 
       // Create success fee record
-      const [fee] = await db.insert(successFees).values({
-        userId,
-        applicationId: input.applicationId ?? null,
-        employerName: input.employerName,
-        jobTitle: input.jobTitle,
-        monthlySalary: input.monthlySalary,
-        currency: input.currency,
-        feePercent: FEE_PERCENT,
-        monthlyFeeAmount,
-        status: "pending_verification",
-        startDate,
-        nextVerificationDue,
-        offerLetterUrl,
-        offerLetterKey: fileKey,
-        termsAcceptedAt: new Date(),
-      }).$returningId();
+      let fee: { id: number };
+      try {
+        [fee] = await db.insert(successFees).values({
+          userId,
+          applicationId: input.applicationId ?? null,
+          employerName: input.employerName,
+          jobTitle: input.jobTitle,
+          monthlySalary: input.monthlySalary,
+          currency: input.currency,
+          feePercent: FEE_PERCENT,
+          monthlyFeeAmount,
+          status: "pending_verification",
+          startDate,
+          nextVerificationDue,
+          offerLetterUrl,
+          offerLetterKey: fileKey,
+          termsAcceptedAt: new Date(),
+        }).$returningId();
+      } catch (error) {
+        await storageDelete(fileKey).catch(() => {
+          logOperationalFailure("SuccessFees", "Orphan offer letter cleanup");
+        });
+        throw error;
+      }
 
       // Create initial verification record
       await db.insert(employmentVerifications).values({
@@ -810,22 +820,30 @@ export const successFeesRouter = router({
         mimeType: input.documentMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
-      const fileKey = `verifications/${userId}-${Date.now()}-${validation.fileName}`;
+      const fileKey = `verifications/${userId}-${nanoid(12)}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.documentMimeType);
       const documentUrl = `private://${fileKey}`;
 
       // Create verification record. Do not extend the next verification due date here.
       // The deadline should only move after an admin approves the submitted document.
-      const verificationResult = await db.insert(employmentVerifications).values({
-        successFeeId: input.successFeeId,
-        userId,
-        verificationType: "quarterly",
-        documentUrl,
-        documentKey: fileKey,
-        documentType: input.documentType,
-        status: "pending",
-        submittedAt: new Date(),
-      });
+      let verificationResult: Awaited<ReturnType<ReturnType<typeof db.insert>["values"]>>;
+      try {
+        verificationResult = await db.insert(employmentVerifications).values({
+          successFeeId: input.successFeeId,
+          userId,
+          verificationType: "quarterly",
+          documentUrl,
+          documentKey: fileKey,
+          documentType: input.documentType,
+          status: "pending",
+          submittedAt: new Date(),
+        });
+      } catch (error) {
+        await storageDelete(fileKey).catch(() => {
+          logOperationalFailure("SuccessFees", "Orphan verification cleanup");
+        });
+        throw error;
+      }
       const verificationId = Number(verificationResult[0].insertId);
 
       await createAuditEvent({
