@@ -173,6 +173,17 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("ADD COLUMN `interview_id` int NULL");
   });
 
+  it("keeps the employer-response classification enum aligned with runtime", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0047_employer_response_no_response.sql"),
+      "utf8"
+    );
+
+    expect(schema).toMatch(/"employer_question",\s*"no_response",\s*"other",/);
+    expect(migration).toContain("'employer_question','no_response','other'");
+  });
+
   it("keeps the due job-alert index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

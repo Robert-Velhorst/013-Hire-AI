@@ -1,6 +1,13 @@
 export type DatabaseColumnRow = {
   tableName: string;
   columnName: string;
+  sqlType?: string;
+  isNullable?: "YES" | "NO";
+};
+
+export type ExpectedDatabaseColumn = {
+  sqlType: string;
+  nullable: boolean;
 };
 
 export type ExpectedDatabaseIndex = {
@@ -23,6 +30,7 @@ export type DatabaseSchemaAudit = {
   actualIndexCount: number;
   missingTables: string[];
   missingColumns: string[];
+  mismatchedColumns: string[];
   unexpectedColumns: string[];
   missingIndexes: string[];
   mismatchedIndexes: string[];
@@ -31,6 +39,7 @@ export type DatabaseSchemaAudit = {
 export function hasDatabaseSchemaDrift(audit: DatabaseSchemaAudit) {
   return audit.missingTables.length > 0 ||
     audit.missingColumns.length > 0 ||
+    audit.mismatchedColumns.length > 0 ||
     audit.unexpectedColumns.length > 0 ||
     audit.missingIndexes.length > 0 ||
     audit.mismatchedIndexes.length > 0;
@@ -40,17 +49,28 @@ export function compareDatabaseSchema(
   expected: ReadonlyMap<string, ReadonlySet<string>>,
   actualRows: DatabaseColumnRow[],
   expectedIndexes: ReadonlyMap<string, ReadonlyMap<string, ExpectedDatabaseIndex>> = new Map(),
-  actualIndexRows: DatabaseIndexRow[] = []
+  actualIndexRows: DatabaseIndexRow[] = [],
+  expectedColumnDefinitions: ReadonlyMap<string, ReadonlyMap<string, ExpectedDatabaseColumn>> = new Map()
 ): DatabaseSchemaAudit {
   const actual = new Map<string, Set<string>>();
+  const actualColumnDefinitions = new Map<string, Map<string, ExpectedDatabaseColumn>>();
   for (const row of actualRows) {
     const columns = actual.get(row.tableName) ?? new Set<string>();
     columns.add(row.columnName);
     actual.set(row.tableName, columns);
+    if (row.sqlType && row.isNullable) {
+      const definitions = actualColumnDefinitions.get(row.tableName) ?? new Map<string, ExpectedDatabaseColumn>();
+      definitions.set(row.columnName, {
+        sqlType: row.sqlType,
+        nullable: row.isNullable === "YES",
+      });
+      actualColumnDefinitions.set(row.tableName, definitions);
+    }
   }
 
   const missingTables: string[] = [];
   const missingColumns: string[] = [];
+  const mismatchedColumns: string[] = [];
   const unexpectedColumns: string[] = [];
   const missingIndexes: string[] = [];
   const mismatchedIndexes: string[] = [];
@@ -65,6 +85,23 @@ export function compareDatabaseSchema(
     }
     for (const columnName of actualColumns) {
       if (!expectedColumns.has(columnName)) unexpectedColumns.push(`${tableName}.${columnName}`);
+    }
+  }
+
+  const normalizeSqlType = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+  for (const [tableName, definitions] of expectedColumnDefinitions) {
+    const actualDefinitions = actualColumnDefinitions.get(tableName);
+    for (const [columnName, expectedDefinition] of definitions) {
+      const actualDefinition = actualDefinitions?.get(columnName);
+      if (!actualDefinition) continue;
+      if (
+        normalizeSqlType(actualDefinition.sqlType) !== normalizeSqlType(expectedDefinition.sqlType) ||
+        actualDefinition.nullable !== expectedDefinition.nullable
+      ) {
+        mismatchedColumns.push(
+          `${tableName}.${columnName}: expected ${expectedDefinition.sqlType} ${expectedDefinition.nullable ? "NULL" : "NOT NULL"}, actual ${actualDefinition.sqlType} ${actualDefinition.nullable ? "NULL" : "NOT NULL"}`
+        );
+      }
     }
   }
 
@@ -108,6 +145,7 @@ export function compareDatabaseSchema(
       .reduce((count, indexes) => count + indexes.size, 0),
     missingTables: missingTables.sort(),
     missingColumns: missingColumns.sort(),
+    mismatchedColumns: mismatchedColumns.sort(),
     unexpectedColumns: unexpectedColumns.sort(),
     missingIndexes: missingIndexes.sort(),
     mismatchedIndexes: mismatchedIndexes.sort(),

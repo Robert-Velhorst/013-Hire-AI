@@ -75,6 +75,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Enforced one public social-profile reference per candidate and platform with latest-state consolidation and atomic writes.
 - Added the missing migrated employer-response interview link, serialized provider-backed response ingestion per account, and made interview-alert creation retry-safe, preventing runtime insert failures, duplicate evidence races, and repeated notifications.
 - Added a production-bundled schema audit that compares all runtime tables, columns, named indexes, index order, and uniqueness with migrated MySQL and now gates container CI after migration.
+- Aligned migrated SQL types and nullability with the runtime model, including the previously rejected `no_response` employer-response classification.
 
 ## Still required before production
 

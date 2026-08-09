@@ -22,6 +22,7 @@ describe("database schema audit", () => {
       actualIndexCount: 0,
       missingTables: ["employer_responses"],
       missingColumns: ["users.email"],
+      mismatchedColumns: [],
       unexpectedColumns: ["users.legacy_name"],
       missingIndexes: [],
       mismatchedIndexes: [],
@@ -64,6 +65,28 @@ describe("database schema audit", () => {
     expect(audit.actualIndexCount).toBe(1);
     expect(audit.mismatchedIndexes).toEqual([
       "applications.applications_user_job_unique: expected unique (user_id,job_id), actual (user_id,job_id)",
+    ]);
+    expect(hasDatabaseSchemaDrift(audit)).toBe(true);
+  });
+
+  it("reports SQL type and nullability drift", () => {
+    const audit = compareDatabaseSchema(
+      new Map([["users", new Set(["id", "email"])]]),
+      [
+        { tableName: "users", columnName: "id", sqlType: "bigint", isNullable: "NO" },
+        { tableName: "users", columnName: "email", sqlType: "varchar(255)", isNullable: "YES" },
+      ],
+      new Map(),
+      [],
+      new Map([["users", new Map([
+        ["id", { sqlType: "int", nullable: false }],
+        ["email", { sqlType: "varchar(320)", nullable: false }],
+      ])]])
+    );
+
+    expect(audit.mismatchedColumns).toEqual([
+      "users.email: expected varchar(320) NOT NULL, actual varchar(255) NULL",
+      "users.id: expected int NOT NULL, actual bigint NOT NULL",
     ]);
     expect(hasDatabaseSchemaDrift(audit)).toBe(true);
   });
