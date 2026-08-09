@@ -78,4 +78,6 @@
 - Verified both the complete Ubuntu job and the new Windows runtime job in GitHub Actions run `31291576077`.
 - Upgraded vulnerable Vitest/Vite dependencies, moved the ignored Nano ID override into active pnpm workspace settings, and enforced high/critical advisory scanning in CI.
 - Verified the dependency audit reports no high or critical advisories.
+- Aligned local and CI dependency resolution on pnpm 11, restricted install scripts to esbuild, patched Mermaid/DOMPurify/PostCSS/esbuild transitive paths, and raised CI enforcement to moderate severity.
+- Verified `pnpm security:audit` reports no known vulnerabilities at any severity.
 - Passed TypeScript and the full regression suite: 161 files and 825 tests.

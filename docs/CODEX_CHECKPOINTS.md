@@ -15,7 +15,7 @@
 | Privacy lifecycle | Migration 0035; idempotent request, cancellation, user-safe status, admin retention review, and audit tests | Partial: verified erasure execution requires approved retention rules |
 | Retention inventory | Policy `2026-08-09.v1`; schema completeness, authorization, and fail-closed preview tests | Complete for inventory; execution remains intentionally disabled |
 | Windows runtime contract | Explicit host/port selection, native launcher, doctor integration, network/HAI tests, PowerShell parser validation, and dedicated `windows-latest` CI | Complete in CI run `31291576077`; credential-complete production launch pending |
-| Supply-chain audit | Patched Vitest/Vite and Nano ID resolution; `pnpm security:audit`; high/critical CI gate | Complete locally and enforced in CI |
+| Supply-chain audit | Pnpm 11 frozen graph; restricted build scripts; patched Vitest/Vite, Nano ID, Mermaid, DOMPurify, PostCSS, and esbuild; `pnpm security:audit`; moderate-or-higher CI gate | Complete locally and enforced in CI |
 | HAI interoperability | Agent Card, concealed bearer auth, aggregate status, and read-only A2A 1.0 smoke | Complete locally; external HAI peer acceptance pending |
 | ngrok readiness | ngrok 3.39.8 installed; configuration valid; fail-closed reserved-domain launcher | Partial: reserved HTTPS hostname and public health acceptance pending |
 | Frontend delivery efficiency | Production-only bundle gate; 487-byte HTML shell; lazy route chunks retained | Complete for current production build |

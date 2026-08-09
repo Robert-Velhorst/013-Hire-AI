@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "doctor": "node scripts/doctor.mjs",
-    "security:audit": "pnpm audit --audit-level high",
+    "security:audit": "pnpm audit --audit-level moderate",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit migrate"
@@ -101,7 +101,7 @@
     "autoprefixer": "^10.5.2",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.25.12",
-    "pnpm": "^10.34.5",
+    "pnpm": "11.16.0",
     "postcss": "^8.5.18",
     "prettier": "^3.9.5",
     "tailwindcss": "^4.3.2",
@@ -112,5 +112,5 @@
     "vite-plugin-manus-runtime": "^0.0.57",
     "vitest": "^3.2.6"
   },
-  "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af"
+  "packageManager": "pnpm@11.16.0"
 }

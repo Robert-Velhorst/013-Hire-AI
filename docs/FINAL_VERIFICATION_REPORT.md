@@ -26,7 +26,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
 | Unit and integration tests | `npm.cmd test -- --run` | Passed: 161 files, 825 tests |
-| Dependency advisory audit | `pnpm security:audit` | Passed: no high or critical advisories |
+| Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -77,7 +77,9 @@ CI now includes a dedicated Windows runner in addition to the complete Ubuntu su
 
 GitHub Actions run `31291576077` passed both jobs: Ubuntu `build-and-test` and Windows `windows-runtime`.
 
-The supply-chain pass removed the critical Vitest advisory and high nested-Vite and Nano ID advisories. The corrected lockfile resolves Vitest 3.2.x, Vite 7.3.x, and Nano ID 3.3.17, while CI now rejects high or critical advisories on every pull request and `main` push.
+The supply-chain pass removed the critical Vitest advisory and high nested-Vite and Nano ID advisories. The corrected lockfile resolves Vitest 3.2.x, Vite 7.3.x, and Nano ID 3.3.17; the stricter follow-up gate also covers moderate advisories.
+
+The follow-up supply-chain pass aligned all environments on pnpm 11, explicitly limited dependency build scripts to esbuild, and patched Mermaid 11.16.1, DOMPurify 3.4.13, PostCSS 8.5.23, and the nested esbuild path. The registry audit reports no known vulnerabilities, and CI now rejects moderate-or-higher advisories.
 
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
 
