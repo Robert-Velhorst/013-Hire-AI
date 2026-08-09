@@ -25,6 +25,9 @@ import { calculateNextVerificationDue } from "../successFeeDates";
 
 const MIN_MONTHLY_SALARY = 300; // USD
 const FEE_PERCENT = 5;
+const boundedDocumentBase64 = z.string().min(1).max(14_000_000);
+const boundedDocumentMimeType = z.string().trim().min(1).max(120);
+const boundedDocumentFileName = z.string().trim().min(1).max(255);
 const UNRESOLVED_SUCCESS_FEE_STATUSES = [
   "pending_verification",
   "active",
@@ -160,13 +163,13 @@ export const successFeesRouter = router({
     .input(z.object({
       employerName: z.string().min(1).max(255),
       jobTitle: z.string().min(1).max(255),
-      monthlySalary: z.number().min(MIN_MONTHLY_SALARY, `Minimum salary is $${MIN_MONTHLY_SALARY}/month`),
-      currency: z.string().default("USD"),
+      monthlySalary: z.number().finite().min(MIN_MONTHLY_SALARY, `Minimum salary is $${MIN_MONTHLY_SALARY}/month`).max(1_000_000_000),
+      currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform(value => value.toUpperCase()).default("USD"),
       startDate: calendarDate,
-      applicationId: z.number().optional(),
-      offerLetterBase64: z.string().min(1, "Offer letter is required"),
-      offerLetterMimeType: z.string().default("application/pdf"),
-      offerLetterFileName: z.string().default("offer_letter.pdf"),
+      applicationId: z.number().int().positive().optional(),
+      offerLetterBase64: boundedDocumentBase64,
+      offerLetterMimeType: boundedDocumentMimeType.default("application/pdf"),
+      offerLetterFileName: boundedDocumentFileName.default("offer_letter.pdf"),
       termsAccepted: z.boolean().refine(v => v === true, "You must accept the terms"),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -728,10 +731,10 @@ export const successFeesRouter = router({
   // Submit quarterly verification document
   submitVerification: protectedProcedure
     .input(z.object({
-      successFeeId: z.number(),
-      documentBase64: z.string().min(1),
-      documentMimeType: z.string().default("application/pdf"),
-      documentFileName: z.string().default("verification.pdf"),
+      successFeeId: z.number().int().positive(),
+      documentBase64: boundedDocumentBase64,
+      documentMimeType: boundedDocumentMimeType.default("application/pdf"),
+      documentFileName: boundedDocumentFileName.default("verification.pdf"),
       documentType: z.enum(["paystub", "employment_letter", "bank_statement", "other"]),
     }))
     .mutation(async ({ ctx, input }) => {

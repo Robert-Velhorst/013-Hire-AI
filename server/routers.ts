@@ -55,6 +55,14 @@ import { SUPPORTED_LOCALES } from "@shared/localization";
 const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
 const boundedFilterText = z.string().trim().min(1).max(200);
+const boundedShortText = z.string().trim().min(1).max(255);
+const boundedNarrativeText = z.string().trim().min(1).max(20_000);
+const boundedAiList = z.array(z.string().trim().min(1).max(500)).max(50);
+const boundedResumeText = z.string().trim().min(1).max(500_000);
+// 10 MiB of binary data expands to just under 14 MiB when base64 encoded.
+const boundedUploadBase64 = z.string().min(1).max(14_000_000);
+const boundedFileName = z.string().trim().min(1).max(255);
+const boundedMimeType = z.string().trim().min(1).max(120);
 const jobListPageSize = z.number().int().min(1).max(250);
 const jobCatalogPageSize = z.number().int().min(1).max(100);
 const jobSearchFiltersInput = z.object({
@@ -1278,10 +1286,10 @@ export const appRouter = router({
     create: protectedProcedure
       .input(
         z.object({
-          jobId: z.number(),
-          coverLetter: z.string().optional(),
-          customResume: z.string().optional(),
-          notes: z.string().optional(),
+          jobId: z.number().int().positive(),
+          coverLetter: z.string().max(50_000).optional(),
+          customResume: boundedResumeText.optional(),
+          notes: z.string().max(10_000).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -2162,7 +2170,7 @@ export const appRouter = router({
       }),
     declineOffer: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         confirmed: z.literal(true),
         declineNote: z.string().trim().min(8).max(5000),
       }))
@@ -2447,9 +2455,9 @@ export const appRouter = router({
     // Application Notes
     addNote: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         noteType: z.enum(["general", "interview", "followup", "research", "feedback"]),
-        content: z.string(),
+        content: z.string().trim().min(1).max(10_000),
       }))
       .mutation(async ({ ctx, input }) => {
         return await addApplicationNote(input, ctx.user.id);
@@ -2465,7 +2473,10 @@ export const appRouter = router({
       }),
 
     updateNote: protectedProcedure
-      .input(z.object({ noteId: z.number(), content: z.string() }))
+      .input(z.object({
+        noteId: z.number().int().positive(),
+        content: z.string().trim().min(1).max(10_000),
+      }))
       .mutation(async ({ ctx, input }) => {
         return await updateApplicationNote(input.noteId, input.content, ctx.user.id);
       }),
@@ -2770,7 +2781,7 @@ export const appRouter = router({
         return { coverLetter };
       }),
     identifyDecisionMakers: protectedProcedure
-      .input(z.object({ company: z.string(), jobTitle: z.string() }))
+      .input(z.object({ company: boundedShortText, jobTitle: boundedShortText }))
       .mutation(async ({ input }) => {
         const { identifyDecisionMakers } = await import("./aiMatching");
         return await identifyDecisionMakers(input.company, input.jobTitle);
@@ -2787,10 +2798,10 @@ export const appRouter = router({
     upload: protectedProcedure
       .input(
         z.object({
-          fileKey: z.string(),
-          fileUrl: z.string(),
-          fileName: z.string(),
-          fileType: z.string(),
+          fileKey: z.string().trim().min(1).max(1000),
+          fileUrl: safeHttpUrl,
+          fileName: boundedFileName,
+          fileType: boundedMimeType,
         })
       )
       .mutation(async () => {
@@ -2802,7 +2813,7 @@ export const appRouter = router({
         });
       }),
     parse: protectedProcedure
-      .input(z.object({ resumeText: z.string() }))
+      .input(z.object({ resumeText: boundedResumeText }))
       .mutation(async ({ ctx, input }) => {
         const { parseResumeText, resumeToProfileData } = await import("./resumeParser");
         const { upsertUserProfile } = await import("./db");
@@ -2829,9 +2840,9 @@ export const appRouter = router({
     // Parse resume from file (base64 encoded PDF/DOCX)
     parseFile: protectedProcedure
       .input(z.object({
-        fileData: z.string(), // Base64 encoded file data
-        mimeType: z.string(),
-        filename: z.string(),
+        fileData: boundedUploadBase64,
+        mimeType: boundedMimeType,
+        filename: boundedFileName,
       }))
       .mutation(async ({ input, ctx }) => {
         const { parseResumeFromFile, resumeToProfileData } = await import("./resumeParser");
@@ -2888,9 +2899,9 @@ export const appRouter = router({
     // Upload resume with version history
     uploadWithHistory: protectedProcedure
       .input(z.object({
-        fileData: z.string(), // Base64 encoded
-        fileName: z.string(),
-        mimeType: z.string().optional(),
+        fileData: boundedUploadBase64,
+        fileName: boundedFileName,
+        mimeType: boundedMimeType.optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.fileData, "base64");
@@ -2977,9 +2988,9 @@ export const appRouter = router({
     }),
     scrapePlatform: adminProcedure
       .input(z.object({
-        platform: z.string(),
-        keywords: z.string().optional(),
-        location: z.string().optional(),
+        platform: boundedShortText,
+        keywords: boundedFilterText.optional(),
+        location: boundedFilterText.optional(),
         limit: z.number().int().min(1).max(1000).optional(),
       }))
       .mutation(async ({ input }) => {
@@ -2995,8 +3006,8 @@ export const appRouter = router({
       }),
     scrapeAll: adminProcedure
       .input(z.object({
-        keywords: z.string().optional(),
-        location: z.string().optional(),
+        keywords: boundedFilterText.optional(),
+        location: boundedFilterText.optional(),
         limit: z.number().int().min(1).max(1000).optional(),
       }).optional())
       .mutation(async ({ input }) => {
@@ -3007,8 +3018,8 @@ export const appRouter = router({
     runScrape: adminProcedure
       .input(
         z.object({
-          platform: z.string().optional(),
-          keywords: z.string().optional(),
+          platform: boundedShortText.optional(),
+          keywords: boundedFilterText.optional(),
           limit: z.number().int().min(1).max(1000).optional(),
         })
       )
@@ -3205,12 +3216,12 @@ export const appRouter = router({
   diversity: router({
     analyzeCompanyDI: protectedProcedure
       .input(z.object({
-        company: z.string(),
+        company: boundedShortText,
         userDIProfile: z.object({
-          categories: z.array(z.string()),
-          accommodationsNeeded: z.array(z.string()),
+          categories: boundedAiList,
+          accommodationsNeeded: boundedAiList,
           preferredWorkStyle: z.enum(["remote", "hybrid", "onsite", "flexible"]),
-          accessibilityRequirements: z.array(z.string()),
+          accessibilityRequirements: boundedAiList,
           disclosurePreference: z.enum(["always", "when_relevant", "never"]),
         }).optional(),
       }))
@@ -3221,13 +3232,13 @@ export const appRouter = router({
 
     analyzeVisaSponsorship: protectedProcedure
       .input(z.object({
-        company: z.string(),
-        jobTitle: z.string(),
+        company: boundedShortText,
+        jobTitle: boundedShortText,
         visaProfile: z.object({
-          currentStatus: z.string(),
+          currentStatus: boundedShortText,
           needsSponsorship: z.boolean(),
-          sponsorshipType: z.array(z.string()).optional(),
-          country: z.string(),
+          sponsorshipType: boundedAiList.optional(),
+          country: boundedShortText,
           optStemEligible: z.boolean().optional(),
         }),
       }))
@@ -3238,8 +3249,8 @@ export const appRouter = router({
 
     getAccommodationRecommendations: protectedProcedure
       .input(z.object({
-        category: z.string(),
-        specificNeeds: z.array(z.string()),
+        category: boundedShortText,
+        specificNeeds: boundedAiList,
       }))
       .mutation(async ({ input }) => {
         const { generateAccommodationRecommendations } = await import("./diversitySupport");
@@ -3248,7 +3259,7 @@ export const appRouter = router({
 
     getDIPlatforms: publicProcedure
       .input(z.object({
-        categories: z.array(z.string()),
+        categories: boundedAiList,
       }))
       .query(async ({ input }) => {
         const { getDIPlatforms } = await import("./diversitySupport");
@@ -3257,10 +3268,10 @@ export const appRouter = router({
 
     analyzeRelocation: protectedProcedure
       .input(z.object({
-        fromLocation: z.string(),
-        toLocation: z.string(),
-        salary: z.number(),
-        familySize: z.number(),
+        fromLocation: boundedShortText,
+        toLocation: boundedShortText,
+        salary: z.number().finite().nonnegative().max(1_000_000_000),
+        familySize: z.number().int().min(1).max(50),
       }))
       .mutation(async ({ input }) => {
         const { analyzeRelocation } = await import("./diversitySupport");
@@ -3277,13 +3288,13 @@ export const appRouter = router({
   career: router({
     analyzeSalary: protectedProcedure
       .input(z.object({
-        jobTitle: z.string(),
-        company: z.string(),
-        location: z.string(),
-        yearsExperience: z.number(),
-        skills: z.array(z.string()),
-        currentSalary: z.number().optional(),
-        offeredSalary: z.number().optional(),
+        jobTitle: boundedShortText,
+        company: boundedShortText,
+        location: boundedShortText,
+        yearsExperience: z.number().finite().min(0).max(100),
+        skills: boundedAiList,
+        currentSalary: z.number().finite().nonnegative().max(1_000_000_000).optional(),
+        offeredSalary: z.number().finite().nonnegative().max(1_000_000_000).optional(),
       }))
       .mutation(async ({ input }) => {
         const { analyzeSalary } = await import("./careerIntelligence");
@@ -3300,13 +3311,13 @@ export const appRouter = router({
 
     analyzeCompanyCulture: protectedProcedure
       .input(z.object({
-        company: z.string(),
-        jobTitle: z.string(),
-        jobDescription: z.string(),
+        company: boundedShortText,
+        jobTitle: boundedShortText,
+        jobDescription: boundedNarrativeText,
         userPreferences: z.object({
-          workStyle: z.string().optional(),
-          values: z.array(z.string()).optional(),
-          priorities: z.array(z.string()).optional(),
+          workStyle: boundedShortText.optional(),
+          values: boundedAiList.optional(),
+          priorities: boundedAiList.optional(),
         }).optional(),
       }))
       .mutation(async ({ input }) => {
@@ -3321,10 +3332,10 @@ export const appRouter = router({
 
     generateNetworkingStrategy: protectedProcedure
       .input(z.object({
-        targetCompany: z.string(),
-        targetRole: z.string(),
-        userBackground: z.string(),
-        existingConnections: z.array(z.string()).optional(),
+        targetCompany: boundedShortText,
+        targetRole: boundedShortText,
+        userBackground: boundedNarrativeText,
+        existingConnections: boundedAiList.optional(),
       }))
       .mutation(async ({ input }) => {
         const { generateNetworkingStrategy } = await import("./careerIntelligence");
@@ -3338,12 +3349,12 @@ export const appRouter = router({
 
     generateCareerPlan: protectedProcedure
       .input(z.object({
-        currentRole: z.string(),
-        targetRole: z.string(),
-        yearsExperience: z.number(),
-        skills: z.array(z.string()),
-        interests: z.array(z.string()),
-        constraints: z.array(z.string()).optional(),
+        currentRole: boundedShortText,
+        targetRole: boundedShortText,
+        yearsExperience: z.number().finite().min(0).max(100),
+        skills: boundedAiList,
+        interests: boundedAiList,
+        constraints: boundedAiList.optional(),
       }))
       .mutation(async ({ input }) => {
         const { generateCareerPlan } = await import("./careerIntelligence");
@@ -3359,9 +3370,9 @@ export const appRouter = router({
 
     analyzeSkillGap: protectedProcedure
       .input(z.object({
-        jobRequirements: z.string(),
-        userSkills: z.array(z.string()),
-        userExperience: z.string(),
+        jobRequirements: boundedNarrativeText,
+        userSkills: boundedAiList,
+        userExperience: boundedNarrativeText,
       }))
       .mutation(async ({ input }) => {
         const { analyzeSkillGap } = await import("./careerIntelligence");
@@ -3881,14 +3892,20 @@ export const appRouter = router({
       .query(({ input }) => extractBenefits(input.description)),
 
     checkDuplicate: protectedProcedure
-      .input(z.object({ text: z.string(), threshold: z.number().optional() }))
+      .input(z.object({
+        text: z.string().trim().min(1).max(50_000),
+        threshold: z.number().finite().min(0).max(1).optional(),
+      }))
       .query(({ input }) => {
         const deduplicator = getDeduplicator();
         return deduplicator.isDuplicate(input.text, input.threshold || 0.85);
       }),
 
     addToCorpus: protectedProcedure
-      .input(z.object({ id: z.number(), text: z.string() }))
+      .input(z.object({
+        id: z.number().int().positive(),
+        text: z.string().trim().min(1).max(50_000),
+      }))
       .mutation(({ input }) => {
         const deduplicator = getDeduplicator();
         deduplicator.addDocument(input.id, input.text);
@@ -3924,10 +3941,10 @@ export const appRouter = router({
 
     subscribe: protectedProcedure
       .input(z.object({
-        keywords: z.array(z.string()).optional(),
-        locations: z.array(z.string()).optional(),
-        platformIds: z.array(z.number()).optional(),
-        minSalary: z.number().optional(),
+        keywords: z.array(boundedFilterText).max(20).optional(),
+        locations: z.array(boundedFilterText).max(20).optional(),
+        platformIds: z.array(z.number().int().positive()).max(100).optional(),
+        minSalary: z.number().int().min(0).max(10_000_000).optional(),
         jobTypes: z.array(z.enum(["full-time", "part-time", "contract", "temporary"])).max(4).optional(),
         experienceLevels: z.array(z.enum(["entry", "junior", "mid", "senior", "lead", "executive"])).max(6).optional(),
       }))
@@ -3960,12 +3977,12 @@ export const appRouter = router({
   alerts: router({
     create: protectedProcedure
       .input(z.object({
-        name: z.string(),
-        keywords: z.string().optional(),
-        locations: z.string().optional(),
-        platforms: z.string().optional(),
-        minSalary: z.number().optional(),
-        jobTypes: z.string().optional(),
+        name: z.string().trim().min(1).max(255),
+        keywords: z.string().max(5000).optional(),
+        locations: z.string().max(5000).optional(),
+        platforms: z.string().max(5000).optional(),
+        minSalary: z.number().int().min(0).max(10_000_000).optional(),
+        jobTypes: z.string().max(1000).optional(),
         frequency: z.enum(["instant", "daily", "weekly"]),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -3990,13 +4007,13 @@ export const appRouter = router({
 
     update: protectedProcedure
       .input(z.object({
-        alertId: z.number(),
-        name: z.string().optional(),
-        keywords: z.string().optional(),
-        locations: z.string().optional(),
-        platforms: z.string().optional(),
-        minSalary: z.number().optional(),
-        jobTypes: z.string().optional(),
+        alertId: z.number().int().positive(),
+        name: z.string().trim().min(1).max(255).optional(),
+        keywords: z.string().max(5000).optional(),
+        locations: z.string().max(5000).optional(),
+        platforms: z.string().max(5000).optional(),
+        minSalary: z.number().int().min(0).max(10_000_000).optional(),
+        jobTypes: z.string().max(1000).optional(),
         frequency: z.enum(["instant", "daily", "weekly"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
