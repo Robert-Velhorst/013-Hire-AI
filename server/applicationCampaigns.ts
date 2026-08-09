@@ -756,9 +756,9 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     countUserAutonomousPreparationsSince(userId, startOfToday),
     getActiveJobs(250, 0),
     options.includeAdminReviews
-      ? getUserAdminReviewPage(userId, ["open", "in_progress"], 100)
-      : Promise.resolve({ items: [], total: 0, limit: 100, hasMore: false }),
-    getUserReviewDecisionPage(userId),
+      ? getUserAdminReviewPage(userId, ["open", "in_progress"], 5)
+      : Promise.resolve({ items: [], total: 0, limit: 5, hasMore: false }),
+    getUserReviewDecisionPage(userId, 5),
     getUserSuccessFeeSummary(userId),
     getUserOfferAttributionReviewPage(userId, 5),
     listUserConnectorAccounts(userId),
@@ -1123,6 +1123,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: adminReviewPage.limit,
       hasMore: adminReviewPage.hasMore,
     },
+    reviewDecisionScope: {
+      loaded: reviewDecisionPage.items.length,
+      limit: reviewDecisionPage.limit,
+      hasMore: reviewDecisionPage.hasMore,
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,
@@ -1161,8 +1166,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     },
     queues: {
       pendingApprovals: approvals.slice(0, 5),
-      adminReviews: userAdminReviews.slice(0, 5),
-      reviewDecisions: reviewDecisionQueue.slice(0, 5),
+      adminReviews: userAdminReviews,
+      reviewDecisions: reviewDecisionQueue,
       interviewNotifications: interviewNotificationQueue.items,
       inboxResponseCandidates: inboxResponseCandidateQueue.slice(0, 5),
       interviewScheduling: interviewSchedulingPage.items,

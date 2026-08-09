@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded review queues
+
+- Reduced admin and review-decision dashboard hydration from 100 records to five while preserving database-counted totals.
+- Added explicit truncation metadata for the review-decision queue and removed redundant post-query slicing.
+- Added covering indexes and scale coverage proving exact totals, bounded pages, and cross-user isolation.
+
 ## 2026-08-09 - Exact bounded offer-attribution operating reads
 
 - Replaced the dashboard's first-100 approval dependency with an exact owner-scoped offer-attribution count and a bounded five-item review page.

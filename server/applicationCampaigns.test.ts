@@ -25,6 +25,7 @@ import {
   getAuditEventsForEntity,
   getApplicationCampaign,
   getUserOfferAttributionReviewPage,
+  getUserReviewDecisionPage,
   listUserApplicationApprovals,
   requestUserConnectorConnection,
   upsertUserConnectorAccount,
@@ -32,6 +33,7 @@ import {
   upsertInterviewPreparation,
   upsertUserProfile,
 } from "./db";
+import { sampleJobs } from "./sampleData";
 
 async function recordInterviewInvite(applicationId: number, userId: number) {
   await recordEmployerResponse({
@@ -192,6 +194,67 @@ describe("application campaign operating ledger", () => {
     ]));
   });
 
+  it("keeps review totals exact while hydrating at most five owned items", async () => {
+    const userId = 99035;
+    const otherUserId = 99036;
+
+    for (let index = 0; index < 7; index += 1) {
+      if (index < sampleJobs.length) {
+        await createApplicationDecision({
+          userId,
+          jobId: sampleJobs[index].id,
+          decision: "review",
+          reviewRequired: 1,
+          decidedBy: "system",
+        });
+      }
+      await createAdminReviewItem({
+        userId,
+        entityType: "application",
+        entityId: 60_000 + index,
+        category: "application_review",
+        priority: "high",
+        title: `Owned admin review ${index + 1}`,
+        description: "Requires an administrator decision.",
+      });
+    }
+    await createApplicationDecision({
+      userId: otherUserId,
+      jobId: sampleJobs[0].id,
+      decision: "review",
+      reviewRequired: 1,
+      decidedBy: "system",
+    });
+    await createAdminReviewItem({
+      userId: otherUserId,
+      entityType: "application",
+      entityId: 69_999,
+      category: "application_review",
+      priority: "critical",
+      title: "Foreign admin review",
+      description: "Must remain isolated from the current user.",
+    });
+
+    const decisionPage = await getUserReviewDecisionPage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId, {
+      includeAdminReviews: true,
+      persistCampaign: false,
+    });
+
+    expect(ledger.metrics.reviewRequiredDecisions).toBe(decisionPage.total);
+    expect(ledger.metrics.openAdminReviews).toBe(7);
+    expect(ledger.queues.reviewDecisions).toHaveLength(decisionPage.items.length);
+    expect(ledger.queues.adminReviews).toHaveLength(5);
+    expect(ledger.reviewDecisionScope).toEqual({
+      loaded: decisionPage.items.length,
+      limit: 5,
+      hasMore: decisionPage.hasMore,
+    });
+    expect(ledger.adminReviewScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
+    expect(ledger.queues.reviewDecisions.every((item) => item.userId === userId)).toBe(true);
+    expect(ledger.queues.adminReviews.every((item) => item.userId === userId)).toBe(true);
+  });
+
   it("syncs durable campaign state from current operating queues", async () => {
     const userId = 99001;
     const oldDate = new Date(Date.now() - 8 * 86400000);
@@ -327,7 +390,12 @@ describe("application campaign operating ledger", () => {
     expect(adminLedger.canReviewAdminItems).toBe(true);
     expect(adminLedger.adminReviewScope).toEqual({
       loaded: 1,
-      limit: 100,
+      limit: 5,
+      hasMore: false,
+    });
+    expect(ledger.reviewDecisionScope).toEqual({
+      loaded: 1,
+      limit: 5,
       hasMore: false,
     });
     expect(ledger.metrics.reviewRequiredDecisions).toBe(1);

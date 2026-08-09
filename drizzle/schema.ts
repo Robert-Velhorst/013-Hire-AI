@@ -295,6 +295,12 @@ export const applicationDecisions = mysqlTable("application_decisions", {
   uniqueIndex("application_decisions_user_job_unique").on(table.userId, table.jobId),
   index("application_decisions_user_decision_idx").on(table.userId, table.decision),
   index("application_decisions_user_updated_idx").on(table.userId, table.updatedAt),
+  index("application_decisions_user_review_updated_idx").on(
+    table.userId,
+    table.reviewRequired,
+    table.updatedAt,
+    table.id
+  ),
   index("application_decisions_review_required_idx").on(table.reviewRequired),
 ]);
 
@@ -479,6 +485,12 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
   index("admin_review_items_status_priority_idx").on(table.status, table.priority),
   index("admin_review_items_status_created_idx").on(table.status, table.createdAt),
   index("admin_review_items_user_status_idx").on(table.userId, table.status),
+  index("admin_review_items_user_status_created_idx").on(
+    table.userId,
+    table.status,
+    table.createdAt,
+    table.id
+  ),
   index("admin_review_items_user_category_created_idx").on(
     table.userId,
     table.category,

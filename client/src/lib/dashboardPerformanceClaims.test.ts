@@ -43,7 +43,7 @@ describe("dashboard performance claims", () => {
     expect(campaigns).not.toContain("listInterviewPreparationsForUser");
     expect(campaigns).toContain("getUserOfferAttributionReviewPage(userId, 5)");
     expect(campaigns).not.toContain("getUserOfferAttributionReviews(userId, {");
-    expect(campaigns).toContain("getUserAdminReviewPage(userId");
+    expect(campaigns).toContain('getUserAdminReviewPage(userId, ["open", "in_progress"], 5)');
     expect(campaigns).not.toContain("listUserAdminReviewItems(userId");
     expect(campaigns).not.toContain("listAdminReviewItems(\"all\")");
     expect(campaigns).not.toMatch(/\bgetEmployerResponses\(/);
@@ -156,7 +156,7 @@ describe("dashboard performance claims", () => {
     expect(campaigns).toContain("getUserApplicationsForJobs(");
     expect(campaigns).toContain("getUserApplicationSummary(userId)");
     expect(campaigns).toContain("getUserOperatingApplicationApprovals(");
-    expect(campaigns).toContain("getUserReviewDecisionPage(userId)");
+    expect(campaigns).toContain("getUserReviewDecisionPage(userId, 5)");
     expect(campaigns).not.toContain("getUserApplications(userId)");
     expect(campaigns).not.toContain("listUserApplicationApprovals(userId, \"all\")");
     expect(campaigns).not.toContain("getUserApplicationDecisions(userId)");
