@@ -1,7 +1,6 @@
 import { invokeLLM } from "./_core/llm";
 import { createRequire } from "module";
 import mammoth from "mammoth";
-import { storagePut } from "./storage";
 import { validateGitHubUrl, validateLinkedInUrl, validatePortfolioUrl } from "./socialConnections";
 import { logOperationalFailure } from "./operationalFailureLog";
 
@@ -93,24 +92,6 @@ export function extractTextFromRTF(buffer: Buffer): string {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-/**
- * Upload resume file to S3 and return the URL
- */
-export async function uploadResumeToS3(
-  buffer: Buffer,
-  filename: string,
-  userId: number,
-  mimeType: string
-): Promise<{ url: string; key: string }> {
-  const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).substring(2, 8);
-  const extension = filename.split(".").pop() || "pdf";
-  const key = `resumes/${userId}/${timestamp}-${randomSuffix}.${extension}`;
-  
-  const result = await storagePut(key, buffer, mimeType);
-  return { url: result.url, key };
 }
 
 /**

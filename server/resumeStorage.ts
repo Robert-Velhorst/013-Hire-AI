@@ -8,7 +8,7 @@ import { getDb } from "./db";
 import { userResumes } from "../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { RESUME_MIME_TYPES, scanSensitiveUpload, validateUploadedFile } from "./uploadValidation";
+import { RESUME_MIME_TYPES, validateUploadedFile } from "./uploadValidation";
 import { logOperationalFailure } from "./operationalFailureLog";
 
 // ============================================================================
@@ -116,8 +116,6 @@ export async function uploadResume(
     mimeType: detectedMimeType,
     allowedMimeTypes: RESUME_MIME_TYPES,
   });
-  await scanSensitiveUpload({ data: fileData, fileName: validation.fileName, mimeType: detectedMimeType });
-
   // Get current version count for this user
   const existingResumes = await db
     .select({ version: userResumes.version })

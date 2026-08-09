@@ -64,4 +64,35 @@ describe("discovery traffic policy", () => {
     expect(admin).toContain("Concurrent source cap");
     expect(admin).toContain("Source timeout");
   });
+
+  it("fails production diagnostics when the selected scanner is unavailable", () => {
+    const env = {
+      ...process.env,
+      NODE_ENV: "production",
+      DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
+      JWT_SECRET: "doctor-test-cookie-secret",
+      VITE_APP_ID: "hire-ai-doctor-test",
+      OAUTH_SERVER_URL: "https://oauth.example.test",
+      OWNER_OPEN_ID: "doctor-owner",
+      BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
+      STRIPE_SECRET_KEY: "sk_test_doctor",
+      STRIPE_WEBHOOK_SECRET: "whsec_doctor",
+      FILE_MALWARE_SCAN_MODE: "http",
+      FILE_MALWARE_SCAN_URL: "",
+      JOB_SCRAPING_SCHEDULER_ENABLED: "false",
+      HAI_CONNECTOR_ENABLED: "false",
+    };
+    const runDoctor = (extra: Record<string, string>) => spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+      cwd: process.cwd(), env: { ...env, ...extra }, encoding: "utf8",
+    });
+    const blocked = runDoctor({});
+    expect(blocked.status).toBe(1);
+    expect(blocked.stdout).toContain("FAIL document malware scanning");
+    const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
+    expect(malformed.status).toBe(1);
+    expect(malformed.stdout).toContain("scanner URL must be HTTP(S)");
+    const accepted = runDoctor({ FILE_MALWARE_SCAN_URL: "https://scanner.example.test" });
+    expect(accepted.status).toBe(0);
+    expect(accepted.stdout).toContain("PASS document malware scanning");
+  });
 });

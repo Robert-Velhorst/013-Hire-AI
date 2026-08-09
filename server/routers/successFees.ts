@@ -13,7 +13,7 @@ import { applicationApprovals, applications, successFees, employmentVerification
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { isAcceptedOfferApplicationStatus } from "@shared/offerEligibility";
 import { storagePut } from "../storage";
-import { scanSensitiveUpload, validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
+import { validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
 import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
 
@@ -240,7 +240,6 @@ export const successFeesRouter = router({
         mimeType: input.offerLetterMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
-      await scanSensitiveUpload({ data: fileBuffer, fileName: validation.fileName, mimeType: input.offerLetterMimeType });
       const fileKey = `offer-letters/${userId}-${Date.now()}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.offerLetterMimeType);
       const offerLetterUrl = `private://${fileKey}`;
@@ -735,7 +734,6 @@ export const successFeesRouter = router({
         mimeType: input.documentMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
-      await scanSensitiveUpload({ data: fileBuffer, fileName: validation.fileName, mimeType: input.documentMimeType });
       const fileKey = `verifications/${userId}-${Date.now()}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.documentMimeType);
       const documentUrl = `private://${fileKey}`;

@@ -1,7 +1,8 @@
 // Preconfigured storage helpers for Manus WebDev templates
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
-import { ENV } from './_core/env';
+import { ENV } from "./_core/env";
+import { scanSensitiveUpload } from "./uploadValidation";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 
@@ -80,6 +81,15 @@ export async function storagePut(
 ): Promise<{ key: string; url: string }> {
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  if (/^(resumes|offer-letters|verifications)\//.test(key)) {
+    const bytes =
+      typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+    await scanSensitiveUpload({
+      data: bytes,
+      fileName: key.split("/").pop() ?? "upload",
+      mimeType: contentType,
+    });
+  }
   const uploadUrl = buildUploadUrl(baseUrl, key);
   const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
   const response = await fetch(uploadUrl, {
@@ -98,7 +108,9 @@ export async function storagePut(
   return { key, url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
   return {

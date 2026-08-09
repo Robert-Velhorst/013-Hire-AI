@@ -43,10 +43,51 @@ check(
   missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
 );
 
+function windowsDefenderAvailable() {
+  if (process.platform !== "win32") return false;
+  const candidates = [];
+  if (process.env.ProgramFiles) candidates.push(path.join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe"));
+  if (process.env.ProgramData) {
+    const root = path.join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform");
+    if (fs.existsSync(root)) {
+      const versions = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
+        .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+      candidates.unshift(...versions.map(version => path.join(root, version, "MpCmdRun.exe")));
+    }
+  }
+  return candidates.some(candidate => fs.existsSync(candidate));
+}
+
+const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto").trim().toLowerCase();
+const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
+const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
+const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
+const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
+const malwareTimeoutValid = Number.isInteger(malwareScanTimeout) && malwareScanTimeout >= 1_000 && malwareScanTimeout <= 120_000;
+const malwareConcurrencyValid = Number.isInteger(malwareScanConcurrency) && malwareScanConcurrency >= 1 && malwareScanConcurrency <= 8;
+let malwareScanUrlValid = !malwareScanUrl;
+try {
+  if (malwareScanUrl) {
+    const parsed = new URL(malwareScanUrl);
+    malwareScanUrlValid = ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
+  }
+} catch { malwareScanUrlValid = false; }
+const defenderAvailable = windowsDefenderAvailable();
+const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcurrencyValid && malwareScanUrlValid && (
+  (malwareScanMode === "http" && Boolean(malwareScanUrl))
+  || (malwareScanMode === "windows_defender" && defenderAvailable)
+  || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
+);
 check(
   "document malware scanning",
-  isProduction && !String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "fail" : !String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "warn" : "pass",
-  String(process.env.FILE_MALWARE_SCAN_URL || "").trim() ? "scanner endpoint configured" : "required before production document uploads"
+  !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",
+  !malwareModeValid ? "mode must be auto, http, or windows_defender"
+    : !malwareScanUrlValid ? "scanner URL must be HTTP(S) without embedded credentials"
+      : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
+        : !malwareConcurrencyValid ? "concurrency must be 1-8"
+          : malwareScanUrl && malwareScanMode !== "windows_defender" ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`
+            : defenderAvailable && malwareScanMode !== "http" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
+              : "scanner required before production document uploads"
 );
 
 const scrapingEnabled = String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "").trim().toLowerCase() === "true";

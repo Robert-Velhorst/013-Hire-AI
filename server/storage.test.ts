@@ -9,6 +9,23 @@ afterEach(() => {
 });
 
 describe("private storage deletion", () => {
+  it("scans sensitive namespaces before uploading any bytes", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.local/scan");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ clean: true, provider: "test" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ url: "https://private.example/resume" }), { status: 200 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const { storagePut } = await import("./storage");
+    await expect(storagePut("resumes/7/resume.pdf", Buffer.from("%PDF-safe"), "application/pdf"))
+      .resolves.toEqual({ key: "resumes/7/resume.pdf", url: "https://private.example/resume" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://scanner.example.local/scan");
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/v1/storage/upload");
+  });
+
   it("uses the authenticated storage delete endpoint with a normalized object key", async () => {
     vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
     vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");

@@ -5,7 +5,7 @@
 - Session cookies are `httpOnly`; secure requests use `SameSite=None; Secure` and local requests use `SameSite=Lax`.
 - Protected and admin tRPC middleware enforce authentication and role authorization.
 - User-owned mutations pass the current user ID into storage operations; cross-user access tests cover critical records.
-- File uploads validate size, MIME type, and signature. Production uploads require a malware-scanner endpoint.
+- Sensitive storage namespaces enforce malware scanning centrally before upload. Windows standalone uses Microsoft Defender by default; cloud/container deployments use the bounded HTTP scanner with optional bearer authentication. Production fails closed when neither is available.
 - Connector tokens are encrypted and kept outside public profile tables; social links are references, not credentials.
 - Connector disconnect disables access before cleanup, uses scoped provider revocation where supported, deletes local grants after successful or manual-only cleanup, and retains failed-revocation grants only for an auditable retry. Microsoft and LinkedIn never trigger broader account-session revocation.
 - Application, payment, and provider records use audit events, ownership checks, and idempotency controls.

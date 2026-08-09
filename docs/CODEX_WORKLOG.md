@@ -120,6 +120,7 @@
 
 - Added migration `0038` with idempotent erasure runs, secret-free itemized tasks, bounded execution leases, retry state, and manual-cleanup evidence.
 - Added separately confirmed transactional database finalization with policy-coverage drift protection, rollback/retry behavior, account pseudonymization, erasable-record deletion, retained-ledger scrubbing, regulated-record preservation, and clean-MySQL acceptance.
+- Centralized sensitive-document scanning at the storage boundary, added authenticated and timeout-bounded HTTP scanning for cloud deployments, native Microsoft Defender scanning for Windows standalone, and removed the unused direct resume-storage bypass.
 - Made resolved privacy reviews create a non-destructive plan before the review is closed, preventing resolved-without-plan failure.
 - Added exact-confirmation admin controls for provider/object cleanup and evidence controls for unsupported provider revocation.
 - Made private-object deletion idempotent when storage already reports the object missing.

@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 865 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 167 files, 871 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
@@ -33,7 +33,8 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Discovery traffic contract | `server/discoveryTrafficPolicy.test.ts`; scraper unit tests | Passed: cancellation propagation, deadline abort, source serialization, bounded concurrency, selective retry/backoff, `Retry-After`, and production allowlisting |
 | Container and fresh database | Docker Desktop; MySQL 8.4; `server/containerPackaging.test.ts`; `server/migrationJournal.test.ts` | Passed: fail-closed doctor, all 38 migrations, advisory-lock release, non-root runtime, Docker health, production readiness, and frontend HTTP 200 |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
-| Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
+| Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Fails closed when required production configuration or a platform-appropriate scanner is absent; native Windows Defender is detected for standalone operation |
+| Windows document scanning | Native `MpCmdRun.exe` smoke through `scanSensitiveUpload` | Passed with a clean `windows_defender` verdict and temporary-file cleanup |
 | Diff whitespace audit | `git diff --check` | Passed |
 
 ## Runtime and UI evidence

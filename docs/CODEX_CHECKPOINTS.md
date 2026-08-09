@@ -7,7 +7,7 @@
 | Privacy export | server export test; Settings calls `privacy.exportData` | Complete |
 | Static verification | `npm.cmd run check` | Complete |
 | Focused verification | privacy and HTTP safety tests | Complete |
-| Full regression | `npm.cmd test -- --run`: 167 files, 865 tests; 1 MySQL integration test separately passed | Complete |
+| Full regression | `npm.cmd test -- --run`: 167 files, 871 tests; 1 MySQL integration test separately passed | Complete |
 | Production build | `npm.cmd run build` | Complete |
 | Configuration audit | Development doctor warns; production doctor fails closed for missing required configuration | Complete |
 | Local health/readiness | Port 3040: `/healthz` and `/readyz` returned 200; readiness reports development memory | Complete |
