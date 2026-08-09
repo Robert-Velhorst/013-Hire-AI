@@ -9,6 +9,34 @@ afterEach(() => {
 });
 
 describe("private storage deletion", () => {
+  it.each([
+    ["upload", (storage: typeof import("./storage"), key: string) => storage.storagePut(key, "data", "text/plain")],
+    ["download", (storage: typeof import("./storage"), key: string) => storage.storageGet(key)],
+    ["deletion", (storage: typeof import("./storage"), key: string) => storage.storageDelete(key)],
+  ])("rejects unsafe object keys before %s network access", async (_operation, invoke) => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+    const storage = await import("./storage");
+
+    for (const key of ["", "../secret", "safe/../secret", "safe/%2e%2e/secret", "safe\\secret", "safe//secret", "safe/line\nbreak"]) {
+      await expect(invoke(storage, key)).rejects.toThrow(/Storage object key/);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized object keys before network access", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+    const { storageGet } = await import("./storage");
+
+    await expect(storageGet(`generated/${"a".repeat(1_025)}`)).rejects.toThrow("between 1 and 1024 UTF-8 bytes");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("scans sensitive namespaces before uploading any bytes", async () => {
     vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
     vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");

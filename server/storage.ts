@@ -67,7 +67,32 @@ function ensureTrailingSlash(value: string): string {
 }
 
 function normalizeKey(relKey: string): string {
-  return relKey.replace(/^\/+/, "");
+  const key = relKey.replace(/^\/+/, "").normalize("NFC");
+  if (!key || Buffer.byteLength(key, "utf8") > 1_024) {
+    throw new Error("Storage object key must contain between 1 and 1024 UTF-8 bytes.");
+  }
+  if (/[\\\u0000-\u001f\u007f]/.test(key)) {
+    throw new Error("Storage object key contains an unsafe character.");
+  }
+
+  const segments = key.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("Storage object key contains an unsafe path segment.");
+  }
+  for (const segment of segments) {
+    try {
+      const decoded = decodeURIComponent(segment);
+      if (decoded === "." || decoded === ".." || /[\\/\u0000-\u001f\u007f]/.test(decoded)) {
+        throw new Error("Storage object key contains an unsafe encoded path segment.");
+      }
+    } catch (error) {
+      if (error instanceof URIError) {
+        throw new Error("Storage object key contains invalid percent encoding.");
+      }
+      throw error;
+    }
+  }
+  return key;
 }
 
 function toFormData(
@@ -93,8 +118,8 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  const { baseUrl, apiKey } = getStorageConfig();
   if (/^(resumes|offer-letters|verifications)\//.test(key)) {
     const bytes =
       typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
@@ -125,8 +150,8 @@ export async function storagePut(
 export async function storageGet(
   relKey: string
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  const { baseUrl, apiKey } = getStorageConfig();
   return {
     key,
     url: await buildDownloadUrl(baseUrl, key, apiKey),
@@ -138,8 +163,8 @@ export async function storageGet(
  * metadata when this fails, otherwise the sensitive file becomes orphaned.
  */
 export async function storageDelete(relKey: string): Promise<{ key: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
+  const { baseUrl, apiKey } = getStorageConfig();
   const response = await fetch(buildDeleteUrl(baseUrl, key), {
     method: "DELETE",
     headers: buildAuthHeaders(apiKey),
