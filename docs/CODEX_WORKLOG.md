@@ -272,3 +272,10 @@
 - Kept list reads for cross-provider readiness and inventory workflows, where the complete account set is required.
 - Added ownership, missing-provider, and wiring contracts; focused provider suites continue to pass with the exact dependency shape.
 - Passed TypeScript, the complete regression suite, and the production bundle check.
+
+## 2026-08-09 - Bounded match-ledger writes
+
+- Replaced profile refresh's per-job match upserts with atomic ten-row batches over the existing user/job unique key.
+- Retained individual retry after a batch failure, preserving per-job partial-success counts and the non-blocking profile-update contract.
+- Added a 25-job `10 + 10 + 5` workload and static batch/fallback contract coverage.
+- Passed TypeScript, the complete regression suite, and the production bundle check.

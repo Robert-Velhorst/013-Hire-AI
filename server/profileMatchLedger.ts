@@ -2,6 +2,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import { calculateDeterministicJobMatch } from "./aiMatching";
 import {
   createAuditEvent,
+  createCanonicalJobMatches,
   createJobMatch,
   getActiveJobs,
   getUserProfile,
@@ -57,10 +58,11 @@ export async function refreshProfileMatchLedger(
 
   for (let start = 0; start < jobs.length; start += MATCH_REFRESH_CONCURRENCY) {
     const batch = jobs.slice(start, start + MATCH_REFRESH_CONCURRENCY);
-    const batchResults = await Promise.all(batch.map(async (job) => {
+    const matches: Parameters<typeof createCanonicalJobMatches>[0] = [];
+    for (const job of batch) {
       try {
         const match = calculateDeterministicJobMatch(profileForMatching, job, "profile_evidence_refresh");
-        await createJobMatch({
+        matches.push({
           userId: input.userId,
           jobId: job.id,
           matchScore: match.matchScore,
@@ -70,11 +72,25 @@ export async function refreshProfileMatchLedger(
           locationMatch: match.locationMatch,
           salaryMatch: match.salaryMatch,
         });
-        return true;
       } catch {
-        return false;
+        failedMatches += 1;
       }
-    }));
+    }
+    if (matches.length === 0) continue;
+    let batchResults: boolean[];
+    try {
+      await createCanonicalJobMatches(matches);
+      batchResults = matches.map(() => true);
+    } catch {
+      batchResults = await Promise.all(matches.map(async (match) => {
+        try {
+          await createJobMatch(match);
+          return true;
+        } catch {
+          return false;
+        }
+      }));
+    }
     refreshedMatches += batchResults.filter(Boolean).length;
     failedMatches += batchResults.filter((result) => !result).length;
   }

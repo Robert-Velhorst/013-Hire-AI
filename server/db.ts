@@ -4440,6 +4440,32 @@ export async function createJobMatch(match: InsertJobMatch) {
   };
 }
 
+export async function createCanonicalJobMatches(matches: InsertJobMatch[]) {
+  if (matches.length === 0) return;
+  const db = await getDb();
+  if (!db) {
+    for (const match of matches) {
+      await createJobMatch(match);
+    }
+    return;
+  }
+
+  await db
+    .insert(jobMatches)
+    .values(matches)
+    .onDuplicateKeyUpdate({
+      set: {
+        matchScore: sql`VALUES(${jobMatches.matchScore})`,
+        matchReasons: sql`VALUES(${jobMatches.matchReasons})`,
+        skillsMatch: sql`VALUES(${jobMatches.skillsMatch})`,
+        experienceMatch: sql`VALUES(${jobMatches.experienceMatch})`,
+        locationMatch: sql`VALUES(${jobMatches.locationMatch})`,
+        salaryMatch: sql`VALUES(${jobMatches.salaryMatch})`,
+        updatedAt: new Date(),
+      },
+    });
+}
+
 export async function getUserJobMatches(userId: number, minScore = 70) {
   const db = await getDb();
   if (!db) {
