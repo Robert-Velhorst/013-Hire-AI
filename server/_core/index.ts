@@ -15,6 +15,7 @@ import { ensureScraperPlatformCatalog } from "../db";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
 import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
+import { drainRuntime } from "./gracefulShutdown";
 
 async function startServer() {
   validateProductionEnv();
@@ -115,18 +116,18 @@ async function startServer() {
     }, 10_000);
     forceExit.unref();
 
-    await Promise.all([
-      autonomousScheduler?.stop(),
-      jobScrapingScheduler?.stop(),
-    ]);
-    server.close((error) => {
+    try {
+      await drainRuntime(server, [
+        () => autonomousScheduler?.stop(),
+        () => jobScrapingScheduler?.stop(),
+      ]);
       clearTimeout(forceExit);
-      if (error) {
-        logOperationalFailure("Server", "Shutdown");
-        process.exit(1);
-      }
       process.exit(0);
-    });
+    } catch {
+      clearTimeout(forceExit);
+      logOperationalFailure("Server", "Shutdown");
+      process.exit(1);
+    }
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
