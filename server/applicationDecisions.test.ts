@@ -139,6 +139,24 @@ describe("application decision ledger", () => {
     expect(await getUserApplications(userId)).toHaveLength(0);
   });
 
+  it("returns only requested decisions owned by the authenticated user", async () => {
+    const userId = 94020;
+    const otherUserId = 94021;
+    await Promise.all([
+      createApplicationDecision({ userId, jobId: 1, decision: "save", decidedBy: "user" }),
+      createApplicationDecision({ userId, jobId: 2, decision: "ignore", decidedBy: "user" }),
+      createApplicationDecision({ userId, jobId: 3, decision: "review", decidedBy: "system" }),
+      createApplicationDecision({ otherUserId, jobId: 1, decision: "apply", decidedBy: "user" }),
+    ]);
+
+    const caller = appRouter.createCaller(createContext(userId));
+    const decisions = await caller.applications.listDecisions({ jobIds: [1, 3, 3] });
+
+    expect(decisions.map((decision) => decision.jobId).sort((left, right) => left - right))
+      .toEqual([1, 3]);
+    expect(decisions.every((decision) => decision.userId === userId)).toBe(true);
+  });
+
   it("loads one application and decision only for their owner", async () => {
     const userId = 94008;
     const otherUserId = 94009;

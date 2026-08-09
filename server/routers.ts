@@ -1739,10 +1739,14 @@ export const appRouter = router({
           existing: result.existing === true,
         };
       }),
-    listDecisions: protectedProcedure.query(async ({ ctx }) => {
-      const { getUserApplicationDecisions } = await import("./db");
-      return await getUserApplicationDecisions(ctx.user.id);
-    }),
+    listDecisions: protectedProcedure
+      .input(z.object({
+        jobIds: z.array(z.number().int().positive()).max(250),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getUserApplicationDecisionsForJobs } = await import("./db");
+        return await getUserApplicationDecisionsForJobs(ctx.user.id, input.jobIds);
+      }),
     getOperatingLedger: protectedProcedure.query(async ({ ctx }) => {
       const { getUserOperatingLedger } = await import("./applicationCampaigns");
       return await getUserOperatingLedger(ctx.user.id, {

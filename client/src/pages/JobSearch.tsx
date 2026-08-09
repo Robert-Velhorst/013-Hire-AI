@@ -138,6 +138,10 @@ export default function JobSearch() {
     offset: 0,
     filters: deferredJobSearchFilters,
   });
+  const visibleJobIds = useMemo(
+    () => (jobsList || []).map((job) => job.id),
+    [jobsList]
+  );
 
   // Fetch platforms
   const { data: platformsData } = trpc.platforms.list.useQuery();
@@ -169,8 +173,8 @@ export default function JobSearch() {
   const {
     data: applicationDecisions = [],
     refetch: refetchApplicationDecisions,
-  } = trpc.applications.listDecisions.useQuery(undefined, {
-    enabled: Boolean(user),
+  } = trpc.applications.listDecisions.useQuery({ jobIds: visibleJobIds }, {
+    enabled: Boolean(user) && visibleJobIds.length > 0,
   });
   const {
     data: jobMatches = [],

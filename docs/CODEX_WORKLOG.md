@@ -279,3 +279,9 @@
 - Retained individual retry after a batch failure, preserving per-job partial-success counts and the non-blocking profile-update contract.
 - Added a 25-job `10 + 10 + 5` workload and static batch/fallback contract coverage.
 - Passed TypeScript, the complete regression suite, and the production bundle check.
+
+## 2026-08-09 - Scoped Job Search decisions
+
+- Replaced Job Search's unbounded decision-history request with an owner-scoped lookup for its current, at-most-250 job result set.
+- Kept full decision history in privacy export only and added requested/unrequested/cross-user behavior coverage plus a frontend/backend wiring contract.
+- Verified the live Job Search route at desktop and mobile breakpoints: seeded jobs rendered, search narrowed the result set correctly, fail-closed evidence gates remained visible, and no browser warnings or errors were reported.
