@@ -1,12 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
   OUTBOUND_TIMEOUT_MS,
   readBoundedResponseBytes,
+  readBoundedResponseJson,
+  readBoundedResponseText,
   ResponseSizeLimitError,
 } from "./outboundRequest";
 
 describe("outbound request policy", () => {
+  it("defines bounded response budgets by service payload class", () => {
+    expect(OUTBOUND_RESPONSE_MAX_BYTES).toEqual({
+      error: 65_536,
+      storageMetadata: 65_536,
+      standardJson: 4_194_304,
+      llmOrTranscription: 8_388_608,
+      imageGeneration: 33_554_432,
+    });
+  });
+
   it("provides distinct bounded budgets for short and long-running services", () => {
     expect(OUTBOUND_TIMEOUT_MS).toEqual({
       notification: 15_000,
@@ -39,5 +52,13 @@ describe("outbound request policy", () => {
       },
     }));
     await expect(readBoundedResponseBytes(response, 10)).rejects.toBeInstanceOf(ResponseSizeLimitError);
+  });
+
+  it("parses bounded text and JSON responses", async () => {
+    await expect(readBoundedResponseText(new Response("ready"), 10)).resolves.toBe("ready");
+    await expect(readBoundedResponseJson<{ ready: boolean }>(
+      new Response(JSON.stringify({ ready: true })),
+      100
+    )).resolves.toEqual({ ready: true });
   });
 });

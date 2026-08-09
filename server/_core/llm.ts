@@ -1,5 +1,11 @@
 import { ENV } from "./env";
-import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "./outboundRequest";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -324,11 +330,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error);
     throw new Error(
       `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  return await readBoundedResponseJson<InvokeResult>(response, OUTBOUND_RESPONSE_MAX_BYTES.llmOrTranscription);
 }

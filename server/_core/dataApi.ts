@@ -5,7 +5,13 @@
  *   })
  */
 import { ENV } from "./env";
-import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "./outboundRequest";
 
 export type DataApiCallOptions = {
   query?: Record<string, unknown>;
@@ -48,13 +54,22 @@ export async function callDataApi(
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
+    const detail = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error).catch(() => "");
     throw new Error(
       `Data API request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
     );
   }
 
-  const payload = await response.json().catch(() => ({}));
+  let payload: Record<string, unknown>;
+  try {
+    payload = await readBoundedResponseJson<Record<string, unknown>>(
+      response,
+      OUTBOUND_RESPONSE_MAX_BYTES.standardJson
+    );
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    payload = {};
+  }
   if (payload && typeof payload === "object" && "jsonData" in payload) {
     try {
       return JSON.parse((payload as Record<string, string>).jsonData ?? "{}");

@@ -8,7 +8,13 @@
  */
 
 import { ENV } from "./env";
-import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "./outboundRequest";
 
 // ============================================================================
 // Configuration
@@ -82,13 +88,13 @@ export async function makeRequest<T = unknown>(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error);
     throw new Error(
       `Google Maps API request failed (${response.status} ${response.statusText}): ${errorText}`
     );
   }
 
-  return (await response.json()) as T;
+  return await readBoundedResponseJson<T>(response, OUTBOUND_RESPONSE_MAX_BYTES.standardJson);
 }
 
 // ============================================================================

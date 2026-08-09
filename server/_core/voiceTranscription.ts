@@ -28,8 +28,11 @@
 import { ENV } from "./env";
 import {
   outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
   OUTBOUND_TIMEOUT_MS,
   readBoundedResponseBytes,
+  readBoundedResponseJson,
+  readBoundedResponseText,
   ResponseSizeLimitError,
 } from "./outboundRequest";
 
@@ -170,7 +173,7 @@ export async function transcribeAudio(
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
+      const errorText = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error).catch(() => "");
       return {
         error: "Transcription service request failed",
         code: "TRANSCRIPTION_FAILED",
@@ -179,7 +182,10 @@ export async function transcribeAudio(
     }
 
     // Step 5: Parse and return the transcription result
-    const whisperResponse = await response.json() as WhisperResponse;
+    const whisperResponse = await readBoundedResponseJson<WhisperResponse>(
+      response,
+      OUTBOUND_RESPONSE_MAX_BYTES.llmOrTranscription
+    );
     
     // Validate response structure
     if (!whisperResponse.text || typeof whisperResponse.text !== 'string') {

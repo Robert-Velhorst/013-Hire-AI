@@ -54,6 +54,17 @@ describe("private storage deletion", () => {
     expect(String(fetchMock.mock.calls[1][0])).toContain("/v1/storage/upload");
   });
 
+  it("rejects an unsafe URL returned after upload", async () => {
+    vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
+    vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      url: "javascript:alert(1)",
+    }), { status: 200 })) as typeof fetch;
+
+    const { storagePut } = await import("./storage");
+    await expect(storagePut("generated/result.png", "image", "image/png")).rejects.toThrow("HTTP or HTTPS");
+  });
+
   it("uses the authenticated storage delete endpoint with a normalized object key", async () => {
     vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
     vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");

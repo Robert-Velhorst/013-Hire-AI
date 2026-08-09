@@ -17,7 +17,13 @@
  */
 import { storagePut } from "server/storage";
 import { ENV } from "./env";
-import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "./outboundRequest";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -67,18 +73,18 @@ export async function generateImage(
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
+    const detail = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error).catch(() => "");
     throw new Error(
       `Image generation request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
     );
   }
 
-  const result = (await response.json()) as {
+  const result = await readBoundedResponseJson<{
     image: {
       b64Json: string;
       mimeType: string;
     };
-  };
+  }>(response, OUTBOUND_RESPONSE_MAX_BYTES.imageGeneration);
   const base64Data = result.image.b64Json;
   const buffer = Buffer.from(base64Data, "base64");
 

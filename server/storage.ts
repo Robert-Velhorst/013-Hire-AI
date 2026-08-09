@@ -2,7 +2,13 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from "./_core/env";
-import { outboundRequestSignal, OUTBOUND_TIMEOUT_MS } from "./_core/outboundRequest";
+import {
+  outboundRequestSignal,
+  OUTBOUND_RESPONSE_MAX_BYTES,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+  readBoundedResponseText,
+} from "./_core/outboundRequest";
 import { scanSensitiveUpload } from "./uploadValidation";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
@@ -32,6 +38,17 @@ function buildDeleteUrl(baseUrl: string, relKey: string): URL {
   return url;
 }
 
+function requireHttpUrl(value: unknown, responseName: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${responseName} did not include a URL.`);
+  }
+  const url = new URL(value);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`${responseName} URL must use HTTP or HTTPS.`);
+  }
+  return url.toString();
+}
+
 async function buildDownloadUrl(
   baseUrl: string,
   relKey: string,
@@ -48,20 +65,17 @@ async function buildDownloadUrl(
     signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
   });
   if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
+    const message = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error)
+      .catch(() => response.statusText);
     throw new Error(
       `Storage download URL retrieval failed (${response.status} ${response.statusText}): ${message}`
     );
   }
-  const value = (await response.json()) as { url?: unknown };
-  if (typeof value.url !== "string") {
-    throw new Error("Storage download URL response did not include a URL.");
-  }
-  const url = new URL(value.url);
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("Storage download URL must use HTTP or HTTPS.");
-  }
-  return url.toString();
+  const value = await readBoundedResponseJson<{ url?: unknown }>(
+    response,
+    OUTBOUND_RESPONSE_MAX_BYTES.storageMetadata
+  );
+  return requireHttpUrl(value.url, "Storage download URL response");
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -141,13 +155,17 @@ export async function storagePut(
   });
 
   if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
+    const message = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error)
+      .catch(() => response.statusText);
     throw new Error(
       `Storage upload failed (${response.status} ${response.statusText}): ${message}`
     );
   }
-  const url = (await response.json()).url;
-  return { key, url };
+  const { url } = await readBoundedResponseJson<{ url?: unknown }>(
+    response,
+    OUTBOUND_RESPONSE_MAX_BYTES.storageMetadata
+  );
+  return { key, url: requireHttpUrl(url, "Storage upload response") };
 }
 
 export async function storageGet(
@@ -175,7 +193,8 @@ export async function storageDelete(relKey: string): Promise<{ key: string }> {
   });
 
   if (!response.ok && response.status !== 404) {
-    const message = await response.text().catch(() => response.statusText);
+    const message = await readBoundedResponseText(response, OUTBOUND_RESPONSE_MAX_BYTES.error)
+      .catch(() => response.statusText);
     throw new Error(
       `Storage deletion failed (${response.status} ${response.statusText}): ${message}`
     );

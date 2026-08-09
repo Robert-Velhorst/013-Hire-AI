@@ -4,6 +4,14 @@ export const OUTBOUND_TIMEOUT_MS = {
   generation: 120_000,
 } as const;
 
+export const OUTBOUND_RESPONSE_MAX_BYTES = {
+  error: 64 * 1024,
+  storageMetadata: 64 * 1024,
+  standardJson: 4 * 1024 * 1024,
+  llmOrTranscription: 8 * 1024 * 1024,
+  imageGeneration: 32 * 1024 * 1024,
+} as const;
+
 export function outboundRequestSignal(timeoutMs: number): AbortSignal {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000) {
     throw new Error("Outbound request timeout must be between 1000 and 300000 milliseconds.");
@@ -57,4 +65,18 @@ export async function readBoundedResponseBytes(
     offset += chunk.byteLength;
   }
   return result;
+}
+
+export async function readBoundedResponseText(
+  response: Response,
+  maxBytes: number
+): Promise<string> {
+  return new TextDecoder().decode(await readBoundedResponseBytes(response, maxBytes));
+}
+
+export async function readBoundedResponseJson<T>(
+  response: Response,
+  maxBytes: number
+): Promise<T> {
+  return JSON.parse(await readBoundedResponseText(response, maxBytes)) as T;
 }
