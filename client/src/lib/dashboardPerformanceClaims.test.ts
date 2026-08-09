@@ -133,4 +133,29 @@ describe("dashboard performance claims", () => {
     expect(autonomousService).not.toMatch(/\bgetInterviewSchedules\(/);
     expect(autonomousService).not.toMatch(/\bgetFollowUps\(/);
   });
+
+  it("keeps dashboard and autonomous application history bounded", () => {
+    const campaigns = readFileSync(
+      resolve(process.cwd(), "server", "applicationCampaigns.ts"),
+      "utf8"
+    );
+    const autonomousService = readFileSync(
+      resolve(process.cwd(), "server", "autonomousService.ts"),
+      "utf8"
+    );
+
+    expect(campaigns).toContain("getUserOperatingApplicationWindow(userId)");
+    expect(campaigns).toContain("getUserApplicationsForJobs(");
+    expect(campaigns).toContain("getUserApplicationSummary(userId)");
+    expect(campaigns).toContain("getUserOperatingApplicationApprovals(");
+    expect(campaigns).toContain("getUserReviewDecisionPage(userId)");
+    expect(campaigns).not.toContain("getUserApplications(userId)");
+    expect(campaigns).not.toContain("listUserApplicationApprovals(userId, \"all\")");
+    expect(campaigns).not.toContain("getUserApplicationDecisions(userId)");
+    expect(autonomousService).toContain("getUserOperatingApplicationWindow(userId)");
+    expect(autonomousService).toContain("countUserAutonomousPreparationsSince");
+    expect(autonomousService).toContain("getUserApplicationDecisionsForJobs(");
+    expect(autonomousService).not.toContain("getUserApplications(userId)");
+    expect(autonomousService).not.toContain("getUserApplicationDecisions(userId)");
+  });
 });

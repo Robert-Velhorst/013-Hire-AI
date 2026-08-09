@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 169 files, 877 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 169 files, 883 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
@@ -38,6 +38,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Windows document scanning | Native `MpCmdRun.exe` smoke through `scanSensitiveUpload` | Passed with a clean `windows_defender` verdict and temporary-file cleanup |
 | Authenticated browser shell | Playwright desktop and 390 x 844 mobile smoke | Passed: dashboard-to-review navigation, one primary landmark, named brand/account controls, clean console, and no horizontal dashboard overflow |
 | Application ledger paging | `server/applicationPagination.test.ts`; `server/migrationJournal.test.ts` | Passed: deterministic same-timestamp cursor traversal, whole-ledger aggregate counts, exact ownership isolation, 100-row API ceiling, and schema/migration index alignment |
+| Bounded operating workload | `server/applicationCampaigns.test.ts`; `client/src/lib/dashboardPerformanceClaims.test.ts` | Passed: exact totals with 260 active applications, oldest-first 250-record working set, explicit truncation, exact current-job/daily policy checks, and exact totals with 105 pending approvals behind bounded queues |
 | Diff whitespace audit | `git diff --check` | Passed |
 
 ## Runtime and UI evidence

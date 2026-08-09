@@ -135,3 +135,11 @@
 - Replaced the platform-name scalar lookup with a joined projection and added migration `0039` for the `(user_id, created_at, id)` cursor index.
 - Added same-timestamp traversal, aggregate, cross-owner, and migration-alignment regressions; passed 169 test files and 877 tests, TypeScript, production build, dependency audit, and the development doctor.
 - A local disposable MySQL initialization did not reach its final TCP server within the fixed probe window; the existing health-gated container CI remains the authoritative clean 40-migration acceptance for this increment.
+
+## 2026-08-09 - Bounded operating workload pass
+
+- Removed complete joined application-history hydration from dashboard snapshots and autonomous cycles.
+- Added an oldest-first 250-record active window, exact current-job application and user-decision lookups, and an exact same-day autonomous preparation counter so duplicate prevention and daily limits remain correct.
+- Replaced full approval and decision histories with bounded operating queues plus exact aggregate totals; approved follow-up handoffs remain scoped to the loaded applications.
+- Added migration `0040` for the user/status/activity operating index and explicit truncation fields in dashboard and durable autonomous-run output.
+- Passed synthetic 260-application and 105-pending-approval workloads, exact ownership/current-job checks, TypeScript, and the full 169-file/883-test regression suite. Representative production-volume MySQL query plans remain deployment acceptance.

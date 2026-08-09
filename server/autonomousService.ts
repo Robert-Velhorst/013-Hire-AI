@@ -17,6 +17,7 @@ import {
   createJobMatch,
   acquireAutonomousRunLease,
   completeAutonomousRunLease,
+  countUserAutonomousPreparationsSince,
   getActiveJobs,
   getAutonomousUserEligibility,
   getAutonomousJobSourceEligibility,
@@ -24,8 +25,9 @@ import {
   getApplicationCampaign,
   getJobById,
   getUserEmployerResponsesForApplications,
-  getUserApplicationDecisions,
-  getUserApplications,
+  getUserApplicationDecisionsForJobs,
+  getUserApplicationsForJobs,
+  getUserOperatingApplicationWindow,
   getUserProfile,
   getUserSkills,
   getWorkExperiences,
@@ -54,6 +56,8 @@ import type { AutonomousJobSourceEligibility } from "./autonomousSourceEligibili
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 
 export interface AutonomousRunResult extends AutonomousPlan {
+  operatingApplicationsLoaded: number;
+  operatingWindowTruncated: boolean;
   queuedApplicationRecords: number;
   queuedReviewRecords: number;
   queuedManualRecords: number;
@@ -82,6 +86,8 @@ export const AUTONOMOUS_RUN_FAILURE =
 
 function persistableRunSummary(result: AutonomousRunResult) {
   return {
+    operatingApplicationsLoaded: result.operatingApplicationsLoaded,
+    operatingWindowTruncated: result.operatingWindowTruncated,
     queuedApplicationRecords: result.queuedApplicationRecords,
     queuedReviewRecords: result.queuedReviewRecords,
     queuedManualRecords: result.queuedManualRecords,
@@ -402,15 +408,37 @@ async function executeAutonomousRun(
   overrides: AutonomousPreferences = {},
   assertLeaseActive: () => void = () => {}
 ): Promise<AutonomousRunResult> {
-  const [jobList, profile, applications, activeResume, existingDecisions, skills, workExperiences] = await Promise.all([
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const [
+    jobList,
+    profile,
+    applicationWindow,
+    autonomousPreparationsToday,
+    activeResume,
+    skills,
+    workExperiences,
+  ] = await Promise.all([
     getActiveJobs(250, 0),
     getUserProfile(userId),
-    getUserApplications(userId),
+    getUserOperatingApplicationWindow(userId),
+    countUserAutonomousPreparationsSince(userId, startOfToday),
     getActiveResume(userId),
-    getUserApplicationDecisions(userId),
     getUserSkills(userId),
     getWorkExperiences(userId),
   ]);
+  const currentJobApplications = await getUserApplicationsForJobs(
+    userId,
+    jobList.map((job) => job.id)
+  );
+  const applications = Array.from(new Map(
+    [...applicationWindow.items, ...currentJobApplications]
+      .map((application) => [application.id, application] as const)
+  ).values());
+  const existingDecisions = await getUserApplicationDecisionsForJobs(
+    userId,
+    jobList.map((job) => job.id)
+  );
   const profileForMatching = resolveProfileCandidateEvidence(profile, skills, workExperiences);
   const resolvedPreferences = {
     ...parseAutonomousPreferences(profile?.preferences),
@@ -427,7 +455,8 @@ async function executeAutonomousRun(
     applications as any,
     resolvedPreferences,
     Boolean(activeResume),
-    userDecisionJobIds
+    userDecisionJobIds,
+    { autonomousPreparationsToday }
   );
   const executable = getExecutableDecisions(plan);
   const evidenceContext = await getAutonomousEvidenceContext(userId, {
@@ -873,6 +902,8 @@ async function executeAutonomousRun(
 
   return {
     ...plan,
+    operatingApplicationsLoaded: applicationWindow.items.length,
+    operatingWindowTruncated: applicationWindow.hasMore,
     queuedApplicationRecords,
     queuedReviewRecords,
     queuedManualRecords,

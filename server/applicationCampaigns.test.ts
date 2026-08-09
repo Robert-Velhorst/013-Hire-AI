@@ -69,6 +69,79 @@ describe("application campaign operating ledger", () => {
     expect(await getApplicationCampaign(userId)).toBeFalsy();
   });
 
+  it("keeps exact totals while bounding a large active operating history", async () => {
+    const userId = 99019;
+    for (let index = 0; index < 260; index += 1) {
+      await createApplication({
+        userId,
+        jobId: 20_000 + index,
+        status: "applied",
+        notes: "Historical confirmed application.",
+      });
+    }
+
+    const ledger = await getUserOperatingLedger(userId, { persistCampaign: false });
+
+    expect(ledger.applicationOverview).toMatchObject({
+      total: 260,
+      submitted: 260,
+      active: 260,
+      operatingWindow: {
+        loaded: 250,
+        limit: 250,
+        hasMore: true,
+      },
+    });
+    expect(ledger.applicationOverview.recent).toHaveLength(10);
+    expect(ledger.metrics.trackedApplications).toBe(260);
+    expect(ledger.nextActions).toContain(
+      "Processing is safely limited to the 250 oldest active applications in this cycle."
+    );
+  });
+
+  it("keeps exact approval and review totals beyond bounded operating queues", async () => {
+    const userId = 99020;
+    for (let index = 0; index < 105; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 30_000 + index,
+        status: "pending",
+      });
+      const applicationId = Number(application.insertId);
+      await createApplicationApproval({
+        userId,
+        applicationId,
+        entityType: "application",
+        entityId: applicationId,
+        approvalType: "application_submission",
+        status: "pending",
+        riskLevel: "high",
+        requestedBy: "system",
+        title: `Review application ${index + 1}`,
+      });
+    }
+    for (let jobId = 1; jobId <= 4; jobId += 1) {
+      await createApplicationDecision({
+        userId,
+        jobId,
+        decision: "review",
+        reviewRequired: 1,
+        decidedBy: "system",
+      });
+    }
+
+    const ledger = await getUserOperatingLedger(userId, { persistCampaign: false });
+
+    expect(ledger.metrics.pendingApprovals).toBe(105);
+    expect(ledger.metrics.reviewRequiredDecisions).toBe(4);
+    expect(ledger.queues.pendingApprovals).toHaveLength(5);
+    expect(ledger.queues.reviewDecisions).toHaveLength(4);
+    expect(ledger.nextActions).toEqual(expect.arrayContaining([
+      "Resolve 105 pending user approvals.",
+      "Review 4 saved application decisions.",
+    ]));
+  });
+
   it("syncs durable campaign state from current operating queues", async () => {
     const userId = 99001;
     const oldDate = new Date(Date.now() - 8 * 86400000);

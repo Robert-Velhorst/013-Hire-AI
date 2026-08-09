@@ -129,4 +129,18 @@ describe("Drizzle migration journal", () => {
       "ADD INDEX `applications_user_created_idx` (`user_id`, `created_at`, `id`)"
     );
   });
+
+  it("keeps the bounded operating-window index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0040_application_operating_window.sql"),
+      "utf8"
+    );
+    const indexName = "applications_user_status_activity_idx";
+
+    expect(schema).toContain(`index("${indexName}")`);
+    expect(migration).toContain(
+      `ADD INDEX \`${indexName}\` (\`user_id\`, \`status\`, \`last_activity\`, \`created_at\`, \`id\`)`
+    );
+  });
 });

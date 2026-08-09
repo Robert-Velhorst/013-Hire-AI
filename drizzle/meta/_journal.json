@@ -281,6 +281,13 @@
       "when": 1786496400000,
       "tag": "0039_application_ledger_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1786496460000,
+      "tag": "0040_application_operating_window",
+      "breakpoints": true
     }
   ]
 }

@@ -216,6 +216,13 @@ export const applications = mysqlTable("applications", {
 }, (table) => [
   uniqueIndex("applications_user_job_unique").on(table.userId, table.jobId),
   index("applications_user_created_idx").on(table.userId, table.createdAt, table.id),
+  index("applications_user_status_activity_idx").on(
+    table.userId,
+    table.status,
+    table.lastActivity,
+    table.createdAt,
+    table.id
+  ),
 ]);
 
 /**

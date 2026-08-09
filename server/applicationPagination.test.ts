@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  countUserAutonomousPreparationsSince,
   createApplication,
   getUserApplicationById,
   getUserApplicationPage,
   getUserApplicationSummary,
+  getUserApplicationsForJobs,
+  getUserOperatingApplicationWindow,
 } from "./db";
 
 describe("application ledger pagination", () => {
@@ -51,9 +54,11 @@ describe("application ledger pagination", () => {
 
     await expect(getUserApplicationSummary(userId)).resolves.toEqual({
       total: 4,
+      prepared: 1,
       active: 3,
       submitted: 3,
       responded: 2,
+      responseSignals: 2,
       interviewing: 1,
       interview: 1,
       offered: 0,
@@ -64,5 +69,43 @@ describe("application ledger pagination", () => {
       userId,
     });
     await expect(getUserApplicationById(otherUserId, createdIds[0])).resolves.toBeNull();
+  });
+
+  it("bounds the operating set while preserving exact job and daily-preparation checks", async () => {
+    vi.useFakeTimers();
+    const userId = 94103;
+    const otherUserId = 94104;
+    const baseTime = new Date("2026-08-09T00:00:00.000Z").getTime();
+    const createdIds: number[] = [];
+
+    for (let index = 0; index < 260; index += 1) {
+      vi.setSystemTime(new Date(baseTime + index * 1000));
+      const result = await createApplication({
+        userId,
+        jobId: 10_000 + index,
+        status: "applied",
+        notes: index < 3 ? "Autonomous queue: prepared for review." : "Historical application.",
+      });
+      createdIds.push(result.insertId);
+    }
+    await createApplication({
+      userId: otherUserId,
+      jobId: 10_000,
+      status: "applied",
+      notes: "Autonomous queue: belongs to another user.",
+    });
+
+    const window = await getUserOperatingApplicationWindow(userId, 25);
+    expect(window).toMatchObject({ hasMore: true, limit: 25 });
+    expect(window.items).toHaveLength(25);
+    expect(window.items.map(({ id }) => id)).toEqual(createdIds.slice(0, 25));
+    expect(window.items.every((application) => application.userId === userId)).toBe(true);
+
+    const exactJobs = await getUserApplicationsForJobs(userId, [10_259, 10_000, 10_259, -1]);
+    expect(exactJobs.map(({ jobId }) => jobId).sort((left, right) => left - right)).toEqual([10_000, 10_259]);
+    expect(exactJobs.every((application) => application.userId === userId)).toBe(true);
+    await expect(
+      countUserAutonomousPreparationsSince(userId, new Date(baseTime))
+    ).resolves.toBe(3);
   });
 });

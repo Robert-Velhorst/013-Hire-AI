@@ -225,6 +225,25 @@ describe("autonomous orchestrator", () => {
     );
   });
 
+  it("uses the exact preparation counter when the operating window is bounded", () => {
+    const plan = buildAutonomousPlan(
+      [baseJob],
+      profile,
+      [],
+      {
+        mode: "auto_apply",
+        requireHumanReview: false,
+        dailyApplicationLimit: 2,
+      },
+      true,
+      [],
+      { autonomousPreparationsToday: 2 }
+    );
+
+    expect(plan.summary.dailyRemaining).toBe(0);
+    expect(plan.decisions[0].action).toBe("skip");
+  });
+
   it("allows a pending preparation to be reconciled without treating it as submitted", () => {
     const pendingPreparation: Application = {
       id: 22,

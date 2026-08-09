@@ -87,6 +87,10 @@ export interface AutonomousPlan {
   policyWarnings: string[];
 }
 
+export interface AutonomousPlanningContext {
+  autonomousPreparationsToday?: number;
+}
+
 /**
  * Keep a stale listing out of every autonomous path, even when a provider has
  * not yet refreshed its `isActive` flag.
@@ -272,7 +276,8 @@ export function buildAutonomousPlan(
   applications: Application[] = [],
   preferences: AutonomousPreferences = {},
   hasActiveResumeArtifact?: boolean,
-  userDecisionJobIds: Iterable<number> = []
+  userDecisionJobIds: Iterable<number> = [],
+  planningContext: AutonomousPlanningContext = {}
 ): AutonomousPlan {
   const mode = preferences.mode || "review_first";
   const minMatchScore = Math.min(100, Math.max(0, Math.round(preferences.minMatchScore ?? 70)));
@@ -296,7 +301,8 @@ export function buildAutonomousPlan(
       .filter((application) => (application.status || "pending") !== "pending")
       .map((application) => application.jobId)
   );
-  const alreadyQueuedToday = applications.filter(hasAppliedToday).length;
+  const alreadyQueuedToday = planningContext.autonomousPreparationsToday ??
+    applications.filter(hasAppliedToday).length;
   const dailyRemaining = Math.max(0, dailyLimit - alreadyQueuedToday);
   const policyWarnings: string[] = [];
   const hasResumeEvidence = hasActiveResumeArtifact ?? Boolean(profile?.resumeUrl || profile?.resumeFileKey);

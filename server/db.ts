@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -1849,6 +1849,138 @@ export async function getUserApplicationPage(
   };
 }
 
+const operatingApplicationStatuses: ApplicationStatus[] = [
+  "pending",
+  "applied",
+  "viewed",
+  "interview",
+  "offer",
+  "accepted",
+];
+
+function applicationActivityTime(application: {
+  lastActivity?: Date | null;
+  appliedDate?: Date | null;
+  createdAt?: Date;
+}) {
+  return (application.lastActivity ?? application.appliedDate ?? application.createdAt ?? new Date(0)).getTime();
+}
+
+export async function getUserOperatingApplicationWindow(userId: number, requestedLimit = 250) {
+  const limit = Math.min(Math.max(Math.floor(requestedLimit), 1), 500);
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryApplications
+      .filter((application) =>
+        application.userId === userId &&
+        operatingApplicationStatuses.includes(application.status ?? "pending")
+      )
+      .sort((left, right) =>
+        applicationActivityTime(left) - applicationActivityTime(right) || left.id - right.id
+      );
+    return {
+      items: rows.slice(0, limit).map(projectMemoryApplication),
+      hasMore: rows.length > limit,
+      limit,
+    };
+  }
+
+  const activityAt = sql<Date>`COALESCE(${applications.lastActivity}, ${applications.appliedDate}, ${applications.createdAt})`;
+  const rows = await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.status, operatingApplicationStatuses)
+    ))
+    .orderBy(asc(activityAt), asc(applications.id))
+    .limit(limit + 1);
+
+  return {
+    items: rows.slice(0, limit),
+    hasMore: rows.length > limit,
+    limit,
+  };
+}
+
+export async function getUserApplicationsForJobs(userId: number, requestedJobIds: number[]) {
+  const jobIds = Array.from(new Set(requestedJobIds.filter((jobId) => Number.isInteger(jobId) && jobId > 0))).slice(0, 250);
+  if (jobIds.length === 0) return [];
+
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(jobIds);
+    return memoryApplications
+      .filter((application) => application.userId === userId && requested.has(application.jobId))
+      .map(projectMemoryApplication);
+  }
+
+  return await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.jobId, jobIds)
+    ));
+}
+
+export async function getUserApplicationsByIds(userId: number, requestedApplicationIds: number[]) {
+  const applicationIds = Array.from(new Set(
+    requestedApplicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  )).slice(0, 100);
+  if (applicationIds.length === 0) return [];
+
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(applicationIds);
+    return memoryApplications
+      .filter((application) => application.userId === userId && requested.has(application.id))
+      .map(projectMemoryApplication);
+  }
+  return await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+    .where(and(
+      eq(applications.userId, userId),
+      inArray(applications.id, applicationIds)
+    ));
+}
+
+export async function countUserAutonomousPreparationsSince(userId: number, since: Date) {
+  const isAutonomousPreparation = (application: { isAutoApplied?: number | null; notes?: string | null }) => {
+    const notes = application.notes?.toLowerCase() ?? "";
+    return application.isAutoApplied === 1 || notes.includes("autonomous") || notes.includes("manual apply queue");
+  };
+  const db = await getDb();
+  if (!db) {
+    return memoryApplications.filter((application) =>
+      application.userId === userId &&
+      application.createdAt >= since &&
+      isAutonomousPreparation(application)
+    ).length;
+  }
+
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(applications)
+    .where(and(
+      eq(applications.userId, userId),
+      gte(applications.createdAt, since),
+      or(
+        eq(applications.isAutoApplied, 1),
+        like(applications.notes, "%autonomous%"),
+        like(applications.notes, "%manual apply queue%")
+      )
+    ));
+  return Number(row?.count ?? 0);
+}
+
 export async function getUserApplicationSummary(userId: number) {
   const db = await getDb();
   if (!db) {
@@ -1856,9 +1988,11 @@ export async function getUserApplicationSummary(userId: number) {
     const submitted = rows.filter((application) => application.status !== "pending").length;
     return {
       total: rows.length,
+      prepared: rows.filter((application) => application.status === "pending").length,
       active: rows.filter((application) => ["pending", "applied", "viewed", "interview"].includes(application.status ?? "pending")).length,
       submitted,
       responded: rows.filter((application) => !["pending", "applied"].includes(application.status ?? "pending")).length,
+      responseSignals: rows.filter((application) => ["viewed", "interview", "offer", "accepted", "rejected"].includes(application.status ?? "pending")).length,
       interviewing: rows.filter((application) => ["interview", "offer", "accepted"].includes(application.status ?? "pending")).length,
       interview: rows.filter((application) => application.status === "interview").length,
       offered: rows.filter((application) => ["offer", "accepted"].includes(application.status ?? "pending")).length,
@@ -1869,9 +2003,11 @@ export async function getUserApplicationSummary(userId: number) {
   const [row] = await db
     .select({
       total: sql<number>`COUNT(*)`,
+      prepared: sql<number>`COALESCE(SUM(${applications.status} = 'pending'), 0)`,
       active: sql<number>`COALESCE(SUM(${applications.status} IN ('pending', 'applied', 'viewed', 'interview')), 0)`,
       submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
       responded: sql<number>`COALESCE(SUM(${applications.status} NOT IN ('pending', 'applied')), 0)`,
+      responseSignals: sql<number>`COALESCE(SUM(${applications.status} IN ('viewed', 'interview', 'offer', 'accepted', 'rejected')), 0)`,
       interviewing: sql<number>`COALESCE(SUM(${applications.status} IN ('interview', 'offer', 'accepted')), 0)`,
       interview: sql<number>`COALESCE(SUM(${applications.status} = 'interview'), 0)`,
       offered: sql<number>`COALESCE(SUM(${applications.status} IN ('offer', 'accepted')), 0)`,
@@ -1884,9 +2020,11 @@ export async function getUserApplicationSummary(userId: number) {
     Object.entries(row ?? {}).map(([key, value]) => [key, Number(value)])
   ) as {
     total: number;
+    prepared: number;
     active: number;
     submitted: number;
     responded: number;
+    responseSignals: number;
     interviewing: number;
     interview: number;
     offered: number;
@@ -2079,6 +2217,67 @@ export async function getUserApplicationDecisions(userId: number) {
     .leftJoin(jobs, eq(applicationDecisions.jobId, jobs.id))
     .where(eq(applicationDecisions.userId, userId))
     .orderBy(desc(applicationDecisions.updatedAt));
+}
+
+export async function getUserApplicationDecisionsForJobs(userId: number, requestedJobIds: number[]) {
+  const jobIds = Array.from(new Set(requestedJobIds.filter((jobId) => Number.isInteger(jobId) && jobId > 0))).slice(0, 250);
+  if (jobIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(jobIds);
+    return memoryApplicationDecisions
+      .filter((decision) => decision.userId === userId && requested.has(decision.jobId))
+      .map(projectMemoryApplicationDecision);
+  }
+  return await db
+    .select(userApplicationDecisionSelection)
+    .from(applicationDecisions)
+    .leftJoin(jobs, eq(applicationDecisions.jobId, jobs.id))
+    .where(and(
+      eq(applicationDecisions.userId, userId),
+      inArray(applicationDecisions.jobId, jobIds)
+    ));
+}
+
+export async function getUserReviewDecisionPage(userId: number, requestedLimit = 100) {
+  const limit = Math.min(Math.max(Math.floor(requestedLimit), 1), 100);
+  const isReviewDecision = (decision: { reviewRequired?: number; decision: ApplicationDecision["decision"] }) =>
+    (decision.reviewRequired ?? 1) === 1 || ["review", "manual_apply"].includes(decision.decision);
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryApplicationDecisions
+      .filter((decision) => decision.userId === userId && isReviewDecision(decision))
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+    return {
+      items: rows.slice(0, limit).map(projectMemoryApplicationDecision),
+      total: rows.length,
+      hasMore: rows.length > limit,
+      limit,
+    };
+  }
+  const reviewCondition = or(
+    eq(applicationDecisions.reviewRequired, 1),
+    inArray(applicationDecisions.decision, ["review", "manual_apply"])
+  );
+  const [rows, countRows] = await Promise.all([
+    db
+      .select(userApplicationDecisionSelection)
+      .from(applicationDecisions)
+      .leftJoin(jobs, eq(applicationDecisions.jobId, jobs.id))
+      .where(and(eq(applicationDecisions.userId, userId), reviewCondition))
+      .orderBy(desc(applicationDecisions.updatedAt))
+      .limit(limit + 1),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(applicationDecisions)
+      .where(and(eq(applicationDecisions.userId, userId), reviewCondition)),
+  ]);
+  return {
+    items: rows.slice(0, limit),
+    total: Number(countRows[0]?.count ?? 0),
+    hasMore: rows.length > limit,
+    limit,
+  };
 }
 
 export async function createApplicationMaterial(material: InsertApplicationMaterial) {
@@ -2768,7 +2967,7 @@ function parseApprovalPayload(payload?: string | null): Record<string, unknown> 
 
 interface OfferAttributionReviewData {
   approvals?: ApplicationApproval[];
-  applications?: Awaited<ReturnType<typeof getUserApplications>>;
+  applications?: Array<Awaited<ReturnType<typeof getUserApplications>>[number]>;
   employerResponses?: EmployerResponse[];
 }
 
@@ -3521,6 +3720,81 @@ export async function listUserApplicationApprovals(
     .from(applicationApprovals)
     .where(and(...conditions))
     .orderBy(desc(applicationApprovals.createdAt));
+}
+
+export async function getUserOperatingApplicationApprovals(
+  userId: number,
+  requestedApplicationIds: number[],
+  requestedPendingLimit = 100
+) {
+  const applicationIds = Array.from(new Set(
+    requestedApplicationIds.filter((applicationId) => Number.isInteger(applicationId) && applicationId > 0)
+  )).slice(0, 500);
+  const pendingLimit = Math.min(Math.max(Math.floor(requestedPendingLimit), 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(applicationIds);
+    const pending = memoryApplicationApprovals
+      .filter((approval) => approval.userId === userId && approval.status === "pending")
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+    const scopedApproved = memoryApplicationApprovals.filter((approval) =>
+      approval.userId === userId &&
+      approval.status === "approved" &&
+      approval.approvalType === "follow_up_send" &&
+      approval.applicationId != null &&
+      requested.has(approval.applicationId)
+    )
+      .sort((left, right) => (right.decidedAt?.getTime() ?? 0) - (left.decidedAt?.getTime() ?? 0))
+      .slice(0, 500);
+    return {
+      items: Array.from(new Map(
+        [...pending.slice(0, pendingLimit), ...scopedApproved]
+          .map((approval) => [approval.id, approval] as const)
+      ).values()) as ApplicationApproval[],
+      pendingTotal: pending.length,
+      pendingHasMore: pending.length > pendingLimit,
+      pendingLimit,
+    };
+  }
+
+  const pendingCondition = and(
+    eq(applicationApprovals.userId, userId),
+    eq(applicationApprovals.status, "pending")
+  );
+  const [pendingRows, pendingCountRows, scopedApproved] = await Promise.all([
+    db
+      .select()
+      .from(applicationApprovals)
+      .where(pendingCondition)
+      .orderBy(desc(applicationApprovals.createdAt))
+      .limit(pendingLimit + 1),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(applicationApprovals)
+      .where(pendingCondition),
+    applicationIds.length === 0
+      ? Promise.resolve([] as ApplicationApproval[])
+      : db
+          .select()
+          .from(applicationApprovals)
+          .where(and(
+            eq(applicationApprovals.userId, userId),
+            eq(applicationApprovals.status, "approved"),
+            eq(applicationApprovals.approvalType, "follow_up_send"),
+            inArray(applicationApprovals.applicationId, applicationIds)
+          ))
+          .orderBy(desc(applicationApprovals.decidedAt), desc(applicationApprovals.id))
+          .limit(500),
+  ]);
+  return {
+    items: Array.from(new Map(
+      [...pendingRows.slice(0, pendingLimit), ...scopedApproved]
+        .map((approval) => [approval.id, approval] as const)
+    ).values()),
+    pendingTotal: Number(pendingCountRows[0]?.count ?? 0),
+    pendingHasMore: pendingRows.length > pendingLimit,
+    pendingLimit,
+  };
 }
 
 export async function listUserApplicationApprovalsForApplication(

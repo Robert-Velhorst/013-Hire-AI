@@ -12,8 +12,16 @@ import {
   getEducationEntries,
   listUnreadInterviewNotifications,
   listPendingInboxResponseCandidates,
-  getUserApplicationDecisions,
+  countUserAutonomousPreparationsSince,
+  getUserApplicationPage,
+  getUserApplicationSummary,
   getUserApplications,
+  getUserApplicationsByIds,
+  getUserApplicationsForJobs,
+  getUserOperatingApplicationWindow,
+  getUserApplicationDecisionsForJobs,
+  getUserReviewDecisionPage,
+  getUserOperatingApplicationApprovals,
   getUserEmployerResponsesForApplications,
   getUserProfile,
   getUserOfferAttributionReviews,
@@ -23,7 +31,6 @@ import {
   listUserConnectorAccounts,
   listInterviewPreparationsForUser,
   listUserAdminReviewItems,
-  listUserApplicationApprovals,
   upsertApplicationCampaign,
 } from "./db";
 import { buildAutonomousPlan, parseAutonomousPreferences } from "./autonomousOrchestrator";
@@ -628,16 +635,20 @@ export interface OperatingLedgerOptions {
 }
 
 export async function getUserOperatingLedger(userId: number, options: OperatingLedgerOptions = {}) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const [
     profile,
     workExperiences,
     educationEntries,
     skills,
-    applications,
+    applicationWindow,
+    recentApplicationPage,
+    applicationSummary,
+    autonomousPreparationsToday,
     jobs,
-    allApprovals,
     adminReviews,
-    decisions,
+    reviewDecisionPage,
     successFees,
     connectorAccounts,
     activeResume,
@@ -648,20 +659,50 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     getWorkExperiences(userId),
     getEducationEntries(userId),
     getUserSkills(userId),
-    getUserApplications(userId),
+    getUserOperatingApplicationWindow(userId),
+    getUserApplicationPage(userId, { limit: 10 }),
+    getUserApplicationSummary(userId),
+    countUserAutonomousPreparationsSince(userId, startOfToday),
     getActiveJobs(250, 0),
-    listUserApplicationApprovals(userId, "all"),
     options.includeAdminReviews
       ? listUserAdminReviewItems(userId, ["open", "in_progress"], 100)
       : Promise.resolve([]),
-    getUserApplicationDecisions(userId),
+    getUserReviewDecisionPage(userId),
     getUserSuccessFees(userId),
     listUserConnectorAccounts(userId),
     getActiveResume(userId),
     listPendingInboxResponseCandidates(userId),
     getApplicationCampaign(userId),
   ]);
+  const [currentJobApplications, currentJobDecisions] = await Promise.all([
+    getUserApplicationsForJobs(userId, jobs.map((job) => job.id)),
+    getUserApplicationDecisionsForJobs(userId, jobs.map((job) => job.id)),
+  ]);
+  const initialApplications = Array.from(new Map(
+    [...applicationWindow.items, ...currentJobApplications]
+      .map((application) => [application.id, application] as const)
+  ).values()) as UserApplicationRecord[];
+  const approvalSet = await getUserOperatingApplicationApprovals(
+    userId,
+    initialApplications.map((application) => application.id)
+  );
+  const approvalApplicationIds = approvalSet.items.flatMap((approval) => {
+    const applicationId = approval.applicationId ??
+      (approval.entityType === "application" ? approval.entityId : null);
+    return applicationId ? [applicationId] : [];
+  });
+  const approvalApplications = await getUserApplicationsByIds(userId, approvalApplicationIds);
+  const applications = Array.from(new Map(
+    [...initialApplications, ...approvalApplications]
+      .map((application) => [application.id, application] as const)
+  ).values()) as UserApplicationRecord[];
+  const decisions = Array.from(new Map(
+    [...reviewDecisionPage.items, ...currentJobDecisions]
+      .map((decision) => [decision.id, decision] as const)
+  ).values());
+  const allApprovals = approvalSet.items;
   const approvals = allApprovals.filter((approval) => approval.status === "pending");
+  const pendingApprovalCount = approvalSet.pendingTotal;
   const campaignStatus = existingCampaign?.status ?? "active";
 
   const readiness = calculateProfileReadiness({
@@ -693,7 +734,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     Boolean(activeResume),
     decisions
       .filter((decision) => decision.decidedBy === "user")
-      .map((decision) => decision.jobId)
+      .map((decision) => decision.jobId),
+    { autonomousPreparationsToday }
   );
   const userAdminReviews = options.includeAdminReviews
     ? adminReviews.filter((item) =>
@@ -721,8 +763,6 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
         : null,
     };
   });
-  const submittedApplications = applications.filter((application) => application.status !== "pending");
-  const responseCount = applicationStatusCount(applications, ["viewed", "interview", "offer", "accepted", "rejected"]);
   const operatingEvidence = await loadOperatingApplicationEvidence(applications, userId);
   const employerResponses = Array.from(operatingEvidence.responsesByApplication.values()).flat();
   const [
@@ -787,15 +827,18 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     campaignStatus === "paused"
       ? "Resume the paused campaign before autonomous work can run."
       : "",
+    applicationWindow.hasMore
+      ? `Processing is safely limited to the ${applicationWindow.limit} oldest active applications in this cycle.`
+      : "",
     ...getLocationPolicyNextActions(plan),
     ...readiness.nextActions,
     ...getActionReadyFollowUpNextActions(plan, followUpReadiness),
-    approvals.length > 0 ? `Resolve ${approvals.length} pending user approval${approvals.length === 1 ? "" : "s"}.` : "",
+    pendingApprovalCount > 0 ? `Resolve ${pendingApprovalCount} pending user approval${pendingApprovalCount === 1 ? "" : "s"}.` : "",
     userAdminReviews.length > 0
       ? `${userAdminReviews.length} item${userAdminReviews.length === 1 ? " needs" : "s need"} admin operating review.`
       : "",
-    reviewDecisions.length > 0
-      ? `Review ${reviewDecisions.length} saved application decision${reviewDecisions.length === 1 ? "" : "s"}.`
+    reviewDecisionPage.total > 0
+      ? `Review ${reviewDecisionPage.total} saved application decision${reviewDecisionPage.total === 1 ? "" : "s"}.`
       : "",
     interviewSchedulingQueue.length > 0
       ? `Review ${interviewSchedulingQueue.length} interview scheduling item${interviewSchedulingQueue.length === 1 ? "" : "s"} before follow-up automation continues.`
@@ -838,7 +881,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     ...evidenceGates
       .filter((gate) => gate.severity === "high")
       .map((gate) => gate.label),
-    approvals.length > 0 ? "Pending user approvals" : "",
+    pendingApprovalCount > 0 ? "Pending user approvals" : "",
     userAdminReviews.length > 0 ? "Open admin review items" : "",
     successFeeCompliance.status === "needs_attention" ? "Success-fee compliance needs attention" : "",
   ]);
@@ -900,11 +943,16 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       evidenceGates,
     },
     applicationOverview: {
-      total: applications.length,
-      submitted: submittedApplications.length,
-      active: applicationStatusCount(applications, ["pending", "applied", "viewed", "interview"]),
-      interviewing: applicationStatusCount(applications, ["interview"]),
-      recent: applications.slice(0, 10).map((application) => ({
+      total: applicationSummary.total,
+      submitted: applicationSummary.submitted,
+      active: applicationSummary.active,
+      interviewing: applicationSummary.interview,
+      operatingWindow: {
+        loaded: applicationWindow.items.length,
+        limit: applicationWindow.limit,
+        hasMore: applicationWindow.hasMore,
+      },
+      recent: recentApplicationPage.items.map((application) => ({
         id: application.id,
         status: application.status,
         appliedDate: application.appliedDate,
@@ -921,31 +969,31 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       blockedCount: followUpReadiness.blockedCount,
     },
     metrics: {
-      trackedApplications: applications.length,
-      preparedApplications: applicationStatusCount(applications, ["pending"]),
-      submittedApplications: submittedApplications.length,
-      employerResponses: responseCount,
+      trackedApplications: applicationSummary.total,
+      preparedApplications: applicationSummary.prepared,
+      submittedApplications: applicationSummary.submitted,
+      employerResponses: applicationSummary.responseSignals,
       employerResponsesNeedingReply: employerResponseQueue.length,
-      interviews: applicationStatusCount(applications, ["interview"]),
+      interviews: applicationSummary.interview,
       unreadInterviewNotifications: interviewNotificationQueue.length,
       inboxResponseCandidates: inboxResponseCandidateQueue.length,
       interviewSchedulingNeeded: interviewSchedulingQueue.length,
       interviewPreparationNeeded: interviewPreparationQueue.length,
       interviewOutcomesNeeded: interviewOutcomeQueue.length,
-      offers: applicationStatusCount(applications, ["offer", "accepted"]),
+      offers: applicationSummary.offered,
       activeSuccessFees: successFeeCompliance.activeFees,
       pendingOfferAttributions: successFeeCompliance.pendingOfferAttributions,
       pendingSuccessFeeVerifications: successFeeCompliance.pendingVerification,
       overdueSuccessFeeVerifications: successFeeCompliance.overdueVerifications,
       dueSoonSuccessFeeVerifications: successFeeCompliance.dueSoonVerifications,
       successFeeMonthlyCents: successFeeCompliance.monthlyFeeCents,
-      pendingApprovals: approvals.length,
+      pendingApprovals: pendingApprovalCount,
       approvedFollowUpsReadyToSend: approvedFollowUpsReadyToSend.length,
       followUpDeliveryReconciliation: followUpDeliveryReconciliation.length,
       evidenceGates: evidenceGates.length,
       connectorReadiness: connectorReadinessQueue.length,
       openAdminReviews: userAdminReviews.length,
-      reviewRequiredDecisions: reviewDecisions.length,
+      reviewRequiredDecisions: reviewDecisionPage.total,
       followUpsDue: followUpDueQueue.length,
       policyWarnings: plan.summary.policyWarnings,
       dailyRemaining: plan.summary.dailyRemaining,
