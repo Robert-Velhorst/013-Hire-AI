@@ -5245,6 +5245,34 @@ export async function getUserJobMatches(userId: number, minScore = 70) {
     .orderBy(desc(jobMatches.updatedAt));
 }
 
+export async function getUserJobMatchesForJobs(userId: number, requestedJobIds: number[]) {
+  const jobIds = Array.from(new Set(
+    requestedJobIds.filter((jobId) => Number.isInteger(jobId) && jobId > 0)
+  ));
+  if (jobIds.length === 0) return [] as JobMatch[];
+
+  const db = await getDb();
+  if (!db) {
+    const requested = new Set(jobIds);
+    return memoryJobMatches.filter((match) =>
+      match.userId === userId && requested.has(match.jobId)
+    ) as JobMatch[];
+  }
+
+  const matches: JobMatch[] = [];
+  for (let offset = 0; offset < jobIds.length; offset += 500) {
+    const rows = await db
+      .select()
+      .from(jobMatches)
+      .where(and(
+        eq(jobMatches.userId, userId),
+        inArray(jobMatches.jobId, jobIds.slice(offset, offset + 500))
+      ));
+    matches.push(...rows);
+  }
+  return matches;
+}
+
 // Decision Makers
 export async function getDecisionMakerByCompany(company: string) {
   const db = await getDb();

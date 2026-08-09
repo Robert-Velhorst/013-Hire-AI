@@ -2705,11 +2705,13 @@ export const appRouter = router({
 
         return match;
       }),
-    getMatches: protectedProcedure
-      .input(z.object({ minScore: z.number().optional().default(70) }))
+    getMatchesForJobs: protectedProcedure
+      .input(z.object({
+        jobIds: z.array(z.number().int().positive()).max(250),
+      }))
       .query(async ({ ctx, input }) => {
-        const { getUserJobMatches } = await import("./db");
-        return await getUserJobMatches(ctx.user.id, input.minScore);
+        const { getUserJobMatchesForJobs } = await import("./db");
+        return await getUserJobMatchesForJobs(ctx.user.id, input.jobIds);
       }),
   }),
 

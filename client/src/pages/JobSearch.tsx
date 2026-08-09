@@ -199,13 +199,18 @@ export default function JobSearch() {
   );
   const refetchApplicationDecisions = () =>
     Promise.all(applicationDecisionQueries.map((query) => query.refetch()));
-  const {
-    data: jobMatches = [],
-    refetch: refetchJobMatches,
-  } = trpc.matching.getMatches.useQuery(
-    { minScore: 0 },
-    { enabled: Boolean(user) }
+  const jobMatchQueries = trpc.useQueries((queries) =>
+    visibleJobIdChunks.map((jobIds) => queries.matching.getMatchesForJobs(
+      { jobIds },
+      { enabled: Boolean(user) && jobIds.length > 0 }
+    ))
   );
+  const jobMatches = useMemo<any[]>(
+    () => jobMatchQueries.flatMap((query) => (query.data ?? []) as any[]),
+    [jobMatchQueries]
+  );
+  const refetchJobMatches = () =>
+    Promise.all(jobMatchQueries.map((query) => query.refetch()));
   const {
     data: operatingLedger,
     refetch: refetchOperatingLedger,

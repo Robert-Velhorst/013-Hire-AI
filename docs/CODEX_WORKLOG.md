@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Page-aligned job-match reads
+
+- Replaced Job Search's complete account match-ledger read with owner-scoped lookups for only the loaded catalog jobs.
+- Reused bounded 250-ID chunks as users load additional catalog pages, preserving refresh behavior after match recalculation.
+- Kept the complete match ledger internal for autonomous processing while removing it from the interactive API surface.
+
 ## 2026-08-09 - Cursor-paged public job catalog
 
 - Replaced Job Search's 250-record offset read with deterministic 50-record cursor pages ordered by posted time, creation time, and ID.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createJobMatch, getUserJobMatches } from "./db";
+import { createJobMatch, getUserJobMatches, getUserJobMatchesForJobs } from "./db";
 
 describe("job match persistence", () => {
   it("updates one current match record for each user and job", async () => {
@@ -63,5 +63,18 @@ describe("job match persistence", () => {
 
     expect(matches).toHaveLength(1);
     expect(matches[0]).toMatchObject({ jobId: 1, matchScore: 81 });
+  });
+
+  it("returns only requested matches owned by the current user", async () => {
+    const userId = 991004;
+    const otherUserId = 991005;
+    await createJobMatch({ userId, jobId: 1, matchScore: 83 });
+    await createJobMatch({ userId, jobId: 2, matchScore: 76 });
+    await createJobMatch({ otherUserId, jobId: 1, matchScore: 99 });
+
+    const matches = await getUserJobMatchesForJobs(userId, [1, 1, -1, 999_999]);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ userId, jobId: 1, matchScore: 83 });
   });
 });

@@ -213,7 +213,10 @@ describe("Matching Router", () => {
   it("gets user matches", async () => {
     const caller = appRouter.createCaller(createMockContext());
 
-    await expect(caller.matching.getMatches({ minScore: 70 })).resolves.toEqual(expect.any(Array));
+    await expect(caller.matching.getMatchesForJobs({ jobIds: [1] })).resolves.toEqual(expect.any(Array));
+    await expect(caller.matching.getMatchesForJobs({
+      jobIds: Array.from({ length: 251 }, (_, index) => index + 1),
+    })).rejects.toBeDefined();
     expect(caller.matching.calculateMatch).toBeDefined();
   });
 });
