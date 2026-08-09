@@ -30,6 +30,10 @@ describe("approved follow-up mailbox delivery", () => {
     expect(result).toMatchObject({ messageId: "gmail-message-7" });
     const request = fetcher.mock.calls[0];
     expect(request[0]).toContain("gmail.googleapis.com");
+    expect(request[1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
     const body = JSON.parse(String(request[1]?.body)) as { raw: string };
     expect(Buffer.from(body.raw, "base64url").toString("utf8")).toContain("To: recruiter@example.com");
     expect(Buffer.from(body.raw, "base64url").toString("utf8")).toContain("Content-Type: text/plain");
@@ -48,6 +52,10 @@ describe("approved follow-up mailbox delivery", () => {
     );
 
     expect(result).toMatchObject({ messageId: null, confirmation: expect.stringContaining("Outlook accepted") });
+    expect(fetcher.mock.calls[0][1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
     const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body)) as { message: { toRecipients: Array<{ emailAddress: { address: string } }> } };
     expect(body.message.toRecipients[0].emailAddress.address).toBe("recruiter@example.com");
   });
@@ -63,6 +71,22 @@ describe("approved follow-up mailbox delivery", () => {
       "Hello",
       fetcher
     )).rejects.toThrow("Gmail rejected");
+  });
+
+  it("rejects oversized Gmail acknowledgements without treating them as delivery evidence", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(sendFollowUpProviderMessage(
+      "gmail",
+      "access-token",
+      "recruiter@example.com",
+      "Follow-up",
+      "Hello",
+      fetcher
+    )).rejects.toThrow(/1048576-byte limit/i);
   });
 
   it("fails closed before touching a provider when durable delivery state is unavailable", async () => {

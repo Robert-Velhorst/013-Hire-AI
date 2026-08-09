@@ -22,6 +22,7 @@ import {
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
+import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export type FollowUpMailProvider = "gmail" | "outlook";
 
@@ -195,23 +196,23 @@ export async function sendFollowUpProviderMessage(
       "",
       message,
     ].join("\r\n"), "utf8").toString("base64url");
-    const response = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    const response = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", providerRequestInit({
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ raw }),
-    });
+    }));
     if (!response.ok) throw new Error(`Gmail rejected the follow-up delivery (${response.status}).`);
-    const payload = await response.json() as { id?: unknown };
+    const payload = await readProviderJson<{ id?: unknown }>(response);
     if (typeof payload.id !== "string" || !payload.id) {
       throw new Error("Gmail accepted the request without a deterministic message identifier.");
     }
     return { messageId: payload.id, confirmation: `Gmail accepted the approved follow-up with message ID ${payload.id}.` };
   }
 
-  const response = await fetcher("https://graph.microsoft.com/v1.0/me/sendMail", {
+  const response = await fetcher("https://graph.microsoft.com/v1.0/me/sendMail", providerRequestInit({
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -225,7 +226,7 @@ export async function sendFollowUpProviderMessage(
       },
       saveToSentItems: true,
     }),
-  });
+  }));
   if (!response.ok) throw new Error(`Outlook rejected the follow-up delivery (${response.status}).`);
   return { messageId: null, confirmation: "Outlook accepted the approved follow-up for delivery and saved it to Sent Items." };
 }
