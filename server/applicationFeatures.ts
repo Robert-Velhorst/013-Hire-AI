@@ -4446,6 +4446,55 @@ export async function getJobAlerts(userId: number) {
     .orderBy(desc(jobAlerts.createdAt));
 }
 
+export async function getJobAlertPage(
+  userId: number,
+  options: {
+    limit?: number;
+    cursor?: { createdAt: Date; id: number };
+  } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryJobAlerts
+      .filter((alert) => alert.userId === userId)
+      .filter((alert) => !options.cursor || (
+        alert.createdAt < options.cursor.createdAt ||
+        (alert.createdAt.getTime() === options.cursor.createdAt.getTime() && alert.id < options.cursor.id)
+      ))
+      .sort((left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id
+      )
+      .slice(0, limit + 1)
+      .map((alert) => ({ ...alert }));
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last ? { createdAt: last.createdAt, id: last.id } : null,
+    };
+  }
+
+  const cursorCondition = options.cursor ? or(
+    lt(jobAlerts.createdAt, options.cursor.createdAt),
+    and(eq(jobAlerts.createdAt, options.cursor.createdAt), lt(jobAlerts.id, options.cursor.id))
+  ) : undefined;
+  const rows = await db
+    .select()
+    .from(jobAlerts)
+    .where(and(eq(jobAlerts.userId, userId), cursorCondition))
+    .orderBy(desc(jobAlerts.createdAt), desc(jobAlerts.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: hasMore && last ? { createdAt: last.createdAt, id: last.id } : null,
+  };
+}
+
 export async function updateJobAlert(
   userId: number,
   alertId: number,

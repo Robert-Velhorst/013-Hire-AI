@@ -951,6 +951,7 @@ export const jobAlerts = mysqlTable("job_alerts", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("job_alerts_active_frequency_triggered_idx").on(table.isActive, table.frequency, table.lastTriggered),
+  index("job_alerts_user_created_idx").on(table.userId, table.createdAt, table.id),
 ]);
 
 export type JobPlatform = typeof jobPlatforms.$inferSelect;

@@ -115,7 +115,9 @@ describe("Job Alerts", () => {
   it("lists user alerts", async () => {
     const caller = appRouter.createCaller(createMockContext());
 
-    await expect(caller.alerts.list()).resolves.toEqual(expect.any(Array));
+    await expect(caller.alerts.listPage({ limit: 10 })).resolves.toMatchObject({
+      items: expect.any(Array),
+    });
   });
 });
 

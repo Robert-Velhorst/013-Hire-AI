@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Cursor-paged job alerts
+
+- Replaced the live Job Alerts full-history query with stable cursor pagination and incremental frontend loading.
+- Added an owner/created-time/ID database index for deterministic, index-backed alert pages.
+- Preserved complete alert reads only for explicit privacy export and internal alert processing.
+
 ## 2026-08-09 - Cursor-paged saved jobs
 
 - Replaced the live saved-jobs full-history read with stable cursor pagination and incremental frontend loading.

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -47,7 +47,21 @@ export default function JobAlerts() {
   const { locale, t } = useLocale();
 
   // Fetch alerts
-  const { data: alerts, isLoading, refetch } = trpc.alerts.list.useQuery();
+  const {
+    data: alertPages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = trpc.alerts.listPage.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const alerts = useMemo(
+    () => alertPages?.pages.flatMap((page) => page.items) ?? [],
+    [alertPages]
+  );
 
   // Mutations
   const createMutation = trpc.alerts.create.useMutation({
@@ -291,7 +305,7 @@ export default function JobAlerts() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
           </div>
-        ) : alerts && alerts.length > 0 ? (
+        ) : alerts.length > 0 ? (
           <div className="grid gap-4">
             {alerts.map((alert: any) => (
               <Card key={alert.id} className="bg-slate-900/50 border-slate-700/50">
@@ -373,6 +387,20 @@ export default function JobAlerts() {
                 </CardContent>
               </Card>
             ))}
+            {hasNextPage ? (
+              <div className="flex justify-center pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-700"
+                  disabled={isFetchingNextPage}
+                  onClick={() => fetchNextPage()}
+                >
+                  {isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Load more
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <Card className="bg-slate-900/50 border-slate-700/50">

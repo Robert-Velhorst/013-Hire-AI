@@ -45,7 +45,6 @@ import {
   generateEmployerReplyEmail,
   generateFollowUpEmail,
   createJobAlert,
-  getJobAlerts,
   updateJobAlert,
   toggleJobAlert,
   deleteJobAlert,
@@ -3921,9 +3920,17 @@ export const appRouter = router({
         });
       }),
 
-    list: protectedProcedure
-      .query(async ({ ctx }) => {
-        return await getJobAlerts(ctx.user.id);
+    listPage: protectedProcedure
+      .input(z.object({
+        limit: boundedPageSize.optional().default(50),
+        cursor: z.object({
+          createdAt: z.date(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getJobAlertPage } = await import("./applicationFeatures");
+        return await getJobAlertPage(ctx.user.id, input);
       }),
 
     update: protectedProcedure

@@ -17,6 +17,7 @@ vi.mock("./db", async (importOriginal) => ({
 import {
   createJobAlert,
   deleteJobAlert,
+  getJobAlertPage,
   getJobAlerts,
   processJobAlerts,
   toggleJobAlert,
@@ -192,5 +193,51 @@ describe("job alert processing", () => {
     expect(await getJobAlerts(userId)).toEqual([
       expect.objectContaining({ id, lastTriggered: expect.any(Date) }),
     ]);
+  });
+
+  it("pages equal-timestamp alert rules without leaking another owner", async () => {
+    mocks.getDb.mockResolvedValue(null);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T19:00:00.000Z"));
+    const userId = 91236;
+    const otherUserId = 91237;
+    const ownedIds: number[] = [];
+    let otherId: number | null = null;
+    try {
+      for (let index = 0; index < 4; index += 1) {
+        const created = await createJobAlert({
+          userId,
+          name: `Alert ${index}`,
+          keywords: `keyword-${index}`,
+          frequency: "daily",
+        });
+        ownedIds.push(created.id);
+      }
+      otherId = (await createJobAlert({
+        userId: otherUserId,
+        name: "Other owner alert",
+        keywords: "private",
+        frequency: "weekly",
+      })).id;
+
+      const first = await getJobAlertPage(userId, { limit: 2 });
+      expect(first.items).toHaveLength(2);
+      expect(first.nextCursor).toEqual({
+        createdAt: new Date("2026-08-09T19:00:00.000Z"),
+        id: first.items[1].id,
+      });
+      const second = await getJobAlertPage(userId, {
+        limit: 2,
+        cursor: first.nextCursor ?? undefined,
+      });
+      expect(second.items).toHaveLength(2);
+      expect(second.nextCursor).toBeNull();
+      expect(new Set([...first.items, ...second.items].map((alert) => alert.id)).size).toBe(4);
+      expect([...first.items, ...second.items].every((alert) => alert.userId === userId)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      for (const alertId of ownedIds) await deleteJobAlert(userId, alertId);
+      if (otherId !== null) await deleteJobAlert(otherUserId, otherId);
+    }
   });
 });

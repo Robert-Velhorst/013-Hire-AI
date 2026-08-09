@@ -189,4 +189,14 @@ describe("dashboard performance claims", () => {
     expect(router).toContain("getSavedJobPage: protectedProcedure");
     expect(router).not.toContain("getSavedJobs: protectedProcedure");
   });
+
+  it("uses cursor pagination for the job-alert surface", () => {
+    const page = readFileSync(resolve(process.cwd(), "client/src/pages/JobAlerts.tsx"), "utf8");
+    const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
+
+    expect(page).toContain("alerts.listPage.useInfiniteQuery");
+    expect(page).toContain("getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined");
+    expect(router).toContain("listPage: protectedProcedure");
+    expect(router).not.toContain("return await getJobAlerts(ctx.user.id)");
+  });
 });

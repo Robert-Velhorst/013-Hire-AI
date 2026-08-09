@@ -400,6 +400,13 @@
       "when": 1786497420000,
       "tag": "0056_saved_job_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1786497480000,
+      "tag": "0057_job_alert_cursor_index",
+      "breakpoints": true
     }
   ]
 }

@@ -225,6 +225,21 @@ describe("Drizzle migration journal", () => {
     );
   });
 
+  it("keeps the job-alert cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0057_job_alert_cursor_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("job_alerts_user_created_idx").on(table.userId, table.createdAt, table.id)'
+    );
+    expect(migration).toContain(
+      "CREATE INDEX `job_alerts_user_created_idx` ON `job_alerts` (`user_id`, `created_at`, `id`)"
+    );
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(
