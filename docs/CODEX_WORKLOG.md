@@ -71,4 +71,5 @@
 - Reused the exact pending application and application-scoped approval lookups when save/ignore decisions close prepared work.
 - Replaced employer-reply preparation's full response-history load with one ownership-scoped exact/latest-replyable lookup.
 - Replaced interview-preparation context's repeated ownership and full schedule reads with one owned, future-status, ordered, limited query.
-- Passed TypeScript and the full regression suite: 159 files and 817 tests.
+- Batched autonomous follow-up responses, interview schedules, and existing follow-ups into three ownership-scoped reads per run instead of up to three reads per candidate.
+- Passed TypeScript and the full regression suite: 159 files and 818 tests.

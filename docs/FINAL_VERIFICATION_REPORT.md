@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 817 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 818 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -65,6 +65,8 @@ Standalone application lifecycle actions and admin evidence no longer load a use
 Employer reply preparation now resolves an explicit response or the newest replyable response through a bounded application-and-user lookup. Regression coverage confirms that a newer response owned by another user cannot become the fallback or an explicit reply target.
 
 Interview preparation context now uses one joined ownership-scoped query to select only the earliest future scheduled or rescheduled interview. The no-interview and missing-application outcomes remain distinct, and the development-memory path retains the same ordering semantics.
+
+Autonomous follow-up processing now loads employer responses, interview schedules, and prior follow-ups once for all candidate applications, then groups that owned evidence locally. Existing safety-block and duplicate-cooldown regressions continue to cover the same decisions without per-candidate query fan-out.
 
 Admin evidence also retrieves its application by owned primary key and its decision through the unique user/job key instead of loading both histories. Independent evidence groups are assembled concurrently, with source-contract and cross-owner regressions.
 

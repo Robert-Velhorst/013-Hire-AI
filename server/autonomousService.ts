@@ -22,8 +22,8 @@ import {
   getAutonomousJobSourceEligibility,
   getApplicationLedgerArtifacts,
   getApplicationCampaign,
-  getEmployerResponses,
   getJobById,
+  getUserEmployerResponsesForApplications,
   getUserApplicationDecisions,
   getUserApplications,
   getUserProfile,
@@ -35,8 +35,8 @@ import {
 import {
   createFollowUp,
   generateFollowUpEmail,
-  getFollowUps,
-  getInterviewSchedules,
+  getUserFollowUpsForApplications,
+  getUserInterviewSchedulesForApplications,
 } from "./applicationFeatures";
 import { getUserOperatingLedger } from "./applicationCampaigns";
 import { getInterviewSchedulingRequirement } from "./interviewScheduling";
@@ -353,18 +353,27 @@ async function recordAutonomousApplicationLedgerArtifacts({
   });
 }
 
+function groupApplicationEvidence<T extends { applicationId: number }>(items: T[]) {
+  const grouped = new Map<number, T[]>();
+  for (const item of items) {
+    const applicationItems = grouped.get(item.applicationId);
+    if (applicationItems) applicationItems.push(item);
+    else grouped.set(item.applicationId, [item]);
+  }
+  return grouped;
+}
+
 async function getAutonomousFollowUpSafetyBlock(
-  userId: number,
-  followUp: { applicationId: number; status: string }
+  followUp: { applicationId: number; status: string },
+  responses: Awaited<ReturnType<typeof getUserEmployerResponsesForApplications>>,
+  schedules: Awaited<ReturnType<typeof getUserInterviewSchedulesForApplications>>
 ): Promise<string | null> {
-  const responses = await getEmployerResponses(followUp.applicationId, userId);
   const latestResponse = responses[0];
   if (latestResponse && ["employer_question", "other"].includes(latestResponse.responseType)) {
     return "Employer response needs a reply before routine follow-up automation continues.";
   }
 
   if (followUp.status === "interview") {
-    const schedules = await getInterviewSchedules(followUp.applicationId, userId);
     const completedInterviewNeedsOutcome = schedules.some((schedule) =>
       schedule.status === "completed" &&
       !responses.some((response) => response.interviewId === schedule.id)
@@ -781,10 +790,27 @@ async function executeAutonomousRun(
   let skippedDuplicateFollowUps = 0;
   let skippedSafetyBlockedFollowUps = 0;
   if (resolvedPreferences.createFollowUps) {
+    const followUpApplicationIds = executable.followUps.map((followUp) => followUp.applicationId);
+    const interviewApplicationIds = executable.followUps
+      .filter((followUp) => followUp.status === "interview")
+      .map((followUp) => followUp.applicationId);
+    const [followUpResponses, interviewSchedules, existingFollowUps] = await Promise.all([
+      getUserEmployerResponsesForApplications(userId, followUpApplicationIds),
+      getUserInterviewSchedulesForApplications(userId, interviewApplicationIds),
+      getUserFollowUpsForApplications(userId, followUpApplicationIds),
+    ]);
+    const responsesByApplication = groupApplicationEvidence(followUpResponses);
+    const schedulesByApplication = groupApplicationEvidence(interviewSchedules);
+    const followUpsByApplication = groupApplicationEvidence(existingFollowUps);
+
     for (const followUp of executable.followUps) {
       assertLeaseActive();
       try {
-        const safetyBlock = await getAutonomousFollowUpSafetyBlock(userId, followUp);
+        const safetyBlock = await getAutonomousFollowUpSafetyBlock(
+          followUp,
+          responsesByApplication.get(followUp.applicationId) ?? [],
+          schedulesByApplication.get(followUp.applicationId) ?? []
+        );
         if (safetyBlock) {
           skippedSafetyBlockedFollowUps += 1;
           await createAuditEvent({
@@ -806,9 +832,9 @@ async function executeAutonomousRun(
           continue;
         }
 
-        const existingFollowUps = await getFollowUps(followUp.applicationId, userId);
+        const applicationFollowUps = followUpsByApplication.get(followUp.applicationId) ?? [];
         const cooldownStartedAt = Date.now() - 5 * 86400000;
-        const hasBlockingFollowUp = existingFollowUps.some((existing) =>
+        const hasBlockingFollowUp = applicationFollowUps.some((existing) =>
           !existing.sentDate ||
           Boolean(existing.sentDate && new Date(existing.sentDate).getTime() >= cooldownStartedAt) ||
           existing.responseReceived === 1

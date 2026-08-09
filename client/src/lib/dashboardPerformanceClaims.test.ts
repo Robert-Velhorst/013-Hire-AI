@@ -119,4 +119,18 @@ describe("dashboard performance claims", () => {
     expect(interviewContext).toContain(".limit(1)");
     expect(interviewContext).not.toContain("getInterviewSchedules(");
   });
+
+  it("batch-loads autonomous follow-up evidence once per run", () => {
+    const autonomousService = readFileSync(
+      resolve(process.cwd(), "server", "autonomousService.ts"),
+      "utf8"
+    );
+
+    expect(autonomousService).toContain("getUserEmployerResponsesForApplications");
+    expect(autonomousService).toContain("getUserInterviewSchedulesForApplications");
+    expect(autonomousService).toContain("getUserFollowUpsForApplications");
+    expect(autonomousService).not.toMatch(/\bgetEmployerResponses\(/);
+    expect(autonomousService).not.toMatch(/\bgetInterviewSchedules\(/);
+    expect(autonomousService).not.toMatch(/\bgetFollowUps\(/);
+  });
 });

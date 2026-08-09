@@ -35,6 +35,7 @@ Audit date: 2026-08-08
 | Save/ignore decisions reloaded all applications and all pending approvals to close one prepared review item. | The close branch now reuses the exact pending user/job lookup and loads approvals only for that owned application before cancelling its submission gate. |
 | Employer reply preparation loaded every response for an application to select one target. | Reply preparation now retrieves either the explicit owned response or the newest owned replyable response with one bounded query; cross-user targets are rejected. |
 | Interview preparation verified ownership and then loaded every schedule to select one future interview. | The successful path now joins the owned application to future scheduled/rescheduled interviews, orders by start time, and returns one row. Error semantics remain explicit. |
+| Autonomous follow-up safety loaded responses, schedules, and follow-up history separately for every candidate. | One run now batch-loads each ownership-scoped evidence type once, groups rows by application, and reuses them across safety and cooldown decisions. |
 
 ## Material unresolved risks
 
