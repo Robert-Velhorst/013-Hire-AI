@@ -441,7 +441,7 @@ export async function getRecentJobs(options: {
     if (experienceCondition) conditions.push(experienceCondition);
   }
 
-  const jobList = await db
+  const jobListQuery = db
     .select({
       id: jobs.id,
       title: jobs.title,
@@ -460,10 +460,12 @@ export async function getRecentJobs(options: {
     .limit(limit)
     .offset(offset);
 
-  const countResult = await db
+  const countQuery = db
     .select({ count: sql<number>`count(*)` })
     .from(jobs)
     .where(and(...conditions));
+
+  const [jobList, countResult] = await Promise.all([jobListQuery, countQuery]);
 
   const total = countResult[0]?.count || 0;
 
@@ -509,22 +511,22 @@ export async function getDiscoveryStats(): Promise<{
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const totalResult = await db
+  const totalQuery = db
     .select({ count: sql<number>`count(*)` })
     .from(jobs)
     .where(and(eq(jobs.isActive, 1), canonicalJobCondition));
 
-  const todayResult = await db
+  const todayQuery = db
     .select({ count: sql<number>`count(*)` })
     .from(jobs)
     .where(and(eq(jobs.isActive, 1), gt(jobs.createdAt, todayStart), canonicalJobCondition));
 
-  const weekResult = await db
+  const weekQuery = db
     .select({ count: sql<number>`count(*)` })
     .from(jobs)
     .where(and(eq(jobs.isActive, 1), gt(jobs.createdAt, weekStart), canonicalJobCondition));
 
-  const platformsResult = await db
+  const platformsQuery = db
     .select({
       platformId: jobs.platformId,
       count: sql<number>`count(*)`,
@@ -535,7 +537,7 @@ export async function getDiscoveryStats(): Promise<{
     .orderBy(desc(sql`count(*)`))
     .limit(10);
 
-  const locationsResult = await db
+  const locationsQuery = db
     .select({
       location: jobs.location,
       count: sql<number>`count(*)`,
@@ -545,6 +547,14 @@ export async function getDiscoveryStats(): Promise<{
     .groupBy(jobs.location)
     .orderBy(desc(sql`count(*)`))
     .limit(10);
+
+  const [totalResult, todayResult, weekResult, platformsResult, locationsResult] = await Promise.all([
+    totalQuery,
+    todayQuery,
+    weekQuery,
+    platformsQuery,
+    locationsQuery,
+  ]);
 
   return {
     totalJobs: totalResult[0]?.count || 0,
@@ -604,13 +614,28 @@ export async function searchJobs(query: string, options?: {
 
   const limit = options?.limit || 20;
   const offset = options?.offset || 0;
-  const searchTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const searchTerms = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 20);
 
   if (searchTerms.length === 0) {
     return getRecentJobs({ limit, offset });
   }
 
-  const allJobs = await db
+  const matchConditions = searchTerms.flatMap((term) => {
+    const pattern = `%${term}%`;
+    return [like(jobs.title, pattern), like(jobs.company, pattern), like(jobs.description, pattern)];
+  });
+  const relevanceParts = searchTerms.flatMap((term) => {
+    const pattern = `%${term}%`;
+    return [
+      sql<number>`CASE WHEN ${jobs.title} LIKE ${pattern} THEN 10 ELSE 0 END`,
+      sql<number>`CASE WHEN ${jobs.company} LIKE ${pattern} THEN 5 ELSE 0 END`,
+      sql<number>`CASE WHEN ${jobs.description} LIKE ${pattern} THEN 1 ELSE 0 END`,
+    ];
+  });
+  const relevanceScore = sql<number>`(${sql.join(relevanceParts, sql.raw(" + "))})`;
+  const conditions = and(eq(jobs.isActive, 1), canonicalJobCondition, or(...matchConditions));
+
+  const jobListQuery = db
     .select({
       id: jobs.id,
       title: jobs.title,
@@ -621,47 +646,26 @@ export async function searchJobs(query: string, options?: {
       jobType: jobs.jobType,
       platformId: jobs.platformId,
       postedDate: jobs.postedDate,
-      description: jobs.description,
+      matchScore: relevanceScore,
     })
     .from(jobs)
-    .where(and(eq(jobs.isActive, 1), canonicalJobCondition))
-    .orderBy(desc(jobs.postedDate));
+    .where(conditions)
+    .orderBy(desc(relevanceScore), desc(jobs.postedDate), desc(jobs.id))
+    .limit(limit)
+    .offset(offset);
+  const countQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(jobs)
+    .where(conditions);
 
-  const scoredJobs = allJobs
-    .map((job) => {
-      const titleLower = job.title.toLowerCase();
-      const companyLower = job.company.toLowerCase();
-      const descLower = (job.description || "").toLowerCase();
-
-      let score = 0;
-      for (const term of searchTerms) {
-        if (titleLower.includes(term)) score += 10;
-        if (companyLower.includes(term)) score += 5;
-        if (descLower.includes(term)) score += 1;
-      }
-
-      return { ...job, score };
-    })
-    .filter((job) => job.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  const total = scoredJobs.length;
-  const paginatedJobs = scoredJobs.slice(offset, offset + limit);
+  const [jobList, countResult] = await Promise.all([jobListQuery, countQuery]);
 
   return {
-    jobs: paginatedJobs.map((j) => ({
-      id: j.id,
-      title: j.title,
-      company: j.company,
-      location: j.location,
-      salaryMin: j.salaryMin,
-      salaryMax: j.salaryMax,
-      jobType: j.jobType,
-      platformId: j.platformId,
-      postedDate: j.postedDate,
-      matchScore: j.score,
+    jobs: jobList.map((job) => ({
+      ...job,
+      matchScore: Number(job.matchScore),
     })),
-    total,
+    total: Number(countResult[0]?.count || 0),
   };
 }
 
