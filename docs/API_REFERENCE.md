@@ -727,6 +727,25 @@ Get D&I-focused job platforms.
 
 ---
 
+## Connector Router
+
+### `connectors.disconnect`
+
+Disables Hire.AI access before attempting provider cleanup. Google, Dropbox, and GitHub use their app-scoped revocation APIs. Microsoft and LinkedIn return explicit account-side removal guidance because neither provider documents a suitable app-scoped revocation endpoint for this connection. Local encrypted credentials are removed after revocation or when manual cleanup is required. A failed provider request leaves the account disabled and retains the encrypted grant only so revocation can be retried.
+
+**Type:** Mutation (Protected)
+
+**Input:**
+```typescript
+{
+  provider: "gmail" | "google_drive" | "dropbox" | "outlook" | "linkedin" | "github" | "portfolio";
+}
+```
+
+**Output cleanup status:** `not_needed | revoked | manual_required | failed`
+
+---
+
 ## Social Router
 
 ### `social.connect`

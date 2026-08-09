@@ -1507,7 +1507,6 @@ export async function requestUserConnectorConnection(input: {
 }
 
 export async function disconnectUserConnectorAccount(userId: number, provider: InsertUserConnectorAccount["provider"]) {
-  await deleteConnectorAuthorization(userId, provider);
   return await upsertUserConnectorAccount({
     userId,
     provider,

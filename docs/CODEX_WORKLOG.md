@@ -107,3 +107,11 @@
 - Removed the production server's Vite runtime dependency and verified the pruned image becomes healthy, reports production database readiness, and serves the frontend.
 - Added a Linux CI container job that repeats fail-closed startup, full migration, image health, readiness, and frontend checks.
 - Passed TypeScript and the full regression suite: 164 files and 852 tests.
+
+## 2026-08-09 - Connector revocation and cleanup pass
+
+- Repaired connector disconnect ordering so Hire.AI access is disabled before provider cleanup and encrypted grants are not destroyed before revocation can be attempted.
+- Added bounded app-scoped revocation for Google, Dropbox, and GitHub without logging provider bodies or token values.
+- Made Google revocation disable and clean both Gmail and Drive records because the provider invalidates the shared project grant.
+- Kept Microsoft and LinkedIn truthful and narrow: local credentials are removed and account-side removal guidance is returned instead of invoking broad sign-in-session revocation.
+- Retained encrypted grants after provider failure solely for retry, with high-risk audit status and user-visible warning.

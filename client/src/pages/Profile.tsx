@@ -208,8 +208,14 @@ export default function Profile() {
     onError: (error) => toast.error(error.message || "Unable to record connector request"),
   });
   const disconnectConnector = trpc.connectors.disconnect.useMutation({
-    onSuccess: async () => {
-      toast.success("Connector access disabled");
+    onSuccess: async (result) => {
+      if (result.providerRevocation.status === "failed") {
+        toast.warning(result.providerRevocation.detail);
+      } else if (result.providerRevocation.status === "manual_required") {
+        toast.info(result.providerRevocation.detail);
+      } else {
+        toast.success(result.providerRevocation.detail);
+      }
       await evidenceReadinessQuery.refetch();
     },
     onError: (error) => toast.error(error.message || "Unable to disable connector access"),

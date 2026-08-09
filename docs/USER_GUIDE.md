@@ -209,12 +209,15 @@ Use this information to:
 
 ### Sensitive Document Retention And Deletion
 
+- Disconnecting Google, Dropbox, or GitHub disables Hire.AI access first and then calls the provider's scoped revocation API. Google revocation invalidates both Gmail and Drive grants for the same Hire.AI project, so both connections are disabled together.
+- Microsoft and LinkedIn require account-side removal because they do not expose a suitable app-scoped revocation endpoint for these delegated connections. Hire.AI deletes its local encrypted credential and shows the required manual cleanup message.
+- If an available provider revocation endpoint fails, the connector stays disabled and the encrypted grant is retained only for a later cleanup retry. The failure is recorded as high-risk audit evidence and no token value is exposed.
 - Resume versions, offer letters, and verification documents are stored as private object references, never as public asset URLs. Downloads are requested through the authenticated backend and use a fresh storage-provider URL.
 - Uploads are limited to 10 MiB, checked against allowed MIME types and file signatures before storage, and require a configured malware scanner in production. A scanner failure rejects the upload.
 - Deleting a resume version first removes its private storage object. Its ledger record is removed only after that cleanup succeeds; a failed deletion leaves the record intact so the user can retry.
 - Offer and quarterly-verification documents are compliance evidence. They remain retained while the associated success-fee obligation, verification review, payment recovery, dispute, or legal review is open. They require an operator-controlled retention decision once those obligations are closed.
 - Settings can open one idempotent account-deletion review at a time. The request can be cancelled while open and remains visible as a status; submitting it does not immediately erase data.
-- An admin resolution records the retention decision and audit trail only. Provider revocation, private-object deletion, database erasure, and any legally required retained evidence remain separate execution work.
+- An admin resolution records the retention decision and audit trail only. Account-level connector cleanup is implemented, but bulk provider revocation, private-object deletion, database erasure, and any legally required retained evidence remain separate erasure-execution work.
 
 ---
 

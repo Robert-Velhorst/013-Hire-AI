@@ -482,8 +482,12 @@ export const appRouter = router({
     disconnect: protectedProcedure
       .input(z.object({ provider: connectorProvider }))
       .mutation(async ({ ctx, input }) => {
-        const { disconnectUserConnectorAccount, createAuditEvent } = await import("./db");
-        const account = await disconnectUserConnectorAccount(ctx.user.id, input.provider);
+        const { createAuditEvent } = await import("./db");
+        const { disconnectConnectorAccess } = await import("./connectorDisconnect");
+        const { account, providerRevocation } = await disconnectConnectorAccess(
+          ctx.user.id,
+          input.provider
+        );
 
         await createAuditEvent({
           userId: ctx.user.id,
@@ -495,13 +499,15 @@ export const appRouter = router({
           afterState: JSON.stringify({
             provider: input.provider,
             status: "disabled",
+            providerRevocation: providerRevocation.status,
           }),
-          riskLevel: "low",
+          riskLevel: providerRevocation.status === "failed" ? "high" : "low",
         });
 
         return {
           success: true,
           account,
+          providerRevocation,
         };
       }),
   }),

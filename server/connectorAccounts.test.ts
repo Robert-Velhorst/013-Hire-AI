@@ -185,6 +185,10 @@ describe("connector account tRPC procedures", () => {
     });
     expect(disconnectResult.success).toBe(true);
     expect(disconnectResult.account.status).toBe("disabled");
+    expect(disconnectResult.providerRevocation).toEqual({
+      status: "not_needed",
+      detail: "No stored OAuth grant was present.",
+    });
   });
 
   it("allows the explicit follow-up send scope but rejects scopes outside Hire.AI's inventory", async () => {
