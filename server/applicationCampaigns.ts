@@ -48,6 +48,7 @@ import { buildAutonomousEvidenceGates } from "@shared/autonomousEvidenceGates";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import {
   getUpcomingInterviewPreparationPage,
+  getEmployerResponseReplyPage,
   getInterviewOutcomePage,
   getInterviewSchedulingPage,
   getUserFollowUpsForApplications,
@@ -853,6 +854,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     offerAttributionReviews,
     interviewNotificationQueue,
     interviewSchedulingPage,
+    employerResponseReplyPage,
     interviewPreparationQueue,
     interviewOutcomePage,
     successFeeOperatingSet,
@@ -871,6 +873,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     }),
     getInterviewNotificationQueue(userId),
     getInterviewSchedulingPage(userId, 5),
+    getEmployerResponseReplyPage(userId, 5),
     getInterviewPreparationQueue(userId),
     getInterviewOutcomePage(userId, 5),
     getUserSuccessFeeOperatingItems(userId),
@@ -878,7 +881,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
   const followUpSuppressionState = followUpReadiness.suppressionState;
   const interviewSchedulingQueue = followUpReadiness.interviewSchedulingQueue;
   const interviewOutcomeQueue = followUpReadiness.interviewOutcomeQueue;
-  const employerResponseQueue = followUpReadiness.employerResponseQueue;
+  const employerResponseQueue = employerResponseReplyPage.items;
   const successFeeCompliance = getSuccessFeeComplianceSummaryFromAggregates(
     successFeeSummary,
     offerAttributionReviews.length
@@ -947,8 +950,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     interviewOutcomePage.total > 0
       ? `Record outcomes for ${interviewOutcomePage.total} completed interview${interviewOutcomePage.total === 1 ? "" : "s"} before routine follow-ups continue.`
       : "",
-    employerResponseQueue.length > 0
-      ? `Reply to ${employerResponseQueue.length} employer question${employerResponseQueue.length === 1 ? "" : "s"} before routine follow-ups continue.`
+    employerResponseReplyPage.total > 0
+      ? `Reply to ${employerResponseReplyPage.total} employer question${employerResponseReplyPage.total === 1 ? "" : "s"} before routine follow-ups continue.`
       : "",
     approvedFollowUpsReadyToSend.length > 0
       ? `Record send handoff for ${approvedFollowUpsReadyToSend.length} approved follow-up draft${approvedFollowUpsReadyToSend.length === 1 ? "" : "s"}.`
@@ -1079,6 +1082,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: interviewSchedulingPage.limit,
       hasMore: interviewSchedulingPage.hasMore,
     },
+    employerResponseReplyScope: {
+      loaded: employerResponseReplyPage.items.length,
+      limit: employerResponseReplyPage.limit,
+      hasMore: employerResponseReplyPage.hasMore,
+    },
     interviewOutcomeScope: {
       loaded: interviewOutcomePage.items.length,
       limit: interviewOutcomePage.limit,
@@ -1100,7 +1108,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       preparedApplications: applicationSummary.prepared,
       submittedApplications: applicationSummary.submitted,
       employerResponses: applicationSummary.responseSignals,
-      employerResponsesNeedingReply: employerResponseQueue.length,
+      employerResponsesNeedingReply: employerResponseReplyPage.total,
       interviews: applicationSummary.interview,
       unreadInterviewNotifications: interviewNotificationQueue.total,
       inboxResponseCandidates: inboxResponseCandidatePage.total,

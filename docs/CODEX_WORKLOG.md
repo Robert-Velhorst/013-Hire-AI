@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded employer-reply queue
+
+- Replaced operating-window reply counts with an exact owner-scoped latest-response query and a five-record command-center page.
+- Added a durable indexed employer-response link on follow-up drafts, including migration backfill from existing approval payloads.
+- Preserved pending/approved draft suppression while exposing explicit queue truncation metadata and exact totals.
+
 ## 2026-08-09 - Exact bounded interview-scheduling queue
 
 - Replaced operating-window scheduling counts with an exact owner-scoped account query preserving new-invite, cancelled-schedule, completed-round, and missing-schedule rules.

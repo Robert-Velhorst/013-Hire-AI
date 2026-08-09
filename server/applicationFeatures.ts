@@ -32,7 +32,7 @@ import {
   updateApplicationStatus,
   upsertInterviewPreparation,
 } from "./db";
-import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
+import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type EmployerResponse, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
 import { isJobListingCurrent } from "../shared/jobListingFreshness";
 import { generateInterviewPreparation as generateAiInterviewPreparation } from "./aiMatching";
@@ -1948,6 +1948,151 @@ export async function getInterviewSchedulingPage(userId: number, requestedLimit 
   return { items: rows, total, limit, hasMore: total > rows.length };
 }
 
+export async function getEmployerResponseReplyPage(userId: number, requestedLimit = 5) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    type StatusApplication = Awaited<ReturnType<typeof getUserApplicationStatusPage>>["items"][number];
+    const activeApplications: StatusApplication[] = [];
+    for (const status of ["applied", "viewed", "interview"] as const) {
+      let afterId = 0;
+      while (true) {
+        const page = await getUserApplicationStatusPage(userId, status, afterId, 500);
+        activeApplications.push(...page.items);
+        if (!page.hasMore || page.nextAfterId === null) break;
+        afterId = page.nextAfterId;
+      }
+    }
+    const responses = await getUserEmployerResponsesForApplications(
+      userId,
+      activeApplications.map((application) => application.id)
+    );
+    const latestResponseByApplication = new Map<number, EmployerResponse>();
+    for (const response of responses) {
+      const current = latestResponseByApplication.get(response.applicationId);
+      if (!current || response.receivedAt > current.receivedAt ||
+          (response.receivedAt.getTime() === current.receivedAt.getTime() && response.id > current.id)) {
+        latestResponseByApplication.set(response.applicationId, response);
+      }
+    }
+    const candidates = [] as Array<{
+      application: StatusApplication;
+      response: EmployerResponse;
+    }>;
+    for (const application of activeApplications) {
+      const response = latestResponseByApplication.get(application.id);
+      if (!response || !["employer_question", "other"].includes(response.responseType)) continue;
+      const linkedDraftIds = new Set(memoryFollowUps.filter((followUp) =>
+        followUp.applicationId === application.id &&
+        followUp.sourceResponseId === response.id &&
+        !followUp.sentDate
+      ).map((followUp) => followUp.id));
+      if (linkedDraftIds.size > 0) {
+        const approvals = await listUserApplicationApprovalsForApplication(userId, application.id);
+        if (approvals.some((approval) =>
+          approval.entityType === "follow_up" &&
+          linkedDraftIds.has(approval.entityId) &&
+          approval.approvalType === "follow_up_send" &&
+          ["pending", "approved"].includes(approval.status)
+        )) continue;
+      }
+      candidates.push({ application, response });
+    }
+    candidates.sort((left, right) =>
+      right.response.receivedAt.getTime() - left.response.receivedAt.getTime() ||
+      right.response.id - left.response.id
+    );
+    return {
+      items: candidates.slice(0, limit).map(({ application, response }) => ({
+        applicationId: application.id,
+        jobId: application.jobId,
+        responseId: response.id,
+        responseType: response.responseType,
+        source: response.source,
+        summary: response.summary,
+        receivedAt: response.receivedAt,
+        status: application.status,
+        job: application.job ? {
+          id: application.job.id,
+          title: application.job.title,
+          company: application.job.company,
+          location: application.job.location,
+        } : null,
+      })),
+      total: candidates.length,
+      limit,
+      hasMore: candidates.length > limit,
+    };
+  }
+
+  const condition = and(
+    eq(applications.userId, userId),
+    inArray(applications.status, ["applied", "viewed", "interview"]),
+    inArray(employerResponses.responseType, ["employer_question", "other"]),
+    sql`NOT EXISTS (
+      SELECT 1 FROM employer_responses later_response
+      WHERE later_response.application_id = ${employerResponses.applicationId}
+        AND later_response.user_id = ${employerResponses.userId}
+        AND (
+          later_response.received_at > ${employerResponses.receivedAt} OR
+          (later_response.received_at = ${employerResponses.receivedAt} AND later_response.id > ${employerResponses.id})
+        )
+    )`,
+    sql`NOT EXISTS (
+      SELECT 1 FROM follow_ups active_draft
+      INNER JOIN application_approvals active_approval
+        ON active_approval.entity_type = 'follow_up'
+        AND active_approval.entity_id = active_draft.id
+        AND active_approval.user_id = ${userId}
+        AND active_approval.approval_type = 'follow_up_send'
+        AND active_approval.status IN ('pending', 'approved')
+      WHERE active_draft.application_id = ${applications.id}
+        AND active_draft.source_response_id = ${employerResponses.id}
+        AND active_draft.sent_date IS NULL
+    )`
+  );
+  const selection = {
+    applicationId: applications.id,
+    jobId: applications.jobId,
+    responseId: employerResponses.id,
+    responseType: employerResponses.responseType,
+    source: employerResponses.source,
+    summary: employerResponses.summary,
+    receivedAt: employerResponses.receivedAt,
+    status: applications.status,
+    job: {
+      id: jobs.id,
+      title: jobs.title,
+      company: jobs.company,
+      location: jobs.location,
+    },
+  };
+  const baseQuery = () => db
+    .select(selection)
+    .from(employerResponses)
+    .innerJoin(applications, and(
+      eq(employerResponses.applicationId, applications.id),
+      eq(employerResponses.userId, applications.userId)
+    ))
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .where(condition);
+  const [items, countRows] = await Promise.all([
+    baseQuery()
+      .orderBy(desc(employerResponses.receivedAt), desc(employerResponses.id))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(employerResponses)
+      .innerJoin(applications, and(
+        eq(employerResponses.applicationId, applications.id),
+        eq(employerResponses.userId, applications.userId)
+      ))
+      .where(condition),
+  ]);
+  const total = Number(countRows[0]?.count ?? 0);
+  return { items, total, limit, hasMore: total > items.length };
+}
+
 async function getMemoryUpcomingInterviewContexts(
   userId: number,
   now: Date,
@@ -2733,6 +2878,7 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
     const record = {
       id: nextMemoryFollowUpId(),
       applicationId: input.applicationId,
+      sourceResponseId: metadata.sourceResponseId,
       message,
       sentDate: null,
       deliveryConfirmation: null,
@@ -2787,6 +2933,7 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
   return await db.transaction(async (tx) => {
     const result = await tx.insert(followUps).values({
       applicationId: input.applicationId,
+      sourceResponseId: metadata.sourceResponseId,
       message,
       sentDate: null,
       responseReceived: 0,

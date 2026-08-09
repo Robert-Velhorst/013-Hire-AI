@@ -14,7 +14,7 @@ import {
   getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
-import { createFollowUp, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
+import { createFollowUp, getEmployerResponseReplyPage, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
 import {
   createAdminReviewItem,
   createApplication,
@@ -923,6 +923,52 @@ describe("application campaign operating ledger", () => {
     expect(ledger.interviewSchedulingScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
   });
 
+  it("reports an exact bounded employer-reply queue without leaking another user", async () => {
+    const userId = 99019;
+    const otherUserId = 99020;
+
+    for (let index = 0; index < 6; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 600 + index,
+        status: "viewed",
+        notes: `Employer question ${index + 1} needs a reply.`,
+      });
+      await recordEmployerResponse({
+        applicationId: Number(application.insertId),
+        responseType: "employer_question",
+        source: "email",
+        sourceReference: `gmail-campaign-question-${userId}-${index}`,
+        summary: `Recruiter question ${index + 1}.`,
+        receivedAt: new Date(Date.now() + index),
+      }, userId);
+    }
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 700,
+      status: "viewed",
+      notes: "This employer question belongs to another user.",
+    });
+    const foreignApplicationId = Number(foreignApplication.insertId);
+    await recordEmployerResponse({
+      applicationId: foreignApplicationId,
+      responseType: "employer_question",
+      source: "email",
+      sourceReference: `gmail-campaign-question-${otherUserId}`,
+      summary: "Foreign recruiter question.",
+    }, otherUserId);
+
+    const page = await getEmployerResponseReplyPage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.every((item) => item.applicationId !== foreignApplicationId)).toBe(true);
+    expect(ledger.metrics.employerResponsesNeedingReply).toBe(6);
+    expect(ledger.queues.employerResponsesNeedingReply).toHaveLength(5);
+    expect(ledger.employerResponseReplyScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
+  });
+
   it("reports an exact bounded interview-outcome queue without leaking another user", async () => {
     const userId = 99015;
     const otherUserId = 99016;
@@ -1078,7 +1124,7 @@ describe("application campaign operating ledger", () => {
       receivedAt: new Date(),
     }, userId);
 
-    await createFollowUp({
+    const reply = await createFollowUp({
       applicationId,
       message: "Hi, thanks for reaching out. [Add exact availability here.]",
       purpose: "employer_reply",
@@ -1086,7 +1132,9 @@ describe("application campaign operating ledger", () => {
     }, userId);
 
     const ledger = await getUserOperatingLedger(userId);
+    const followUps = await getFollowUps(applicationId, userId);
 
+    expect(followUps.find((followUp) => followUp.id === reply.id)?.sourceResponseId).toBe(response.responseId);
     expect(ledger.metrics.employerResponsesNeedingReply).toBe(0);
     expect(ledger.queues.employerResponsesNeedingReply).toHaveLength(0);
     expect(ledger.metrics.pendingApprovals).toBe(1);

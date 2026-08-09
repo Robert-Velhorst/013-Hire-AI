@@ -685,6 +685,7 @@ export const interviewPreparation = mysqlTable("interview_preparation", {
 export const followUps = mysqlTable("follow_ups", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  sourceResponseId: int("source_response_id").references(() => employerResponses.id, { onDelete: "set null" }),
   message: text("message"),
   sentDate: timestamp("sent_date"),
   deliveryConfirmation: text("delivery_confirmation"),
@@ -701,6 +702,7 @@ export const followUps = mysqlTable("follow_ups", {
   uniqueIndex("follow_ups_delivery_attempt_key_unique").on(table.deliveryAttemptKey),
   index("follow_ups_delivery_state_idx").on(table.deliveryState),
   index("follow_ups_application_created_idx").on(table.applicationId, table.createdAt),
+  index("follow_ups_source_response_sent_idx").on(table.sourceResponseId, table.sentDate),
 ]);
 
 /**
