@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useLocale } from "@/contexts/LocaleContext";
+import { localeLabels, SUPPORTED_LOCALES, type SupportedLocale } from "@shared/localization";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +35,7 @@ export default function Settings() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const { locale, setLocale, t } = useLocale();
   
   // Settings state
   const [autoApply, setAutoApply] = useState(false);
@@ -64,6 +67,14 @@ export default function Settings() {
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => toast.success("Settings saved"),
     onError: (error) => toast.error(error.message || "Failed to save settings"),
+  });
+  const updateLocale = trpc.auth.updateLocale.useMutation({
+    onSuccess: ({ locale: savedLocale }) => {
+      setLocale(savedLocale);
+      utils.auth.me.setData(undefined, (current) => current ? { ...current, locale: savedLocale } : current);
+      toast.success(t("languageSaved"));
+    },
+    onError: (error) => toast.error(error.message || t("languageSaveFailed")),
   });
 
   useEffect(() => {
@@ -244,6 +255,36 @@ export default function Settings() {
         </div>
 
         <div className="space-y-6">
+          <Card className="bg-slate-900/50 border-slate-800/50">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Globe className="h-5 w-5 text-cyan-400" />
+                {t("language")}
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                {t("languageDescription")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={locale}
+                onValueChange={(value) => updateLocale.mutate({ locale: value as SupportedLocale })}
+                disabled={updateLocale.isPending}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" aria-label={t("language")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {SUPPORTED_LOCALES.map((supportedLocale) => (
+                    <SelectItem key={supportedLocale} value={supportedLocale} className="text-white">
+                      {localeLabels[supportedLocale]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
           {/* Application Preparation Settings */}
           <Card className="bg-slate-900/50 border-slate-800/50">
             <CardHeader>

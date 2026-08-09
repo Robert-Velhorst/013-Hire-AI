@@ -143,4 +143,15 @@ describe("Drizzle migration journal", () => {
       `ADD INDEX \`${indexName}\` (\`user_id\`, \`status\`, \`last_activity\`, \`created_at\`, \`id\`)`
     );
   });
+
+  it("keeps the account locale migration aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0041_user_locale.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('locale: varchar("locale", { length: 10 }).default("en").notNull()');
+    expect(migration).toContain("ADD COLUMN `locale` varchar(10) NOT NULL DEFAULT 'en'");
+  });
 });

@@ -25,7 +25,7 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 169 files, 883 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 172 files, 889 tests; database-gated privacy test skipped in the ordinary run and passed separately on clean MySQL 8.4 |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |

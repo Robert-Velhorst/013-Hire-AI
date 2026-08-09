@@ -264,6 +264,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       existing.email = user.email ?? existing.email ?? null;
       existing.loginMethod = user.loginMethod ?? existing.loginMethod ?? null;
       existing.role = user.role ?? existing.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
+      existing.locale = user.locale ?? existing.locale ?? "en";
       existing.stripeCustomerId = user.stripeCustomerId ?? existing.stripeCustomerId ?? null;
       existing.accountStatus = user.accountStatus ?? existing.accountStatus ?? "active";
       existing.tosAcceptedAt = user.tosAcceptedAt ?? existing.tosAcceptedAt ?? null;
@@ -279,6 +280,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       email: user.email ?? null,
       loginMethod: user.loginMethod ?? null,
       role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
+      locale: user.locale ?? "en",
       stripeCustomerId: user.stripeCustomerId ?? null,
       accountStatus: user.accountStatus ?? "active",
       tosAcceptedAt: user.tosAcceptedAt ?? null,
@@ -319,6 +321,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = "admin";
       updateSet.role = "admin";
     }
+    if (user.locale !== undefined) {
+      values.locale = user.locale;
+      updateSet.locale = user.locale;
+    }
     if (user.stripeCustomerId !== undefined) {
       values.stripeCustomerId = user.stripeCustomerId;
       updateSet.stripeCustomerId = user.stripeCustomerId;
@@ -358,6 +364,18 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateUserLocale(userId: number, locale: string) {
+  const db = await getDb();
+  if (!db) {
+    const user = memoryUsers.find((item) => item.id === userId);
+    if (!user) throw new Error("User not found");
+    user.locale = locale;
+    user.updatedAt = new Date();
+    return;
+  }
+  await db.update(users).set({ locale }).where(eq(users.id, userId));
 }
 
 // Job Platforms

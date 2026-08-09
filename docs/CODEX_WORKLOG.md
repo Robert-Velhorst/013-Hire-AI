@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-08-09 - Account-backed localization foundation
+
+- Added migration `0041` and a validated English/Dutch locale contract, preserving the preference across OAuth user upserts and both MySQL and standalone memory runtimes.
+- Added an authenticated, user-scoped locale mutation with before/after audit evidence; focused testing exposed and fixed memory-mode before-state aliasing.
+- Wired the account language through the React provider, HTML `lang`, shared navigation/auth shell, and Settings while documenting remaining untranslated workflow copy honestly.
+- Restored the root `CURRENT_STATUS.md` referenced by the README and corrected the user-guide link.
+
 ## 2026-08-08 - Giant goal prompt implementation pass
 
 - Audited the 116-phase prompt against current `main` at `e00ca3a`.

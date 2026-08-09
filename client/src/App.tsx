@@ -4,6 +4,7 @@ import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { LocaleProvider, useLocale } from "./contexts/LocaleContext";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -21,11 +22,12 @@ const ReviewQueue = lazy(() => import("./pages/ReviewQueue"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoadingFallback() {
+  const { t } = useLocale();
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
       <div className="flex items-center gap-3 text-sm" role="status" aria-live="polite">
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
-        Loading Hire.AI...
+        {t("loading")}
       </div>
     </div>
   );
@@ -67,10 +69,12 @@ function App() {
         defaultTheme="dark"
         // switchable
       >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <LocaleProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </LocaleProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

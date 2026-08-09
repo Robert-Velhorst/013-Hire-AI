@@ -51,6 +51,7 @@ import {
   deleteJobAlert,
 } from "./applicationFeatures";
 import { MAX_FOLLOW_UP_MESSAGE_CHARS } from "./messageSanitization";
+import { SUPPORTED_LOCALES } from "@shared/localization";
 
 const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
@@ -276,6 +277,25 @@ export const appRouter = router({
       await db.update(users).set({ tosAcceptedAt: new Date() }).where(eq(users.id, ctx.user.id));
       return { success: true };
     }),
+    updateLocale: protectedProcedure
+      .input(z.object({ locale: z.enum(SUPPORTED_LOCALES) }))
+      .mutation(async ({ ctx, input }) => {
+        const { createAuditEvent, updateUserLocale } = await import("./db");
+        const previousLocale = ctx.user.locale;
+        await updateUserLocale(ctx.user.id, input.locale);
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "account_locale_updated",
+          actor: "user",
+          source: "auth.updateLocale",
+          beforeState: JSON.stringify({ locale: previousLocale }),
+          afterState: JSON.stringify({ locale: input.locale }),
+          riskLevel: "low",
+        });
+        return { locale: input.locale };
+      }),
   }),
   privacy: router({
     getDeletionRequest: protectedProcedure.query(async ({ ctx }) => {

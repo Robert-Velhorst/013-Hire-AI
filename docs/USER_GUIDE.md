@@ -1,6 +1,6 @@
 # Hire.AI V2 - User Guide
 
-> Scope note: this guide describes the available product flows, not authority to submit applications or act on external services. Hire.AI prepares reviewable work and keeps external actions behind explicit user confirmation and connected-provider authorization. See `CURRENT_STATUS.md` for current limitations.
+> Scope note: this guide describes the available product flows, not authority to submit applications or act on external services. Hire.AI prepares reviewable work and keeps external actions behind explicit user confirmation and connected-provider authorization. See [`CURRENT_STATUS.md`](../CURRENT_STATUS.md) for current limitations.
 
 ## Table of Contents
 

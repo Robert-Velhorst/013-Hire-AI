@@ -17,6 +17,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  locale: varchar("locale", { length: 10 }).default("en").notNull(),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   accountStatus: mysqlEnum("account_status", ["active", "suspended", "pending"]).default("active").notNull(),
   tosAcceptedAt: timestamp("tos_accepted_at"),

@@ -20,6 +20,8 @@ The current baseline also includes a versioned privacy metadata export, a user-o
 
 Windows-native startup now performs a production audit and health check, server binding defaults to loopback, a reserved ngrok tunnel can be health-verified, and an optional local/private HAI A2A connector exposes aggregate read-only status. These controls are implemented contracts, not evidence that a specific Windows host, ngrok domain, or HAI deployment has passed live acceptance.
 
+English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account controls. Remaining workflow-page copy is still English and requires translation plus native-speaker and accessibility review.
+
 However, several public-facing claims and status documents previously described features as complete even when the implementation was still partial, simulated, untested, or framework-level only.
 
 ## Important limitations
@@ -54,14 +56,18 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Restricted every scraper control and status endpoint to administrators and added regular-user denial coverage.
 - Added application ownership regressions for cross-user status mutation and preserved user scoping for notes, interviews, and follow-ups.
 - Replaced public landing-page claims with review-first, evidence-backed product language.
-- Added a migration for core ownership foreign keys, payment uniqueness, and the Stripe webhook event ledger.
+- Added migrations for ownership constraints, payment uniqueness, the Stripe webhook ledger, bounded operating workloads, and account locale persistence.
 - Added duplicate-resistant Stripe webhook claims, retry handling, payment audit events, and a success-fee state machine.
 - Enforced sensitive-upload size, MIME, and signature validation; production uploads now require a configured malware scanner and retain only private storage references.
+- Added an audited, user-scoped English/Dutch language preference and localized shared navigation/account controls.
 
 ## Still required before production
 
-1. Apply the new database migration in each environment and verify existing records satisfy the foreign-key constraints.
+1. Apply the complete migration history in each environment and verify existing records satisfy the constraints.
 2. Configure a malware-scanner endpoint before accepting production document uploads.
 3. Add real scraper tests and verified platform coverage.
 4. Keep human review before any application submission or external handoff.
 5. Obtain legal and privacy review before accepting real users.
+6. Translate remaining product workflows and complete native-speaker/accessibility acceptance.
+
+See [`docs/GOAL_COMPLETION_MATRIX.md`](./docs/GOAL_COMPLETION_MATRIX.md) for requirement-by-requirement evidence and [`docs/OPERATOR_RUNBOOK.md`](./docs/OPERATOR_RUNBOOK.md) for deployment controls.
