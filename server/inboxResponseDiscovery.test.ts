@@ -80,6 +80,14 @@ describe("inbox response discovery", () => {
       confidence: "medium",
     })]);
     expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0][1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
+    expect(fetcher.mock.calls[1][1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
     expect(mocks.upsertUserConnectorAccount).toHaveBeenCalledWith(expect.objectContaining({
       provider: "gmail",
       status: "connected",
@@ -134,6 +142,44 @@ describe("inbox response discovery", () => {
       source: "email",
       sourceReferences: ["gmail:gmail-recorded", "gmail:gmail-new"],
     });
+  });
+
+  it("reads Gmail message details in ordered batches of at most five", async () => {
+    const releases: Array<() => void> = [];
+    let requestCount = 0;
+    let detailCalls = 0;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return new Response(JSON.stringify({
+          messages: Array.from({ length: 6 }, (_, index) => ({ id: `gmail-${index + 1}` })),
+        }), { status: 200 });
+      }
+      detailCalls += 1;
+      if (detailCalls <= 5) {
+        await new Promise<void>((resolve) => releases.push(resolve));
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    const discovery = discoverInboxResponseCandidates(700, "gmail", options(fetcher));
+    await vi.waitFor(() => expect(detailCalls).toBe(5));
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    releases.splice(0).forEach((release) => release());
+
+    await expect(discovery).resolves.toEqual([]);
+    expect(detailCalls).toBe(6);
+  });
+
+  it("rejects oversized Gmail list metadata before verifying the connector", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher)))
+      .rejects.toThrow("Outbound response exceeded");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalled();
   });
 
   it("rejects stale inbox consent before reading any external message", async () => {

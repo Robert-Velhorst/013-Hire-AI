@@ -14,6 +14,11 @@ import {
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
+import {
+  outboundRequestSignal,
+  OUTBOUND_TIMEOUT_MS,
+  readBoundedResponseJson,
+} from "./_core/outboundRequest";
 
 export type InboxProvider = "gmail" | "outlook";
 export type InboxResponseType = "rejection" | "interview_invite" | "offer" | "employer_question" | "other";
@@ -33,6 +38,9 @@ export type InboxResponseCandidate = {
 };
 
 const MAX_MESSAGES = 50;
+const GMAIL_DETAIL_CONCURRENCY = 5;
+const MAX_INBOX_LIST_BYTES = 1024 * 1024;
+const MAX_INBOX_MESSAGE_BYTES = 256 * 1024;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const INBOX_RESPONSE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -257,6 +265,14 @@ function gmailHeaders(payload: Record<string, unknown>) {
   };
 }
 
+function inboxRequest(init: RequestInit = {}): RequestInit {
+  return {
+    ...init,
+    redirect: "error",
+    signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+  };
+}
+
 export async function discoverInboxResponseCandidates(
   userId: number,
   provider: InboxProvider,
@@ -271,39 +287,50 @@ export async function discoverInboxResponseCandidates(
     const list = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages?" + new URLSearchParams({
       maxResults: String(MAX_MESSAGES),
       q: "newer_than:30d",
-    }), { headers: { Authorization: `Bearer ${accessToken}` } });
+    }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }));
     if (!list.ok) await throwInboxApiError(userId, account, "gmail", list.status, dependencies);
-    const payload = await list.json() as { messages?: Array<{ id?: unknown }> };
+    const payload = await readBoundedResponseJson<{ messages?: Array<{ id?: unknown }> }>(
+      list,
+      MAX_INBOX_LIST_BYTES
+    );
     await markInboxAccessVerified(userId, account, now, dependencies);
-    const messages = Array.isArray(payload.messages) ? payload.messages.slice(0, MAX_MESSAGES) : [];
+    const messages = (Array.isArray(payload.messages) ? payload.messages : [])
+      .flatMap((message) => typeof message.id === "string" && message.id ? [message.id] : [])
+      .slice(0, MAX_MESSAGES);
     const candidates: InboxResponseCandidate[] = [];
-    for (const message of messages) {
-      if (typeof message.id !== "string" || !message.id) continue;
-      const detail = await fetcher(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(message.id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!detail.ok) {
-        if (detail.status === 401 || detail.status === 403) {
-          await throwInboxApiError(userId, account, "gmail", detail.status, dependencies);
+    for (let offset = 0; offset < messages.length; offset += GMAIL_DETAIL_CONCURRENCY) {
+      const batch = messages.slice(offset, offset + GMAIL_DETAIL_CONCURRENCY);
+      const batchCandidates = await Promise.all(batch.map(async (messageId): Promise<InboxResponseCandidate | null> => {
+        const detail = await fetcher(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, inboxRequest({
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }));
+        if (!detail.ok) {
+          if (detail.status === 401 || detail.status === 403) {
+            await throwInboxApiError(userId, account, "gmail", detail.status, dependencies);
+          }
+          return null;
         }
-        continue;
-      }
-      const metadata = await detail.json() as Record<string, unknown>;
-      const headers = gmailHeaders(metadata);
-      const preview = typeof metadata.snippet === "string" ? metadata.snippet.slice(0, 600) : "";
-      const match = findApplicationMatch(`${headers.sender || ""} ${headers.subject} ${preview}`, applications);
-      const received = headers.receivedAt ? new Date(headers.receivedAt) : now;
-      if (!match || Number.isNaN(received.getTime()) || !isWithinInboxResponseLookback(received, now)) continue;
-      candidates.push({
-        provider,
-        messageId: message.id,
-        ...match,
-        sender: headers.sender,
-        subject: headers.subject.slice(0, 500),
-        preview,
-        receivedAt: received.toISOString(),
-        suggestedResponseType: classifyResponse(`${headers.subject} ${preview}`),
-      });
+        const metadata = await readBoundedResponseJson<Record<string, unknown>>(
+          detail,
+          MAX_INBOX_MESSAGE_BYTES
+        );
+        const headers = gmailHeaders(metadata);
+        const preview = typeof metadata.snippet === "string" ? metadata.snippet.slice(0, 600) : "";
+        const match = findApplicationMatch(`${headers.sender || ""} ${headers.subject} ${preview}`, applications);
+        const received = headers.receivedAt ? new Date(headers.receivedAt) : now;
+        if (!match || Number.isNaN(received.getTime()) || !isWithinInboxResponseLookback(received, now)) return null;
+        return {
+          provider,
+          messageId,
+          ...match,
+          sender: headers.sender,
+          subject: headers.subject.slice(0, 500),
+          preview,
+          receivedAt: received.toISOString(),
+          suggestedResponseType: classifyResponse(`${headers.subject} ${preview}`),
+        };
+      }));
+      candidates.push(...batchCandidates.filter((candidate): candidate is InboxResponseCandidate => candidate !== null));
     }
     return await excludeRecordedInboxResponses(userId, candidates, dependencies);
   }
@@ -314,9 +341,12 @@ export async function discoverInboxResponseCandidates(
     "$select": "id,subject,from,receivedDateTime,bodyPreview",
     "$filter": `receivedDateTime ge ${lookbackStart}`,
     "$orderby": "receivedDateTime desc",
-  }), { headers: { Authorization: `Bearer ${accessToken}` } });
+  }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }));
   if (!response.ok) await throwInboxApiError(userId, account, "outlook", response.status, dependencies);
-  const payload = await response.json() as { value?: Array<Record<string, unknown>> };
+  const payload = await readBoundedResponseJson<{ value?: Array<Record<string, unknown>> }>(
+    response,
+    MAX_INBOX_LIST_BYTES
+  );
   await markInboxAccessVerified(userId, account, now, dependencies);
   const candidates = (Array.isArray(payload.value) ? payload.value : []).flatMap((message): InboxResponseCandidate[] => {
     const messageId = typeof message.id === "string" ? message.id : "";
