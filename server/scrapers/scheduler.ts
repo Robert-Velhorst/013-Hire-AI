@@ -62,6 +62,7 @@ export class JobScrapingScheduler {
   private config: SchedulerConfig;
   private intervalId: NodeJS.Timeout | null = null;
   private activeCycle: Promise<void> | null = null;
+  private activeCycleController: AbortController | null = null;
   private status: SchedulerStatus = {
     isStarted: false,
     isRunning: false,
@@ -99,6 +100,10 @@ export class JobScrapingScheduler {
       console.log("[Scheduler] Already running");
       return;
     }
+    if (this.activeCycleController?.signal.aborted) {
+      console.log("[Scheduler] Shutdown still in progress");
+      return;
+    }
 
     this.status.isStarted = true;
     console.log(`[Scheduler] Starting with ${this.config.intervalMinutes} minute interval`);
@@ -126,6 +131,7 @@ export class JobScrapingScheduler {
       console.log("[Scheduler] Stopped");
     }
     this.status.isStarted = false;
+    this.activeCycleController?.abort();
     await this.activeCycle;
   }
 
@@ -139,15 +145,20 @@ export class JobScrapingScheduler {
       return;
     }
 
+    const controller = new AbortController();
+    this.activeCycleController = controller;
     let cycle: Promise<void>;
-    cycle = this.executeScraping().finally(() => {
-      if (this.activeCycle === cycle) this.activeCycle = null;
+    cycle = this.executeScraping(controller.signal).finally(() => {
+      if (this.activeCycle === cycle) {
+        this.activeCycle = null;
+        this.activeCycleController = null;
+      }
     });
     this.activeCycle = cycle;
     await cycle;
   }
 
-  private async executeScraping(): Promise<void> {
+  private async executeScraping(signal: AbortSignal): Promise<void> {
 
     this.status.isRunning = true;
     this.status.errors = [];
@@ -160,13 +171,16 @@ export class JobScrapingScheduler {
     try {
       const manager = await getScraperManager();
       
-      const scrapingOptions: { limit: number; platformNames?: string[] } = {
+      const scrapingOptions: { limit: number; platformNames?: string[]; signal: AbortSignal } = {
         limit: this.config.maxJobsPerRun,
+        signal,
       };
       if (this.config.enabledPlatforms?.length) {
         scrapingOptions.platformNames = this.config.enabledPlatforms;
       }
       const result = await manager.runScrapingCycle(scrapingOptions);
+
+      if (signal.aborted) throw new Error("Scraping cycle was cancelled.");
 
       this.status.totalJobsScraped += result.totalSaved;
       this.status.totalRunsCompleted++;

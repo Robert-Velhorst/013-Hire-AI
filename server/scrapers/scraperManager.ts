@@ -14,6 +14,7 @@ export interface ScrapeOptions {
   location?: string;
   limit?: number;
   platformNames?: string[];
+  signal?: AbortSignal;
 }
 
 export interface ScraperManagerOptions {
@@ -40,6 +41,35 @@ function sanitizeScrapeError(error: unknown): string {
 function sanitizeScrapeErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
   return Array.from(new Set(errors.map((error) => sanitizeScrapeError(error))));
+}
+
+function cancelledError(message = "Source request was cancelled.") {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+function waitForPlatformTurn(previousRun: Promise<void>, signal?: AbortSignal) {
+  if (!signal) return previousRun;
+  if (signal.aborted) return Promise.reject(cancelledError());
+
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(cancelledError());
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    previousRun.then(
+      () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
 }
 
 function isCurrentListing(job: { isActive?: number | null; expiryDate?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }, now: Date) {
@@ -196,7 +226,21 @@ export class ScraperManager {
     let releaseRun = () => {};
     const currentRun = new Promise<void>((resolve) => { releaseRun = resolve; });
     this.platformRunTails.set(platformName, currentRun);
-    await previousRun;
+    try {
+      await waitForPlatformTurn(previousRun, options?.signal);
+    } catch (error) {
+      void previousRun.then(() => {
+        releaseRun();
+        if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+      });
+      throw error;
+    }
+
+    if (options?.signal?.aborted) {
+      releaseRun();
+      if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+      throw cancelledError();
+    }
 
     const minimumPollIntervalMs = getPlatformMinimumPollIntervalMs(platformName);
     const previousAttempt = this.platformLastAttemptedAt.get(platformName);
@@ -206,10 +250,17 @@ export class ScraperManager {
       return { jobs: [], errors: [], scrapedAt: new Date(), skippedReason: "poll_interval" };
     }
     if (minimumPollIntervalMs > 0) {
-      const claimed = await claimPlatformScrapeAttempt(
-        scraper.getPlatformId(),
-        new Date(Date.now() - minimumPollIntervalMs)
-      );
+      let claimed: boolean;
+      try {
+        claimed = await claimPlatformScrapeAttempt(
+          scraper.getPlatformId(),
+          new Date(Date.now() - minimumPollIntervalMs)
+        );
+      } catch (error) {
+        releaseRun();
+        if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+        throw error;
+      }
       if (!claimed) {
         releaseRun();
         if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
@@ -218,11 +269,32 @@ export class ScraperManager {
     }
     this.platformLastAttemptedAt.set(platformName, new Date());
 
+    if (options?.signal?.aborted) {
+      releaseRun();
+      if (this.platformRunTails.get(platformName) === currentRun) this.platformRunTails.delete(platformName);
+      throw cancelledError();
+    }
+
     const controller = new AbortController();
     let timeout: NodeJS.Timeout | undefined;
+    let removeAbortListener = () => {};
     try {
+      const cancellation = new Promise<never>((_, reject) => {
+        if (!options?.signal) return;
+        const onAbort = () => {
+          controller.abort();
+          reject(cancelledError());
+        };
+        if (options.signal.aborted) {
+          onAbort();
+          return;
+        }
+        options.signal.addEventListener("abort", onAbort, { once: true });
+        removeAbortListener = () => options.signal?.removeEventListener("abort", onAbort);
+      });
       const result = await Promise.race([
         scraper.scrape({ ...options, signal: controller.signal }),
+        cancellation,
         new Promise<never>((_, reject) => {
           timeout = setTimeout(
             () => {
@@ -246,6 +318,7 @@ export class ScraperManager {
       return result;
     } finally {
       if (timeout) clearTimeout(timeout);
+      removeAbortListener();
       releaseRun();
       if (this.platformRunTails.get(platformName) === currentRun) {
         this.platformRunTails.delete(platformName);
@@ -326,6 +399,7 @@ export class ScraperManager {
     console.log(`[ScraperManager] Starting scrape of ${selectedScrapers.length} platforms`);
 
     for (const platformName of requestedPlatformNames) {
+      if (options?.signal?.aborted) break;
       if (!this.scrapers.has(platformName)) {
         await this.recordUnavailablePlatform(platformName);
         platformResults[platformName] = {
@@ -340,7 +414,7 @@ export class ScraperManager {
     const workers = Array.from(
       { length: Math.min(this.maxConcurrentScrapes, pendingScrapers.length) },
       async () => {
-        while (pendingScrapers.length > 0) {
+        while (pendingScrapers.length > 0 && !options?.signal?.aborted) {
           const entry = pendingScrapers.shift();
           if (!entry) return;
           const [platformName, scraper] = entry;
@@ -351,7 +425,15 @@ export class ScraperManager {
         }
       }
     );
-    await Promise.all(workers);
+    const workerResults = await Promise.allSettled(workers);
+
+    if (options?.signal?.aborted) {
+      throw cancelledError("Scraping cycle was cancelled.");
+    }
+    const failedWorker = workerResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    if (failedWorker) throw failedWorker.reason;
 
     console.log(`[ScraperManager] Scraping complete. Total jobs: ${totalJobs}`);
 

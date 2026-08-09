@@ -115,8 +115,10 @@ async function startServer() {
     }, 10_000);
     forceExit.unref();
 
-    await autonomousScheduler?.stop();
-    await jobScrapingScheduler?.stop();
+    await Promise.all([
+      autonomousScheduler?.stop(),
+      jobScrapingScheduler?.stop(),
+    ]);
     server.close((error) => {
       clearTimeout(forceExit);
       if (error) {

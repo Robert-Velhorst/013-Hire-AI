@@ -35,7 +35,10 @@ describe("job scraping scheduler", () => {
 
     await scheduler.runScraping();
 
-    expect(mocks.runScrapingCycle).toHaveBeenCalledWith({ limit: 25 });
+    expect(mocks.runScrapingCycle).toHaveBeenCalledWith({
+      limit: 25,
+      signal: expect.any(AbortSignal),
+    });
     expect(scheduler.getStatus()).toMatchObject({
       isStarted: false,
       isRunning: false,
@@ -165,6 +168,7 @@ describe("job scraping scheduler", () => {
     expect(mocks.runScrapingCycle).toHaveBeenCalledWith({
       limit: 25,
       platformNames: ["RemoteOK", "Remotive"],
+      signal: expect.any(AbortSignal),
     });
     expect(scheduler.getStatus().enabledPlatforms).toEqual(["RemoteOK", "Remotive"]);
   });
@@ -239,6 +243,29 @@ describe("job scraping scheduler", () => {
     await stopping;
     expect(stopped).toBe(true);
     expect(scheduler.getStatus()).toMatchObject({ isRunning: false, nextRunAt: null });
+  });
+
+  it("aborts the active discovery cycle during shutdown", async () => {
+    mocks.runScrapingCycle.mockImplementationOnce(async ({ signal }: { signal: AbortSignal }) => {
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+      throw new Error("cancelled");
+    });
+    const scheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+    scheduler.start();
+    await vi.waitFor(() => expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1));
+
+    await scheduler.stop();
+
+    const options = mocks.runScrapingCycle.mock.calls[0]?.[0] as { signal: AbortSignal };
+    expect(options.signal.aborted).toBe(true);
+    expect(mocks.processJobAlerts).not.toHaveBeenCalled();
+    expect(scheduler.getStatus()).toMatchObject({
+      isStarted: false,
+      isRunning: false,
+      totalRunsCompleted: 1,
+      totalFailedRuns: 1,
+      lastRunOutcome: "failed",
+    });
   });
 
   it("joins an active cycle instead of reporting a second manual run", async () => {

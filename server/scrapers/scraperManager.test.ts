@@ -163,6 +163,33 @@ describe("scraper manager platform restrictions", () => {
     });
   });
 
+  it("aborts active work and does not dequeue another source", async () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 5_000, maxConcurrentScrapes: 1 });
+    const saveJobs = vi.spyOn(manager, "saveJobs");
+    const controller = new AbortController();
+    let activeSignal: AbortSignal | undefined;
+    const active = {
+      getPlatformId: () => 1,
+      scrape: vi.fn().mockImplementation(({ signal }: { signal: AbortSignal }) => {
+        activeSignal = signal;
+        return new Promise(() => {});
+      }),
+    } as unknown as BaseScraper;
+    const queued = createScraper(2);
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Active source", active);
+    scrapers.set("Queued source", queued);
+
+    const cycle = manager.runScrapingCycle({ signal: controller.signal });
+    await vi.waitFor(() => expect(active.scrape).toHaveBeenCalledOnce());
+    controller.abort();
+
+    await expect(cycle).rejects.toMatchObject({ name: "AbortError" });
+    expect(activeSignal?.aborted).toBe(true);
+    expect(queued.scrape).not.toHaveBeenCalled();
+    expect(saveJobs).not.toHaveBeenCalled();
+  });
+
   it("serializes overlapping runs for the same platform", async () => {
     const manager = new ScraperManager({ scrapeTimeoutMs: 5_000, maxConcurrentScrapes: 3 });
     let releaseFirst = () => {};
@@ -183,6 +210,38 @@ describe("scraper manager platform restrictions", () => {
     await vi.waitFor(() => expect(source.scrape).toHaveBeenCalledOnce());
     releaseFirst();
     await Promise.all([first, second]);
+    expect(source.scrape).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a queued same-source run without breaking provider serialization", async () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 5_000, maxConcurrentScrapes: 1 });
+    let releaseFirst = () => {};
+    const firstResult = new Promise<{ jobs: []; errors: []; scrapedAt: Date }>((resolve) => {
+      releaseFirst = () => resolve({ jobs: [], errors: [], scrapedAt: new Date() });
+    });
+    const source = {
+      getPlatformId: () => 7,
+      scrape: vi.fn()
+        .mockImplementationOnce(() => firstResult)
+        .mockResolvedValue({ jobs: [], errors: [], scrapedAt: new Date() }),
+    } as unknown as BaseScraper;
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Serialized source", source);
+
+    const first = manager.scrapePlatform("Serialized source");
+    await vi.waitFor(() => expect(source.scrape).toHaveBeenCalledOnce());
+    const controller = new AbortController();
+    const cancelled = manager.scrapeAll({
+      platformNames: ["Serialized source"],
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(cancelled).rejects.toMatchObject({ name: "AbortError" });
+    expect(source.scrape).toHaveBeenCalledOnce();
+    releaseFirst();
+    await first;
+    await manager.scrapePlatform("Serialized source");
     expect(source.scrape).toHaveBeenCalledTimes(2);
   });
 
@@ -213,6 +272,56 @@ describe("scraper manager platform restrictions", () => {
     expect(result).toMatchObject({ errors: [], skippedReason: "poll_interval" });
     expect(source.scrape).not.toHaveBeenCalled();
     expect(mocks.recordPlatformScrapeOutcome).not.toHaveBeenCalled();
+  });
+
+  it("releases provider serialization when a durable polling claim fails", async () => {
+    mocks.claimPlatformScrapeAttempt
+      .mockRejectedValueOnce(new Error("database unavailable"))
+      .mockResolvedValueOnce(true);
+    const manager = new ScraperManager();
+    const source = createScraper(61);
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Jobicy", source);
+
+    await expect(manager.scrapePlatform("Jobicy")).rejects.toThrow("database unavailable");
+    const retry = await manager.scrapePlatform("Jobicy");
+
+    expect(retry.errors).toEqual([]);
+    expect(source.scrape).toHaveBeenCalledOnce();
+    expect(mocks.claimPlatformScrapeAttempt).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for sibling workers before propagating a worker failure", async () => {
+    const manager = new ScraperManager({ maxConcurrentScrapes: 2 });
+    let releaseHealthy = () => {};
+    const healthyResult = new Promise<{ jobs: []; errors: []; scrapedAt: Date }>((resolve) => {
+      releaseHealthy = () => resolve({ jobs: [], errors: [], scrapedAt: new Date() });
+    });
+    const failed = {
+      getPlatformId: () => 61,
+      scrape: vi.fn(),
+    } as unknown as BaseScraper;
+    const healthy = {
+      getPlatformId: () => 62,
+      scrape: vi.fn().mockImplementation(() => healthyResult),
+    } as unknown as BaseScraper;
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("Jobicy", failed);
+    scrapers.set("Healthy source", healthy);
+    mocks.claimPlatformScrapeAttempt.mockRejectedValueOnce(new Error("claim unavailable"));
+
+    let rejected = false;
+    const cycle = manager.scrapeAll().catch((error) => {
+      rejected = true;
+      throw error;
+    });
+    await vi.waitFor(() => expect(healthy.scrape).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(rejected).toBe(false);
+
+    releaseHealthy();
+    await expect(cycle).rejects.toThrow("claim unavailable");
+    expect(rejected).toBe(true);
   });
 
   it("restores provider polling intervals from durable source state", async () => {
