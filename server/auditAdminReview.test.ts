@@ -4,6 +4,7 @@ import {
   createAuditEvent,
   getAuditEventsForEntity,
   getAuditEventsForUser,
+  getUserAdminReviewPage,
   listActiveAdminReviewItemsForEntity,
   listAdminReviewItems,
   listUserAdminReviewItems,
@@ -206,5 +207,51 @@ describe("audit and admin review ledger", () => {
       entityId: targetVerificationId,
       status: "open",
     });
+  });
+
+  it("returns an exact owned total with a bounded active review page", async () => {
+    const userId = 97009;
+    const otherUserId = 97010;
+
+    await Promise.all(
+      Array.from({ length: 105 }, (_, index) =>
+        createAdminReviewItem({
+          userId,
+          entityType: "application",
+          entityId: 99000 + index,
+          category: "application_review",
+          status: index % 2 === 0 ? "open" : "in_progress",
+          priority: "medium",
+          title: `Owned review ${index + 1}`,
+        })
+      )
+    );
+    await createAdminReviewItem({
+      userId: otherUserId,
+      entityType: "application",
+      entityId: 99105,
+      category: "application_review",
+      status: "open",
+      priority: "critical",
+      title: "Other user review",
+    });
+    await createAdminReviewItem({
+      userId,
+      entityType: "application",
+      entityId: 99106,
+      category: "application_review",
+      status: "resolved",
+      priority: "low",
+      title: "Resolved owned review",
+    });
+
+    const page = await getUserAdminReviewPage(userId, ["open", "in_progress"], 100);
+
+    expect(page).toMatchObject({ total: 105, limit: 100, hasMore: true });
+    expect(page.items).toHaveLength(100);
+    expect(page.items.every((review) => review.userId === userId)).toBe(true);
+    expect(page.items.every((review) => ["open", "in_progress"].includes(review.status))).toBe(true);
+    expect(page.items.some((review) => review.title === "Other user review")).toBe(false);
+    expect(page.items.some((review) => review.title === "Resolved owned review")).toBe(false);
   });
 });

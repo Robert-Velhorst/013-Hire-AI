@@ -324,6 +324,11 @@ describe("application campaign operating ledger", () => {
     expect(adminLedger.metrics.openAdminReviews).toBe(1);
     expect(adminLedger.queues.adminReviews).toHaveLength(1);
     expect(adminLedger.canReviewAdminItems).toBe(true);
+    expect(adminLedger.adminReviewScope).toEqual({
+      loaded: 1,
+      limit: 100,
+      hasMore: false,
+    });
     expect(ledger.metrics.reviewRequiredDecisions).toBe(1);
     expect(ledger.queues.reviewDecisions[0]).toMatchObject({
       jobId: 1,

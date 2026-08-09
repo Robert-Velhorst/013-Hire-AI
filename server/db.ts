@@ -3873,6 +3873,52 @@ export async function listUserAdminReviewItems(
     .limit(boundedLimit);
 }
 
+export async function getUserAdminReviewPage(
+  userId: number,
+  statuses: AdminReviewItem["status"][] = ["open", "in_progress"],
+  requestedLimit = 100
+) {
+  const allowedStatuses = new Set<AdminReviewItem["status"]>([
+    "open",
+    "in_progress",
+    "resolved",
+    "dismissed",
+  ]);
+  const selectedStatuses = Array.from(new Set(statuses.filter((status) => allowedStatuses.has(status))));
+  const limit = Math.min(250, Math.max(1, Math.trunc(requestedLimit)));
+  if (selectedStatuses.length === 0) {
+    return { items: [] as AdminReviewItem[], total: 0, limit, hasMore: false };
+  }
+  const db = await getDb();
+  if (!db) {
+    const selectedStatusSet = new Set(selectedStatuses);
+    const rows = memoryAdminReviewItems
+      .filter((item) => item.userId === userId && selectedStatusSet.has(item.status))
+      .sort((left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id
+      );
+    return { items: rows.slice(0, limit), total: rows.length, limit, hasMore: rows.length > limit };
+  }
+  const condition = and(
+    eq(adminReviewItems.userId, userId),
+    inArray(adminReviewItems.status, selectedStatuses)
+  );
+  const [items, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(adminReviewItems)
+      .where(condition)
+      .orderBy(desc(adminReviewItems.createdAt), desc(adminReviewItems.id))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(adminReviewItems)
+      .where(condition),
+  ]);
+  const total = Number(totalRows[0]?.count ?? 0);
+  return { items, total, limit, hasMore: total > items.length };
+}
+
 export async function getUnreadInterviewNotificationPage(userId: number, requestedLimit = 5) {
   const limit = Math.min(50, Math.max(1, Math.trunc(requestedLimit)));
   const db = await getDb();

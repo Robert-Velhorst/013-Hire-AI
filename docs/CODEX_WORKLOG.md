@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded admin-review queue
+
+- Replaced capped-list length reporting with an exact owner- and status-scoped admin-review count.
+- Added a bounded 100-record operating page, a five-record dashboard projection, and explicit truncation metadata.
+- Added scale coverage proving foreign-owner and resolved reviews cannot enter active queue totals or records.
+
 ## 2026-08-09 - Exact verified interview-notification queue
 
 - Replaced broad unread-notification hydration plus in-memory validation with one owner-scoped joined query over current interview applications and invite evidence.

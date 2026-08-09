@@ -30,7 +30,7 @@ import {
   getUserSkills,
   getWorkExperiences,
   listUserConnectorAccounts,
-  listUserAdminReviewItems,
+  getUserAdminReviewPage,
   upsertApplicationCampaign,
 } from "./db";
 import {
@@ -732,7 +732,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     applicationSummary,
     autonomousPreparationsToday,
     jobs,
-    adminReviews,
+    adminReviewPage,
     reviewDecisionPage,
     successFeeSummary,
     connectorAccounts,
@@ -750,8 +750,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     countUserAutonomousPreparationsSince(userId, startOfToday),
     getActiveJobs(250, 0),
     options.includeAdminReviews
-      ? listUserAdminReviewItems(userId, ["open", "in_progress"], 100)
-      : Promise.resolve([]),
+      ? getUserAdminReviewPage(userId, ["open", "in_progress"], 100)
+      : Promise.resolve({ items: [], total: 0, limit: 100, hasMore: false }),
     getUserReviewDecisionPage(userId),
     getUserSuccessFeeSummary(userId),
     listUserConnectorAccounts(userId),
@@ -822,11 +822,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       .map((decision) => decision.jobId),
     { autonomousPreparationsToday }
   );
-  const userAdminReviews = options.includeAdminReviews
-    ? adminReviews.filter((item) =>
-        item.userId === userId && ["open", "in_progress"].includes(item.status)
-      )
-    : [];
+  const userAdminReviews = options.includeAdminReviews ? adminReviewPage.items : [];
   const reviewDecisions = decisions.filter((decision) =>
     decision.reviewRequired === 1 || ["review", "manual_apply"].includes(decision.decision)
   );
@@ -924,8 +920,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     ...readiness.nextActions,
     ...getActionReadyFollowUpNextActions(plan, followUpReadiness),
     pendingApprovalCount > 0 ? `Resolve ${pendingApprovalCount} pending user approval${pendingApprovalCount === 1 ? "" : "s"}.` : "",
-    userAdminReviews.length > 0
-      ? `${userAdminReviews.length} item${userAdminReviews.length === 1 ? " needs" : "s need"} admin operating review.`
+    adminReviewPage.total > 0
+      ? `${adminReviewPage.total} item${adminReviewPage.total === 1 ? " needs" : "s need"} admin operating review.`
       : "",
     reviewDecisionPage.total > 0
       ? `Review ${reviewDecisionPage.total} saved application decision${reviewDecisionPage.total === 1 ? "" : "s"}.`
@@ -972,7 +968,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       .filter((gate) => gate.severity === "high")
       .map((gate) => gate.label),
     pendingApprovalCount > 0 ? "Pending user approvals" : "",
-    userAdminReviews.length > 0 ? "Open admin review items" : "",
+    adminReviewPage.total > 0 ? "Open admin review items" : "",
     successFeeCompliance.status === "needs_attention" ? "Success-fee compliance needs attention" : "",
   ]);
 
@@ -1072,6 +1068,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: interviewNotificationQueue.limit,
       hasMore: interviewNotificationQueue.hasMore,
     },
+    adminReviewScope: {
+      loaded: adminReviewPage.items.length,
+      limit: adminReviewPage.limit,
+      hasMore: adminReviewPage.hasMore,
+    },
     planSummary: actionReadyPlanSummary,
     followUpReadiness: {
       candidateCount: followUpReadiness.candidateCount,
@@ -1102,7 +1103,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       followUpDeliveryReconciliation: followUpDeliveryReconciliation.length,
       evidenceGates: evidenceGates.length,
       connectorReadiness: connectorReadinessQueue.length,
-      openAdminReviews: userAdminReviews.length,
+      openAdminReviews: adminReviewPage.total,
       reviewRequiredDecisions: reviewDecisionPage.total,
       followUpsDue: followUpDueQueue.length,
       policyWarnings: plan.summary.policyWarnings,
