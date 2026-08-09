@@ -185,15 +185,16 @@ describe("Drizzle migration journal", () => {
   it("keeps the due job-alert index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(
-      resolve(process.cwd(), "drizzle", "0067_job_alert_check_cursor.sql"),
+      resolve(process.cwd(), "drizzle", "0068_job_alert_check_lease.sql"),
       "utf8"
     );
-    const indexName = "job_alerts_active_frequency_checked_idx";
+    const indexName = "job_alerts_due_lease_idx";
 
     expect(schema).toContain(`index("${indexName}")`);
     expect(migration).toContain(`\`${indexName}\``);
     expect(schema).toContain('lastCheckedAt: timestamp("last_checked_at")');
-    expect(migration).toContain("SET `last_checked_at` = `last_triggered`");
+    expect(migration).toContain("`check_lease_id`");
+    expect(migration).toContain("`check_lease_until`");
   });
 
   it("keeps the application ledger cursor index aligned with the schema", () => {

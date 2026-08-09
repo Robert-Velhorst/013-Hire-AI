@@ -3,6 +3,8 @@
  * Handles saved jobs, application notes, interview scheduling, and follow-up emails
  */
 
+import { randomUUID } from "node:crypto";
+
 import { eq, and, desc, asc, sql, inArray, isNull, lte, lt, or, gt } from "drizzle-orm";
 import {
   createApplicationApproval,
@@ -4581,6 +4583,8 @@ export async function createJobAlert(input: CreateAlertInput) {
       isActive: 1,
       lastTriggered: null,
       lastCheckedAt: null,
+      checkLeaseId: null,
+      checkLeaseUntil: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -4780,19 +4784,45 @@ export async function processJobAlerts() {
   const instantCutoff = new Date(now.getTime() - 60 * 60 * 1000);
   const dailyCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const weeklyCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const alerts = await db
-    .select()
+  const dueCondition = or(
+    isNull(jobAlerts.lastCheckedAt),
+    and(eq(jobAlerts.frequency, "instant"), lte(jobAlerts.lastCheckedAt, instantCutoff)),
+    and(eq(jobAlerts.frequency, "daily"), lte(jobAlerts.lastCheckedAt, dailyCutoff)),
+    and(eq(jobAlerts.frequency, "weekly"), lte(jobAlerts.lastCheckedAt, weeklyCutoff))
+  );
+  const leaseAvailableCondition = or(
+    isNull(jobAlerts.checkLeaseUntil),
+    lte(jobAlerts.checkLeaseUntil, now)
+  );
+  const candidates = await db
+    .select({ id: jobAlerts.id })
     .from(jobAlerts)
     .where(and(
       eq(jobAlerts.isActive, 1),
-      or(
-        isNull(jobAlerts.lastCheckedAt),
-        and(eq(jobAlerts.frequency, "instant"), lte(jobAlerts.lastCheckedAt, instantCutoff)),
-        and(eq(jobAlerts.frequency, "daily"), lte(jobAlerts.lastCheckedAt, dailyCutoff)),
-        and(eq(jobAlerts.frequency, "weekly"), lte(jobAlerts.lastCheckedAt, weeklyCutoff))
-      )
+      dueCondition,
+      leaseAvailableCondition
     ))
     .orderBy(asc(jobAlerts.lastCheckedAt), asc(jobAlerts.id))
+    .limit(alertBatchSize);
+  if (candidates.length === 0) {
+    return { processed: 0, externalNotifications: 0 as const };
+  }
+  const leaseId = randomUUID();
+  const leaseUntil = new Date(now.getTime() + 30 * 60 * 1000);
+  await db
+    .update(jobAlerts)
+    .set({ checkLeaseId: leaseId, checkLeaseUntil: leaseUntil })
+    .where(and(
+      inArray(jobAlerts.id, candidates.map((candidate) => candidate.id)),
+      eq(jobAlerts.isActive, 1),
+      dueCondition,
+      leaseAvailableCondition
+    ));
+  const alerts = await db
+    .select()
+    .from(jobAlerts)
+    .where(eq(jobAlerts.checkLeaseId, leaseId))
+    .orderBy(asc(jobAlerts.id))
     .limit(alertBatchSize);
   if (alerts.length === 0) {
     return { processed: 0, externalNotifications: 0 as const };
@@ -4864,18 +4894,26 @@ export async function processJobAlerts() {
 
   const checkedAlertIds = alerts.map((alert) => alert.id);
   await db.transaction(async (tx) => {
-    await tx
-      .update(jobAlerts)
-      .set({ lastCheckedAt: now })
-      .where(inArray(jobAlerts.id, checkedAlertIds));
-
     if (matchedAlertIds.length > 0) {
       // Matching jobs remain available in the command center. External alerts are
       // reserved for deterministic interview-invite evidence.
       await tx
         .update(jobAlerts)
         .set({ lastTriggered: now })
-        .where(inArray(jobAlerts.id, matchedAlertIds));
+        .where(and(
+          inArray(jobAlerts.id, matchedAlertIds),
+          eq(jobAlerts.checkLeaseId, leaseId)
+        ));
+    }
+    const completion = await tx
+      .update(jobAlerts)
+      .set({ lastCheckedAt: now, checkLeaseId: null, checkLeaseUntil: null })
+      .where(and(
+        inArray(jobAlerts.id, checkedAlertIds),
+        eq(jobAlerts.checkLeaseId, leaseId)
+      ));
+    if (Number(completion[0].affectedRows) !== checkedAlertIds.length) {
+      throw new Error("Job alert evaluation lease was lost before completion.");
     }
   });
 

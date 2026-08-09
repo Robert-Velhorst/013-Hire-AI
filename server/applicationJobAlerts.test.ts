@@ -59,6 +59,7 @@ describe("job alert processing", () => {
       lastTriggered: null,
     };
     mocks.select
+      .mockReturnValueOnce(dueAlertRows([{ id: alert.id }]))
       .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
@@ -75,12 +76,13 @@ describe("job alert processing", () => {
         }]) }) }) }),
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 7, name: "Remote OK" }]) });
-    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
+    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue([{ affectedRows: 1 }]) }) });
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
-    expect(mocks.update).toHaveBeenCalledTimes(2);
-    expect(mocks.where).toHaveBeenCalledTimes(2);
+    expect(mocks.select).toHaveBeenCalledTimes(4);
+    expect(mocks.update).toHaveBeenCalledTimes(3);
+    expect(mocks.where).toHaveBeenCalledTimes(3);
     expect(mocks.limit).toHaveBeenCalledWith(250);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
@@ -99,6 +101,7 @@ describe("job alert processing", () => {
       lastTriggered: null,
     };
     mocks.select
+      .mockReturnValueOnce(dueAlertRows([{ id: alert.id }]))
       .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce({
         from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([{
@@ -114,11 +117,26 @@ describe("job alert processing", () => {
         }]) }) }) }),
       })
       .mockReturnValueOnce({ from: () => Promise.resolve([{ id: 3, name: "We Work Remotely" }]) });
-    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
+    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue([{ affectedRows: 1 }]) }) });
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
+    expect(mocks.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not scan jobs when another worker wins the alert lease", async () => {
+    mocks.select
+      .mockReturnValueOnce(dueAlertRows([{ id: 415 }]))
+      .mockReturnValueOnce(dueAlertRows([]));
+    mocks.update.mockReturnValue({
+      set: () => ({ where: mocks.where.mockResolvedValue([{ affectedRows: 0 }]) }),
+    });
+    mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
+
+    await expect(processJobAlerts()).resolves.toEqual({ processed: 0, externalNotifications: 0 });
+    expect(mocks.select).toHaveBeenCalledTimes(2);
     expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("does not load jobs or platforms when no alert is due", async () => {
@@ -150,6 +168,7 @@ describe("job alert processing", () => {
       from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(rows) }) }) }),
     });
     mocks.select
+      .mockReturnValueOnce(dueAlertRows([{ id: alert.id }]))
       .mockReturnValueOnce(dueAlertRows([alert]))
       .mockReturnValueOnce(page(firstPage))
       .mockReturnValueOnce({ from: () => Promise.resolve([]) })
@@ -160,12 +179,12 @@ describe("job alert processing", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }]));
-    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue(undefined) }) });
+    mocks.update.mockReturnValue({ set: () => ({ where: mocks.where.mockResolvedValue([{ affectedRows: 1 }]) }) });
     mocks.getDb.mockResolvedValue({ select: mocks.select, update: mocks.update, transaction: mocks.transaction });
 
     await expect(processJobAlerts()).resolves.toEqual({ processed: 1, externalNotifications: 0 });
-    expect(mocks.select).toHaveBeenCalledTimes(4);
-    expect(mocks.update).toHaveBeenCalledTimes(2);
+    expect(mocks.select).toHaveBeenCalledTimes(5);
+    expect(mocks.update).toHaveBeenCalledTimes(3);
   });
 
   it("keeps a user-scoped alert ledger available without a configured database", async () => {

@@ -974,10 +974,12 @@ export const jobAlerts = mysqlTable("job_alerts", {
   isActive: int("is_active").default(1).notNull(),
   lastTriggered: timestamp("last_triggered"),
   lastCheckedAt: timestamp("last_checked_at"),
+  checkLeaseId: varchar("check_lease_id", { length: 64 }),
+  checkLeaseUntil: timestamp("check_lease_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
-  index("job_alerts_active_frequency_checked_idx").on(table.isActive, table.frequency, table.lastCheckedAt),
+  index("job_alerts_due_lease_idx").on(table.isActive, table.frequency, table.lastCheckedAt, table.checkLeaseUntil),
   index("job_alerts_user_created_idx").on(table.userId, table.createdAt, table.id),
 ]);
 
