@@ -19,6 +19,19 @@ For native production startup on Windows 11, use `npm.cmd run start:windows`. It
 
 Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` controls review-only autonomous planning. `JOB_SCRAPING_SCHEDULER_ENABLED` is off by default; enable only approved sources and set an explicit source allowlist where needed.
 
+## Database backup and restore
+
+Install compatible MySQL client tools so `mysqldump` and `mysql` are available. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
+
+1. Disable autonomous and scraping workers and wait for active runs to finish.
+2. Set `DATABASE_URL` for the source database and run `pnpm db:backup`. A successful run creates `backups/<database>-<UTC timestamp>/database.sql` and `manifest.json` only after a non-empty dump is complete.
+3. Run `pnpm db:backup:verify -- <backup-directory>`. Move the verified bundle to encrypted, access-controlled storage outside the application host. The local `backups/` directory is intentionally ignored by Git.
+4. For a restore drill, provision an isolated empty database with the same database name, point `DATABASE_URL` at it, and run `pnpm db:restore -- <backup-directory> --confirm RESTORE:<database>`.
+5. Run `pnpm db:migrate`, `pnpm doctor`, application reconciliation checks, and representative read-only workflows against the restored target. Record the bundle checksum, restore target, timestamps, and results.
+6. Never restore over the active production database as a test. Re-enable workers only after database and provider reconciliation succeeds.
+
+The restore command fails before starting `mysql` when the manifest is malformed, the dump is missing or changed, the source and target database names differ, or the exact target-specific confirmation is absent. Database backup does not copy private storage objects; the storage provider needs its own versioning and recovery policy.
+
 ## Incident response
 
 1. Disable both scheduler flags.
@@ -38,4 +51,4 @@ Set `DATABASE_URL`, then run `pnpm db:migrate`. `AUTONOMOUS_SCHEDULER_ENABLED` c
 
 ## Deployment
 
-Build with `docker build -t hire-ai .` when Docker is available. The container will fail startup in production if the core required environment variables are absent. Do not deploy until `pnpm doctor` passes with production configuration and malware scanning configured.
+Build with `docker build -t hire-ai .` when Docker is available. The container will fail startup in production if the core required environment variables are absent. Do not deploy until `pnpm doctor` passes with production configuration and malware scanning configured, and a verified database backup and isolated restore drill have been recorded.

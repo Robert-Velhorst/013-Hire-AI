@@ -80,4 +80,11 @@
 - Verified the dependency audit reports no high or critical advisories.
 - Aligned local and CI dependency resolution on pnpm 11, restricted install scripts to esbuild, patched Mermaid/DOMPurify/PostCSS/esbuild transitive paths, and raised CI enforcement to moderate severity.
 - Verified `pnpm security:audit` reports no known vulnerabilities at any severity.
-- Passed TypeScript and the full regression suite: 161 files and 825 tests.
+- Passed TypeScript and the full regression suite: 162 files and 837 tests.
+
+## 2026-08-09 - Database recovery pass
+
+- Added Windows-compatible streaming MySQL backup and restore commands with credentials excluded from process arguments and manifests.
+- Backups now publish only complete, non-empty dumps with a versioned manifest, byte count, and SHA-256 checksum; failed runs remove partial bundles.
+- Restore now fails before database mutation on malformed or modified bundles, database-name mismatch, or missing target-specific confirmation.
+- Added operator procedures and adversarial tests for first-run backup directories, tampering, target mismatch, and confirmation enforcement.

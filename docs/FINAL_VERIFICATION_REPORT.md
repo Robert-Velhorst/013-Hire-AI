@@ -25,10 +25,11 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 161 files, 825 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 162 files, 837 tests |
 | Dependency advisory audit | `pnpm security:audit` | Passed: no known vulnerabilities |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
+| Database recovery contract | `server/databaseRecovery.test.ts` | Passed: streaming backup, checksum verification, credential exclusion, tamper rejection, target matching, and explicit restore confirmation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
 | Production configuration audit | `NODE_ENV=production npm.cmd run doctor` | Failed closed as expected when required production configuration and malware scanner are absent |
 | Diff whitespace audit | `git diff --check` | Passed |
@@ -91,7 +92,7 @@ Save and ignore decisions use that same exact pending application plus its scope
 
 ## Release blockers and scope boundaries
 
-- A production database, migration run, backups, restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment.
+- A production database, migration run, real backup, isolated restore drill, monitoring, and deployment health checks have not been demonstrated in a hosted environment. The repository now provides verified streaming backup/restore tooling so that acceptance can be performed without ad hoc shell handling.
 - Gmail, Google Drive, Dropbox, Microsoft, LinkedIn, and GitHub integrations require user-owned OAuth applications, credentials, redirect configuration, consent, and live acceptance testing.
 - The HAI connector contract is locally verified, but acceptance against an independently running HAI peer is still required.
 - Public ngrok health and OAuth callback verification require an operator-owned reserved HTTPS hostname.

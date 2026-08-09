@@ -26,6 +26,8 @@ The current audited status is maintained in [CURRENT_STATUS.md](./CURRENT_STATUS
 
 Native Windows 11 startup, verified ngrok tunnelling, and the restricted HAI A2A connector are documented in [Windows, ngrok, and HAI operation](./docs/WINDOWS_NGROK_HAI.md).
 
+Checksummed MySQL backup and target-confirmed restore commands are documented in the [operator runbook](./docs/OPERATOR_RUNBOOK.md). A real isolated restore drill is required before production deployment.
+
 ---
 
 ## Overview
@@ -287,6 +289,9 @@ External connectors remain unavailable until their provider credentials, shared 
 | `pnpm test` | Run all Vitest tests |
 | `pnpm db:generate` | Generate a migration after an intentional schema change |
 | `pnpm db:migrate` | Apply committed database migrations |
+| `pnpm db:backup` | Create an atomic checksummed MySQL backup bundle |
+| `pnpm db:backup:verify -- <directory>` | Verify backup size and SHA-256 manifest evidence |
+| `pnpm db:restore -- <directory> --confirm RESTORE:<database>` | Restore a verified bundle into an explicitly matched target |
 | `pnpm db:push` | Backward-compatible alias for applying committed migrations |
 | `pnpm check` | TypeScript type checking |
 | `pnpm format` | Format code with Prettier |

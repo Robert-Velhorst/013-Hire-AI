@@ -14,6 +14,9 @@
     "test": "vitest run",
     "doctor": "node scripts/doctor.mjs",
     "security:audit": "pnpm audit --audit-level moderate",
+    "db:backup": "node scripts/database-backup.mjs",
+    "db:backup:verify": "node scripts/database-backup.mjs verify",
+    "db:restore": "node scripts/database-restore.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit migrate"
