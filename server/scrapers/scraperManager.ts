@@ -2,7 +2,7 @@ import type { BaseScraper, ScrapeRequestOptions, ScrapeResult } from "./baseScra
 import { getScraperForPlatform, getSupportedPlatforms, hasScraper } from "./index";
 import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
 import { jobDuplicates, jobs, jobPlatforms } from "../../drizzle/schema";
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { samplePlatforms } from "../sampleData";
 import { findBestJobDuplicateCandidate } from "../jobDeduplication";
 import { isJobListingCurrent } from "../../shared/jobListingFreshness";
@@ -23,6 +23,7 @@ export interface ScraperManagerOptions {
 
 const DEFAULT_SCRAPE_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_CONCURRENT_SCRAPES = 3;
+const SOURCE_IDENTITY_BATCH_SIZE = 200;
 export const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 export const SCRAPER_INITIALIZATION_FAILURE_MESSAGE = "Source initialization could not complete.";
 
@@ -43,6 +44,12 @@ function sanitizeScrapeErrors(errors: unknown): string[] {
 
 function isCurrentListing(job: { isActive?: number | null; expiryDate?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }, now: Date) {
   return isJobListingCurrent(job, now);
+}
+
+function sourceIdentityKey(job: { platformId?: unknown; externalId?: unknown }) {
+  return Number.isInteger(job.platformId) && typeof job.externalId === "string" && job.externalId
+    ? JSON.stringify([job.platformId, job.externalId])
+    : null;
 }
 
 function refreshedListingValues(job: any, current: any, now: Date) {
@@ -373,16 +380,68 @@ export class ScraperManager {
     let duplicates = 0;
     let errors = 0;
     const now = new Date();
+    const sourceIdentities = Array.from(new Map(
+      scrapedJobs
+        .map((job) => [sourceIdentityKey(job), job] as const)
+        .filter((entry): entry is readonly [string, any] => entry[0] !== null)
+    ).values());
+    const existingBySourceIdentity = new Map<string, any>();
+    const canonicalByDuplicateId = new Map<number, any>();
+    let useBatchedIdentityReads = sourceIdentities.length > 1;
+    if (useBatchedIdentityReads) {
+      try {
+        for (let offset = 0; offset < sourceIdentities.length; offset += SOURCE_IDENTITY_BATCH_SIZE) {
+          const batch = sourceIdentities.slice(offset, offset + SOURCE_IDENTITY_BATCH_SIZE);
+          const identityConditions = batch.map((job) => and(
+            eq(jobs.platformId, job.platformId),
+            eq(jobs.externalId, job.externalId)
+          ));
+          const existingRows = await db
+            .select()
+            .from(jobs)
+            .where(or(...identityConditions));
+          for (const row of existingRows) {
+            const key = sourceIdentityKey(row);
+            if (key) existingBySourceIdentity.set(key, row);
+          }
+        }
+        const duplicateIds = Array.from(existingBySourceIdentity.values())
+          .map((job) => Number(job.id))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+        if (duplicateIds.length > 0) {
+          const sourceLinks = await db
+            .select({ duplicateJobId: jobDuplicates.duplicateJobId, primaryJobId: jobDuplicates.primaryJobId })
+            .from(jobDuplicates)
+            .where(inArray(jobDuplicates.duplicateJobId, duplicateIds));
+          const primaryIds = Array.from(new Set(sourceLinks.map((link) => link.primaryJobId)));
+          if (primaryIds.length > 0) {
+            const primaryRows = await db.select().from(jobs).where(inArray(jobs.id, primaryIds));
+            const primaryById = new Map(primaryRows.map((row) => [row.id, row]));
+            for (const link of sourceLinks) {
+              const primary = primaryById.get(link.primaryJobId);
+              if (primary) canonicalByDuplicateId.set(link.duplicateJobId, primary);
+            }
+          }
+        }
+      } catch {
+        existingBySourceIdentity.clear();
+        canonicalByDuplicateId.clear();
+        useBatchedIdentityReads = false;
+      }
+    }
 
     for (const job of scrapedJobs) {
       try {
         // Check for duplicates by external ID and platform
-        if (job.externalId && job.platformId) {
-          const existing = await db
-            .select()
-            .from(jobs)
-            .where(and(eq(jobs.externalId, job.externalId), eq(jobs.platformId, job.platformId)))
-            .limit(1);
+        const identityKey = sourceIdentityKey(job);
+        if (identityKey) {
+          const existing = useBatchedIdentityReads
+            ? [existingBySourceIdentity.get(identityKey)].filter(Boolean)
+            : await db
+                .select()
+                .from(jobs)
+                .where(and(eq(jobs.externalId, job.externalId), eq(jobs.platformId, job.platformId)))
+                .limit(1);
 
           if (existing.length > 0) {
             const current = existing[0];
@@ -391,24 +450,36 @@ export class ScraperManager {
               .set(refreshedListingValues(job, current, now))
               .where(eq(jobs.id, current.id));
 
-            const sourceLink = await db
-              .select({ primaryJobId: jobDuplicates.primaryJobId })
-              .from(jobDuplicates)
-              .where(eq(jobDuplicates.duplicateJobId, current.id))
-              .limit(1);
-            if (sourceLink[0]) {
-              const primary = await db
-                .select()
-                .from(jobs)
-                .where(eq(jobs.id, sourceLink[0].primaryJobId))
-                .limit(1);
-              if (primary[0] && !isCurrentListing(primary[0], now)) {
+            const batchedPrimary = useBatchedIdentityReads
+              ? canonicalByDuplicateId.get(current.id)
+              : null;
+            if (useBatchedIdentityReads) {
+              if (batchedPrimary && !isCurrentListing(batchedPrimary, now)) {
                 // The canonical row represents the aggregate opportunity. A live
                 // linked source must keep it discoverable and actionable.
                 await db
                   .update(jobs)
-                  .set(refreshedListingValues(job, primary[0], now))
-                  .where(eq(jobs.id, primary[0].id));
+                  .set(refreshedListingValues(job, batchedPrimary, now))
+                  .where(eq(jobs.id, batchedPrimary.id));
+              }
+            } else {
+              const sourceLink = await db
+                .select({ primaryJobId: jobDuplicates.primaryJobId })
+                .from(jobDuplicates)
+                .where(eq(jobDuplicates.duplicateJobId, current.id))
+                .limit(1);
+              if (sourceLink[0]) {
+                const primary = await db
+                  .select()
+                  .from(jobs)
+                  .where(eq(jobs.id, sourceLink[0].primaryJobId))
+                  .limit(1);
+                if (primary[0] && !isCurrentListing(primary[0], now)) {
+                  await db
+                    .update(jobs)
+                    .set(refreshedListingValues(job, primary[0], now))
+                    .where(eq(jobs.id, primary[0].id));
+                }
               }
             }
             refreshed++;
@@ -446,6 +517,7 @@ export class ScraperManager {
         if (crossPlatformDuplicate) {
           const duplicateWrite = await db.insert(jobs).values(job);
           const duplicateJobId = Number(duplicateWrite[0].insertId);
+          if (identityKey) existingBySourceIdentity.set(identityKey, { ...job, id: duplicateJobId });
           await db.insert(jobDuplicates).values({
             primaryJobId: crossPlatformDuplicate.job.id,
             duplicateJobId,
@@ -456,7 +528,10 @@ export class ScraperManager {
         }
 
         // Insert new job
-        await db.insert(jobs).values(job);
+        const inserted = await db.insert(jobs).values(job);
+        if (identityKey) {
+          existingBySourceIdentity.set(identityKey, { ...job, id: Number(inserted[0].insertId) });
+        }
         saved++;
       } catch {
         console.error("[ScraperManager] Failed to save job.");

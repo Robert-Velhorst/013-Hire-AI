@@ -283,6 +283,60 @@ describe("scraper manager platform restrictions", () => {
     errorSpy.mockRestore();
   });
 
+  it("batch-loads source identities and canonical links for multi-job refreshes", async () => {
+    const existingJobs = [
+      { id: 801, externalId: "source-801", platformId: 8, title: "Engineer I", company: "Batch Co", isActive: 1 },
+      { id: 802, externalId: "source-802", platformId: 8, title: "Engineer II", company: "Batch Co", isActive: 1 },
+    ];
+    const selectResponses = [existingJobs, []];
+    const select = vi.fn(() => ({
+      from: () => ({
+        where: vi.fn().mockImplementation(() => Promise.resolve(selectResponses.shift() ?? [])),
+      }),
+    }));
+    const where = vi.fn().mockResolvedValue([{ affectedRows: 1 }]);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    const result = await new ScraperManager().saveJobs(existingJobs.map((job) => ({
+      ...job,
+      description: `Updated ${job.externalId}`,
+    })));
+
+    expect(result).toEqual({ saved: 0, refreshed: 2, duplicates: 0, errors: 0 });
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to isolated indexed reads when batch prefetch is unavailable", async () => {
+    const existingJobs = [
+      { id: 811, externalId: "source-811", platformId: 8, title: "Engineer I", company: "Fallback Co", isActive: 1 },
+      { id: 812, externalId: "source-812", platformId: 8, title: "Engineer II", company: "Fallback Co", isActive: 1 },
+    ];
+    let selectCall = 0;
+    const fallbackResponses = [[existingJobs[0]], [], [existingJobs[1]], []];
+    const select = vi.fn(() => {
+      selectCall += 1;
+      return {
+        from: () => ({
+          where: () => selectCall === 1
+            ? Promise.reject(new Error("batch unavailable"))
+            : { limit: vi.fn().mockResolvedValue(fallbackResponses.shift() ?? []) },
+        }),
+      };
+    });
+    const where = vi.fn().mockResolvedValue([{ affectedRows: 1 }]);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    mocks.getDb.mockResolvedValue({ select, update });
+
+    const result = await new ScraperManager().saveJobs(existingJobs);
+
+    expect(result).toEqual({ saved: 0, refreshed: 2, duplicates: 0, errors: 0 });
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
   it("refreshes a re-observed source listing instead of leaving an expired record unavailable", async () => {
     const existingJob = {
       id: 712,
