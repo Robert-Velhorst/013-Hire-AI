@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { count, eq, or } from "drizzle-orm";
 import {
   adminReviewItems,
   applicationApprovals,
@@ -34,10 +34,13 @@ import {
   userSkills,
   users,
   workExperiences,
+  workspaceInvitations,
+  workspaceMembers,
+  workspaces,
 } from "../drizzle/schema";
 import { getDb } from "./db";
 
-export const PRIVACY_RETENTION_POLICY_VERSION = "2026-08-09.v1";
+export const PRIVACY_RETENTION_POLICY_VERSION = "2026-08-09.v2";
 
 export type PrivacyRetentionAction = "erase" | "scrub_and_retain" | "retain";
 
@@ -88,6 +91,7 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "user_skills", action: "erase", reason: erasableReason, tableRef: userSkills, userColumn: userSkills.userId },
   { table: "user_projects", action: "erase", reason: erasableReason, tableRef: userProjects, userColumn: userProjects.userId },
   { table: "job_alerts", action: "erase", reason: erasableReason, tableRef: jobAlerts, userColumn: jobAlerts.userId },
+  { table: "workspace_members", action: "erase", reason: "Workspace membership is removed during account erasure after ownership-transfer checks pass.", tableRef: workspaceMembers, userColumn: workspaceMembers.userId },
   { table: "privacy_erasure_runs", action: "scrub_and_retain", reason: "Erasure execution evidence must remain bounded and non-sensitive.", tableRef: privacyErasureRuns, userColumn: privacyErasureRuns.userId },
   { table: "privacy_erasure_tasks", action: "scrub_and_retain", reason: "Itemized cleanup evidence must remain bounded and contains no copied tokens or object keys.", tableRef: privacyErasureTasks, userColumn: privacyErasureTasks.userId },
   { table: "success_fees", action: "retain", reason: regulatedReason, tableRef: successFees, userColumn: successFees.userId, privateObjectColumns: ["offer_letter_key"] },
@@ -114,6 +118,30 @@ export const indirectPrivacyRetentionPolicy: IndirectPolicyEntry[] = [
   { table: "application_notes", action: "erase", reason: erasableReason, countForUser: (db, userId) => countApplicationChildren(db, applicationNotes, applicationNotes.applicationId, userId) },
   { table: "interview_schedules", action: "erase", reason: erasableReason, countForUser: (db, userId) => countApplicationChildren(db, interviewSchedules, interviewSchedules.applicationId, userId) },
   { table: "follow_ups", action: "scrub_and_retain", reason: ledgerReason, countForUser: (db, userId) => countApplicationChildren(db, followUps, followUps.applicationId, userId) },
+  {
+    table: "workspaces",
+    action: "erase",
+    reason: "Owner-only workspaces are erased; ownership must be transferred before erasing an owner who still has active members.",
+    countForUser: async (db, userId) => {
+      const rows = await db.select({ value: count() }).from(workspaces).where(eq(workspaces.createdByUserId, userId));
+      return Number(rows[0]?.value ?? 0);
+    },
+  },
+  {
+    table: "workspace_invitations",
+    action: "erase",
+    reason: "Invitation addresses and account relationships are erased with the inviting or accepting account.",
+    countForUser: async (db, userId) => {
+      const user = (await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1))[0];
+      const ownership = [
+        eq(workspaceInvitations.invitedByUserId, userId),
+        eq(workspaceInvitations.acceptedByUserId, userId),
+      ];
+      if (user?.email) ownership.push(eq(workspaceInvitations.email, user.email.trim().toLowerCase()));
+      const rows = await db.select({ value: count() }).from(workspaceInvitations).where(or(...ownership));
+      return Number(rows[0]?.value ?? 0);
+    },
+  },
 ];
 
 export const privacyRetentionPolicyTables = [

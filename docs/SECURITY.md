@@ -10,7 +10,8 @@
 - Connector disconnect disables access before cleanup, uses scoped provider revocation where supported, deletes local grants after successful or manual-only cleanup, and retains failed-revocation grants only for an auditable retry. Microsoft and LinkedIn never trigger broader account-session revocation.
 - Application, payment, and provider records use audit events, ownership checks, and idempotency controls.
 - Account deletion requests are session-owned, idempotent while open, auditable, and routed to high-priority operator review. Admin review records `dataDeleted: false`; no review action silently erases regulated evidence.
-- Privacy policy `2026-08-09.v1` classifies every direct and application-linked user-owned table, known private-object key, and provider grant. A schema-source regression fails when a new direct user table is not classified; previews remain read-only and fail closed without persistent storage.
+- Privacy policy `2026-08-09.v2` classifies every direct and application-linked user-owned table, including workspace membership and invitation relationships, known private-object key, and provider grant. A schema-source regression fails when a new direct user table is not classified; previews remain read-only and fail closed without persistent storage.
+- Workspace invitations are email-bound, expire after seven days, and persist only a SHA-256 token hash. Role changes and ownership transfers are audited. Membership does not authorize candidate-domain data access.
 - HTTP responses disable `X-Powered-By`, prohibit framing, constrain browser permissions, and add production CSP/HSTS.
 - Native startup binds to loopback by default and production refuses port fallback. The HAI bridge is disabled by default, limited to local/private endpoint configuration, scoped to one user, protected by a separate 32+ character bearer token, body-bounded, and read-only.
 

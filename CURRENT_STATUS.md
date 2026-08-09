@@ -22,6 +22,8 @@ Windows-native startup now performs a production audit and health check, server 
 
 English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account controls. Remaining workflow-page copy is still English and requires translation plus native-speaker and accessibility review.
 
+Account-backed workspaces now provide owner, administrator, and member roles; email-bound expiring invitations; single-owner transfer; bounded membership; audited role changes; and safe archival. Workspace membership intentionally does not share candidate profiles, documents, applications, or other candidate-domain records. That boundary requires a separate product and privacy design before collaboration can extend beyond governance.
+
 However, several public-facing claims and status documents previously described features as complete even when the implementation was still partial, simulated, untested, or framework-level only.
 
 ## Important limitations
@@ -60,6 +62,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Added duplicate-resistant Stripe webhook claims, retry handling, payment audit events, and a success-fee state machine.
 - Enforced sensitive-upload size, MIME, and signature validation; production uploads now require a configured malware scanner and retain only private storage references.
 - Added an audited, user-scoped English/Dutch language preference and localized shared navigation/account controls.
+- Added durable workspace governance with hashed one-time invitations, least-privilege role controls, ownership transfer, audit evidence, retention-policy coverage, and a Team screen.
 
 ## Still required before production
 

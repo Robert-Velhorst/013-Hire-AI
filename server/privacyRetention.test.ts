@@ -48,6 +48,9 @@ const expectedUserOwnedTables = [
   "success_fees",
   "employment_verifications",
   "fee_payments",
+  "workspace_members",
+  "workspaces",
+  "workspace_invitations",
 ].sort();
 
 function context(userId: number, role: "user" | "admin"): TrpcContext {
@@ -80,6 +83,25 @@ describe("privacy retention inventory", () => {
   it("keeps the transactional finalizer in lockstep with the policy inventory", () => {
     expect(() => assertPrivacyFinalizerCoverage()).not.toThrow();
     expect([...privacyFinalizerPolicyTables].sort()).toEqual(expectedUserOwnedTables);
+  });
+
+  it("requires workspace succession and removes invitation dependencies before owned workspaces", () => {
+    const finalizerSource = readFileSync(
+      new URL("./privacyErasureFinalization.ts", import.meta.url),
+      "utf8"
+    );
+    expect(finalizerSource).toContain(
+      "Transfer workspace ownership or remove all other active members before account erasure."
+    );
+    const transactionCleanup = finalizerSource.slice(
+      finalizerSource.indexOf("const invitationOwnership")
+    );
+    expect(transactionCleanup.indexOf('"workspace_invitations"')).toBeLessThan(
+      transactionCleanup.indexOf('"workspaces"')
+    );
+    expect(transactionCleanup.indexOf('"workspace_invitations"')).toBeLessThan(
+      transactionCleanup.indexOf('"workspace_members"')
+    );
   });
 
   it("fails when a new direct user-owned schema table is not added to the policy", () => {

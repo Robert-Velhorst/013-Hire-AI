@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Workspace governance
+
+- Added durable workspaces, role-scoped memberships, hashed expiring invitations, ownership transfer, safe archival, bounded queries, and audited mutations.
+- Added the authenticated Team screen and kept candidate-domain data outside workspace authority.
+- Extended privacy policy `2026-08-09.v2` and account-erasure handling to workspace relationships.
+
 ## 2026-08-09 - Account-backed localization foundation
 
 - Added migration `0041` and a validated English/Dutch locale contract, preserving the preference across OAuth user upserts and both MySQL and standalone memory runtimes.

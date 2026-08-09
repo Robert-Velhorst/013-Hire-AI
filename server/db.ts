@@ -366,6 +366,21 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) return memoryUsers.find((user) => user.id === userId) as User | undefined;
+  return (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const db = await getDb();
+  if (!db) {
+    return memoryUsers.find((user) => user.email?.trim().toLowerCase() === normalizedEmail) as User | undefined;
+  }
+  return (await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1))[0];
+}
+
 export async function updateUserLocale(userId: number, locale: string) {
   const db = await getDb();
   if (!db) {

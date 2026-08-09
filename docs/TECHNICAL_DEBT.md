@@ -10,5 +10,5 @@
 | Deployment backup/restore acceptance | Partial | Streaming checksummed tooling, Docker client mode, tests, and a two-container isolated restore passed; configure encrypted off-host retention and repeat recovery against the provisioned deployment and storage-provider policy. |
 | Windows/ngrok hosted acceptance | Partial | Native and tunnel launchers exist; production credentials, a reserved HTTPS hostname, and public health/callback evidence are required. |
 | External HAI peer acceptance | Partial | The read-only A2A 1.0 status contract is locally verified; configure a shared token and private peer URL in a controlled environment. |
-| Team/workspace permissions | Missing | Product decision, tenant-bound schema, invitation lifecycle, and authorization model. |
+| Candidate collaboration within workspaces | Governance complete; candidate sharing intentionally disabled | Define an explicit consent, tenant-isolation, revocation, and audit model before exposing candidate-domain records to workspace members. |
 | Full product localization | Partial | English/Dutch account persistence and shared shell translations exist; translate remaining workflow copy and complete native-speaker/accessibility review. |

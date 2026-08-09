@@ -154,4 +154,29 @@ describe("Drizzle migration journal", () => {
     expect(schema).toContain('locale: varchar("locale", { length: 10 }).default("en").notNull()');
     expect(migration).toContain("ADD COLUMN `locale` varchar(10) NOT NULL DEFAULT 'en'");
   });
+
+  it("keeps workspace governance constraints and indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0042_workspace_governance.sql"),
+      "utf8"
+    );
+    const requiredNames = [
+      "workspaces_creator_status_idx",
+      "workspace_members_workspace_user_unique",
+      "workspace_members_user_status_idx",
+      "workspace_members_workspace_status_role_idx",
+      "workspace_invitations_token_unique",
+      "workspace_invitations_workspace_created_idx",
+      "workspace_invitations_email_expiry_idx",
+    ];
+    for (const name of requiredNames) {
+      expect(schema).toContain(name);
+      expect(migration).toContain(`\`${name}\``);
+    }
+    expect(migration).toContain("ON DELETE CASCADE");
+    expect(migration).toContain("ON DELETE RESTRICT");
+    expect(migration).toContain("ON DELETE SET NULL");
+    expect(migration).toContain("'workspace'");
+  });
 });

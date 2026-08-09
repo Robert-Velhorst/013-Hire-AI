@@ -14,6 +14,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import { getRecentJobs, searchJobs, getDiscoveryStats, getSubscriptionManager } from "./realTimeDiscovery";
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
+import { workspacesRouter } from "./routers/workspaces";
 import { uploadResume, getActiveResume, getResumeVersions, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
 import {
   saveJob,
@@ -74,7 +75,7 @@ const jobSearchFiltersInput = z.object({
   postedWithin: z.enum(["all", "1", "3", "7", "30"]).optional(),
   listingSafety: z.enum(["all", "clear", "review", "blocked"]).optional(),
 }).optional();
-const auditEntityType = z.enum(["job", "application", "success_fee", "verification", "user", "admin_review"]);
+const auditEntityType = z.enum(["job", "application", "success_fee", "verification", "user", "admin_review", "workspace"]);
 const connectorProvider = z.enum([
   "gmail",
   "google_drive",
@@ -262,6 +263,7 @@ function toPrivacyDeletionRequestView(review: {
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  workspaces: workspacesRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

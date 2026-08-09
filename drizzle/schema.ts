@@ -29,6 +29,53 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+export const workspaces = mysqlTable("workspaces", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  createdByUserId: int("created_by_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  index("workspaces_creator_status_idx").on(table.createdByUserId, table.status, table.id),
+]);
+
+export const workspaceMembers = mysqlTable("workspace_members", {
+  id: int("id").autoincrement().primaryKey(),
+  workspaceId: int("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: mysqlEnum("role", ["owner", "admin", "member"]).default("member").notNull(),
+  status: mysqlEnum("status", ["active", "removed"]).default("active").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("workspace_members_workspace_user_unique").on(table.workspaceId, table.userId),
+  index("workspace_members_user_status_idx").on(table.userId, table.status, table.workspaceId),
+  index("workspace_members_workspace_status_role_idx").on(table.workspaceId, table.status, table.role),
+]);
+
+export const workspaceInvitations = mysqlTable("workspace_invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  workspaceId: int("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  email: varchar("email", { length: 320 }).notNull(),
+  role: mysqlEnum("role", ["admin", "member"]).default("member").notNull(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  invitedByUserId: int("invited_by_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  acceptedByUserId: int("accepted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  acceptedAt: timestamp("accepted_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("workspace_invitations_token_unique").on(table.tokenHash),
+  index("workspace_invitations_workspace_created_idx").on(table.workspaceId, table.createdAt, table.id),
+  index("workspace_invitations_email_expiry_idx").on(table.email, table.expiresAt, table.id),
+]);
+
+export type Workspace = typeof workspaces.$inferSelect;
+export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
+export type WorkspaceInvitation = typeof workspaceInvitations.$inferSelect;
+
 /**
  * Job Platforms Configuration
  * Stores information about the 50+ remote job platforms we aggregate from
@@ -375,7 +422,7 @@ export const applicationNotifications = mysqlTable("application_notifications", 
 export const auditEvents = mysqlTable("audit_events", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
-  entityType: mysqlEnum("entity_type", ["job", "application", "success_fee", "verification", "user", "admin_review"]).notNull(),
+  entityType: mysqlEnum("entity_type", ["job", "application", "success_fee", "verification", "user", "admin_review", "workspace"]).notNull(),
   entityId: int("entity_id").notNull(),
   action: varchar("action", { length: 120 }).notNull(),
   actor: mysqlEnum("actor", ["system", "user", "admin"]).default("system").notNull(),

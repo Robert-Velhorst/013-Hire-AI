@@ -69,7 +69,7 @@ Cancels the current user's open request and records the cancellation. It cannot 
 
 ### `admin.previewPrivacyErasure`
 
-Admin-only query for a privacy-deletion review. Counts every direct and application-linked user-owned table under policy `2026-08-09.v1`, classifies records as `erase`, `scrub_and_retain`, or `retain`, and reports private-object and provider-revocation work. It fails closed in development-memory mode and performs no deletion.
+Admin-only query for a privacy-deletion review. Counts every direct and application-linked user-owned table under policy `2026-08-09.v2`, classifies records as `erase`, `scrub_and_retain`, or `retain`, and reports private-object and provider-revocation work. It fails closed in development-memory mode and performs no deletion.
 
 ### `admin.getPrivacyErasurePlan`
 
@@ -86,6 +86,23 @@ Requires `ready_for_database` state and the exact `ERASE DATABASE USER <id> USIN
 ### `admin.confirmManualPrivacyCleanup`
 
 Records bounded evidence for a blocked Microsoft or LinkedIn account-side cleanup task. The run advances to `ready_for_database` only when every external task is complete.
+
+---
+
+## Workspaces Router
+
+All workspace procedures require an authenticated account. Membership never grants access to candidate profiles, documents, jobs, applications, or provider connections.
+
+- `workspaces.list` and `workspaces.detail` return only active, authorized workspaces. Unauthorized IDs are concealed as not found.
+- `workspaces.create` creates an owner-controlled workspace.
+- `workspaces.rename` is available to owners and administrators.
+- `workspaces.invite` creates an email-bound, seven-day invitation. The plaintext token is returned once and only its SHA-256 hash is stored.
+- `workspaces.acceptInvitation` is email-bound and idempotent for its original recipient.
+- `workspaces.revokeInvitation` is available to managers.
+- `workspaces.changeMemberRole`, `workspaces.removeMember`, and `workspaces.transferOwnership` enforce owner and administrator privilege ceilings.
+- `workspaces.archive` requires a sole active owner and prevents accidental removal of a shared workspace.
+
+Workloads are bounded to 20 actively owned workspaces per user, 100 active memberships per user, 100 active members per workspace, and 50 active invitations per workspace.
 
 ---
 

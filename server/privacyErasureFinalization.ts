@@ -32,6 +32,9 @@ import {
   userSkills,
   users,
   workExperiences,
+  workspaceInvitations,
+  workspaceMembers,
+  workspaces,
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import {
@@ -76,6 +79,9 @@ export const privacyFinalizerPolicyTables = [
   "success_fees",
   "employment_verifications",
   "fee_payments",
+  "workspace_members",
+  "workspaces",
+  "workspace_invitations",
 ] as const;
 
 export function assertPrivacyFinalizerCoverage() {
@@ -152,6 +158,25 @@ export async function finalizePrivacyErasure(
     );
   }
 
+  const ownedWorkspaces = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.createdByUserId, run.userId));
+  if (ownedWorkspaces.length > 0) {
+    const activeOtherMember = await db
+      .select({ id: workspaceMembers.id })
+      .from(workspaceMembers)
+      .where(and(
+        inArray(workspaceMembers.workspaceId, ownedWorkspaces.map(item => item.id)),
+        eq(workspaceMembers.status, "active"),
+        sql`${workspaceMembers.userId} <> ${run.userId}`
+      ))
+      .limit(1);
+    if (activeOtherMember.length > 0) {
+      throw new Error("Transfer workspace ownership or remove all other active members before account erasure.");
+    }
+  }
+
   const unfinishedExternalTasks = await db
     .select({ id: privacyErasureTasks.id })
     .from(privacyErasureTasks)
@@ -207,6 +232,7 @@ export async function finalizePrivacyErasure(
 
   try {
     const result = await db.transaction(async tx => {
+      const userIdentity = (await tx.select({ email: users.email }).from(users).where(eq(users.id, run.userId)).limit(1))[0];
       const applicationRows = await tx
         .select({ id: applications.id })
         .from(applications)
@@ -317,6 +343,26 @@ export async function finalizePrivacyErasure(
       for (const [name, table, userColumn] of erasableDirect) {
         await remove(name, tx.delete(table).where(eq(userColumn, run.userId)));
       }
+
+      const invitationOwnership = [
+        eq(workspaceInvitations.invitedByUserId, run.userId),
+        eq(workspaceInvitations.acceptedByUserId, run.userId),
+      ];
+      if (userIdentity?.email) {
+        invitationOwnership.push(eq(workspaceInvitations.email, userIdentity.email.trim().toLowerCase()));
+      }
+      await remove(
+        "workspace_invitations",
+        tx.delete(workspaceInvitations).where(or(...invitationOwnership))
+      );
+      await remove(
+        "workspaces",
+        tx.delete(workspaces).where(eq(workspaces.createdByUserId, run.userId))
+      );
+      await remove(
+        "workspace_members",
+        tx.delete(workspaceMembers).where(eq(workspaceMembers.userId, run.userId))
+      );
 
       await scrub(
         "applications",

@@ -19,6 +19,7 @@ const JobSearch = lazy(() => import("./pages/JobSearch"));
 const Applications = lazy(() => import("./pages/Applications"));
 const JobAlerts = lazy(() => import("./pages/JobAlerts"));
 const ReviewQueue = lazy(() => import("./pages/ReviewQueue"));
+const Team = lazy(() => import("./pages/Team"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoadingFallback() {
@@ -42,6 +43,7 @@ function Router() {
         <Route path={"/jobs"} component={JobSearch} />
         <Route path={"/applications"} component={Applications} />
         <Route path={"/review-queue"} component={ReviewQueue} />
+        <Route path={"/team"} component={Team} />
         <Route path={"/alerts"} component={JobAlerts} />
         <Route path={"/profile"} component={Profile} />
         <Route path={"/settings"} component={Settings} />

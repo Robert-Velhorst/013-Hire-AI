@@ -14,6 +14,21 @@
 8. [Career Intelligence](#career-intelligence)
 9. [Diversity & Inclusion Support](#diversity--inclusion-support)
 10. [Tips for Success](#tips-for-success)
+11. [Team Workspaces](#team-workspaces)
+
+---
+
+## Team Workspaces
+
+Open **Team** from the main navigation to create or manage a workspace.
+
+1. Create a workspace or select one you already belong to.
+2. Owners and administrators can invite a person by email. Share the one-time invitation code through a trusted channel; it expires after seven days.
+3. The invited person signs in with the same email address and enters the code on the Team screen.
+4. Owners can promote members, transfer ownership, or remove members. Administrators can manage ordinary members but cannot appoint administrators or change the owner.
+5. A workspace can be archived only after all other active members have left or been removed.
+
+Workspaces currently organize membership only. They do not expose resumes, profiles, applications, messages, provider accounts, or other candidate data to team members.
 
 ---
 
