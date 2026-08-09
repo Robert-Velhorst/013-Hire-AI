@@ -18,13 +18,14 @@ Hire.AI is a verified local prototype with controlled automation and review-firs
 - Added loopback-first Windows hosting, a health-gated native launcher, a reserved-domain ngrok launcher, and a read-only HAI A2A 1.0 aggregate-status connector.
 - Removed development instrumentation from production delivery and added a bundle gate; the generated HTML shell decreased from 367,750 bytes to 487 bytes.
 - Consolidated the dashboard from seven overlapping API queries to one bounded, read-only operating snapshot and repaired the embedded development Vite configuration.
+- Added migration `0036` with 17 operating-query indexes and removed table-wide reads from privacy review, admin evidence, and job-source aggregation paths.
 
 ## Automated evidence
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Type check | `npm.cmd run check` | Passed |
-| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 804 tests |
+| Unit and integration tests | `npm.cmd test -- --run` | Passed: 159 files, 805 tests |
 | Production build | `npm.cmd run build` | Passed |
 | Production shell budget | `scripts/check-production-bundle.mjs` | Passed: 487 bytes; no Manus or JSX-location instrumentation |
 | Development configuration audit | `npm.cmd run doctor` | Passed with expected warnings for unconfigured production secrets and malware scanning |
@@ -46,6 +47,8 @@ ngrok 3.39.8 is installed and `ngrok config check` reports a valid local configu
 The production frontend output rendered at desktop (1440 x 900) and mobile (390 x 844), and the landing-page workflow-scroll control moved to the intended section. The in-app browser connection timed out, so this check used the bundled Playwright runtime. Because Vite preview serves static output only, its console contained the expected failed API query; this is not evidence of a credential-complete production full-stack session.
 
 The dashboard now issues one operating-snapshot query instead of seven overlapping requests. Its snapshot exposes exact counts and at most 10 projected recent applications, ordinary users do not trigger global admin-review reads, and the protected GET does not create campaign state. A local development smoke verified the repaired embedded server returns `/src/main.tsx` as JavaScript; browser startup on the loaded host exceeded the acceptance window before a final dashboard screenshot could be captured.
+
+Migration `0036` adds query-aligned indexes for profile readiness and the operating lifecycle. Privacy deletion status and admin evidence now fetch one matching review row, while job aggregation loads only the selected job's duplicate group. This is source- and test-verified locally; execution plans and migration timing still require a production-like database acceptance run.
 
 ## Release blockers and scope boundaries
 

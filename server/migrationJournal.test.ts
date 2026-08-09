@@ -36,4 +36,40 @@ describe("Drizzle migration journal", () => {
       "db:push": "drizzle-kit migrate",
     });
   });
+
+  it("keeps operating query indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0036_operating_query_indexes.sql"),
+      "utf8"
+    );
+    const expectedIndexes = [
+      "jobs_active_posted_created_idx",
+      "jobs_platform_external_idx",
+      "user_profiles_user_idx",
+      "social_media_profiles_user_active_idx",
+      "applications_user_created_idx",
+      "application_decisions_user_updated_idx",
+      "admin_review_items_status_created_idx",
+      "admin_review_items_user_category_created_idx",
+      "application_approvals_user_status_created_idx",
+      "follow_ups_application_created_idx",
+      "user_resumes_user_active_version_idx",
+      "interview_schedules_application_scheduled_idx",
+      "interview_schedules_status_scheduled_idx",
+      "work_experiences_user_sort_idx",
+      "education_entries_user_sort_idx",
+      "user_skills_user_sort_idx",
+      "success_fees_user_created_idx",
+    ];
+
+    for (const indexName of expectedIndexes) {
+      expect(schema, `${indexName} is missing from the schema`).toContain(
+        `index("${indexName}")`
+      );
+      expect(migration, `${indexName} is missing from the migration`).toContain(
+        `\`${indexName}\``
+      );
+    }
+  });
 });

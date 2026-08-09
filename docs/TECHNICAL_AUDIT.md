@@ -22,6 +22,7 @@ Audit date: 2026-08-08
 | Production HTML embedded the Manus development runtime and a second React runtime. | Manus and JSX-location plugins now run only for the Vite development server. The production shell fell from 367,750 bytes to 487 bytes, and the build fails if development markers return or the shell exceeds 25 KiB. |
 | Dashboard opened seven overlapping API queries and its ledger GET wrote campaign state. | Dashboard data now comes from one bounded operating snapshot, recent applications are projected and capped at 10, non-admin requests skip the global admin-review read, and the protected GET does not persist campaign state. |
 | The embedded Vite server lost its root/plugins after production config became command-aware. | CLI and embedded startup now share `createViteConfig`; tests cover build/serve plugin boundaries and a live check verified `/src/main.tsx` is served as JavaScript. |
+| Hot operating queries lacked matching compound indexes, and several single-record workflows scanned full tables. | Migration `0036` adds 17 query-aligned indexes. Privacy deletion, admin evidence, and duplicate-source aggregation now use bounded indexed lookups. A regression test keeps migration and schema declarations aligned. |
 
 ## Material unresolved risks
 

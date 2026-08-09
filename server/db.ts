@@ -131,7 +131,7 @@ const memoryEmployerResponses: (InsertEmployerResponse & { id: number; createdAt
 const memoryInboxResponseCandidates: (InsertInboxResponseCandidate & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryApplicationNotifications: (InsertApplicationNotification & { id: number; createdAt: Date })[] = [];
 const memoryAuditEvents: (InsertAuditEvent & { id: number; createdAt: Date })[] = [];
-const memoryAdminReviewItems: (InsertAdminReviewItem & { id: number; createdAt: Date; updatedAt: Date })[] = [];
+const memoryAdminReviewItems: AdminReviewItem[] = [];
 const memoryApplicationApprovals: (InsertApplicationApproval & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryApplicationCampaigns: (InsertApplicationCampaign & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryInterviewPreparations: (InsertInterviewPreparation & { id: number; createdAt: Date })[] = [];
@@ -853,14 +853,27 @@ export async function getJobAggregationSources(jobId: number) {
     .limit(1);
   if (!job[0]) return null;
 
-  const links = await db
+  const directLinks = await db
     .select({
       primaryJobId: jobDuplicates.primaryJobId,
       duplicateJobId: jobDuplicates.duplicateJobId,
     })
-    .from(jobDuplicates);
-  const primaryJobId = resolveCanonicalJobId(jobId, links);
-  const sourceIds = getCanonicalJobGroupIds(jobId, links);
+    .from(jobDuplicates)
+    .where(or(
+      eq(jobDuplicates.primaryJobId, jobId),
+      eq(jobDuplicates.duplicateJobId, jobId)
+    ));
+  const primaryJobId = resolveCanonicalJobId(jobId, directLinks);
+  const links = primaryJobId === jobId
+    ? directLinks
+    : await db
+      .select({
+        primaryJobId: jobDuplicates.primaryJobId,
+        duplicateJobId: jobDuplicates.duplicateJobId,
+      })
+      .from(jobDuplicates)
+      .where(eq(jobDuplicates.primaryJobId, primaryJobId));
+  const sourceIds = getCanonicalJobGroupIds(primaryJobId, links);
   const sources = await db
     .select()
     .from(jobs)
@@ -2825,15 +2838,30 @@ export async function listAdminReviewItems(status: AdminReviewItem["status"] | "
 }
 
 export async function getLatestPrivacyDeletionReview(userId: number) {
-  const reviews = await listAdminReviewItems("all");
-  return reviews
-    .filter((item) =>
-      item.userId === userId &&
-      item.entityType === "user" &&
-      item.entityId === userId &&
-      item.category === "privacy_deletion"
-    )
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+  const db = await getDb();
+  if (!db) {
+    return memoryAdminReviewItems
+      .filter((item) =>
+        item.userId === userId &&
+        item.entityType === "user" &&
+        item.entityId === userId &&
+        item.category === "privacy_deletion"
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
+  }
+
+  const reviews = await db
+    .select()
+    .from(adminReviewItems)
+    .where(and(
+      eq(adminReviewItems.userId, userId),
+      eq(adminReviewItems.entityType, "user"),
+      eq(adminReviewItems.entityId, userId),
+      eq(adminReviewItems.category, "privacy_deletion")
+    ))
+    .orderBy(desc(adminReviewItems.createdAt))
+    .limit(1);
+  return reviews[0] ?? null;
 }
 
 export async function requestPrivacyDeletionReview(userId: number, reason?: string) {
@@ -2938,12 +2966,18 @@ export async function dismissOfferAttributionAdminReviews(
 }
 
 export async function getAdminReviewEvidenceSnapshot(reviewItemId: number) {
-  const reviewItem = (await listAdminReviewItems("all")).find((item) => item.id === reviewItemId);
+  const db = await getDb();
+  const reviewItem = !db
+    ? memoryAdminReviewItems.find((item) => item.id === reviewItemId)
+    : (await db
+      .select()
+      .from(adminReviewItems)
+      .where(eq(adminReviewItems.id, reviewItemId))
+      .limit(1))[0];
   if (!reviewItem) {
     throw new Error("Review item not found.");
   }
 
-  const db = await getDb();
   const user = !db
     ? memoryUsers.find((item) => item.id === reviewItem.userId)
     : (await db

@@ -81,7 +81,10 @@ export const jobs = mysqlTable("jobs", {
   diversityFriendly: int("diversity_friendly").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("jobs_active_posted_created_idx").on(table.isActive, table.postedDate, table.createdAt),
+  index("jobs_platform_external_idx").on(table.platformId, table.externalId),
+]);
 
 /**
  * Job Duplicates Tracking
@@ -123,7 +126,9 @@ export const userProfiles = mysqlTable("user_profiles", {
   needsVisaSponsorship: int("needs_visa_sponsorship").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("user_profiles_user_idx").on(table.userId),
+]);
 
 /**
  * Social Media Profiles
@@ -139,7 +144,9 @@ export const socialMediaProfiles = mysqlTable("social_media_profiles", {
   isActive: int("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("social_media_profiles_user_active_idx").on(table.userId, table.isActive),
+]);
 
 /**
  * User Connector Accounts
@@ -208,6 +215,7 @@ export const applications = mysqlTable("applications", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("applications_user_job_unique").on(table.userId, table.jobId),
+  index("applications_user_created_idx").on(table.userId, table.createdAt),
 ]);
 
 /**
@@ -230,6 +238,7 @@ export const applicationDecisions = mysqlTable("application_decisions", {
 }, (table) => [
   uniqueIndex("application_decisions_user_job_unique").on(table.userId, table.jobId),
   index("application_decisions_user_decision_idx").on(table.userId, table.decision),
+  index("application_decisions_user_updated_idx").on(table.userId, table.updatedAt),
   index("application_decisions_review_required_idx").on(table.reviewRequired),
 ]);
 
@@ -405,7 +414,15 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("admin_review_items_status_priority_idx").on(table.status, table.priority),
+  index("admin_review_items_status_created_idx").on(table.status, table.createdAt),
   index("admin_review_items_user_status_idx").on(table.userId, table.status),
+  index("admin_review_items_user_category_created_idx").on(
+    table.userId,
+    table.category,
+    table.entityType,
+    table.entityId,
+    table.createdAt
+  ),
   index("admin_review_items_entity_idx").on(table.entityType, table.entityId),
 ]);
 
@@ -441,6 +458,7 @@ export const applicationApprovals = mysqlTable("application_approvals", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("application_approvals_user_status_idx").on(table.userId, table.status),
+  index("application_approvals_user_status_created_idx").on(table.userId, table.status, table.createdAt),
   index("application_approvals_application_idx").on(table.applicationId),
   index("application_approvals_entity_idx").on(table.entityType, table.entityId),
 ]);
@@ -573,6 +591,7 @@ export const followUps = mysqlTable("follow_ups", {
 }, (table) => [
   uniqueIndex("follow_ups_delivery_attempt_key_unique").on(table.deliveryAttemptKey),
   index("follow_ups_delivery_state_idx").on(table.deliveryState),
+  index("follow_ups_application_created_idx").on(table.applicationId, table.createdAt),
 ]);
 
 /**
@@ -624,7 +643,9 @@ export const userResumes = mysqlTable("user_resumes", {
   isActive: int("is_active").default(1).notNull(),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("user_resumes_user_active_version_idx").on(table.userId, table.isActive, table.version),
+]);
 
 /**
  * Saved Jobs (Bookmarks)
@@ -676,7 +697,10 @@ export const interviewSchedules = mysqlTable("interview_schedules", {
   status: mysqlEnum("status", ["scheduled", "completed", "cancelled", "rescheduled"]).default("scheduled"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("interview_schedules_application_scheduled_idx").on(table.applicationId, table.scheduledAt),
+  index("interview_schedules_status_scheduled_idx").on(table.status, table.scheduledAt),
+]);
 
 /**
  * Work Experiences
@@ -697,7 +721,9 @@ export const workExperiences = mysqlTable("work_experiences", {
   sortOrder: int("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("work_experiences_user_sort_idx").on(table.userId, table.sortOrder),
+]);
 
 /**
  * Education
@@ -718,7 +744,9 @@ export const educationEntries = mysqlTable("education_entries", {
   sortOrder: int("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index("education_entries_user_sort_idx").on(table.userId, table.sortOrder),
+]);
 
 /**
  * Skills
@@ -733,7 +761,9 @@ export const userSkills = mysqlTable("user_skills", {
   yearsOfExperience: int("years_of_experience"),
   sortOrder: int("sort_order").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("user_skills_user_sort_idx").on(table.userId, table.sortOrder),
+]);
 
 /**
  * Projects
@@ -837,6 +867,7 @@ export const successFees = mysqlTable("success_fees", {
 }, (table) => [
   uniqueIndex("success_fees_stripe_subscription_unique").on(table.stripeSubscriptionId),
   index("success_fees_user_status_idx").on(table.userId, table.status),
+  index("success_fees_user_created_idx").on(table.userId, table.createdAt),
 ]);
 
 /**

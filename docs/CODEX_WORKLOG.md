@@ -49,3 +49,12 @@
 - Corrected the dashboard’s jobs metric to describe the bounded roles scanned by the planner rather than implying a total inventory count.
 - Fixed the embedded development server after command-aware Vite configuration caused `/src/main.tsx` to fall through to HTML. CLI and embedded startup now use the same tested configuration factory.
 - Passed TypeScript, production build, focused dashboard/campaign/configuration tests, and the full regression suite: 159 files and 804 tests.
+
+## 2026-08-09 - Operating query and persistence contract pass
+
+- Added migration `0036` with 17 indexes covering the operating snapshot, profile readiness, application lifecycle, admin review, interview, resume, and success-fee query paths.
+- Added a migration/schema alignment regression so an operating index cannot be declared in only one source of truth.
+- Replaced full-table privacy-review and admin-evidence reads with bounded indexed lookups.
+- Replaced the job aggregation source lookup's full duplicate-table scan with indexed direct/group queries.
+- Corrected the in-memory admin-review store to expose the same complete row contract as MySQL, removing optional-status defects in privacy routes and admin evidence rendering.
+- Passed TypeScript and the full regression suite: 159 files and 805 tests.

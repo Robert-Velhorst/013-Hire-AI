@@ -253,6 +253,13 @@
       "when": 1786150800000,
       "tag": "0035_privacy_deletion_review",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1786237200000,
+      "tag": "0036_operating_query_indexes",
+      "breakpoints": true
     }
   ]
 }
