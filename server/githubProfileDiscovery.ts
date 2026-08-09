@@ -12,6 +12,7 @@ import {
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
+import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export type GitHubRepositoryCandidate = {
   name: string;
@@ -67,6 +68,17 @@ function stringValue(value: unknown, maxLength: number) {
   return typeof value === "string" && value.trim()
     ? value.trim().slice(0, maxLength)
     : null;
+}
+
+function httpUrlValue(value: unknown, maxLength: number) {
+  const text = stringValue(value, maxLength);
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function numberValue(value: unknown) {
@@ -167,7 +179,7 @@ function parseUser(payload: unknown) {
   if (!payload || typeof payload !== "object") return null;
   const value = payload as Record<string, unknown>;
   const username = stringValue(value.login, 255);
-  const profileUrl = stringValue(value.html_url, 500);
+  const profileUrl = httpUrlValue(value.html_url, 500);
   if (!username || !profileUrl) return null;
   return {
     username,
@@ -176,7 +188,7 @@ function parseUser(payload: unknown) {
     bio: stringValue(value.bio, 2_000),
     location: stringValue(value.location, 255),
     company: stringValue(value.company, 255),
-    blog: stringValue(value.blog, 500),
+    blog: httpUrlValue(value.blog, 500),
     publicRepositoryCount: numberValue(value.public_repos),
   };
 }
@@ -190,7 +202,7 @@ function parseRepositories(payload: unknown): GitHubRepositoryCandidate[] {
     const value = item as Record<string, unknown>;
     if (value.fork === true || value.archived === true) continue;
     const name = stringValue(value.name, 255);
-    const url = stringValue(value.html_url, 500);
+    const url = httpUrlValue(value.html_url, 500);
     if (!name || !url || seen.has(url)) continue;
     seen.add(url);
     repositories.push({
@@ -227,7 +239,10 @@ export async function discoverGitHubProfile(
   const dependencies = options.dependencies ?? defaults;
   const { account, accessToken } = await getGitHubAccessToken(userId, now, fetcher, dependencies);
   const headers = githubHeaders(accessToken);
-  const userResponse = await fetcher("https://api.github.com/user", { headers });
+  const userResponse = await fetcher(
+    "https://api.github.com/user",
+    providerRequestInit({ headers })
+  );
   if (!userResponse.ok) {
     if (userResponse.status === 401 || userResponse.status === 403) {
       await markGitHubAccessNeedsReauth(userId, account, dependencies);
@@ -235,7 +250,7 @@ export async function discoverGitHubProfile(
     }
     throw new Error("GitHub profile discovery is temporarily unavailable.");
   }
-  const user = parseUser(await userResponse.json() as unknown);
+  const user = parseUser(await readProviderJson<unknown>(userResponse));
   if (!user) throw new Error("GitHub did not return a usable public profile.");
 
   // This public endpoint avoids requesting access to private repositories.
@@ -246,7 +261,7 @@ export async function discoverGitHubProfile(
       direction: "desc",
       per_page: String(MAX_REPOSITORIES),
     }),
-    { headers }
+    providerRequestInit({ headers })
   );
   if (!repositoriesResponse.ok) {
     if (repositoriesResponse.status === 401 || repositoriesResponse.status === 403) {
@@ -255,7 +270,7 @@ export async function discoverGitHubProfile(
     }
     throw new Error("GitHub repository discovery is temporarily unavailable.");
   }
-  const repositories = parseRepositories(await repositoriesResponse.json() as unknown);
+  const repositories = parseRepositories(await readProviderJson<unknown>(repositoriesResponse));
   const suggestedSkills = Array.from(new Set(
     repositories.flatMap((repository) => repository.language ? [repository.language] : [])
   )).sort((left, right) => left.localeCompare(right));

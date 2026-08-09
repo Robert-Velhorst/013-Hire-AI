@@ -5,6 +5,7 @@ import {
   getUserConnectorAccount,
   upsertUserConnectorAccount,
 } from "./db";
+import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export type LinkedInIdentityCandidate = {
   provider: "linkedin";
@@ -117,9 +118,10 @@ export async function discoverLinkedInIdentity(
   const now = options.now ?? new Date();
   const dependencies = options.dependencies ?? defaults;
   const { account, accessToken } = await getLinkedInAccessToken(userId, now, dependencies);
-  const response = await fetcher("https://api.linkedin.com/v2/userinfo", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const response = await fetcher(
+    "https://api.linkedin.com/v2/userinfo",
+    providerRequestInit({ headers: { Authorization: `Bearer ${accessToken}` } })
+  );
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       await markLinkedInAccessNeedsReauth(userId, account, dependencies);
@@ -128,7 +130,7 @@ export async function discoverLinkedInIdentity(
     throw new Error("LinkedIn identity discovery is temporarily unavailable.");
   }
 
-  const identity = parseLinkedInUserInfo(await response.json() as unknown);
+  const identity = parseLinkedInUserInfo(await readProviderJson<unknown>(response));
   if (!identity) throw new Error("LinkedIn did not return a usable identity profile.");
   const candidate: LinkedInIdentityCandidate = { provider: "linkedin", ...identity };
 

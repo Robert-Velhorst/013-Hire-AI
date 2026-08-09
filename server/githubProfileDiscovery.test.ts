@@ -40,6 +40,7 @@ describe("GitHub profile discovery", () => {
         html_url: "https://github.com/octavia",
         name: "Octavia Example",
         bio: "Platform engineer",
+        blog: "javascript:alert(1)",
         public_repos: 4,
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([
@@ -47,6 +48,7 @@ describe("GitHub profile discovery", () => {
         { name: "docs", html_url: "https://github.com/octavia/docs", language: "TypeScript", stargazers_count: 0, fork: false, archived: true },
         { name: "fork", html_url: "https://github.com/octavia/fork", language: "Go", stargazers_count: 0, fork: true, archived: false },
         { name: "data", html_url: "https://github.com/octavia/data", language: "Python", stargazers_count: 2, fork: false, archived: false },
+        { name: "unsafe", html_url: "javascript:alert(1)", language: "Rust", stargazers_count: 5, fork: false, archived: false },
       ]), { status: 200 }));
     const deps = dependencies();
 
@@ -56,11 +58,20 @@ describe("GitHub profile discovery", () => {
       username: "octavia",
       profileUrl: "https://github.com/octavia",
       suggestedSkills: ["Python", "TypeScript"],
+      blog: null,
     });
     expect(result.repositories.map((repository) => repository.name)).toEqual(["platform", "data"]);
     expect(fetcher.mock.calls[1][0]).toContain("/users/octavia/repos?");
     expect(fetcher.mock.calls[1][0]).toContain("type=owner");
     expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer github-access-token");
+    expect(fetcher.mock.calls[0][1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
+    expect(fetcher.mock.calls[1][1]).toEqual(expect.objectContaining({
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    }));
     expect(deps.upsertUserConnectorAccount).toHaveBeenCalledWith(expect.objectContaining({
       provider: "github",
       lastVerifiedAt: now,
@@ -168,6 +179,19 @@ describe("GitHub profile discovery", () => {
       status: "needs_reauth",
       lastVerifiedAt: now,
     }));
+  });
+
+  it("rejects oversized GitHub profile metadata before reading repositories", async () => {
+    const deps = dependencies();
+    const fetcher = vi.fn().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(discoverGitHubProfile(18, { fetcher, now, dependencies: deps }))
+      .rejects.toThrow("Outbound response exceeded");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(deps.upsertUserConnectorAccount).not.toHaveBeenCalled();
   });
 
   it("merges source-supported skills without duplicate casing", () => {

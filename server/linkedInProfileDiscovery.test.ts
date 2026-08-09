@@ -45,9 +45,14 @@ describe("LinkedIn identity discovery", () => {
       email: "avery@example.test",
       emailVerified: true,
     });
-    expect(fetcher).toHaveBeenCalledWith("https://api.linkedin.com/v2/userinfo", {
-      headers: { Authorization: "Bearer linkedin-access-token" },
-    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://api.linkedin.com/v2/userinfo",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer linkedin-access-token" },
+        redirect: "error",
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(deps.upsertUserConnectorAccount).toHaveBeenCalledWith(expect.objectContaining({
       provider: "linkedin",
       externalAccountLabel: "Avery Example <avery@example.test>",
@@ -82,6 +87,18 @@ describe("LinkedIn identity discovery", () => {
       status: "needs_reauth",
       lastVerifiedAt: now,
     }));
+  });
+
+  it("rejects oversized LinkedIn identity metadata before refreshing account evidence", async () => {
+    const deps = dependencies();
+    const fetcher = vi.fn().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(discoverLinkedInIdentity(21, { fetcher, now, dependencies: deps }))
+      .rejects.toThrow("Outbound response exceeded");
+    expect(deps.upsertUserConnectorAccount).not.toHaveBeenCalled();
   });
 
   it("does not treat a LinkedIn grant without expiry metadata as permanent access", async () => {
