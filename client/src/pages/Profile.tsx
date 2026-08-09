@@ -1734,21 +1734,21 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit 
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Job title" required><Input value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} /></FormField>
-            <FormField label="Company" required><Input value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} /></FormField>
-            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></FormField>
-            <FormField label="Start date" required><Input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></FormField>
+            <FormField label="Job title" required><Input value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} /></FormField>
+            <FormField label="Company" required><Input value={form.company} onChange={(event) => setForm((current) => ({ ...current, company: event.target.value }))} /></FormField>
+            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
+            <FormField label="Start date" required><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
             <div className="flex items-end pb-2">
               <div className="flex items-center gap-2">
-                <Checkbox id="work-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm({ ...form, isCurrent: Boolean(checked) })} />
+                <Checkbox id="work-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm((current) => ({ ...current, isCurrent: Boolean(checked) }))} />
                 <label htmlFor="work-current" className="text-sm text-slate-300">I currently work here</label>
               </div>
             </div>
           </div>
-          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></FormField>
-          <FormField label="Key achievements"><Textarea value={form.achievements} onChange={(event) => setForm({ ...form, achievements: event.target.value })} /></FormField>
-          <FormField label="Skills used"><Input value={form.skills} onChange={(event) => setForm({ ...form, skills: event.target.value })} placeholder="React, stakeholder management, SQL" /></FormField>
+          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
+          <FormField label="Key achievements"><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
+          <FormField label="Skills used"><Input value={form.skills} onChange={(event) => setForm((current) => ({ ...current, skills: event.target.value }))} placeholder="React, stakeholder management, SQL" /></FormField>
           <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add experience"} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
@@ -1829,21 +1829,21 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = fal
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Degree" required><Input value={form.degree} onChange={(event) => setForm({ ...form, degree: event.target.value })} /></FormField>
-            <FormField label="Institution" required><Input value={form.institution} onChange={(event) => setForm({ ...form, institution: event.target.value })} /></FormField>
-            <FormField label="Field of study"><Input value={form.fieldOfStudy} onChange={(event) => setForm({ ...form, fieldOfStudy: event.target.value })} /></FormField>
-            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></FormField>
-            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></FormField>
-            <FormField label="GPA"><Input value={form.gpa} onChange={(event) => setForm({ ...form, gpa: event.target.value })} /></FormField>
+            <FormField label="Degree" required><Input value={form.degree} onChange={(event) => setForm((current) => ({ ...current, degree: event.target.value }))} /></FormField>
+            <FormField label="Institution" required><Input value={form.institution} onChange={(event) => setForm((current) => ({ ...current, institution: event.target.value }))} /></FormField>
+            <FormField label="Field of study"><Input value={form.fieldOfStudy} onChange={(event) => setForm((current) => ({ ...current, fieldOfStudy: event.target.value }))} /></FormField>
+            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
+            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
+            <FormField label="GPA"><Input value={form.gpa} onChange={(event) => setForm((current) => ({ ...current, gpa: event.target.value }))} /></FormField>
             <div className="flex items-end pb-2">
               <div className="flex items-center gap-2">
-                <Checkbox id="education-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm({ ...form, isCurrent: Boolean(checked) })} />
+                <Checkbox id="education-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm((current) => ({ ...current, isCurrent: Boolean(checked) }))} />
                 <label htmlFor="education-current" className="text-sm text-slate-300">Currently studying</label>
               </div>
             </div>
           </div>
-          <FormField label="Achievements"><Textarea value={form.achievements} onChange={(event) => setForm({ ...form, achievements: event.target.value })} /></FormField>
+          <FormField label="Achievements"><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
           <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add education"} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
@@ -1918,16 +1918,16 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <FormField label="Skill" required><Input value={form.skillName} onChange={(event) => setForm({ ...form, skillName: event.target.value })} /></FormField>
+          <FormField label="Skill" required><Input value={form.skillName} onChange={(event) => setForm((current) => ({ ...current, skillName: event.target.value }))} /></FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Category"><Input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Technical, leadership, language" /></FormField>
+            <FormField label="Category"><Input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Technical, leadership, language" /></FormField>
             <FormField label="Proficiency">
-              <select className="flex h-9 w-full rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={form.proficiency} onChange={(event) => setForm({ ...form, proficiency: event.target.value as SkillProficiency })}>
+              <select className="flex h-9 w-full rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={form.proficiency} onChange={(event) => setForm((current) => ({ ...current, proficiency: event.target.value as SkillProficiency }))}>
                 <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option>
               </select>
             </FormField>
           </div>
-          <FormField label="Years of experience"><Input type="number" min="0" max="80" value={form.yearsOfExperience} onChange={(event) => setForm({ ...form, yearsOfExperience: event.target.value })} /></FormField>
+          <FormField label="Years of experience"><Input type="number" min="0" max="80" value={form.yearsOfExperience} onChange={(event) => setForm((current) => ({ ...current, yearsOfExperience: event.target.value }))} /></FormField>
           <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add skill"} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
@@ -2006,13 +2006,13 @@ function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <FormField label="Project title" required><Input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></FormField>
-          <FormField label="Project URL"><Input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://..." /></FormField>
-          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></FormField>
-          <FormField label="Technologies"><Input value={form.technologies} onChange={(event) => setForm({ ...form, technologies: event.target.value })} placeholder="React, TypeScript, MySQL" /></FormField>
+          <FormField label="Project title" required><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></FormField>
+          <FormField label="Project URL"><Input type="url" value={form.url} onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))} placeholder="https://..." /></FormField>
+          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
+          <FormField label="Technologies"><Input value={form.technologies} onChange={(event) => setForm((current) => ({ ...current, technologies: event.target.value }))} placeholder="React, TypeScript, MySQL" /></FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} /></FormField>
+            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label="End date"><Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
           </div>
           <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add project"} onCancel={() => onOpenChange(false)} />
         </form>

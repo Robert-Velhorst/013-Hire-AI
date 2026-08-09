@@ -63,6 +63,10 @@ const boundedResumeText = z.string().trim().min(1).max(500_000);
 const boundedUploadBase64 = z.string().min(1).max(14_000_000);
 const boundedFileName = z.string().trim().min(1).max(255);
 const boundedMimeType = z.string().trim().min(1).max(120);
+const boundedProfilePayload = z.string().max(50_000);
+const boundedNoteText = z.string().max(10_000);
+const boundedTagsText = z.string().max(2_000);
+const validDate = z.coerce.date();
 const jobListPageSize = z.number().int().min(1).max(250);
 const jobCatalogPageSize = z.number().int().min(1).max(100);
 const jobSearchFiltersInput = z.object({
@@ -618,7 +622,7 @@ export const appRouter = router({
         return await searchJobs(input);
       }),
     getById: publicProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int().positive() }))
       .query(async ({ input }) => {
         const { getJobById } = await import("./db");
         return await getJobById(input.id);
@@ -633,9 +637,9 @@ export const appRouter = router({
     // Saved Jobs
     saveJob: protectedProcedure
       .input(z.object({
-        jobId: z.number(),
-        notes: z.string().optional(),
-        tags: z.string().optional(),
+        jobId: z.number().int().positive(),
+        notes: boundedNoteText.optional(),
+        tags: boundedTagsText.optional(),
         priority: z.enum(["low", "medium", "high"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -649,7 +653,7 @@ export const appRouter = router({
       }),
 
     unsaveJob: protectedProcedure
-      .input(z.object({ jobId: z.number() }))
+      .input(z.object({ jobId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         return await unsaveJob(ctx.user.id, input.jobId);
       }),
@@ -669,9 +673,9 @@ export const appRouter = router({
 
     updateSavedJobNotes: protectedProcedure
       .input(z.object({
-        jobId: z.number(),
-        notes: z.string(),
-        tags: z.string().optional(),
+        jobId: z.number().int().positive(),
+        notes: boundedNoteText,
+        tags: boundedTagsText.optional(),
         priority: z.enum(["low", "medium", "high"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -755,10 +759,10 @@ export const appRouter = router({
     update: protectedProcedure
       .input(
         z.object({
-          skills: z.string().optional(),
-          experience: z.string().optional(),
-          education: z.string().optional(),
-          preferences: z.string().optional(),
+          skills: boundedProfilePayload.optional(),
+          experience: boundedProfilePayload.optional(),
+          education: boundedProfilePayload.optional(),
+          preferences: boundedProfilePayload.optional(),
           desiredJobTypes: z.string().trim().max(500).nullable().optional(),
           desiredLocations: z.string().trim().max(500).nullable().optional(),
           salaryExpectationMin: z.number().int().min(0).max(10_000_000).nullable().optional(),
@@ -769,7 +773,7 @@ export const appRouter = router({
           linkedinUrl: safeHttpUrl.nullable().optional(),
           githubUrl: safeHttpUrl.nullable().optional(),
           portfolioUrl: safeHttpUrl.nullable().optional(),
-          diversityGroup: z.string().optional(),
+          diversityGroup: z.string().trim().max(255).optional(),
           needsVisaSponsorship: z.number().int().min(0).max(1).optional(),
         }).superRefine((value, context) => {
           if (
@@ -1057,8 +1061,8 @@ export const appRouter = router({
         jobTitle: z.string().trim().min(1).max(255),
         company: z.string().trim().min(1).max(255),
         location: z.string().trim().max(255).optional(),
-        startDate: z.string().transform((s) => new Date(s)),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate,
+        endDate: validDate.optional(),
         isCurrent: z.number().int().min(0).max(1).optional(),
         description: z.string().trim().max(5000).optional(),
         achievements: z.string().trim().max(5000).optional(),
@@ -1075,12 +1079,12 @@ export const appRouter = router({
       }),
     updateWorkExperience: protectedProcedure
       .input(z.object({
-        id: z.number(),
+        id: z.number().int().positive(),
         jobTitle: z.string().trim().min(1).max(255).optional(),
         company: z.string().trim().min(1).max(255).optional(),
         location: z.string().trim().max(255).optional(),
-        startDate: z.string().transform((s) => new Date(s)).optional(),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate.optional(),
+        endDate: validDate.optional(),
         isCurrent: z.number().int().min(0).max(1).optional(),
         description: z.string().trim().max(5000).optional(),
         achievements: z.string().trim().max(5000).optional(),
@@ -1097,7 +1101,7 @@ export const appRouter = router({
         return { workExperience, matchRefresh };
       }),
     deleteWorkExperience: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { deleteWorkExperience } = await import("./db");
         const workExperience = await deleteWorkExperience(input.id, ctx.user.id);
@@ -1119,8 +1123,8 @@ export const appRouter = router({
         fieldOfStudy: z.string().trim().max(255).optional(),
         institution: z.string().trim().min(1).max(255),
         location: z.string().trim().max(255).optional(),
-        startDate: z.string().transform((s) => new Date(s)).optional(),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate.optional(),
+        endDate: validDate.optional(),
         isCurrent: z.number().int().min(0).max(1).optional(),
         gpa: z.string().trim().max(20).optional(),
         achievements: z.string().trim().max(5000).optional(),
@@ -1131,13 +1135,13 @@ export const appRouter = router({
       }),
     updateEducation: protectedProcedure
       .input(z.object({
-        id: z.number(),
+        id: z.number().int().positive(),
         degree: z.string().trim().min(1).max(255).optional(),
         fieldOfStudy: z.string().trim().max(255).optional(),
         institution: z.string().trim().min(1).max(255).optional(),
         location: z.string().trim().max(255).optional(),
-        startDate: z.string().transform((s) => new Date(s)).optional(),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate.optional(),
+        endDate: validDate.optional(),
         isCurrent: z.number().int().min(0).max(1).optional(),
         gpa: z.string().trim().max(20).optional(),
         achievements: z.string().trim().max(5000).optional(),
@@ -1148,7 +1152,7 @@ export const appRouter = router({
         return await updateEducationEntry(id, ctx.user.id, data);
       }),
     deleteEducation: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { deleteEducationEntry } = await import("./db");
         return await deleteEducationEntry(input.id, ctx.user.id);
@@ -1177,7 +1181,7 @@ export const appRouter = router({
       }),
     updateSkill: protectedProcedure
       .input(z.object({
-        id: z.number(),
+        id: z.number().int().positive(),
         skillName: z.string().trim().min(1).max(100).optional(),
         category: z.string().trim().max(100).optional(),
         proficiency: z.enum(["beginner", "intermediate", "advanced", "expert"]).optional(),
@@ -1194,7 +1198,7 @@ export const appRouter = router({
         return result;
       }),
     deleteSkill: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { deleteUserSkill } = await import("./db");
         const result = await deleteUserSkill(input.id, ctx.user.id);
@@ -1216,8 +1220,8 @@ export const appRouter = router({
         description: z.string().trim().max(5000).optional(),
         url: z.string().trim().max(500).optional(),
         technologies: z.string().trim().max(2000).optional(),
-        startDate: z.string().transform((s) => new Date(s)).optional(),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate.optional(),
+        endDate: validDate.optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { createUserProject } = await import("./db");
@@ -1225,13 +1229,13 @@ export const appRouter = router({
       }),
     updateProject: protectedProcedure
       .input(z.object({
-        id: z.number(),
+        id: z.number().int().positive(),
         title: z.string().trim().min(1).max(255).optional(),
         description: z.string().trim().max(5000).optional(),
         url: z.string().trim().max(500).optional(),
         technologies: z.string().trim().max(2000).optional(),
-        startDate: z.string().transform((s) => new Date(s)).optional(),
-        endDate: z.string().transform((s) => new Date(s)).optional(),
+        startDate: validDate.optional(),
+        endDate: validDate.optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
@@ -1239,7 +1243,7 @@ export const appRouter = router({
         return await updateUserProject(id, ctx.user.id, data);
       }),
     deleteProject: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { deleteUserProject } = await import("./db");
         return await deleteUserProject(input.id, ctx.user.id);
@@ -1443,7 +1447,7 @@ export const appRouter = router({
       }),
     decide: protectedProcedure
       .input(z.object({
-        jobId: z.number(),
+        jobId: z.number().int().positive(),
         decision: z.enum(["apply", "save", "ignore", "review", "manual_apply"]),
         decisionReason: z.string().trim().min(1).max(5000),
         matchScore: z.number().int().min(0).max(100).optional(),
@@ -1865,7 +1869,7 @@ export const appRouter = router({
         return { success: true, changed: result.changed, notification: result.notification };
       }),
     getLedgerArtifacts: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({ applicationId: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
         const { getApplicationLedgerArtifactWindow } = await import("./db");
         try {
@@ -1879,7 +1883,7 @@ export const appRouter = router({
         }
       }),
     generateInterviewPreparation: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({ applicationId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         try {
           return await generateInterviewPreparationForApplication(input.applicationId, ctx.user.id);
@@ -1918,7 +1922,7 @@ export const appRouter = router({
       }),
     resolveApproval: protectedProcedure
       .input(z.object({
-        approvalId: z.number(),
+        approvalId: z.number().int().positive(),
         status: z.enum(["approved", "rejected", "cancelled"]),
         decisionNote: z.string().trim().max(5000).optional(),
       }))
@@ -2097,7 +2101,7 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(
         z.object({
-          applicationId: z.number(),
+          applicationId: z.number().int().positive(),
           status: z.literal("withdrawn"),
         })
       )
@@ -2131,7 +2135,7 @@ export const appRouter = router({
       }),
     confirmOfferAcceptance: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         confirmed: z.literal(true),
         acceptanceNote: z.string().trim().min(8).max(5000),
       }))
@@ -2223,7 +2227,7 @@ export const appRouter = router({
       }),
     confirmSubmission: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         source: z.enum(["manual", "employer_portal", "email_confirmation", "ats_confirmation"]),
         evidence: z.string().trim().min(8).max(5000),
         confirmationUrl: safeHttpUrl.optional(),
@@ -2242,7 +2246,7 @@ export const appRouter = router({
       }),
     recordResponse: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         responseType: z.enum(["viewed", "rejection", "interview_invite", "offer", "employer_question", "other"]),
         source: z.enum(["email", "employer_portal", "linkedin", "phone", "other"]),
         sourceReference: z.string().trim().min(3).max(320).optional(),
@@ -2306,7 +2310,7 @@ export const appRouter = router({
         }
       }),
     dismissInboxResponseCandidate: protectedProcedure
-      .input(z.object({ candidateId: z.number() }))
+      .input(z.object({ candidateId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { createAuditEvent, getInboxResponseCandidate, resolveInboxResponseCandidate } = await import("./db");
         const existing = await getInboxResponseCandidate(input.candidateId, ctx.user.id);
@@ -2482,7 +2486,7 @@ export const appRouter = router({
       }),
 
     deleteNote: protectedProcedure
-      .input(z.object({ noteId: z.number() }))
+      .input(z.object({ noteId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         return await deleteApplicationNote(input.noteId, ctx.user.id);
       }),
@@ -2490,7 +2494,7 @@ export const appRouter = router({
     // Interview Scheduling
     scheduleInterview: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         interviewType: z.enum(["phone", "video", "onsite", "technical", "behavioral", "panel"]),
         scheduledAt: z.string().datetime().transform((s) => new Date(s)),
         duration: z.number().int().min(5).max(480).optional(),
@@ -2533,7 +2537,7 @@ export const appRouter = router({
 
     updateInterviewStatus: protectedProcedure
       .input(z.object({
-        interviewId: z.number(),
+        interviewId: z.number().int().positive(),
         status: z.enum(["scheduled", "completed", "cancelled", "rescheduled"]),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2551,7 +2555,7 @@ export const appRouter = router({
 
     recordInterviewOutcome: protectedProcedure
       .input(z.object({
-        interviewId: z.number(),
+        interviewId: z.number().int().positive(),
         outcome: z.enum(["next_round", "offer", "rejection", "no_response", "other"]),
         source: z.enum(["email", "employer_portal", "linkedin", "phone", "other"]),
         sourceReference: z.string().trim().min(3).max(320).optional(),
@@ -2573,7 +2577,7 @@ export const appRouter = router({
 
     rescheduleInterview: protectedProcedure
       .input(z.object({
-        interviewId: z.number(),
+        interviewId: z.number().int().positive(),
         newDate: z.string().datetime().transform((s) => new Date(s)),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2592,10 +2596,10 @@ export const appRouter = router({
     // Follow-ups
     createFollowUp: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         message: z.string().trim().min(1).max(MAX_FOLLOW_UP_MESSAGE_CHARS),
         purpose: z.enum(["routine_follow_up", "employer_reply"]).optional(),
-        sourceResponseId: z.number().optional(),
+        sourceResponseId: z.number().int().positive().optional(),
       }).strict())
       .mutation(async ({ ctx, input }) => {
         try {
@@ -2621,7 +2625,7 @@ export const appRouter = router({
 
     markFollowUpSent: protectedProcedure
       .input(z.object({
-        followUpId: z.number(),
+        followUpId: z.number().int().positive(),
         deliveryConfirmation: z.string().trim().min(8).max(1000),
       }).strict())
       .mutation(async ({ ctx, input }) => {
@@ -2655,7 +2659,7 @@ export const appRouter = router({
       }),
 
     markFollowUpResponse: protectedProcedure
-      .input(z.object({ followUpId: z.number() }))
+      .input(z.object({ followUpId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         try {
           return await markFollowUpResponseReceived(input.followUpId, ctx.user.id);
@@ -2670,7 +2674,7 @@ export const appRouter = router({
 
     generateFollowUpEmail: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         type: z.enum(["initial", "reminder", "thank_you", "status_check"]),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2680,8 +2684,8 @@ export const appRouter = router({
 
     generateEmployerReplyEmail: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
-        responseId: z.number().optional(),
+        applicationId: z.number().int().positive(),
+        responseId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -2701,7 +2705,7 @@ export const appRouter = router({
   // AI Matching
   matching: router({
     calculateMatch: protectedProcedure
-      .input(z.object({ jobId: z.number() }))
+      .input(z.object({ jobId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { getUserProfile, getUserSkills, getWorkExperiences, getJobById, getCanonicalJobId } = await import("./db");
         const { calculateJobMatch } = await import("./aiMatching");
@@ -2755,7 +2759,7 @@ export const appRouter = router({
   // AI-Powered Features
   ai: router({
     generateCoverLetter: protectedProcedure
-      .input(z.object({ jobId: z.number() }))
+      .input(z.object({ jobId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { getUserProfile, getUserSkills, getWorkExperiences, getJobById } = await import("./db");
         const { generateCoverLetter } = await import("./aiMatching");
@@ -2787,7 +2791,7 @@ export const appRouter = router({
         return await identifyDecisionMakers(input.company, input.jobTitle);
       }),
     generateInterviewPrep: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({ applicationId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         return await generateInterviewPreparationForApplication(input.applicationId, ctx.user.id);
       }),
@@ -2935,7 +2939,7 @@ export const appRouter = router({
 
     // Set active version
     setActiveVersion: protectedProcedure
-      .input(z.object({ version: z.number() }))
+      .input(z.object({ version: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const success = await setActiveVersion(ctx.user.id, input.version);
         if (success) {
@@ -2952,7 +2956,7 @@ export const appRouter = router({
 
     // Delete a version
     deleteVersion: protectedProcedure
-      .input(z.object({ version: z.number() }))
+      .input(z.object({ version: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const success = await deleteResumeVersion(ctx.user.id, input.version);
         if (success) {
@@ -2973,7 +2977,7 @@ export const appRouter = router({
 
     // Get download URL
     getDownloadUrl: protectedProcedure
-      .input(z.object({ version: z.number().optional() }))
+      .input(z.object({ version: z.number().int().positive().optional() }))
       .query(async ({ ctx, input }) => {
         const url = await getResumeDownloadUrl(ctx.user.id, input.version);
         return { url };
@@ -3661,7 +3665,7 @@ export const appRouter = router({
     applyToJob: protectedProcedure
       .input(
         z.object({
-          jobId: z.number(),
+          jobId: z.number().int().positive(),
           coverLetter: z.string().trim().max(50_000).optional(),
         })
       )
@@ -4022,13 +4026,13 @@ export const appRouter = router({
       }),
 
     toggle: protectedProcedure
-      .input(z.object({ alertId: z.number(), isActive: z.boolean() }))
+      .input(z.object({ alertId: z.number().int().positive(), isActive: z.boolean() }))
       .mutation(async ({ ctx, input }) => {
         return await toggleJobAlert(ctx.user.id, input.alertId, input.isActive);
       }),
 
     delete: protectedProcedure
-      .input(z.object({ alertId: z.number() }))
+      .input(z.object({ alertId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         return await deleteJobAlert(ctx.user.id, input.alertId);
       }),
@@ -4037,14 +4041,14 @@ export const appRouter = router({
   // Interview Preparation
   interviewPrep: router({
     generateQuestions: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({ applicationId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         return await generateInterviewQuestionsForApplication(input.applicationId, ctx.user.id);
       }),
 
     mockInterview: protectedProcedure
       .input(z.object({
-        applicationId: z.number(),
+        applicationId: z.number().int().positive(),
         userResponse: z.string().trim().min(1).max(10_000),
         questionIndex: z.number().int().min(0).max(100),
       }))
@@ -4058,7 +4062,7 @@ export const appRouter = router({
       }),
 
     videoTips: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+      .input(z.object({ applicationId: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
         return await getVideoInterviewTipsForApplication(input.applicationId, ctx.user.id);
       }),

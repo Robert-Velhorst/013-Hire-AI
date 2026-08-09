@@ -51,6 +51,24 @@ describe("transport resource limits", () => {
     })).rejects.toThrow();
   });
 
+  it("rejects invalid profile dates and oversized saved-job metadata", async () => {
+    await expect(caller.profile.addWorkExperience({
+      jobTitle: "Engineer",
+      company: "Example",
+      startDate: "not-a-date",
+    })).rejects.toThrow();
+    await expect(caller.jobs.saveJob({
+      jobId: 1,
+      notes: "x".repeat(10_001),
+    })).rejects.toThrow();
+  });
+
+  it("rejects zero identifiers before ownership or database work", async () => {
+    await expect(caller.jobs.getById({ id: 0 })).rejects.toThrow();
+    await expect(caller.applications.getLedgerArtifacts({ applicationId: 0 })).rejects.toThrow();
+    await expect(caller.successFees.getFeeVerifications({ successFeeId: 0 })).rejects.toThrow();
+  });
+
   it("keeps upload limits at the transport boundary for every document route", () => {
     const routers = readFileSync(resolve(process.cwd(), "server", "routers.ts"), "utf8");
     const fees = readFileSync(resolve(process.cwd(), "server", "routers", "successFees.ts"), "utf8");

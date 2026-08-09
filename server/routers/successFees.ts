@@ -811,7 +811,7 @@ export const successFeesRouter = router({
   // Report employment ended (user left job)
   reportEmploymentEnded: protectedProcedure
     .input(z.object({
-      successFeeId: z.number(),
+      successFeeId: z.number().int().positive(),
       endDate: z.string().datetime({ offset: true }),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -957,7 +957,7 @@ export const successFeesRouter = router({
 
   // Get verifications for a fee
   getFeeVerifications: protectedProcedure
-    .input(z.object({ successFeeId: z.number() }))
+    .input(z.object({ successFeeId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return [];
@@ -970,7 +970,8 @@ export const successFeesRouter = router({
             eq(employmentVerifications.userId, ctx.user.id)
           )
         )
-        .orderBy(desc(employmentVerifications.submittedAt));
+        .orderBy(desc(employmentVerifications.submittedAt), desc(employmentVerifications.id))
+        .limit(100);
 
       return verifications;
     }),

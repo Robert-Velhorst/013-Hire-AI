@@ -180,6 +180,16 @@ describe("dashboard performance claims", () => {
     expect(router).not.toContain("listInboxResponseCandidates: protectedProcedure");
   });
 
+  it("keeps rapid profile form edits when React batches input events", () => {
+    const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
+
+    expect(profile).toContain("setForm((current) => ({ ...current, jobTitle: event.target.value }))");
+    expect(profile).toContain("setForm((current) => ({ ...current, degree: event.target.value }))");
+    expect(profile).toContain("setForm((current) => ({ ...current, skillName: event.target.value }))");
+    expect(profile).toContain("setForm((current) => ({ ...current, title: event.target.value }))");
+    expect(profile).not.toContain("setForm({ ...form,");
+  });
+
   it("uses cursor pagination for the saved-jobs surface", () => {
     const page = readFileSync(resolve(process.cwd(), "client/src/pages/SavedJobs.tsx"), "utf8");
     const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");

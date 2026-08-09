@@ -184,7 +184,7 @@ export const adminRouter = router({
 
   getReviewEvidence: adminProcedure
     .input(z.object({
-      reviewItemId: z.number(),
+      reviewItemId: z.number().int().positive(),
     }))
     .query(async ({ input }) => {
       try {
@@ -199,7 +199,7 @@ export const adminRouter = router({
     }),
 
   previewPrivacyErasure: adminProcedure
-    .input(z.object({ reviewItemId: z.number() }))
+    .input(z.object({ reviewItemId: z.number().int().positive() }))
     .query(async ({ input }) => {
       const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
       if (evidence.reviewItem.category !== "privacy_deletion" || evidence.reviewItem.entityType !== "user") {
@@ -212,7 +212,7 @@ export const adminRouter = router({
     }),
 
   getPrivacyErasurePlan: adminProcedure
-    .input(z.object({ reviewItemId: z.number() }))
+    .input(z.object({ reviewItemId: z.number().int().positive() }))
     .query(async ({ input }) => {
       const evidence = await getAdminReviewEvidenceSnapshot(input.reviewItemId);
       if (
@@ -296,7 +296,7 @@ export const adminRouter = router({
 
   resolveReviewItem: adminProcedure
     .input(z.object({
-      reviewItemId: z.number(),
+      reviewItemId: z.number().int().positive(),
       status: z.enum(["resolved", "dismissed"]),
       resolution: z.string().trim().min(1).max(5000),
     }))
@@ -514,9 +514,9 @@ export const adminRouter = router({
   updateFeeStatus: adminProcedure
     .input(
       z.object({
-        feeId: z.number(),
+        feeId: z.number().int().positive(),
         status: z.enum(["pending_verification", "active", "paused", "ended", "suspended", "disputed"]),
-        notes: z.string().optional(),
+        notes: z.string().trim().max(10_000).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -611,9 +611,9 @@ export const adminRouter = router({
   reviewVerification: adminProcedure
     .input(
       z.object({
-        verificationId: z.number(),
+        verificationId: z.number().int().positive(),
         approved: z.boolean(),
-        notes: z.string().optional(),
+        notes: z.string().trim().max(10_000).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -701,8 +701,8 @@ export const adminRouter = router({
   suspendUser: adminProcedure
     .input(
       z.object({
-        userId: z.number(),
-        reason: z.string().min(1),
+        userId: z.number().int().positive(),
+        reason: z.string().trim().min(1).max(5000),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -772,7 +772,7 @@ export const adminRouter = router({
 
   // ─── Reinstate User Account ──────────────────────────────────────────────────
   reinstateUser: adminProcedure
-    .input(z.object({ userId: z.number() }))
+    .input(z.object({ userId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
@@ -800,8 +800,8 @@ export const adminRouter = router({
   flagLegalEscalation: adminProcedure
     .input(
       z.object({
-        feeId: z.number(),
-        reason: z.string().min(1),
+        feeId: z.number().int().positive(),
+        reason: z.string().trim().min(1).max(5000),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -996,8 +996,8 @@ export const adminRouter = router({
   addNote: adminProcedure
     .input(
       z.object({
-        feeId: z.number(),
-        note: z.string().min(1),
+        feeId: z.number().int().positive(),
+        note: z.string().trim().min(1).max(10_000),
       })
     )
     .mutation(async ({ ctx, input }) => {
