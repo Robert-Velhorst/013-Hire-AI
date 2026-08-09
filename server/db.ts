@@ -73,6 +73,7 @@ import {
 import { isOfferEligibleApplicationStatus } from "@shared/offerEligibility";
 import { getListingObservationCutoff, isJobListingCurrent } from "@shared/jobListingFreshness";
 import { PROFILE_EVIDENCE_LIMITS, profileEvidenceLimitMessage } from "@shared/profileEvidenceLimits";
+import { APPLICATION_LEDGER_WINDOW_LIMITS, takeApplicationLedgerWindow } from "@shared/applicationLedgerWindow";
 import {
   getMissingScraperPlatformCatalog,
   getPlatformDiscoveryPolicy,
@@ -2780,12 +2781,17 @@ export async function createApplicationAttempt(attempt: InsertApplicationAttempt
   return { insertId: Number(result[0].insertId) };
 }
 
-export async function getApplicationLedgerArtifacts(applicationId: number, userId: number): Promise<{
+async function readApplicationLedgerArtifacts(applicationId: number, userId: number, bounded: boolean): Promise<{
   material: ApplicationMaterial | null;
   interviewPreparation: InterviewPreparation | null;
   attempts: ApplicationAttempt[];
   employerResponses: EmployerResponse[];
   auditEvents: AuditEvent[];
+  hasMore: {
+    attempts: boolean;
+    employerResponses: boolean;
+    auditEvents: boolean;
+  };
 }> {
   const db = await getDb();
   if (!db) {
@@ -2799,19 +2805,33 @@ export async function getApplicationLedgerArtifacts(applicationId: number, userI
     ) || null;
     const attempts = memoryApplicationAttempts
       .filter((item) => item.applicationId === applicationId && item.userId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id);
     const responses = memoryEmployerResponses
       .filter((item) => item.applicationId === applicationId && item.userId === userId)
-      .sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
+      .sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime() || b.id - a.id);
     const events = memoryAuditEvents
       .filter((item) => item.userId === userId && item.entityType === "application" && item.entityId === applicationId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id);
+    const attemptsWindow = bounded
+      ? takeApplicationLedgerWindow(attempts, APPLICATION_LEDGER_WINDOW_LIMITS.attempts)
+      : { items: attempts, hasMore: false };
+    const responsesWindow = bounded
+      ? takeApplicationLedgerWindow(responses, APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses)
+      : { items: responses, hasMore: false };
+    const eventsWindow = bounded
+      ? takeApplicationLedgerWindow(events, APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents)
+      : { items: events, hasMore: false };
     return {
       material: material as ApplicationMaterial | null,
       interviewPreparation: preparation as InterviewPreparation | null,
-      attempts: attempts as ApplicationAttempt[],
-      employerResponses: responses as EmployerResponse[],
-      auditEvents: events as AuditEvent[],
+      attempts: attemptsWindow.items as ApplicationAttempt[],
+      employerResponses: responsesWindow.items as EmployerResponse[],
+      auditEvents: eventsWindow.items as AuditEvent[],
+      hasMore: {
+        attempts: attemptsWindow.hasMore,
+        employerResponses: responsesWindow.hasMore,
+        auditEvents: eventsWindow.hasMore,
+      },
     };
   }
 
@@ -2821,6 +2841,32 @@ export async function getApplicationLedgerArtifacts(applicationId: number, userI
     .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
     .limit(1);
   if (!application[0]) throw new Error("Application not found.");
+
+  const attemptsQuery = db
+    .select()
+    .from(applicationAttempts)
+    .where(and(
+      eq(applicationAttempts.applicationId, applicationId),
+      eq(applicationAttempts.userId, userId)
+    ))
+    .orderBy(desc(applicationAttempts.createdAt), desc(applicationAttempts.id));
+  const responsesQuery = db
+    .select()
+    .from(employerResponses)
+    .where(and(
+      eq(employerResponses.applicationId, applicationId),
+      eq(employerResponses.userId, userId)
+    ))
+    .orderBy(desc(employerResponses.receivedAt), desc(employerResponses.id));
+  const eventsQuery = db
+    .select()
+    .from(auditEvents)
+    .where(and(
+      eq(auditEvents.userId, userId),
+      eq(auditEvents.entityType, "application"),
+      eq(auditEvents.entityId, applicationId)
+    ))
+    .orderBy(desc(auditEvents.createdAt), desc(auditEvents.id));
 
   const [materialRows, preparationRows, attempts, responses, events] = await Promise.all([
     db
@@ -2837,40 +2883,41 @@ export async function getApplicationLedgerArtifacts(applicationId: number, userI
       ))
       .orderBy(desc(interviewPreparation.createdAt))
       .limit(1),
-    db
-      .select()
-      .from(applicationAttempts)
-      .where(and(
-        eq(applicationAttempts.applicationId, applicationId),
-        eq(applicationAttempts.userId, userId)
-      ))
-      .orderBy(desc(applicationAttempts.createdAt)),
-    db
-      .select()
-      .from(employerResponses)
-      .where(and(
-        eq(employerResponses.applicationId, applicationId),
-        eq(employerResponses.userId, userId)
-      ))
-      .orderBy(desc(employerResponses.receivedAt)),
-    db
-      .select()
-      .from(auditEvents)
-      .where(and(
-        eq(auditEvents.userId, userId),
-        eq(auditEvents.entityType, "application"),
-        eq(auditEvents.entityId, applicationId)
-      ))
-      .orderBy(desc(auditEvents.createdAt)),
+    bounded ? attemptsQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.attempts + 1) : attemptsQuery,
+    bounded ? responsesQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses + 1) : responsesQuery,
+    bounded ? eventsQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents + 1) : eventsQuery,
   ]);
+
+  const attemptsWindow = bounded
+    ? takeApplicationLedgerWindow(attempts, APPLICATION_LEDGER_WINDOW_LIMITS.attempts)
+    : { items: attempts, hasMore: false };
+  const responsesWindow = bounded
+    ? takeApplicationLedgerWindow(responses, APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses)
+    : { items: responses, hasMore: false };
+  const eventsWindow = bounded
+    ? takeApplicationLedgerWindow(events, APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents)
+    : { items: events, hasMore: false };
 
   return {
     material: materialRows[0] || null,
     interviewPreparation: preparationRows[0] || null,
-    attempts,
-    employerResponses: responses,
-    auditEvents: events,
+    attempts: attemptsWindow.items,
+    employerResponses: responsesWindow.items,
+    auditEvents: eventsWindow.items,
+    hasMore: {
+      attempts: attemptsWindow.hasMore,
+      employerResponses: responsesWindow.hasMore,
+      auditEvents: eventsWindow.hasMore,
+    },
   };
+}
+
+export async function getApplicationLedgerArtifacts(applicationId: number, userId: number) {
+  return await readApplicationLedgerArtifacts(applicationId, userId, false);
+}
+
+export async function getApplicationLedgerArtifactWindow(applicationId: number, userId: number) {
+  return await readApplicationLedgerArtifacts(applicationId, userId, true);
 }
 
 export async function createEmployerResponse(response: InsertEmployerResponse) {

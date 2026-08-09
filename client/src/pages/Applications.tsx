@@ -15,6 +15,7 @@ import { getApplicationNextActions, type ApplicationNextActionId } from "@/lib/a
 import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
 import { formatJobSalary } from "@/lib/jobSalary";
+import { APPLICATION_LEDGER_WINDOW_LIMITS } from "@shared/applicationLedgerWindow";
 import { useLocation } from "wouter";
 import AppHeader from "@/components/AppHeader";
 import { ReportHireDialog } from "@/components/ReportHireDialog";
@@ -1735,7 +1736,7 @@ export default function Applications() {
                           <div className="flex items-center justify-between gap-3">
                             <h4 className="text-sm font-medium text-slate-300">Application Ledger</h4>
                             <Badge variant="outline" className="border-slate-600 text-slate-300">
-                              {(ledgerArtifacts?.attempts?.length || 0)} attempts / {(ledgerArtifacts?.employerResponses?.length || 0)} responses / {ledgerArtifacts?.interviewPreparation ? 1 : 0} prep / {(ledgerArtifacts?.auditEvents?.length || 0)} audit
+                              {(ledgerArtifacts?.attempts?.length || 0)}{ledgerArtifacts?.hasMore.attempts ? "+" : ""} recent attempts / {(ledgerArtifacts?.employerResponses?.length || 0)}{ledgerArtifacts?.hasMore.employerResponses ? "+" : ""} recent responses / {ledgerArtifacts?.interviewPreparation ? 1 : 0} prep / {(ledgerArtifacts?.auditEvents?.length || 0)}{ledgerArtifacts?.hasMore.auditEvents ? "+" : ""} recent audit
                             </Badge>
                           </div>
 
@@ -1884,7 +1885,7 @@ export default function Applications() {
                                 </div>
                               )}
 
-                              {ledgerArtifacts?.attempts?.slice(0, 5).map((attempt) => (
+                              {ledgerArtifacts?.attempts?.slice(0, APPLICATION_LEDGER_WINDOW_LIMITS.attempts).map((attempt) => (
                                 <div key={attempt.id} className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
@@ -1915,10 +1916,10 @@ export default function Applications() {
                                 <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <MessageSquare className="h-4 w-4" />
-                                    Employer responses
+                                    Recent employer responses
                                   </div>
                                   <div className="space-y-3">
-                                    {ledgerArtifacts?.employerResponses?.slice(0, 5).map((response) => (
+                                    {ledgerArtifacts?.employerResponses?.slice(0, APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses).map((response) => (
                                       <div key={response.id} className="border-l border-slate-700 pl-3">
                                         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                                           <div className="flex flex-wrap items-center gap-2">
@@ -1971,10 +1972,10 @@ export default function Applications() {
                                 <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <Activity className="h-4 w-4" />
-                                    Audit trail
+                                    Recent audit trail
                                   </div>
                                   <div className="space-y-3">
-                                    {ledgerArtifacts?.auditEvents?.slice(0, 6).map((event) => (
+                                    {ledgerArtifacts?.auditEvents?.slice(0, APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents).map((event) => (
                                       <div key={event.id} className="border-l border-slate-700 pl-3">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                           <div className="flex items-center gap-2">

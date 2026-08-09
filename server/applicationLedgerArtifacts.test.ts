@@ -4,6 +4,7 @@ import {
   createApplicationAttempt,
   createApplicationMaterial,
   createEmployerResponse,
+  getApplicationLedgerArtifactWindow,
   getApplicationLedgerArtifacts,
   getEmployerResponses,
 } from "./db";
@@ -48,6 +49,47 @@ describe("application ledger artifacts", () => {
     expect(ledger.attempts).toHaveLength(1);
     expect(ledger.attempts[0].status).toBe("review_required");
     expect(ledger.attempts[0].confirmationText).toContain("user review required");
+  });
+
+  it("bounds the interactive attempt window without truncating internal ledger reads", async () => {
+    const userId = 95004;
+    const jobId = 1;
+    const application = await createApplication({
+      userId,
+      jobId,
+      status: "pending",
+      notes: "Window behavior.",
+    });
+    const applicationId = Number(application.insertId);
+
+    for (let index = 0; index < 7; index += 1) {
+      await createApplicationAttempt({
+        applicationId,
+        userId,
+        jobId,
+        attemptType: "prepare",
+        status: "prepared",
+        confirmationText: `Attempt ${index}`,
+        createdAt: new Date(Date.UTC(2026, 7, 9, 10, index)),
+      });
+    }
+
+    const [complete, interactive] = await Promise.all([
+      getApplicationLedgerArtifacts(applicationId, userId),
+      getApplicationLedgerArtifactWindow(applicationId, userId),
+    ]);
+
+    expect(complete.attempts).toHaveLength(7);
+    expect(complete.hasMore.attempts).toBe(false);
+    expect(interactive.attempts).toHaveLength(5);
+    expect(interactive.hasMore.attempts).toBe(true);
+    expect(interactive.attempts.map((attempt) => attempt.confirmationText)).toEqual([
+      "Attempt 6",
+      "Attempt 5",
+      "Attempt 4",
+      "Attempt 3",
+      "Attempt 2",
+    ]);
   });
 
   it("adds employer responses to the application ledger without leaking other users", async () => {

@@ -320,6 +320,22 @@ describe("Drizzle migration journal", () => {
     }
   });
 
+  it("keeps application-ledger window indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0063_application_ledger_windows.sql"),
+      "utf8"
+    );
+    for (const indexName of [
+      "application_attempts_application_created_id_idx",
+      "employer_responses_application_received_id_idx",
+      "audit_events_entity_created_id_idx",
+    ]) {
+      expect(schema).toContain(`index("${indexName}")`);
+      expect(migration).toContain(`CREATE INDEX \`${indexName}\``);
+    }
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

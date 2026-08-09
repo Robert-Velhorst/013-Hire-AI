@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded application-ledger detail windows
+
+- Limited selected-application attempt, employer-response, and audit reads to the newest records the interface can render, with one-row lookahead overflow signals.
+- Added deterministic timestamp/ID ordering and matching database indexes for all three ledger streams.
+- Updated the application detail summary and headings to describe recent windows truthfully instead of implying complete history.
+
 ## 2026-08-09 - Transactional profile-evidence ceilings
 
 - Added transactionally enforced per-user limits for work history, education, skills, and projects, serializing concurrent inserts on the owning user record.

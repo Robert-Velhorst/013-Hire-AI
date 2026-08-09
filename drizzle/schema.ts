@@ -345,6 +345,7 @@ export const applicationAttempts = mysqlTable("application_attempts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("application_attempts_application_idx").on(table.applicationId),
+  index("application_attempts_application_created_id_idx").on(table.applicationId, table.createdAt, table.id),
   index("application_attempts_user_status_idx").on(table.userId, table.status),
 ]);
 
@@ -394,6 +395,7 @@ export const employerResponses = mysqlTable("employer_responses", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("employer_responses_application_idx").on(table.applicationId),
+  index("employer_responses_application_received_id_idx").on(table.applicationId, table.receivedAt, table.id),
   index("employer_responses_application_type_received_id_idx").on(
     table.applicationId,
     table.responseType,
@@ -449,6 +451,7 @@ export const auditEvents = mysqlTable("audit_events", {
 }, (table) => [
   index("audit_events_user_created_idx").on(table.userId, table.createdAt),
   index("audit_events_entity_idx").on(table.entityType, table.entityId),
+  index("audit_events_entity_created_id_idx").on(table.entityType, table.entityId, table.createdAt, table.id),
 ]);
 
 /**

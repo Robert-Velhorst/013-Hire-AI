@@ -1853,9 +1853,9 @@ export const appRouter = router({
     getLedgerArtifacts: protectedProcedure
       .input(z.object({ applicationId: z.number() }))
       .query(async ({ ctx, input }) => {
-        const { getApplicationLedgerArtifacts } = await import("./db");
+        const { getApplicationLedgerArtifactWindow } = await import("./db");
         try {
-          return await getApplicationLedgerArtifacts(input.applicationId, ctx.user.id);
+          return await getApplicationLedgerArtifactWindow(input.applicationId, ctx.user.id);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unable to load application ledger.";
           throw new TRPCError({
