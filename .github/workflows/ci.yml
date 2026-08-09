@@ -140,6 +140,12 @@ jobs:
             -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
             --entrypoint node hire-ai:ci scripts/database-migrate.mjs
 
+      - name: Verify migrated schema matches the runtime model
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
+            --entrypoint node hire-ai:ci dist/database-schema-audit.js
+
       - name: Verify production health and readiness
         run: |
           trap 'docker rm -f hire-ai-ci-app >/dev/null 2>&1 || true' EXIT

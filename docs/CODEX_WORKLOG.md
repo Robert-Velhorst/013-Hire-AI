@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Runtime-to-migration schema audit
+
+- Added a production-bundled audit that compares every Drizzle table and column with MySQL `information_schema` without exposing connection credentials.
+- Verified all 42 runtime tables against a clean MySQL 8.4 database after the complete 47-migration history: no missing tables, missing columns, or unexpected columns.
+- Added an exact-schema CI gate immediately after image-owned migration so runtime/migration drift fails before health acceptance.
+
 ## 2026-08-09 - Provider-event ingestion idempotency
 
 - Added migration `0046` for the `employer_responses.interview_id` column already required by the runtime schema; a real MySQL workflow drill exposed the missing column.
