@@ -77,7 +77,7 @@ async function startServer() {
   }
 
   let autonomousScheduler: { start(): void; stop(): Promise<void> } | null = null;
-  let jobScrapingScheduler: { start(): void; stop(): void } | null = null;
+  let jobScrapingScheduler: { start(): void; stop(): Promise<void> } | null = null;
   if (ENV.autonomousSchedulerEnabled) {
     const { getAutonomousScheduler } = await import("../autonomousScheduler");
     autonomousScheduler = getAutonomousScheduler();
@@ -116,7 +116,7 @@ async function startServer() {
     forceExit.unref();
 
     await autonomousScheduler?.stop();
-    jobScrapingScheduler?.stop();
+    await jobScrapingScheduler?.stop();
     server.close((error) => {
       clearTimeout(forceExit);
       if (error) {

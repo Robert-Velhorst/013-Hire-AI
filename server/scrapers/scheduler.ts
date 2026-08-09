@@ -61,6 +61,7 @@ function classifyRunOutcome(platformResults: Record<string, { errors: string[] }
 export class JobScrapingScheduler {
   private config: SchedulerConfig;
   private intervalId: NodeJS.Timeout | null = null;
+  private activeCycle: Promise<void> | null = null;
   private status: SchedulerStatus = {
     isStarted: false,
     isRunning: false,
@@ -117,7 +118,7 @@ export class JobScrapingScheduler {
   /**
    * Stop the scheduler
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
@@ -125,16 +126,28 @@ export class JobScrapingScheduler {
       console.log("[Scheduler] Stopped");
     }
     this.status.isStarted = false;
+    await this.activeCycle;
   }
 
   /**
    * Run a single scraping cycle
    */
   async runScraping(): Promise<void> {
-    if (this.status.isRunning) {
-      console.log("[Scheduler] Scraping already in progress, skipping");
+    if (this.activeCycle) {
+      console.log("[Scheduler] Scraping already in progress, joining current run");
+      await this.activeCycle;
       return;
     }
+
+    let cycle: Promise<void>;
+    cycle = this.executeScraping().finally(() => {
+      if (this.activeCycle === cycle) this.activeCycle = null;
+    });
+    this.activeCycle = cycle;
+    await cycle;
+  }
+
+  private async executeScraping(): Promise<void> {
 
     this.status.isRunning = true;
     this.status.errors = [];
@@ -189,6 +202,7 @@ export class JobScrapingScheduler {
     } catch {
       console.error(`[Scheduler] ${SCRAPE_CYCLE_FAILURE_MESSAGE}`);
       this.status.errors.push(SCRAPE_CYCLE_FAILURE_MESSAGE);
+      this.status.totalRunsCompleted++;
       this.status.totalFailedRuns++;
       this.status.lastRunOutcome = "failed";
       this.status.lastRunAt = new Date();
@@ -233,8 +247,12 @@ export class JobScrapingScheduler {
     
     // Restart if running with new interval
     if (shouldRestart) {
-      this.stop();
-      this.start();
+      clearInterval(this.intervalId!);
+      this.intervalId = setInterval(
+        () => void this.runScraping(),
+        this.config.intervalMinutes * 60 * 1000
+      );
+      this.status.nextRunAt = new Date(Date.now() + this.config.intervalMinutes * 60 * 1000);
     }
   }
 }

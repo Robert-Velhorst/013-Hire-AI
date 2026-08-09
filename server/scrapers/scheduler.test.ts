@@ -147,6 +147,10 @@ describe("job scraping scheduler", () => {
 
     expect(scheduler.getStatus().errors).toEqual(["Scraping run could not complete."]);
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("worker-secret");
+    expect(scheduler.getStatus()).toMatchObject({
+      totalRunsCompleted: 2,
+      totalFailedRuns: 2,
+    });
   });
 
   it("passes an explicit platform allowlist to a discovery run", async () => {
@@ -165,13 +169,13 @@ describe("job scraping scheduler", () => {
     expect(scheduler.getStatus().enabledPlatforms).toEqual(["RemoteOK", "Remotive"]);
   });
 
-  it("reports start and stop state for deployment health checks", () => {
+  it("reports start and stop state for deployment health checks", async () => {
     const scheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
 
     scheduler.start();
     expect(scheduler.getStatus().isStarted).toBe(true);
 
-    scheduler.stop();
+    await scheduler.stop();
     expect(scheduler.getStatus()).toMatchObject({ isStarted: false, nextRunAt: null });
   });
 
@@ -210,5 +214,51 @@ describe("job scraping scheduler", () => {
       maxJobsPerRun: 75,
       enabledPlatforms: ["RemoteOK"],
     });
+  });
+
+  it("waits for an active cycle before completing shutdown", async () => {
+    let releaseCycle!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseCycle = resolve;
+    });
+    mocks.runScrapingCycle.mockImplementationOnce(async () => {
+      await gate;
+      return { totalSaved: 0, platformResults: { RemoteOK: { errors: [] } } };
+    });
+    const scheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+    scheduler.start();
+    await vi.waitFor(() => expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1));
+
+    let stopped = false;
+    const stopping = scheduler.stop().then(() => { stopped = true; });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    expect(scheduler.getStatus().isStarted).toBe(false);
+
+    releaseCycle();
+    await stopping;
+    expect(stopped).toBe(true);
+    expect(scheduler.getStatus()).toMatchObject({ isRunning: false, nextRunAt: null });
+  });
+
+  it("joins an active cycle instead of reporting a second manual run", async () => {
+    let releaseCycle!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseCycle = resolve;
+    });
+    mocks.runScrapingCycle.mockImplementationOnce(async () => {
+      await gate;
+      return { totalSaved: 0, platformResults: { RemoteOK: { errors: [] } } };
+    });
+    const scheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+    const first = scheduler.runScraping();
+    await vi.waitFor(() => expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1));
+    const joined = scheduler.runScraping();
+    await Promise.resolve();
+
+    expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1);
+    releaseCycle();
+    await Promise.all([first, joined]);
+    expect(scheduler.getStatus().totalRunsCompleted).toBe(1);
   });
 });

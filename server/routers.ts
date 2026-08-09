@@ -3207,7 +3207,7 @@ export const appRouter = router({
     stopScheduler: adminProcedure.mutation(async () => {
       const { getScheduler } = await import("./scrapers/scheduler");
       const scheduler = getScheduler();
-      scheduler.stop();
+      await scheduler.stop();
       return { success: true, message: "Scheduler stopped", scheduler: scheduler.getStatus() };
     }),
 
