@@ -3487,6 +3487,62 @@ export async function getFollowUps(applicationId: number, userId: number) {
     .orderBy(desc(followUps.createdAt));
 }
 
+export async function getFollowUpPage(
+  applicationId: number,
+  userId: number,
+  options: {
+    limit?: number;
+    cursor?: { createdAt: Date; id: number };
+  } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10), 1), 50);
+  const db = await getDb();
+  if (!db) {
+    await getFollowUpApplication(applicationId, userId);
+    const rows = memoryFollowUps
+      .filter((followUp) => followUp.applicationId === applicationId)
+      .filter((followUp) => !options.cursor || (
+        followUp.createdAt < options.cursor.createdAt ||
+        (followUp.createdAt.getTime() === options.cursor.createdAt.getTime() && followUp.id < options.cursor.id)
+      ))
+      .sort((left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id
+      )
+      .slice(0, limit + 1);
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last ? { createdAt: last.createdAt, id: last.id } : null,
+    };
+  }
+  await assertUserOwnsApplication(applicationId, userId);
+
+  const cursorCondition = options.cursor
+    ? or(
+      lt(followUps.createdAt, options.cursor.createdAt),
+      and(eq(followUps.createdAt, options.cursor.createdAt), lt(followUps.id, options.cursor.id))
+    )
+    : undefined;
+  const rows = await db
+    .select()
+    .from(followUps)
+    .where(and(
+      eq(followUps.applicationId, applicationId),
+      cursorCondition
+    ))
+    .orderBy(desc(followUps.createdAt), desc(followUps.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: hasMore && last ? { createdAt: last.createdAt, id: last.id } : null,
+  };
+}
+
 export async function getUserFollowUpsForApplications(
   userId: number,
   applicationIds: number[]

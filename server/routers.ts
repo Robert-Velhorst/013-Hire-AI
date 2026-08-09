@@ -33,7 +33,7 @@ import {
   confirmApplicationSubmission,
   recordEmployerResponse,
   createFollowUp,
-  getFollowUps,
+  getFollowUpPage,
   withdrawApplication,
   acceptOfferApplication,
   markFollowUpSent,
@@ -2576,10 +2576,17 @@ export const appRouter = router({
         }
       }),
 
-    getFollowUps: protectedProcedure
-      .input(z.object({ applicationId: z.number() }))
+    getFollowUpPage: protectedProcedure
+      .input(z.object({
+        applicationId: z.number().int().positive(),
+        limit: z.number().int().min(1).max(50).default(10),
+        cursor: z.object({
+          createdAt: z.date(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
       .query(async ({ ctx, input }) => {
-        return await getFollowUps(input.applicationId, ctx.user.id);
+        return await getFollowUpPage(input.applicationId, ctx.user.id, input);
       }),
 
     markFollowUpSent: protectedProcedure

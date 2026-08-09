@@ -735,6 +735,7 @@ export const followUps = mysqlTable("follow_ups", {
   uniqueIndex("follow_ups_delivery_attempt_key_unique").on(table.deliveryAttemptKey),
   index("follow_ups_delivery_state_idx").on(table.deliveryState),
   index("follow_ups_application_created_idx").on(table.applicationId, table.createdAt),
+  index("follow_ups_application_created_id_idx").on(table.applicationId, table.createdAt, table.id),
   index("follow_ups_application_sent_id_idx").on(table.applicationId, table.sentDate, table.id),
   index("follow_ups_source_response_sent_idx").on(table.sourceResponseId, table.sentDate),
 ]);

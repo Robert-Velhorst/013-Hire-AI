@@ -336,6 +336,18 @@ describe("Drizzle migration journal", () => {
     }
   });
 
+  it("keeps the follow-up cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0064_follow_up_cursor_index.sql"),
+      "utf8"
+    );
+    const indexName = "follow_ups_application_created_id_idx";
+
+    expect(schema).toContain(`index("${indexName}").on(table.applicationId, table.createdAt, table.id)`);
+    expect(migration).toContain(`CREATE INDEX \`${indexName}\``);
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Cursor-paged application follow-ups
+
+- Replaced the selected-application full follow-up history read with deterministic 10-record cursor pages and incremental loading.
+- Added an application/creation-time/ID index and preserved complete follow-up history for withdrawal, approval, and autonomous lifecycle logic.
+- Removed the three-item display truncation so every loaded follow-up remains actionable and older history has an explicit load path.
+
 ## 2026-08-09 - Bounded application-ledger detail windows
 
 - Limited selected-application attempt, employer-response, and audit reads to the newest records the interface can render, with one-row lookahead overflow signals.

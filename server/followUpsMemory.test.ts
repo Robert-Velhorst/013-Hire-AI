@@ -4,6 +4,7 @@ import {
   generateEmployerReplyEmail,
   generateFollowUpEmail,
   getFollowUps,
+  getFollowUpPage,
   markFollowUpResponseReceived,
   markFollowUpSent,
   recordEmployerResponse,
@@ -78,6 +79,37 @@ describe("follow-up memory fallback", () => {
       event.afterState?.includes("recruiting email account")
     )).toBe(true);
     expect(auditEvents.some((event) => event.action === "follow_up_response_marked_received")).toBe(true);
+  });
+
+  it("pages follow-up history without truncating the complete lifecycle reader", async () => {
+    const userId = 79003;
+    const application = await createApplication({
+      userId,
+      jobId: 1,
+      status: "applied",
+      notes: "Submitted application with paged follow-ups.",
+    });
+    const applicationId = Number(application.insertId);
+
+    for (let index = 0; index < 12; index += 1) {
+      await createFollowUp({
+        applicationId,
+        message: `Follow-up page item ${index}`,
+      }, userId);
+    }
+
+    const first = await getFollowUpPage(applicationId, userId, { limit: 10 });
+    const second = await getFollowUpPage(applicationId, userId, {
+      limit: 10,
+      cursor: first.nextCursor!,
+    });
+
+    expect(await getFollowUps(applicationId, userId)).toHaveLength(12);
+    expect(first.items).toHaveLength(10);
+    expect(first.nextCursor).not.toBeNull();
+    expect(second.items).toHaveLength(2);
+    expect(second.nextCursor).toBeNull();
+    expect(new Set([...first.items, ...second.items].map((item) => item.id)).size).toBe(12);
   });
 
   it("blocks follow-up drafts for applications without submission evidence status", async () => {

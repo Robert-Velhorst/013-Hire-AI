@@ -192,11 +192,21 @@ export default function Applications() {
     [applications, deepLinkedApplication?.id, selectedApplication?.id]
   );
   const {
-    data: followUps,
+    data: followUpPages,
+    isFetchingNextPage: followUpsFetchingNextPage,
+    hasNextPage: followUpsHasNextPage,
+    fetchNextPage: fetchNextFollowUpsPage,
     refetch: refetchFollowUps,
-  } = trpc.applications.getFollowUps.useQuery(
-    { applicationId: selectedApplication?.id || 0 },
-    { enabled: Boolean(selectedApplication?.id) }
+  } = trpc.applications.getFollowUpPage.useInfiniteQuery(
+    { applicationId: selectedApplication?.id || 1, limit: 10 },
+    {
+      enabled: Boolean(selectedApplication?.id),
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    }
+  );
+  const followUps = useMemo(
+    () => followUpPages?.pages.flatMap((page) => page.items) ?? [],
+    [followUpPages]
   );
   const {
     data: ledgerArtifacts,
@@ -2012,7 +2022,7 @@ export default function Applications() {
                         <Separator className="bg-slate-700" />
                         <div className="space-y-3">
                           <h4 className="text-sm font-medium text-slate-300">Follow-ups</h4>
-                          {followUps.slice(0, 3).map((followUp) => {
+                          {followUps.map((followUp) => {
                             const approval = getFollowUpApproval(followUp.id);
                             const approvalStatus = approval?.status;
 
@@ -2128,6 +2138,17 @@ export default function Applications() {
                               </div>
                             );
                           })}
+                          {followUpsHasNextPage && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={followUpsFetchingNextPage}
+                              onClick={() => fetchNextFollowUpsPage()}
+                            >
+                              {followUpsFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              Load earlier follow-ups
+                            </Button>
+                          )}
                         </div>
                       </>
                     )}
