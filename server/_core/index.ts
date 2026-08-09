@@ -11,11 +11,12 @@ import { serveStatic } from "./static";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
-import { ensureScraperPlatformCatalog } from "../db";
+import { ensureScraperPlatformCatalog, probeDatabaseConnection } from "../db";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
 import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
 import { drainRuntime } from "./gracefulShutdown";
+import { createDatabaseReadinessProbe } from "./databaseReadiness";
 
 async function startServer() {
   validateProductionEnv();
@@ -23,6 +24,7 @@ async function startServer() {
 
   const app = express();
   const server = createServer(app);
+  const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });
   app.disable("x-powered-by");
   app.use((_req, res, next) => {
     applyHttpSafetyHeaders(res, ENV.isProduction);
@@ -31,13 +33,23 @@ async function startServer() {
   app.get("/healthz", (_req, res) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
-  app.get("/readyz", (_req, res) => {
+  app.get("/readyz", async (_req, res) => {
     const readiness = getRuntimeReadiness({
       isProduction: ENV.isProduction,
       databaseConfigured: Boolean(ENV.databaseUrl),
       requiredProductionConfigPresent: ENV.isProduction,
     });
-    res.status(readiness.ready ? 200 : 503).json(readiness);
+    const databaseAvailable = ENV.databaseUrl ? await databaseReadiness.check() : null;
+    const ready = readiness.ready && databaseAvailable !== false;
+    res.status(ready ? 200 : 503).json({
+      ...readiness,
+      ready,
+      database: databaseAvailable === null
+        ? "not_configured"
+        : databaseAvailable
+          ? "available"
+          : "unavailable",
+    });
   });
   // Stripe webhook MUST be registered before express.json() to preserve raw body for signature verification
   registerStripeWebhook(app);

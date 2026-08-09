@@ -13,7 +13,7 @@ Hire.AI runs as a native Node.js process; Docker is not required. Production ope
 npm.cmd run start:windows -- -Port 3000
 ```
 
-The script builds the app, runs the production doctor, starts a hidden child process, and reports success only after `/healthz` passes. It binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
+The script builds the app, runs the production doctor, starts a hidden child process, and reports success only after `/readyz` confirms the configured database is reachable. It binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
 
 ## ngrok tunnel
 
@@ -23,13 +23,13 @@ Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Start the Wi
 npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3000
 ```
 
-The tunnel script requires an installed and authenticated ngrok CLI, verifies local health before launch, and verifies public `/healthz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
+The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and verifies public `/readyz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
 
 - Main sign-in: `https://hire-ai.example.ngrok.app/api/oauth/callback`
 - Account connectors: `https://hire-ai.example.ngrok.app/api/connectors/oauth/callback`
 - Stripe webhook: `https://hire-ai.example.ngrok.app/api/stripe/webhook`
 
-Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact connector callback. The script rejects a conflicting configured callback. A green public health check does not prove OAuth, Stripe, storage, email, or provider acceptance; test each with an authorized sandbox account.
+Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact connector callback. The script rejects a conflicting configured callback. A green public readiness check proves the configured database answered, but does not prove OAuth, Stripe, storage, email, or provider acceptance; test each with an authorized sandbox account.
 
 ## HAI A2A connector
 

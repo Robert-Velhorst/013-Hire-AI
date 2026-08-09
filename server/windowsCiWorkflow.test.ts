@@ -28,4 +28,20 @@ describe("Windows runtime CI contract", () => {
     expect(checker).toContain("Language.Parser]::ParseFile");
     expect(checker).toContain("$parseErrors.Count -gt 0");
   });
+
+  it("requires runtime readiness before Windows or ngrok reports success", () => {
+    const windowsLauncher = readFileSync(
+      resolve(process.cwd(), "scripts", "start-windows.ps1"),
+      "utf8"
+    );
+    const ngrokLauncher = readFileSync(
+      resolve(process.cwd(), "scripts", "start-ngrok.ps1"),
+      "utf8"
+    );
+
+    expect(windowsLauncher).toContain("/readyz");
+    expect(windowsLauncher).toContain("$response.ready -eq $true");
+    expect(ngrokLauncher.match(/\/readyz/g)).toHaveLength(2);
+    expect(ngrokLauncher).toContain("$response.ready -eq $true");
+  });
 });

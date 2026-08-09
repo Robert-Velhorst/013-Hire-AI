@@ -13,13 +13,13 @@ if ($public.Scheme -ne 'https' -or -not $public.Host -or $public.UserInfo -or $p
     throw 'PublicUrl must be an origin-only HTTPS URL, for example https://hire-ai.example.ngrok.app/'
 }
 
-$localHealth = "http://127.0.0.1:$Port/healthz"
+$localReadiness = "http://127.0.0.1:$Port/readyz"
 try {
-    $local = Invoke-RestMethod -Uri $localHealth -TimeoutSec 3
+    $local = Invoke-RestMethod -Uri $localReadiness -TimeoutSec 3
 } catch {
-    throw "Hire.AI is not reachable at $localHealth. Start the Windows runtime first."
+    throw "Hire.AI is not ready at $localReadiness. Start the Windows runtime and verify its database first."
 }
-if ($local.status -ne 'ok') { throw 'The local Hire.AI health response is not healthy.' }
+if ($local.ready -ne $true) { throw 'The local Hire.AI runtime is not ready.' }
 
 $expectedConnectorCallback = "$($public.GetLeftPart([UriPartial]::Authority))/api/connectors/oauth/callback"
 if ($env:CONNECTOR_OAUTH_REDIRECT_URI -and $env:CONNECTOR_OAUTH_REDIRECT_URI.TrimEnd('/') -ne $expectedConnectorCallback) {
@@ -36,15 +36,15 @@ $process = Start-Process -FilePath $ngrok.Source `
     -PassThru
 
 try {
-    $publicHealth = "$($public.GetLeftPart([UriPartial]::Authority))/healthz"
+    $publicReadiness = "$($public.GetLeftPart([UriPartial]::Authority))/readyz"
     $deadline = (Get-Date).AddSeconds(60)
     $healthy = $false
     do {
         if ($process.HasExited) { break }
         Start-Sleep -Seconds 1
         try {
-            $response = Invoke-RestMethod -Uri $publicHealth -Headers @{ 'ngrok-skip-browser-warning' = 'true' } -TimeoutSec 5
-            $healthy = $response.status -eq 'ok'
+            $response = Invoke-RestMethod -Uri $publicReadiness -Headers @{ 'ngrok-skip-browser-warning' = 'true' } -TimeoutSec 5
+            $healthy = $response.ready -eq $true
         } catch {
             $healthy = $false
         }
@@ -52,10 +52,10 @@ try {
 
     if (-not $healthy) {
         $details = if (Test-Path $stderrPath) { Get-Content $stderrPath -Tail 20 } else { @() }
-        throw "The ngrok endpoint did not pass public health verification. $($details -join [Environment]::NewLine)"
+        throw "The ngrok endpoint did not pass public readiness verification. $($details -join [Environment]::NewLine)"
     }
 
-    Write-Host "Hire.AI public health verified at $publicHealth"
+    Write-Host "Hire.AI public readiness verified at $publicReadiness"
     Write-Host "Connector OAuth callback: $expectedConnectorCallback"
     Write-Host 'Press Ctrl+C to stop the tunnel.'
     Wait-Process -Id $process.Id

@@ -5,7 +5,7 @@ All application API calls use `/api/trpc`. Public procedures are limited to unau
 ## HTTP operational endpoints
 
 - `GET /healthz`: liveness only; returns no credentials or provider internals.
-- `GET /readyz`: configuration/readiness status. Development explicitly reports `development_memory` when no database is configured. Production returns `503` when required runtime readiness is false.
+- `GET /readyz`: bounded, cached configuration and database readiness status. Development explicitly reports `development_memory` when no database is configured. A configured but unavailable database and incomplete production configuration return `503`; errors expose no connection details.
 - `/api/oauth/callback` and `/api/connectors/oauth/callback`: provider callback boundaries.
 - `/api/stripe/webhook`: registered before JSON parsing to preserve signed raw request bodies.
 - `/.well-known/agent-card.json`, `/api/hai/status`, and `/api/hai/a2a`: disabled-by-default HAI bridge. Status and JSON-RPC require a separate bearer token; the route uses its own 16 KiB parser before the general 50 MiB upload parser.

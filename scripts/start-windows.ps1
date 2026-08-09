@@ -39,15 +39,15 @@ try {
 
     try {
         $healthHost = if ($HostAddress -in @('0.0.0.0', '::')) { '127.0.0.1' } elseif ($HostAddress -eq '::1') { '[::1]' } else { $HostAddress }
-        $healthUrl = "http://${healthHost}:$Port/healthz"
+        $readinessUrl = "http://${healthHost}:$Port/readyz"
         $deadline = (Get-Date).AddSeconds(45)
         $healthy = $false
         do {
             if ($process.HasExited) { break }
             Start-Sleep -Milliseconds 500
             try {
-                $response = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
-                $healthy = $response.status -eq 'ok'
+                $response = Invoke-RestMethod -Uri $readinessUrl -TimeoutSec 3
+                $healthy = $response.ready -eq $true
             } catch {
                 $healthy = $false
             }
@@ -57,10 +57,10 @@ try {
             $details = @()
             if (Test-Path $stderrPath) { $details += Get-Content $stderrPath -Tail 20 }
             if (Test-Path $stdoutPath) { $details += Get-Content $stdoutPath -Tail 20 }
-            throw "Hire.AI did not pass its local health check. $($details -join [Environment]::NewLine)"
+            throw "Hire.AI did not become ready. Check database availability and runtime configuration. $($details -join [Environment]::NewLine)"
         }
 
-        Write-Host "Hire.AI is healthy at http://${healthHost}:$Port/"
+        Write-Host "Hire.AI is ready at http://${healthHost}:$Port/"
         Write-Host 'Press Ctrl+C to stop the local service.'
         Wait-Process -Id $process.Id
         if ($process.ExitCode -ne 0) { throw "Hire.AI exited with code $($process.ExitCode)." }
