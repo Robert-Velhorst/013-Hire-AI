@@ -8,7 +8,7 @@ const now = new Date("2026-07-13T12:00:00.000Z");
 const mocks = {
   findEmployerResponseSourceReferences: vi.fn(),
   getConnectorAuthorization: vi.fn(),
-  getUserApplications: vi.fn(),
+  getUserInboxMatchApplications: vi.fn(),
   listUserConnectorAccounts: vi.fn(),
   upsertConnectorAuthorization: vi.fn(),
   upsertUserConnectorAccount: vi.fn(),
@@ -51,7 +51,7 @@ describe("inbox response discovery", () => {
     });
     mocks.decryptConnectorToken.mockReturnValue("provider-access-token");
     mocks.upsertUserConnectorAccount.mockResolvedValue(undefined);
-    mocks.getUserApplications.mockResolvedValue([{
+    mocks.getUserInboxMatchApplications.mockResolvedValue([{
       id: 701,
       status: "applied",
       job: { company: "Acme Analytics", title: "Senior Data Engineer" },

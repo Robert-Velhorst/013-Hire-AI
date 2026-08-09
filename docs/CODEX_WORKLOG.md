@@ -261,5 +261,6 @@
 ## 2026-08-09 - Batched inbox response deduplication
 
 - Replaced the Gmail/Outlook response scanner's per-candidate existence queries with one deduplicated lookup over the existing user/source/reference unique index.
+- Replaced full application/job hydration with an ownership-scoped four-field matching projection; resume, cover-letter, notes, salary, location, URL, platform, and timestamp data no longer enters inbox scanning memory.
 - Preserved exact source-reference behavior and added direct coverage for tenant isolation, duplicate inputs, mixed recorded/new messages, and empty scans.
-- Passed focused worker/database tests, TypeScript, the complete regression suite, and the production bundle check.
+- Added a data-minimization contract and passed focused worker/database tests, TypeScript, the complete regression suite, and the production bundle check.

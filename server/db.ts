@@ -1868,6 +1868,34 @@ export async function getUserApplications(userId: number) {
     .orderBy(desc(applications.createdAt), desc(applications.id));
 }
 
+export async function getUserInboxMatchApplications(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    return memoryApplications
+      .filter((application) => application.userId === userId)
+      .map((application) => {
+        const job = sampleJobs.find((item) => item.id === application.jobId);
+        return {
+          id: application.id,
+          status: application.status,
+          job: job ? { company: job.company, title: job.title } : null,
+        };
+      });
+  }
+  return await db
+    .select({
+      id: applications.id,
+      status: applications.status,
+      job: {
+        company: jobs.company,
+        title: jobs.title,
+      },
+    })
+    .from(applications)
+    .innerJoin(jobs, eq(applications.jobId, jobs.id))
+    .where(eq(applications.userId, userId));
+}
+
 export type HaiStatusCounts = {
   applications: {
     total: number;

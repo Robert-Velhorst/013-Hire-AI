@@ -9,7 +9,7 @@ import {
 import {
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
-  getUserApplications,
+  getUserInboxMatchApplications,
   listUserConnectorAccounts,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
@@ -39,7 +39,7 @@ const INBOX_RESPONSE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 export type InboxResponseDiscoveryDependencies = {
   findEmployerResponseSourceReferences: typeof findEmployerResponseSourceReferences;
   getConnectorAuthorization: typeof getConnectorAuthorization;
-  getUserApplications: typeof getUserApplications;
+  getUserInboxMatchApplications: typeof getUserInboxMatchApplications;
   listUserConnectorAccounts: typeof listUserConnectorAccounts;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
@@ -52,7 +52,7 @@ export type InboxResponseDiscoveryDependencies = {
 const defaults: InboxResponseDiscoveryDependencies = {
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
-  getUserApplications,
+  getUserInboxMatchApplications,
   listUserConnectorAccounts,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
@@ -201,7 +201,7 @@ function isWithinInboxResponseLookback(receivedAt: Date, now: Date) {
 
 function findApplicationMatch(
   text: string,
-  applications: Awaited<ReturnType<typeof getUserApplications>>
+  applications: Awaited<ReturnType<typeof getUserInboxMatchApplications>>
 ) {
   const haystack = normalized(text);
   const matches = applications
@@ -267,7 +267,7 @@ export async function discoverInboxResponseCandidates(
   const now = options.now ?? new Date();
   const dependencies = options.dependencies ?? defaults;
   const { accessToken, account } = await getInboxAccess(userId, provider, now, fetcher, dependencies);
-  const applications = await dependencies.getUserApplications(userId);
+  const applications = await dependencies.getUserInboxMatchApplications(userId);
   if (provider === "gmail") {
     const list = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages?" + new URLSearchParams({
       maxResults: String(MAX_MESSAGES),
