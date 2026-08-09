@@ -4,6 +4,7 @@
 
 - Added a production-bundled audit that compares every Drizzle table and column with MySQL `information_schema` without exposing connection credentials.
 - Verified all 42 runtime tables against a clean MySQL 8.4 database after the complete 47-migration history: no missing tables, missing columns, or unexpected columns.
+- Extended the same gate to every named runtime index, including ordered columns and uniqueness; the clean database has no missing or structurally mismatched indexes.
 - Added an exact-schema CI gate immediately after image-owned migration so runtime/migration drift fails before health acceptance.
 
 ## 2026-08-09 - Provider-event ingestion idempotency

@@ -5,21 +5,33 @@ import {
   compareDatabaseSchema,
   hasDatabaseSchemaDrift,
   type DatabaseColumnRow,
+  type DatabaseIndexRow,
+  type ExpectedDatabaseIndex,
 } from "./lib/database-schema-audit";
 
 function expectedRuntimeSchema() {
-  const expected = new Map<string, Set<string>>();
+  const tables = new Map<string, Set<string>>();
+  const indexes = new Map<string, Map<string, ExpectedDatabaseIndex>>();
   for (const value of Object.values(schema)) {
     try {
       const config = getTableConfig(value as MySqlTable);
       if (config.name && config.columns.length > 0) {
-        expected.set(config.name, new Set(config.columns.map((column) => column.name)));
+        tables.set(config.name, new Set(config.columns.map((column) => column.name)));
+        indexes.set(config.name, new Map(config.indexes.map((index) => [
+          index.config.name,
+          {
+            columns: index.config.columns
+              .map((column) => "name" in column ? column.name : null)
+              .filter((column): column is string => Boolean(column)),
+            unique: index.config.unique,
+          },
+        ])));
       }
     } catch {
       // The schema module also exports types and relation helpers.
     }
   }
-  return expected;
+  return { tables, indexes };
 }
 
 async function main() {
@@ -28,14 +40,20 @@ async function main() {
 
   const connection = await mysql.createConnection(databaseUrl);
   try {
-    const [rows] = await connection.query<DatabaseColumnRow[]>(
+    const [columnRows] = await connection.query<DatabaseColumnRow[]>(
       `SELECT table_name AS tableName, column_name AS columnName
        FROM information_schema.columns
        WHERE table_schema = DATABASE()`
     );
+    const [indexRows] = await connection.query<DatabaseIndexRow[]>(
+      `SELECT table_name AS tableName, index_name AS indexName, non_unique AS nonUnique,
+              seq_in_index AS sequence, column_name AS columnName
+       FROM information_schema.statistics
+       WHERE table_schema = DATABASE()`
+    );
     const expected = expectedRuntimeSchema();
-    if (expected.size === 0) throw new Error("Runtime schema metadata is empty.");
-    const audit = compareDatabaseSchema(expected, rows);
+    if (expected.tables.size === 0) throw new Error("Runtime schema metadata is empty.");
+    const audit = compareDatabaseSchema(expected.tables, columnRows, expected.indexes, indexRows);
     console.log(JSON.stringify(audit, null, 2));
     if (hasDatabaseSchemaDrift(audit)) {
       throw new Error("Database schema does not exactly match the runtime model.");

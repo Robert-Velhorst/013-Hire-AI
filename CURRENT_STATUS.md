@@ -74,7 +74,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Enforced one interview-preparation record per candidate and job with field-preserving duplicate consolidation and atomic concurrent regeneration.
 - Enforced one public social-profile reference per candidate and platform with latest-state consolidation and atomic writes.
 - Added the missing migrated employer-response interview link, serialized provider-backed response ingestion per account, and made interview-alert creation retry-safe, preventing runtime insert failures, duplicate evidence races, and repeated notifications.
-- Added a production-bundled schema audit that compares all runtime tables and columns with the migrated MySQL database and now gates container CI after migration.
+- Added a production-bundled schema audit that compares all runtime tables, columns, named indexes, index order, and uniqueness with migrated MySQL and now gates container CI after migration.
 
 ## Still required before production
 
