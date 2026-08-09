@@ -4,6 +4,7 @@ import {
   createApplication,
   getUserApplicationById,
   getUserApplicationPage,
+  getUserApplicationStatusPage,
   getUserApplicationSummary,
   getUserApplicationsForJobs,
   getUserOperatingApplicationWindow,
@@ -107,5 +108,37 @@ describe("application ledger pagination", () => {
     await expect(
       countUserAutonomousPreparationsSince(userId, new Date(baseTime))
     ).resolves.toBe(3);
+  });
+
+  it("pages one owned application status with a stable id cursor", async () => {
+    const userId = 94105;
+    const otherUserId = 94106;
+    const interviewIds: number[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 20_000 + index,
+        status: "interview",
+      });
+      interviewIds.push(application.insertId);
+    }
+    await createApplication({ userId, jobId: 20_003, status: "applied" });
+    await createApplication({ userId: otherUserId, jobId: 20_000, status: "interview" });
+
+    const firstPage = await getUserApplicationStatusPage(userId, "interview", 0, 2);
+    const secondPage = await getUserApplicationStatusPage(
+      userId,
+      "interview",
+      firstPage.nextAfterId ?? 0,
+      2
+    );
+
+    expect(firstPage).toMatchObject({ limit: 2, hasMore: true });
+    expect(firstPage.items.map((application) => application.id)).toEqual(interviewIds.slice(0, 2));
+    expect(secondPage.items.map((application) => application.id)).toEqual(interviewIds.slice(2));
+    expect(secondPage.hasMore).toBe(false);
+    expect([...firstPage.items, ...secondPage.items].every((application) =>
+      application.userId === userId && application.status === "interview"
+    )).toBe(true);
   });
 });

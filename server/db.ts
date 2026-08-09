@@ -1898,6 +1898,52 @@ export async function getUserApplications(userId: number) {
     .orderBy(desc(applications.createdAt), desc(applications.id));
 }
 
+export async function getUserApplicationStatusPage(
+  userId: number,
+  status: Application["status"],
+  requestedAfterId = 0,
+  requestedLimit = 250
+) {
+  const afterId = Math.max(0, Math.trunc(requestedAfterId));
+  const limit = Math.min(500, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    const rows = memoryApplications
+      .filter((application) =>
+        application.userId === userId &&
+        application.status === status &&
+        application.id > afterId
+      )
+      .sort((left, right) => left.id - right.id)
+      .slice(0, limit)
+      .map(projectMemoryApplication);
+    return {
+      items: rows,
+      limit,
+      hasMore: rows.length === limit,
+      nextAfterId: rows.at(-1)?.id ?? null,
+    };
+  }
+  const rows = await db
+    .select(userApplicationSelection)
+    .from(applications)
+    .leftJoin(jobs, eq(applications.jobId, jobs.id))
+    .leftJoin(jobPlatforms, eq(jobs.platformId, jobPlatforms.id))
+    .where(and(
+      eq(applications.userId, userId),
+      eq(applications.status, status),
+      gt(applications.id, afterId)
+    ))
+    .orderBy(asc(applications.id))
+    .limit(limit);
+  return {
+    items: rows,
+    limit,
+    hasMore: rows.length === limit,
+    nextAfterId: rows.at(-1)?.id ?? null,
+  };
+}
+
 export async function getUserInboxMatchApplications(userId: number) {
   const db = await getDb();
   if (!db) {

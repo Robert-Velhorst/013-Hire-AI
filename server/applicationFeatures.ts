@@ -22,6 +22,7 @@ import {
   getApplicationLedgerArtifacts,
   getJobById,
   getUserApplicationById,
+  getUserApplicationStatusPage,
   getUserApplicationsByIds,
   getUserEmployerResponsesForApplications,
   listUserApplicationApprovalsForApplication,
@@ -51,7 +52,11 @@ import {
   normalizeEmployerResponseSourceReference,
   type EmployerResponseInput,
 } from "./applicationResponses";
-import { getLatestSchedulableInterviewInvite } from "./interviewScheduling";
+import {
+  getInterviewSchedulingRequirement,
+  getLatestSchedulableInterviewInvite,
+  type InterviewSchedulingRequirement,
+} from "./interviewScheduling";
 
 async function assertUserOwnsApplication(applicationId: number, userId: number) {
   const db = await getDb();
@@ -1796,6 +1801,147 @@ export async function getInterviewOutcomePage(userId: number, requestedLimit = 1
       .select({ count: sql<number>`COUNT(*)` })
       .from(interviewSchedules)
       .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .where(condition),
+  ]);
+  const total = Number(countRows[0]?.count ?? 0);
+  return { items: rows, total, limit, hasMore: total > rows.length };
+}
+
+export async function getInterviewSchedulingPage(userId: number, requestedLimit = 5) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit)));
+  const db = await getDb();
+  if (!db) {
+    type StatusApplication = Awaited<ReturnType<typeof getUserApplicationStatusPage>>["items"][number];
+    const interviewApplications: StatusApplication[] = [];
+    let afterId = 0;
+    while (true) {
+      const page = await getUserApplicationStatusPage(userId, "interview", afterId, 500);
+      interviewApplications.push(...page.items);
+      if (!page.hasMore || page.nextAfterId === null) break;
+      afterId = page.nextAfterId;
+    }
+    const applicationIds = interviewApplications.map((application) => application.id);
+    const responses = await getUserEmployerResponsesForApplications(userId, applicationIds);
+    const responsesByApplication = new Map<number, typeof responses>();
+    for (const response of responses) {
+      const existing = responsesByApplication.get(response.applicationId) ?? [];
+      existing.push(response);
+      responsesByApplication.set(response.applicationId, existing);
+    }
+    const schedulesByApplication = new Map<number, InterviewSchedule[]>();
+    for (const schedule of memoryInterviewSchedules) {
+      const existing = schedulesByApplication.get(schedule.applicationId) ?? [];
+      existing.push(schedule);
+      schedulesByApplication.set(schedule.applicationId, existing);
+    }
+    const candidates = interviewApplications
+      .map((application) => ({
+        application,
+        schedulingRequirement: getInterviewSchedulingRequirement(
+          schedulesByApplication.get(application.id) ?? [],
+          responsesByApplication.get(application.id) ?? []
+        ),
+      }))
+      .filter((candidate) => candidate.schedulingRequirement !== null)
+      .sort((left, right) =>
+        (right.application.lastActivity?.getTime() ?? 0) -
+          (left.application.lastActivity?.getTime() ?? 0) ||
+        right.application.id - left.application.id
+      );
+    return {
+      items: candidates.slice(0, limit).map(({ application, schedulingRequirement }) => ({
+        applicationId: application.id,
+        jobId: application.jobId,
+        status: application.status,
+        lastActivity: application.lastActivity,
+        schedulingRequirement: schedulingRequirement!,
+        job: application.job ? {
+          id: application.job.id,
+          title: application.job.title,
+          company: application.job.company,
+          location: application.job.location,
+        } : null,
+      })),
+      total: candidates.length,
+      limit,
+      hasMore: candidates.length > limit,
+    };
+  }
+
+  const unconsumedLatestInvite = sql`EXISTS (
+    SELECT 1 FROM employer_responses invite
+    WHERE invite.application_id = ${applications.id}
+      AND invite.user_id = ${userId}
+      AND invite.response_type = 'interview_invite'
+      AND NOT EXISTS (
+        SELECT 1 FROM employer_responses later_invite
+        WHERE later_invite.application_id = invite.application_id
+          AND later_invite.user_id = invite.user_id
+          AND later_invite.response_type = 'interview_invite'
+          AND (
+            later_invite.received_at > invite.received_at OR
+            (later_invite.received_at = invite.received_at AND later_invite.id > invite.id)
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM interview_schedules consumed_schedule
+        WHERE consumed_schedule.application_id = invite.application_id
+          AND (
+            consumed_schedule.employer_response_id = invite.id OR
+            (consumed_schedule.employer_response_id IS NULL AND consumed_schedule.created_at > invite.received_at)
+          )
+      )
+  )`;
+  const activeSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules active_schedule
+    WHERE active_schedule.application_id = ${applications.id}
+      AND active_schedule.status IN ('scheduled', 'rescheduled')
+  )`;
+  const cancelledSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules cancelled_schedule
+    WHERE cancelled_schedule.application_id = ${applications.id}
+      AND cancelled_schedule.status = 'cancelled'
+  )`;
+  const completedSchedule = sql`EXISTS (
+    SELECT 1 FROM interview_schedules completed_schedule
+    WHERE completed_schedule.application_id = ${applications.id}
+      AND completed_schedule.status = 'completed'
+  )`;
+  const schedulingRequirement = sql<Exclude<InterviewSchedulingRequirement, null>>`CASE
+    WHEN ${unconsumedLatestInvite} THEN 'new_invite'
+    WHEN ${activeSchedule} THEN NULL
+    WHEN ${cancelledSchedule} THEN 'cancelled_schedule'
+    WHEN ${completedSchedule} THEN NULL
+    ELSE 'missing_schedule'
+  END`;
+  const condition = and(
+    eq(applications.userId, userId),
+    eq(applications.status, "interview"),
+    sql`${schedulingRequirement} IS NOT NULL`
+  );
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        applicationId: applications.id,
+        jobId: applications.jobId,
+        status: applications.status,
+        lastActivity: applications.lastActivity,
+        schedulingRequirement,
+        job: {
+          id: jobs.id,
+          title: jobs.title,
+          company: jobs.company,
+          location: jobs.location,
+        },
+      })
+      .from(applications)
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(condition)
+      .orderBy(desc(applications.lastActivity), desc(applications.id))
+      .limit(limit),
+    db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(applications)
       .where(condition),
   ]);
   const total = Number(countRows[0]?.count ?? 0);

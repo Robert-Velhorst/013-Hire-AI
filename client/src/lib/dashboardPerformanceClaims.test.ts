@@ -35,6 +35,7 @@ describe("dashboard performance claims", () => {
     expect(campaigns).toContain("getUserInterviewSchedulesForApplications");
     expect(campaigns).toContain("getUserFollowUpsForApplications");
     expect(campaigns).toContain("getUpcomingInterviewPreparationPage");
+    expect(campaigns).toContain("getInterviewSchedulingPage(userId, 5)");
     expect(campaigns).toContain("getInterviewOutcomePage(userId, 5)");
     expect(campaigns).not.toContain("listInterviewPreparationsForUser");
     expect(campaigns).toContain("getUserOfferAttributionReviews(userId, {");

@@ -49,6 +49,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import {
   getUpcomingInterviewPreparationPage,
   getInterviewOutcomePage,
+  getInterviewSchedulingPage,
   getUserFollowUpsForApplications,
   getUserInterviewSchedulesForApplications,
 } from "./applicationFeatures";
@@ -851,6 +852,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     followUpReadiness,
     offerAttributionReviews,
     interviewNotificationQueue,
+    interviewSchedulingPage,
     interviewPreparationQueue,
     interviewOutcomePage,
     successFeeOperatingSet,
@@ -868,6 +870,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       employerResponses,
     }),
     getInterviewNotificationQueue(userId),
+    getInterviewSchedulingPage(userId, 5),
     getInterviewPreparationQueue(userId),
     getInterviewOutcomePage(userId, 5),
     getUserSuccessFeeOperatingItems(userId),
@@ -929,8 +932,8 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
     reviewDecisionPage.total > 0
       ? `Review ${reviewDecisionPage.total} saved application decision${reviewDecisionPage.total === 1 ? "" : "s"}.`
       : "",
-    interviewSchedulingQueue.length > 0
-      ? `Review ${interviewSchedulingQueue.length} interview scheduling item${interviewSchedulingQueue.length === 1 ? "" : "s"} before follow-up automation continues.`
+    interviewSchedulingPage.total > 0
+      ? `Review ${interviewSchedulingPage.total} interview scheduling item${interviewSchedulingPage.total === 1 ? "" : "s"} before follow-up automation continues.`
       : "",
     interviewNotificationQueue.total > 0
       ? `Review ${interviewNotificationQueue.total} verified interview invite${interviewNotificationQueue.total === 1 ? "" : "s"}.`
@@ -1071,6 +1074,11 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       limit: interviewNotificationQueue.limit,
       hasMore: interviewNotificationQueue.hasMore,
     },
+    interviewSchedulingScope: {
+      loaded: interviewSchedulingPage.items.length,
+      limit: interviewSchedulingPage.limit,
+      hasMore: interviewSchedulingPage.hasMore,
+    },
     interviewOutcomeScope: {
       loaded: interviewOutcomePage.items.length,
       limit: interviewOutcomePage.limit,
@@ -1096,7 +1104,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       interviews: applicationSummary.interview,
       unreadInterviewNotifications: interviewNotificationQueue.total,
       inboxResponseCandidates: inboxResponseCandidatePage.total,
-      interviewSchedulingNeeded: interviewSchedulingQueue.length,
+      interviewSchedulingNeeded: interviewSchedulingPage.total,
       interviewPreparationNeeded: interviewPreparationQueue.total,
       interviewOutcomesNeeded: interviewOutcomePage.total,
       offers: applicationSummary.offered,
@@ -1123,7 +1131,7 @@ export async function getUserOperatingLedger(userId: number, options: OperatingL
       reviewDecisions: reviewDecisionQueue.slice(0, 5),
       interviewNotifications: interviewNotificationQueue.items,
       inboxResponseCandidates: inboxResponseCandidateQueue.slice(0, 5),
-      interviewScheduling: interviewSchedulingQueue.slice(0, 5),
+      interviewScheduling: interviewSchedulingPage.items,
       interviewPreparationNeeded: interviewPreparationQueue.items.slice(0, 5),
       interviewOutcomesNeeded: interviewOutcomePage.items,
       employerResponsesNeedingReply: employerResponseQueue.slice(0, 5),

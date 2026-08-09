@@ -388,6 +388,12 @@ export const employerResponses = mysqlTable("employer_responses", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("employer_responses_application_idx").on(table.applicationId),
+  index("employer_responses_application_type_received_id_idx").on(
+    table.applicationId,
+    table.responseType,
+    table.receivedAt,
+    table.id
+  ),
   index("employer_responses_user_interview_idx").on(table.userId, table.interviewId),
   index("employer_responses_user_received_idx").on(table.userId, table.receivedAt),
   uniqueIndex("employer_responses_user_source_reference_unique").on(
@@ -802,6 +808,12 @@ export const interviewSchedules = mysqlTable("interview_schedules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   index("interview_schedules_application_scheduled_idx").on(table.applicationId, table.scheduledAt),
+  index("interview_schedules_application_status_created_response_idx").on(
+    table.applicationId,
+    table.status,
+    table.createdAt,
+    table.employerResponseId
+  ),
   index("interview_schedules_status_scheduled_idx").on(table.status, table.scheduledAt),
   index("interview_schedules_status_updated_id_idx").on(table.status, table.updatedAt, table.id),
 ]);

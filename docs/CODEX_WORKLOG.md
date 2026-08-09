@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Exact bounded interview-scheduling queue
+
+- Replaced operating-window scheduling counts with an exact owner-scoped account query preserving new-invite, cancelled-schedule, completed-round, and missing-schedule rules.
+- Added a five-record command-center page and explicit truncation metadata while keeping autonomous planning bounded.
+- Added MySQL indexes for latest invitation and per-application schedule-state evaluation plus ownership and scale coverage.
+
 ## 2026-08-09 - Exact bounded interview-outcome queue
 
 - Replaced operating-window outcome counts with an exact owner-scoped anti-join over completed interviews and recorded outcome evidence.

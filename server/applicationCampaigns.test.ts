@@ -14,7 +14,7 @@ import {
   getUserAutonomousPlanPreview,
   getUserOperatingLedger,
 } from "./applicationCampaigns";
-import { createFollowUp, getFollowUps, getInterviewOutcomePage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
+import { createFollowUp, getFollowUps, getInterviewOutcomePage, getInterviewSchedulingPage, markFollowUpSent, recordEmployerResponse, recordInterviewOutcome, scheduleInterview, updateInterviewStatus } from "./applicationFeatures";
 import {
   createAdminReviewItem,
   createApplication,
@@ -887,6 +887,40 @@ describe("application campaign operating ledger", () => {
     expect(outcome.responseType).toBe("no_response");
     expect(ledgerAfterOutcome.metrics.interviewOutcomesNeeded).toBe(0);
     expect(ledgerAfterOutcome.queues.interviewOutcomesNeeded).toHaveLength(0);
+  });
+
+  it("reports an exact bounded scheduling queue without leaking another user", async () => {
+    const userId = 99017;
+    const otherUserId = 99018;
+
+    for (let index = 0; index < 6; index += 1) {
+      const application = await createApplication({
+        userId,
+        jobId: 400 + index,
+        status: "interview",
+        notes: `Interview invitation ${index + 1} needs scheduling.`,
+      });
+      await recordInterviewInvite(Number(application.insertId), userId);
+    }
+    const foreignApplication = await createApplication({
+      userId: otherUserId,
+      jobId: 500,
+      status: "interview",
+      notes: "This scheduling item belongs to another user.",
+    });
+    const foreignApplicationId = Number(foreignApplication.insertId);
+    await recordInterviewInvite(foreignApplicationId, otherUserId);
+
+    const page = await getInterviewSchedulingPage(userId, 5);
+    const ledger = await getUserOperatingLedger(userId);
+
+    expect(page).toMatchObject({ total: 6, limit: 5, hasMore: true });
+    expect(page.items).toHaveLength(5);
+    expect(page.items.every((item) => item.schedulingRequirement === "new_invite")).toBe(true);
+    expect(page.items.every((item) => item.applicationId !== foreignApplicationId)).toBe(true);
+    expect(ledger.metrics.interviewSchedulingNeeded).toBe(6);
+    expect(ledger.queues.interviewScheduling).toHaveLength(5);
+    expect(ledger.interviewSchedulingScope).toEqual({ loaded: 5, limit: 5, hasMore: true });
   });
 
   it("reports an exact bounded interview-outcome queue without leaking another user", async () => {
