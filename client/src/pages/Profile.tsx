@@ -173,9 +173,17 @@ export default function Profile() {
   const activeResumeQuery = trpc.resume.getActive.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const resumeVersionsQuery = trpc.resume.getVersions.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const resumeVersionsQuery = trpc.resume.getVersionPage.useInfiniteQuery(
+    { limit: 25 },
+    {
+      enabled: isAuthenticated,
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    }
+  );
+  const resumeVersions = useMemo(
+    () => resumeVersionsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [resumeVersionsQuery.data]
+  );
   const resumeDownload = trpc.resume.getDownloadUrl.useQuery({}, {
     enabled: false,
   });
@@ -983,11 +991,11 @@ export default function Profile() {
               ) : (
                 <p className="text-sm text-slate-400">No active resume yet. Importing a resume creates the version used for future application preparation.</p>
               )}
-              {resumeVersionsQuery.data && resumeVersionsQuery.data.length > 1 ? (
+              {resumeVersions.length > 1 ? (
                 <div className="mt-3 border-t border-slate-800 pt-3">
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Resume versions</p>
                   <div className="space-y-2">
-                    {resumeVersionsQuery.data.map((resume) => (
+                    {resumeVersions.map((resume) => (
                       <div key={resume.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="min-w-0 truncate text-slate-300">v{resume.version} - {resume.fileName}</span>
                         <div className="flex items-center gap-2">
@@ -1011,6 +1019,19 @@ export default function Profile() {
                         </div>
                       </div>
                     ))}
+                    {resumeVersionsQuery.hasNextPage ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-slate-700"
+                        disabled={resumeVersionsQuery.isFetchingNextPage}
+                        onClick={() => resumeVersionsQuery.fetchNextPage()}
+                      >
+                        {resumeVersionsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Load older versions
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

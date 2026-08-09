@@ -5,8 +5,8 @@
 
 import { storageDelete, storagePut, storageGet } from "./storage";
 import { getDb } from "./db";
-import { userResumes } from "../drizzle/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { userResumes, users } from "../drizzle/schema";
+import { eq, desc, and, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { RESUME_MIME_TYPES, validateUploadedFile } from "./uploadValidation";
 import { logOperationalFailure } from "./operationalFailureLog";
@@ -116,55 +116,59 @@ export async function uploadResume(
     mimeType: detectedMimeType,
     allowedMimeTypes: RESUME_MIME_TYPES,
   });
-  // Get current version count for this user
-  const existingResumes = await db
-    .select({ version: userResumes.version })
-    .from(userResumes)
-    .where(eq(userResumes.userId, userId))
-    .orderBy(desc(userResumes.version))
-    .limit(1);
-
-  const newVersion = (existingResumes[0]?.version || 0) + 1;
-
-  // Generate unique file key
+  // The object key stays independent of the version assigned under the owner
+  // lock, so storage upload does not hold a database transaction open.
   const fileId = nanoid(12);
-  const ext = getFileExtension(detectedMimeType);
   const sanitizedFileName = validation.fileName;
-  const fileKey = `resumes/${userId}/${fileId}-v${newVersion}-${sanitizedFileName}`;
+  const fileKey = `resumes/${userId}/${fileId}-${sanitizedFileName}`;
 
   // Upload to S3
   await storagePut(fileKey, fileData, detectedMimeType);
   const fileUrl = privateFileReference(fileKey);
 
-  // Deactivate previous versions
-  await db
-    .update(userResumes)
-    .set({ isActive: 0 })
-    .where(eq(userResumes.userId, userId));
-
-  // Create database record
-  const result = await db.insert(userResumes).values({
-    userId,
-    fileName: sanitizedFileName,
-    fileUrl,
-    fileKey,
-    fileSize: fileData.length,
-    mimeType: detectedMimeType,
-    version: newVersion,
-    isActive: 1,
-  });
-
-  const insertId = result[0].insertId;
+  let storedResume: { insertId: number; version: number };
+  try {
+    storedResume = await db.transaction(async (tx) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+      const existingResumes = await tx
+        .select({ version: userResumes.version })
+        .from(userResumes)
+        .where(eq(userResumes.userId, userId))
+        .orderBy(desc(userResumes.version))
+        .limit(1);
+      const version = (existingResumes[0]?.version || 0) + 1;
+      await tx
+        .update(userResumes)
+        .set({ isActive: 0 })
+        .where(eq(userResumes.userId, userId));
+      const result = await tx.insert(userResumes).values({
+        userId,
+        fileName: sanitizedFileName,
+        fileUrl,
+        fileKey,
+        fileSize: fileData.length,
+        mimeType: detectedMimeType,
+        version,
+        isActive: 1,
+      });
+      return { insertId: Number(result[0].insertId), version };
+    });
+  } catch (error) {
+    await storageDelete(fileKey).catch(() => {
+      logOperationalFailure("ResumeStorage", "Orphan upload cleanup");
+    });
+    throw error;
+  }
 
   return {
-    id: insertId,
+    id: storedResume.insertId,
     userId,
     fileName: sanitizedFileName,
     fileUrl,
     fileKey,
     fileSize: fileData.length,
     mimeType: detectedMimeType,
-    version: newVersion,
+    version: storedResume.version,
     isActive: true,
     uploadedAt: new Date(),
   };
@@ -229,6 +233,41 @@ export async function getResumeVersions(userId: number): Promise<ResumeVersion[]
   }));
 }
 
+export async function getResumeVersionPage(
+  userId: number,
+  options: { limit?: number; cursor?: { version: number; id: number } } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 25), 1), 100);
+  const db = await getDb();
+  if (!db) return { items: [] as ResumeVersion[], nextCursor: null };
+  const cursorCondition = options.cursor ? or(
+    lt(userResumes.version, options.cursor.version),
+    and(eq(userResumes.version, options.cursor.version), lt(userResumes.id, options.cursor.id))
+  ) : undefined;
+  const rows = await db
+    .select()
+    .from(userResumes)
+    .where(and(eq(userResumes.userId, userId), cursorCondition))
+    .orderBy(desc(userResumes.version), desc(userResumes.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map((resume) => ({
+    id: resume.id,
+    version: resume.version,
+    fileName: resume.fileName,
+    fileUrl: resume.fileUrl,
+    fileSize: resume.fileSize,
+    mimeType: resume.mimeType,
+    isActive: resume.isActive === 1,
+    uploadedAt: resume.uploadedAt,
+  }));
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: hasMore && last ? { version: last.version, id: last.id } : null,
+  };
+}
+
 /**
  * Get a specific resume version
  */
@@ -265,20 +304,18 @@ export async function getResumeVersion(userId: number, version: number): Promise
 export async function setActiveVersion(userId: number, version: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-
-  // Deactivate all versions
-  await db
-    .update(userResumes)
-    .set({ isActive: 0 })
-    .where(eq(userResumes.userId, userId));
-
-  // Activate the specified version
-  const result = await db
-    .update(userResumes)
-    .set({ isActive: 1 })
-    .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)));
-
-  return result[0].affectedRows > 0;
+  return await db.transaction(async (tx) => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+    const target = await tx
+      .select({ id: userResumes.id })
+      .from(userResumes)
+      .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)))
+      .limit(1);
+    if (!target[0]) return false;
+    await tx.update(userResumes).set({ isActive: 0 }).where(eq(userResumes.userId, userId));
+    await tx.update(userResumes).set({ isActive: 1 }).where(eq(userResumes.id, target[0].id));
+    return true;
+  });
 }
 
 /**
@@ -296,29 +333,28 @@ export async function deleteResumeVersion(userId: number, version: number): Prom
   // fails so the file remains discoverable and can be retried by the user.
   await storageDelete(resume.fileKey);
 
-  // Delete the version record only after physical storage cleanup succeeds.
-  const result = await db
-    .delete(userResumes)
-    .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)));
-
-  // If we deleted the active version, activate the most recent remaining version
-  if (resume.isActive) {
-    const remaining = await db
-      .select()
+  return await db.transaction(async (tx) => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+    const target = await tx
+      .select({ id: userResumes.id, isActive: userResumes.isActive })
       .from(userResumes)
-      .where(eq(userResumes.userId, userId))
-      .orderBy(desc(userResumes.version))
+      .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)))
       .limit(1);
-
-    if (remaining.length > 0) {
-      await db
-        .update(userResumes)
-        .set({ isActive: 1 })
-        .where(eq(userResumes.id, remaining[0].id));
+    if (!target[0]) return false;
+    await tx.delete(userResumes).where(eq(userResumes.id, target[0].id));
+    if (target[0].isActive === 1) {
+      const remaining = await tx
+        .select({ id: userResumes.id })
+        .from(userResumes)
+        .where(eq(userResumes.userId, userId))
+        .orderBy(desc(userResumes.version), desc(userResumes.id))
+        .limit(1);
+      if (remaining[0]) {
+        await tx.update(userResumes).set({ isActive: 1 }).where(eq(userResumes.id, remaining[0].id));
+      }
     }
-  }
-
-  return result[0].affectedRows > 0;
+    return true;
+  });
 }
 
 /**

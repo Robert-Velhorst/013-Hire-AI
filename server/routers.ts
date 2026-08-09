@@ -15,7 +15,7 @@ import { getRecentJobs, searchJobs, getDiscoveryStats, getSubscriptionManager } 
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
 import { workspacesRouter } from "./routers/workspaces";
-import { uploadResume, getActiveResume, getResumeVersions, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
+import { uploadResume, getActiveResume, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
 import {
   saveJob,
   unsaveJob,
@@ -2863,9 +2863,19 @@ export const appRouter = router({
     getActive: protectedProcedure
       .query(async ({ ctx }) => getActiveResume(ctx.user.id)),
 
-    // Get all versions
-    getVersions: protectedProcedure
-      .query(async ({ ctx }) => getResumeVersions(ctx.user.id)),
+    // Get a bounded version-history page
+    getVersionPage: protectedProcedure
+      .input(z.object({
+        limit: boundedPageSize.optional().default(25),
+        cursor: z.object({
+          version: z.number().int().positive(),
+          id: z.number().int().positive(),
+        }).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getResumeVersionPage } = await import("./resumeStorage");
+        return await getResumeVersionPage(ctx.user.id, input);
+      }),
 
     // Set active version
     setActiveVersion: protectedProcedure

@@ -407,6 +407,13 @@
       "when": 1786497480000,
       "tag": "0057_job_alert_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1786497540000,
+      "tag": "0058_resume_version_cursor_index",
+      "breakpoints": true
     }
   ]
 }

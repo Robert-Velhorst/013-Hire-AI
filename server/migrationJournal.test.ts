@@ -240,6 +240,21 @@ describe("Drizzle migration journal", () => {
     );
   });
 
+  it("keeps the resume-version cursor index aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0058_resume_version_cursor_index.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain(
+      'index("user_resumes_user_version_cursor_idx").on(table.userId, table.version, table.id)'
+    );
+    expect(migration).toContain(
+      "CREATE INDEX `user_resumes_user_version_cursor_idx` ON `user_resumes` (`user_id`, `version`, `id`)"
+    );
+  });
+
   it("keeps the bounded operating-window index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

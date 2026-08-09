@@ -4,6 +4,7 @@ import type { TrpcContext } from "./_core/context";
 const mocks = vi.hoisted(() => ({
   deleteResumeVersion: vi.fn(),
   getActiveResume: vi.fn(),
+  getResumeVersionPage: vi.fn(),
   parseResumeFromFile: vi.fn(),
   resumeToProfileData: vi.fn(),
   setActiveVersion: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./resumeStorage", () => ({
   uploadResume: mocks.uploadResume,
   getActiveResume: mocks.getActiveResume,
+  getResumeVersionPage: mocks.getResumeVersionPage,
   setActiveVersion: mocks.setActiveVersion,
   deleteResumeVersion: mocks.deleteResumeVersion,
 }));
@@ -72,6 +74,7 @@ describe("resume router synchronization", () => {
     mocks.setActiveVersion.mockResolvedValue(true);
     mocks.deleteResumeVersion.mockResolvedValue(true);
     mocks.getActiveResume.mockResolvedValue(versionOne);
+    mocks.getResumeVersionPage.mockResolvedValue({ items: [versionOne], nextCursor: null });
   });
 
   it("parses and stores imported files through versioned resume storage before updating the profile", async () => {
@@ -132,6 +135,16 @@ describe("resume router synchronization", () => {
     await caller.resume.deleteVersion({ version: 1 });
     expect(mocks.deleteResumeVersion).toHaveBeenCalledWith(userId, 1);
     expect(await getUserProfile(userId)).toMatchObject({ resumeUrl: null, resumeFileKey: null });
+  });
+
+  it("returns a bounded owner-scoped resume history page", async () => {
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.resume.getVersionPage({ limit: 25 })).resolves.toEqual({
+      items: [versionOne],
+      nextCursor: null,
+    });
+    expect(mocks.getResumeVersionPage).toHaveBeenCalledWith(userId, { limit: 25 });
   });
 
   it("rejects legacy metadata-only uploads without creating misleading profile evidence", async () => {

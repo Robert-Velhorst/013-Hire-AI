@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Transactional, cursor-paged resume history
+
+- Serialized resume version assignment, activation, and deletion on the stable account row to prevent concurrent duplicate versions or multiple active resumes.
+- Added uploaded-object cleanup when the database transaction fails and verified a target version before deactivating the current resume.
+- Replaced Profile's full resume-history read with indexed cursor pagination while preserving complete privacy exports.
+
 ## 2026-08-09 - Cursor-paged job alerts
 
 - Replaced the live Job Alerts full-history query with stable cursor pagination and incremental frontend loading.

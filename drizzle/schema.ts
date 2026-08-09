@@ -786,6 +786,7 @@ export const userResumes = mysqlTable("user_resumes", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("user_resumes_user_active_version_idx").on(table.userId, table.isActive, table.version),
+  index("user_resumes_user_version_cursor_idx").on(table.userId, table.version, table.id),
 ]);
 
 /**

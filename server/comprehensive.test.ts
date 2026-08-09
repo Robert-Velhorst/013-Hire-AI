@@ -107,7 +107,7 @@ describe("Resume Management", () => {
     expect(caller.resume.parseFile).toBeDefined();
     expect(caller.resume.uploadWithHistory).toBeDefined();
     expect(caller.resume.getActive).toBeDefined();
-    expect(caller.resume.getVersions).toBeDefined();
+    expect(caller.resume.getVersionPage).toBeDefined();
   });
 });
 
