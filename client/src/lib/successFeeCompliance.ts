@@ -37,6 +37,11 @@ export interface SuccessFeeComplianceSummary {
   nextAction: string;
 }
 
+export type SuccessFeeComplianceAggregates = Omit<
+  SuccessFeeComplianceSummary,
+  "status" | "pendingOfferAttributions" | "daysUntilNextVerification" | "label" | "nextAction"
+>;
+
 export interface SuccessFeeComplianceAction {
   id: SuccessFeeComplianceActionId;
   label: string;
@@ -79,32 +84,63 @@ export function getSuccessFeeComplianceSummary(
   const pendingOfferAttributions = offerAttributionReviews.length;
   const monthlyFeeCents = activeFees.reduce((sum, fee) => sum + (fee.monthlyFeeAmount || 0), 0);
   const nextVerificationDue = verificationDeadlines[0] || null;
-  const daysUntilNextVerification = nextVerificationDue
-    ? Math.ceil((nextVerificationDue.getTime() - now.getTime()) / 86_400_000)
+
+  return getSuccessFeeComplianceSummaryFromAggregates({
+    activeFees: activeFees.length,
+    suspendedFees: suspendedFees.length,
+    pausedFees: pausedFees.length,
+    disputedFees: disputedFees.length,
+    pendingVerification,
+    overdueVerifications,
+    dueSoonVerifications,
+    monthlyFeeCents,
+    nextVerificationDue,
+  }, pendingOfferAttributions, now);
+}
+
+export function getSuccessFeeComplianceSummaryFromAggregates(
+  aggregates: SuccessFeeComplianceAggregates,
+  pendingOfferAttributions = 0,
+  now = new Date()
+): SuccessFeeComplianceSummary {
+  const {
+    activeFees,
+    suspendedFees,
+    pausedFees,
+    disputedFees,
+    pendingVerification,
+    overdueVerifications,
+    dueSoonVerifications,
+    monthlyFeeCents,
+    nextVerificationDue,
+  } = aggregates;
+  const normalizedNextDue = coerceDate(nextVerificationDue);
+  const daysUntilNextVerification = normalizedNextDue
+    ? Math.ceil((normalizedNextDue.getTime() - now.getTime()) / 86_400_000)
     : null;
 
-  if (pendingOfferAttributions > 0 || disputedFees.length > 0 || suspendedFees.length > 0 || pausedFees.length > 0 || overdueVerifications > 0) {
+  if (pendingOfferAttributions > 0 || disputedFees > 0 || suspendedFees > 0 || pausedFees > 0 || overdueVerifications > 0) {
     return {
       status: "needs_attention",
-      activeFees: activeFees.length,
-      suspendedFees: suspendedFees.length,
-      pausedFees: pausedFees.length,
-      disputedFees: disputedFees.length,
+      activeFees,
+      suspendedFees,
+      pausedFees,
+      disputedFees,
       pendingVerification,
       overdueVerifications,
       dueSoonVerifications,
       pendingOfferAttributions,
       monthlyFeeCents,
-      nextVerificationDue,
+      nextVerificationDue: normalizedNextDue,
       daysUntilNextVerification,
       label: "Needs attention",
       nextAction: pendingOfferAttributions > 0
         ? "Review offer attribution and report hires that came through Hire.AI."
-        : disputedFees.length > 0
+        : disputedFees > 0
           ? "Resolve the disputed success-fee record through review before billing enforcement advances."
-        : suspendedFees.length > 0
+        : suspendedFees > 0
           ? "Resolve the suspended success-fee payment before billing enforcement advances."
-          : pausedFees.length > 0
+          : pausedFees > 0
             ? "Review the paused success-fee record before billing resumes."
         : "Submit overdue employment verification proof.",
     };
@@ -113,35 +149,35 @@ export function getSuccessFeeComplianceSummary(
   if (pendingVerification > 0 || dueSoonVerifications > 0) {
     return {
       status: "due_soon",
-      activeFees: activeFees.length,
-      suspendedFees: suspendedFees.length,
-      pausedFees: pausedFees.length,
-      disputedFees: disputedFees.length,
+      activeFees,
+      suspendedFees,
+      pausedFees,
+      disputedFees,
       pendingVerification,
       overdueVerifications,
       dueSoonVerifications,
       pendingOfferAttributions,
       monthlyFeeCents,
-      nextVerificationDue,
+      nextVerificationDue: normalizedNextDue,
       daysUntilNextVerification,
       label: "Verification pending",
       nextAction: "Keep offer proof and verification documents ready for review.",
     };
   }
 
-  if (activeFees.length > 0) {
+  if (activeFees > 0) {
     return {
       status: "clear",
-      activeFees: activeFees.length,
-      suspendedFees: suspendedFees.length,
-      pausedFees: pausedFees.length,
-      disputedFees: disputedFees.length,
+      activeFees,
+      suspendedFees,
+      pausedFees,
+      disputedFees,
       pendingVerification,
       overdueVerifications,
       dueSoonVerifications,
       pendingOfferAttributions,
       monthlyFeeCents,
-      nextVerificationDue,
+      nextVerificationDue: normalizedNextDue,
       daysUntilNextVerification,
       label: "Current",
       nextAction: "No success-fee compliance action is due right now.",

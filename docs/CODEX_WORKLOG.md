@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded success-fee operating window
+
+- Replaced account-wide success-fee reads on Billing with stable cursor pagination while retaining exact aggregate totals, compliance counts, deadlines, and the next actionable verification record.
+- Scoped Applications success-fee reads to at most 250 visible or explicitly selected application IDs and kept every query owner-bound.
+- Added migration `0048` with cursor, application-scope, and actionable-deadline indexes; verified migration/schema alignment, the full automated suite, the production build, and Billing/Applications browser flows.
+
 ## 2026-08-09 - Bounded operational failure monitoring
 
 - Extended fixed redacted failure markers into cardinality-bounded process-local counters without accepting exception objects, provider payloads, credentials, or user identifiers.

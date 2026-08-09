@@ -227,7 +227,10 @@ export default function Applications() {
   const {
     data: successFees = [],
     refetch: refetchSuccessFees,
-  } = trpc.successFees.getMyFees.useQuery(undefined, { enabled: Boolean(user) });
+  } = trpc.successFees.listForApplications.useQuery(
+    { applicationIds: approvalApplicationIds },
+    { enabled: Boolean(user) && approvalApplicationIds.length > 0 }
+  );
   const {
     data: offerAttributionReviews = [],
     refetch: refetchOfferAttributionReviews,

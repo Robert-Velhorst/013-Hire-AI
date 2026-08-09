@@ -7,7 +7,9 @@ import {
   dismissOfferAttributionAdminReviews,
   getDb,
   getUserOfferAttributionReviews,
-  getUserSuccessFees,
+  getUserSuccessFeePage,
+  getUserSuccessFeesForApplications,
+  getUserSuccessFeeSummary,
 } from "../db";
 import { applicationApprovals, applications, successFees, employmentVerifications, feePayments, users, type SuccessFee } from "../../drizzle/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
@@ -510,9 +512,19 @@ export const successFeesRouter = router({
       };
     }),
 
-  // Get user's success fees
-  getMyFees: protectedProcedure.query(async ({ ctx }) => {
-    return await getUserSuccessFees(ctx.user.id);
+  listMyFeePage: protectedProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: z.object({ createdAt: z.coerce.date(), id: z.number().int().positive() }).strict().optional(),
+    }).strict())
+    .query(async ({ ctx, input }) => getUserSuccessFeePage(ctx.user.id, input)),
+
+  listForApplications: protectedProcedure
+    .input(z.object({ applicationIds: z.array(z.number().int().positive()).max(250) }).strict())
+    .query(async ({ ctx, input }) => getUserSuccessFeesForApplications(ctx.user.id, input.applicationIds)),
+
+  getMyFeeSummary: protectedProcedure.query(async ({ ctx }) => {
+    return await getUserSuccessFeeSummary(ctx.user.id);
   }),
 
   // Reopen an expired Checkout flow without creating another success-fee record.

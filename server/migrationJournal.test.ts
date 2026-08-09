@@ -89,7 +89,6 @@ describe("Drizzle migration journal", () => {
       "work_experiences_user_sort_idx",
       "education_entries_user_sort_idx",
       "user_skills_user_sort_idx",
-      "success_fees_user_created_idx",
     ];
 
     for (const indexName of expectedIndexes) {

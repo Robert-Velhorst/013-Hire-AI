@@ -3334,6 +3334,143 @@ export async function getUserSuccessFees(userId: number) {
     .orderBy(desc(successFees.createdAt));
 }
 
+export interface SuccessFeePageCursor {
+  createdAt: Date;
+  id: number;
+}
+
+export async function getUserSuccessFeePage(
+  userId: number,
+  options: { limit?: number; cursor?: SuccessFeePageCursor } = {}
+) {
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 100);
+  const db = await getDb();
+  if (!db) {
+    const ordered = memorySuccessFees
+      .filter((fee) => fee.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id);
+    const filtered = options.cursor
+      ? ordered.filter((fee) =>
+          fee.createdAt < options.cursor!.createdAt ||
+          (fee.createdAt.getTime() === options.cursor!.createdAt.getTime() && fee.id < options.cursor!.id)
+        )
+      : ordered;
+    const rows = filtered.slice(0, limit + 1) as SuccessFee[];
+    const items = rows.slice(0, limit);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+    };
+  }
+
+  const cursorCondition = options.cursor
+    ? or(
+        lt(successFees.createdAt, options.cursor.createdAt),
+        and(eq(successFees.createdAt, options.cursor.createdAt), lt(successFees.id, options.cursor.id))
+      )
+    : undefined;
+  const rows = await db
+    .select()
+    .from(successFees)
+    .where(and(eq(successFees.userId, userId), cursorCondition))
+    .orderBy(desc(successFees.createdAt), desc(successFees.id))
+    .limit(limit + 1);
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+  };
+}
+
+export async function getUserSuccessFeesForApplications(userId: number, applicationIds: number[]) {
+  const ids = Array.from(new Set(applicationIds.filter((id) => Number.isInteger(id) && id > 0))).slice(0, 250);
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) {
+    const idSet = new Set(ids);
+    return memorySuccessFees
+      .filter((fee) => fee.userId === userId && fee.applicationId != null && idSet.has(fee.applicationId))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id) as SuccessFee[];
+  }
+  return await db
+    .select()
+    .from(successFees)
+    .where(and(eq(successFees.userId, userId), inArray(successFees.applicationId, ids)))
+    .orderBy(desc(successFees.createdAt), desc(successFees.id))
+    .limit(1000);
+}
+
+export async function getUserSuccessFeeSummary(userId: number) {
+  const now = new Date();
+  const dueSoonCutoff = new Date(now.getTime() + 14 * 86_400_000);
+  const db = await getDb();
+  if (!db) {
+    const fees = memorySuccessFees.filter((fee) => fee.userId === userId);
+    const active = fees.filter((fee) => fee.status === "active" || fee.status === "pending_verification");
+    const deadlines = active
+      .map((fee) => fee.nextVerificationDue)
+      .filter((due): due is Date => due != null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    const actionableFee = fees
+      .filter((fee) =>
+        (fee.status === "active" || fee.status === "pending_verification") && fee.nextVerificationDue != null
+      )
+      .sort((a, b) => a.nextVerificationDue!.getTime() - b.nextVerificationDue!.getTime() || a.id - b.id)[0] ?? null;
+    return {
+      activeFees: active.length,
+      suspendedFees: fees.filter((fee) => fee.status === "suspended").length,
+      pausedFees: fees.filter((fee) => fee.status === "paused").length,
+      disputedFees: fees.filter((fee) => fee.status === "disputed").length,
+      pendingVerification: fees.filter((fee) => fee.status === "pending_verification").length,
+      overdueVerifications: deadlines.filter((due) => due < now).length,
+      dueSoonVerifications: deadlines.filter((due) => due >= now && due <= dueSoonCutoff).length,
+      monthlyFeeCents: active.reduce((sum, fee) => sum + fee.monthlyFeeAmount, 0),
+      nextVerificationDue: deadlines[0] ?? null,
+      actionableFee: actionableFee as SuccessFee | null,
+    };
+  }
+  const [[summary], [actionableFee]] = await Promise.all([
+    db
+      .select({
+        activeFees: sql<number>`coalesce(sum(case when ${successFees.status} in ('active', 'pending_verification') then 1 else 0 end), 0)`,
+        suspendedFees: sql<number>`coalesce(sum(case when ${successFees.status} = 'suspended' then 1 else 0 end), 0)`,
+        pausedFees: sql<number>`coalesce(sum(case when ${successFees.status} = 'paused' then 1 else 0 end), 0)`,
+        disputedFees: sql<number>`coalesce(sum(case when ${successFees.status} = 'disputed' then 1 else 0 end), 0)`,
+        pendingVerification: sql<number>`coalesce(sum(case when ${successFees.status} = 'pending_verification' then 1 else 0 end), 0)`,
+        overdueVerifications: sql<number>`coalesce(sum(case when ${successFees.status} in ('active', 'pending_verification') and ${successFees.nextVerificationDue} < ${now} then 1 else 0 end), 0)`,
+        dueSoonVerifications: sql<number>`coalesce(sum(case when ${successFees.status} in ('active', 'pending_verification') and ${successFees.nextVerificationDue} >= ${now} and ${successFees.nextVerificationDue} <= ${dueSoonCutoff} then 1 else 0 end), 0)`,
+        monthlyFeeCents: sql<number>`coalesce(sum(case when ${successFees.status} in ('active', 'pending_verification') then ${successFees.monthlyFeeAmount} else 0 end), 0)`,
+        nextVerificationDue: sql<Date | null>`min(case when ${successFees.status} in ('active', 'pending_verification') then ${successFees.nextVerificationDue} else null end)`,
+      })
+      .from(successFees)
+      .where(eq(successFees.userId, userId)),
+    db
+      .select()
+      .from(successFees)
+      .where(and(
+        eq(successFees.userId, userId),
+        inArray(successFees.status, ["active", "pending_verification"]),
+        isNotNull(successFees.nextVerificationDue)
+      ))
+      .orderBy(asc(successFees.nextVerificationDue), asc(successFees.id))
+      .limit(1),
+  ]);
+  return {
+    activeFees: Number(summary?.activeFees ?? 0),
+    suspendedFees: Number(summary?.suspendedFees ?? 0),
+    pausedFees: Number(summary?.pausedFees ?? 0),
+    disputedFees: Number(summary?.disputedFees ?? 0),
+    pendingVerification: Number(summary?.pendingVerification ?? 0),
+    overdueVerifications: Number(summary?.overdueVerifications ?? 0),
+    dueSoonVerifications: Number(summary?.dueSoonVerifications ?? 0),
+    monthlyFeeCents: Number(summary?.monthlyFeeCents ?? 0),
+    nextVerificationDue: summary?.nextVerificationDue ?? null,
+    actionableFee: actionableFee ?? null,
+  };
+}
+
 export async function touchApplicationActivity(
   applicationId: number,
   userId: number,

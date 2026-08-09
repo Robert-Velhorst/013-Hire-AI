@@ -971,7 +971,9 @@ export const successFees = mysqlTable("success_fees", {
 }, (table) => [
   uniqueIndex("success_fees_stripe_subscription_unique").on(table.stripeSubscriptionId),
   index("success_fees_user_status_idx").on(table.userId, table.status),
-  index("success_fees_user_created_idx").on(table.userId, table.createdAt),
+  index("success_fees_user_created_id_idx").on(table.userId, table.createdAt, table.id),
+  index("success_fees_user_application_created_idx").on(table.userId, table.applicationId, table.createdAt, table.id),
+  index("success_fees_user_status_due_id_idx").on(table.userId, table.status, table.nextVerificationDue, table.id),
 ]);
 
 /**

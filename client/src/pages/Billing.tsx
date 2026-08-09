@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
   getEmploymentEndControlSummary,
   type EmploymentEndReportResultLike,
 } from "@/lib/employmentEndControl";
-import { getSuccessFeeComplianceAction, getSuccessFeeComplianceSummary, type SuccessFeeComplianceRisk } from "@/lib/successFeeCompliance";
+import { getSuccessFeeComplianceAction, getSuccessFeeComplianceSummaryFromAggregates, type SuccessFeeComplianceRisk } from "@/lib/successFeeCompliance";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -165,7 +165,18 @@ export default function Billing() {
   const [employmentEndDate, setEmploymentEndDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [employmentEndResult, setEmploymentEndResult] = useState<EmploymentEndReportResultLike | null>(null);
 
-  const { data: fees = [], refetch: refetchFees } = trpc.successFees.getMyFees.useQuery();
+  const {
+    data: feePages,
+    refetch: refetchFees,
+    fetchNextPage: fetchNextFeePage,
+    hasNextPage: hasNextFeePage,
+    isFetchingNextPage: isFetchingNextFeePage,
+  } = trpc.successFees.listMyFeePage.useInfiniteQuery(
+    { limit: 50 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
+  );
+  const fees = useMemo(() => feePages?.pages.flatMap((page) => page.items) ?? [], [feePages]);
+  const { data: feeSummary } = trpc.successFees.getMyFeeSummary.useQuery();
   const { data: payments = [] } = trpc.successFees.getPaymentHistory.useQuery();
   const { data: offerAttributionReviews = [] } = trpc.successFees.getOfferAttributionReviews.useQuery();
 
@@ -195,9 +206,22 @@ export default function Billing() {
   });
 
   const activeFees = fees.filter(f => ["active", "pending_verification"].includes(f.status));
-  const totalMonthlyFees = activeFees.reduce((sum, f) => sum + f.monthlyFeeAmount, 0);
+  const totalMonthlyFees = feeSummary?.monthlyFeeCents ?? 0;
   const totalPaid = payments.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0);
-  const complianceSummary = getSuccessFeeComplianceSummary(fees, offerAttributionReviews);
+  const complianceSummary = getSuccessFeeComplianceSummaryFromAggregates(
+    feeSummary ?? {
+      activeFees: 0,
+      suspendedFees: 0,
+      pausedFees: 0,
+      disputedFees: 0,
+      pendingVerification: 0,
+      overdueVerifications: 0,
+      dueSoonVerifications: 0,
+      monthlyFeeCents: 0,
+      nextVerificationDue: null,
+    },
+    offerAttributionReviews.length
+  );
   const complianceAction = getSuccessFeeComplianceAction(complianceSummary);
   const employmentEndFee = employmentEndFeeId
     ? fees.find((fee) => fee.id === employmentEndFeeId) ?? null
@@ -230,7 +254,7 @@ export default function Billing() {
         if (!["active", "pending_verification"].includes(fee.status)) return false;
         if (!fee.nextVerificationDue) return false;
         return new Date(fee.nextVerificationDue).getTime() <= Date.now();
-      }) || activeFees[0];
+      }) || feeSummary?.actionableFee || activeFees[0];
 
       if (targetFee) {
         setVerifyDialogFeeId(targetFee.id);
@@ -299,7 +323,7 @@ export default function Billing() {
                 <Briefcase className="w-4 h-4 text-cyan-400" />
                 <span className="text-gray-400 text-sm">Active Fees</span>
               </div>
-              <p className="text-2xl font-bold text-white">{activeFees.length}</p>
+              <p className="text-2xl font-bold text-white">{feeSummary?.activeFees ?? 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-[#161b22] border-[#21262d]">
@@ -585,6 +609,19 @@ export default function Billing() {
                   </Card>
                 );
               })}
+              {hasNextFeePage && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fetchNextFeePage()}
+                    disabled={isFetchingNextFeePage}
+                    className="border-[#30363d] text-gray-300 hover:bg-[#21262d]"
+                  >
+                    {isFetchingNextFeePage ? "Loading..." : "Load older arrangements"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
