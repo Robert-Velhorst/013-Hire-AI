@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - Bounded Arbeitnow remote discovery
+
+- Added a one-page adapter for Arbeitnow's documented no-key API after checking the live response shape.
+- Rejects every record not explicitly marked remote, applies local keyword/location filters, and preserves the provider backlink required by the API terms.
+- Reuses the atomic hourly source claim so concurrent workers, scheduler cycles, crashes, and restarts cannot over-poll the provider.
+
 ## 2026-08-09 - Verified Jobicy discovery
 
 - Added a dedicated adapter for Jobicy's documented public remote-jobs API and verified the current live response shape once.

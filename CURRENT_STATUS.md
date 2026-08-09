@@ -64,6 +64,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Added an audited, user-scoped English/Dutch language preference and localized shared navigation/account controls.
 - Added durable workspace governance with hashed one-time invitations, least-privilege role controls, ownership transfer, audit evidence, retention-policy coverage, and a Team screen.
 - Added a verified Jobicy public-API adapter with fixture contracts, live schema evidence, remote location and keyword handling, annual-salary safeguards, and restart-safe hourly polling enforcement.
+- Added a bounded Arbeitnow API adapter that ingests only explicit remote records, preserves the required provider backlink, and shares the atomic hourly polling controls; deployment still requires operator/legal acceptance of the current provider terms.
 
 ## Still required before production
 

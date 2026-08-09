@@ -607,7 +607,7 @@ Trigger scraping for all platforms.
 
 Trigger scraping for a specific platform.
 
-Runs one configured and policy-approved source adapter. Jobicy uses its documented public remote-jobs API and enforces a durable one-hour minimum polling interval. A request inside that interval returns `skippedReason: "poll_interval"`, no jobs, and no error; it does not overwrite the latest persisted source result.
+Runs one configured and policy-approved source adapter. Jobicy uses its documented public remote-jobs API. Arbeitnow reads one bounded API page, accepts only records where `remote === true`, and preserves the provider job URL required for attribution. Both enforce a durable one-hour minimum polling interval. A request inside that interval returns `skippedReason: "poll_interval"`, no jobs, and no error; it does not overwrite the latest persisted source result.
 
 **Type:** Mutation (Admin)
 

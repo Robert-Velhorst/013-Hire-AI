@@ -29,6 +29,7 @@ export const scraperPlatformCatalog = [
   { name: "Remote.co", url: "https://remote.co/", tier: "tier1", category: "General" },
   { name: "Remotive", url: "https://remotive.com/", tier: "tier2", category: "General" },
   { name: "Jobicy", url: "https://jobicy.com/jobs", tier: "tier2", category: "General" },
+  { name: "Arbeitnow", url: "https://www.arbeitnow.com/", tier: "tier2", category: "Regional" },
   { name: "JustRemote", url: "https://justremote.co/", tier: "tier2", category: "General" },
   { name: "Jobspresso", url: "https://jobspresso.co/", tier: "tier2", category: "General" },
   { name: "Working Nomads", url: "https://www.workingnomads.com/jobs", tier: "tier2", category: "General" },
@@ -99,6 +100,12 @@ const automatedFeedPolicies: Record<string, PlatformDiscoveryPolicy> = {
     mode: "automated",
     sourceType: "aggregator",
     reason: "Documented public remote-jobs API; provider terms limit polling to no more than hourly.",
+    minimumPollIntervalMs: 60 * 60 * 1000,
+  },
+  Arbeitnow: {
+    mode: "automated",
+    sourceType: "aggregator",
+    reason: "Documented no-key API; remote records are filtered explicitly and provider backlinks are preserved.",
     minimumPollIntervalMs: 60 * 60 * 1000,
   },
   "We Work Remotely": {
