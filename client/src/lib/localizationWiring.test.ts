@@ -31,6 +31,7 @@ describe("localization wiring", () => {
     const notFound = readFileSync(resolve(process.cwd(), "client/src/pages/NotFound.tsx"), "utf8");
     const jobAlerts = readFileSync(resolve(process.cwd(), "client/src/pages/JobAlerts.tsx"), "utf8");
     const team = readFileSync(resolve(process.cwd(), "client/src/pages/Team.tsx"), "utf8");
+    const aiPreferences = readFileSync(resolve(process.cwd(), "client/src/pages/AIPreferences.tsx"), "utf8");
 
     expect(savedJobs).toContain("const { locale, t } = useLocale()");
     expect(savedJobs).toContain('t("savedJobsTitle")');
@@ -41,10 +42,16 @@ describe("localization wiring", () => {
     expect(jobAlerts).toContain('aria-label={t("deleteAlert"');
     expect(team).toContain('t("teamAccess")');
     expect(team).toContain('toLocaleDateString(locale)');
+    expect(aiPreferences).toContain('t("autonomousOperatingControl")');
+    expect(aiPreferences).toContain('t("schedulerErrors"');
+    expect(aiPreferences).toContain('toLocaleTimeString(locale');
+    expect(aiPreferences).not.toContain(">Save AI Preferences<");
+    expect(aiPreferences).not.toContain(">Scheduled Background Runs<");
     expect(jobAlerts).not.toContain("â€¢");
     expect(translate("en", "daysAgo", { count: 3 })).toBe("3 days ago");
     expect(translate("nl", "savedOn", { date: "gisteren" })).toBe("Opgeslagen gisteren");
     expect(translate("en", "applicationsCount", { count: 10 })).toBe("10 applications");
     expect(translate("nl", "deletionStatusOpen")).toContain("geen gegevens verwijderd");
+    expect(translate("nl", "jobTasksCount", { count: 4 })).toBe("4 vacaturtaken");
   });
 });

@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-09 - AI preference workflow localization
+
+- Localized AI preference controls, activity framing, policy/evidence headings, metrics, scheduler states and numeric outcomes, and quick actions in English and Dutch.
+- Made scheduler timestamps follow the persisted locale and retained backend-generated warning, evidence, and failure details verbatim to avoid changing operational meaning.
+- Added typed interpolation coverage and source-wiring regressions for the workflow.
+
 ## 2026-08-09 - Authenticated preference loading gates
 
 - Stopped public Job Search from issuing protected profile and autonomy-plan requests for signed-out visitors.

@@ -20,7 +20,7 @@ The current baseline also includes a versioned privacy metadata export, a user-o
 
 Windows-native startup now performs a production audit and health check, server binding defaults to loopback, a reserved ngrok tunnel can be health-verified, and an optional local/private HAI A2A connector exposes aggregate read-only status. These controls are implemented contracts, not evidence that a specific Windows host, ngrok domain, or HAI deployment has passed live acceptance.
 
-English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account headers, settings and privacy controls, saved jobs, job alerts, team governance, and not-found handling. Remaining workflow-page copy still requires translation plus native-speaker and accessibility review.
+English and Dutch account-language selection now persists in MySQL and localizes shared navigation and account headers, settings and privacy controls, AI preference controls and scheduler counts, saved jobs, job alerts, team governance, and not-found handling. Backend-generated evidence details and remaining workflow-page copy still require translation policy decisions plus native-speaker and accessibility review.
 
 Account-backed workspaces now provide owner, administrator, and member roles; email-bound expiring invitations; single-owner transfer; bounded membership; audited role changes; and safe archival. Workspace membership intentionally does not share candidate profiles, documents, applications, or other candidate-domain records. That boundary requires a separate product and privacy design before collaboration can extend beyond governance.
 
@@ -69,6 +69,7 @@ The success-fee model handles sensitive salary, employment, and payment informat
 - Localized the reusable account header and Team governance workflow, including role labels, invitations, membership changes, ownership transfer, archive confirmations, dates, and icon-only accessibility names.
 - Localized the complete Settings workflow, including preference controls, privacy export, retention-safe deletion review status and confirmations, feedback messages, and accessible control names; the page now reuses the shared account header.
 - Replaced browser-side replacement of the shared preference JSON blob with a validated server-side patch transaction used by Settings, AI Preferences, and Job Search, preventing stale tabs from dropping unrelated autonomy controls.
+- Localized AI preference controls, activity framing, evidence and policy sections, metrics, scheduler states and counts, quick actions, and locale-aware run times while preserving backend evidence text verbatim.
 
 ## Still required before production
 
