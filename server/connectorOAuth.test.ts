@@ -124,6 +124,8 @@ describe("external connector OAuth boundary", () => {
     expect(fetcher).toHaveBeenCalledWith(config.tokenEndpoint, expect.objectContaining({
       method: "POST",
       body: expect.stringContaining("grant_type=authorization_code"),
+      redirect: "error",
+      signal: expect.any(AbortSignal),
     }));
   });
 
@@ -142,6 +144,42 @@ describe("external connector OAuth boundary", () => {
     expect(fetcher).toHaveBeenCalledWith(config.tokenEndpoint, expect.objectContaining({
       method: "POST",
       body: expect.stringContaining("grant_type=refresh_token"),
+      redirect: "error",
+      signal: expect.any(AbortSignal),
     }));
+  });
+
+  it("rejects insecure token endpoints before sending client credentials", async () => {
+    const config = {
+      ...getConnectorOAuthConfig("gmail", environment)!,
+      tokenEndpoint: "http://oauth.example.test/token",
+    };
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(exchangeConnectorAuthorizationCode(config, "authorization-code", fetcher))
+      .rejects.toThrow("credential-free HTTPS");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized token responses without exposing provider content", async () => {
+    const config = getConnectorOAuthConfig("gmail", environment)!;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    }));
+
+    await expect(exchangeConnectorAuthorizationCode(config, "authorization-code", fetcher))
+      .rejects.toThrow("Connector OAuth token exchange failed");
+  });
+
+  it("rejects provider tokens that exceed the encrypted credential budget", async () => {
+    const config = getConnectorOAuthConfig("gmail", environment)!;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      access_token: "a".repeat(16 * 1024 + 1),
+      refresh_token: "provider-refresh-token",
+    }), { status: 200 }));
+
+    await expect(refreshConnectorAccessToken(config, "stored-refresh-token", fetcher))
+      .rejects.toThrow("Connector OAuth token exchange failed");
   });
 });

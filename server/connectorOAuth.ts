@@ -6,6 +6,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { ENV } from "./_core/env";
+import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export const OAUTH_CONNECTOR_PROVIDERS = [
   "gmail",
@@ -70,6 +71,10 @@ export type OAuthTokenResponse = {
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const ENCRYPTION_VERSION = "v1";
+const MAX_PROVIDER_TOKEN_LENGTH = 16 * 1024;
+const MAX_GRANTED_SCOPES = 200;
+const MAX_SCOPE_LENGTH = 500;
+const MAX_TOKEN_LIFETIME_SECONDS = 365 * 24 * 60 * 60;
 
 const providerDefinitions: Record<OAuthConnectorProvider, OAuthProviderDefinition> = {
   gmail: {
@@ -377,28 +382,55 @@ async function parseOAuthTokenResponse(
 ): Promise<OAuthTokenResponse> {
   let payload: Record<string, unknown> = {};
   try {
-    payload = await response.json() as Record<string, unknown>;
+    payload = await readProviderJson<Record<string, unknown>>(response);
   } catch {
     // A non-JSON provider error must not be surfaced or logged with request data.
   }
-  if (!response.ok || typeof payload.access_token !== "string" || !payload.access_token) {
+  const accessToken = typeof payload.access_token === "string" &&
+    payload.access_token.length > 0 &&
+    payload.access_token.length <= MAX_PROVIDER_TOKEN_LENGTH
+    ? payload.access_token
+    : null;
+  if (!response.ok || !accessToken) {
     throw new Error("Connector OAuth token exchange failed.");
   }
   const expiresIn = typeof payload.expires_in === "number"
     ? payload.expires_in
     : typeof payload.expires_in === "string" ? Number(payload.expires_in) : NaN;
-  const grantedScope = typeof payload.scope === "string"
-    ? payload.scope.split(/[\s,]+/).map((scope) => scope.trim()).filter(Boolean)
-    : fallbackScopes;
+  const grantedScope = (typeof payload.scope === "string"
+    ? payload.scope.split(/[\s,]+/)
+    : fallbackScopes)
+    .map((scope) => scope.trim())
+    .filter((scope) => scope.length > 0 && scope.length <= MAX_SCOPE_LENGTH)
+    .slice(0, MAX_GRANTED_SCOPES);
   return {
-    accessToken: payload.access_token,
-    refreshToken: typeof payload.refresh_token === "string" && payload.refresh_token ? payload.refresh_token : null,
-    expiresAt: Number.isFinite(expiresIn) && expiresIn > 0
+    accessToken,
+    refreshToken: typeof payload.refresh_token === "string" &&
+      payload.refresh_token.length > 0 &&
+      payload.refresh_token.length <= MAX_PROVIDER_TOKEN_LENGTH
+      ? payload.refresh_token
+      : null,
+    expiresAt: Number.isFinite(expiresIn) && expiresIn > 0 && expiresIn <= MAX_TOKEN_LIFETIME_SECONDS
       ? new Date(Date.now() + expiresIn * 1000)
       : null,
-    tokenType: typeof payload.token_type === "string" ? payload.token_type : null,
+    tokenType: typeof payload.token_type === "string" && payload.token_type.length <= 100
+      ? payload.token_type
+      : null,
     grantedScopes: grantedScope,
   };
+}
+
+function requireSecureTokenEndpoint(tokenEndpoint: string) {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(tokenEndpoint);
+  } catch {
+    throw new Error("Connector OAuth token endpoint is invalid.");
+  }
+  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) {
+    throw new Error("Connector OAuth token endpoint must use credential-free HTTPS.");
+  }
+  return endpoint.toString();
 }
 
 export async function exchangeConnectorAuthorizationCode(
@@ -406,14 +438,14 @@ export async function exchangeConnectorAuthorizationCode(
   code: string,
   fetcher: typeof fetch = fetch
 ): Promise<OAuthTokenResponse> {
-  const response = await fetcher(config.tokenEndpoint, {
+  const response = await fetcher(requireSecureTokenEndpoint(config.tokenEndpoint), providerRequestInit({
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: tokenEndpointBody(config, code),
-  });
+  }));
   return parseOAuthTokenResponse(response, config.scopes);
 }
 
@@ -422,13 +454,13 @@ export async function refreshConnectorAccessToken(
   refreshToken: string,
   fetcher: typeof fetch = fetch
 ): Promise<OAuthTokenResponse> {
-  const response = await fetcher(config.tokenEndpoint, {
+  const response = await fetcher(requireSecureTokenEndpoint(config.tokenEndpoint), providerRequestInit({
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: refreshTokenEndpointBody(config, refreshToken),
-  });
+  }));
   return parseOAuthTokenResponse(response, config.scopes);
 }
