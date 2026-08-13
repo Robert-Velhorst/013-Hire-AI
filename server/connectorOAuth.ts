@@ -67,6 +67,7 @@ export type OAuthTokenResponse = {
   expiresAt: Date | null;
   tokenType: string | null;
   grantedScopes: string[];
+  scopeWasReturned: boolean;
 };
 
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -417,6 +418,7 @@ async function parseOAuthTokenResponse(
       ? payload.token_type
       : null,
     grantedScopes: grantedScope,
+    scopeWasReturned: typeof payload.scope === "string",
   };
 }
 

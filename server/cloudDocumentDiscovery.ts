@@ -1,11 +1,6 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
-import {
-  decryptConnectorToken,
-  encryptConnectorToken,
-  getConnectorOAuthConfig,
-  refreshConnectorAccessToken,
-  type OAuthConnectorProvider,
-} from "./connectorOAuth";
+import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
+import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
   getConnectorAuthorization,
   getUserConnectorAccount,
@@ -42,7 +37,6 @@ export type DownloadedCloudDocument = {
 const MAX_DISCOVERED_DOCUMENTS = 50;
 const MAX_RESUME_BYTES = 10 * 1024 * 1024;
 const MAX_DOCUMENT_METADATA_BYTES = 1024 * 1024;
-const REFRESH_WINDOW_MS = 60_000;
 const CLOUD_DOCUMENT_READ_SCOPE = "files.content.read_resume_candidates";
 
 function isCloudResumeMimeType(mimeType: string) {
@@ -148,39 +142,26 @@ async function getCloudAccessToken(
     throw new Error("The connector grant is unavailable. Reauthorize this provider before document discovery.");
   }
 
-  const accessToken = dependencies.decryptConnectorToken(authorization.encryptedAccessToken);
-  const expiresAt = authorization.accessTokenExpiresAt?.getTime() ?? null;
-  if (expiresAt !== null && expiresAt > now.getTime() + REFRESH_WINDOW_MS) {
+  try {
+    const accessToken = await getUsableConnectorAccessToken({
+      userId,
+      provider,
+      authorization,
+      now,
+      fetcher,
+      dependencies,
+    });
     return { accessToken, account };
+  } catch (error) {
+    if (error instanceof ConnectorAccessTokenError && error.reason === "expired") {
+      await markCloudAccessNeedsReauth(userId, account, dependencies);
+      throw new Error("The connector authorization has expired. Reauthorize this provider before document discovery.");
+    }
+    if (error instanceof ConnectorAccessTokenError && error.reason === "renewal_not_configured") {
+      throw new Error("This connector is not configured for token renewal in this deployment.");
+    }
+    throw error;
   }
-
-  if (!authorization.encryptedRefreshToken) {
-    await markCloudAccessNeedsReauth(userId, account, dependencies);
-    throw new Error("The connector authorization has expired. Reauthorize this provider before document discovery.");
-  }
-  const config = dependencies.getConnectorOAuthConfig(provider as OAuthConnectorProvider);
-  if (!config) {
-    throw new Error("This connector is not configured for token renewal in this deployment.");
-  }
-  const refreshed = await dependencies.refreshConnectorAccessToken(
-    config,
-    dependencies.decryptConnectorToken(authorization.encryptedRefreshToken),
-    fetcher
-  );
-  await dependencies.upsertConnectorAuthorization({
-    userId,
-    provider,
-    encryptedAccessToken: dependencies.encryptConnectorToken(refreshed.accessToken),
-    // Providers commonly omit an unchanged refresh token. Preserve the durable
-    // encrypted grant instead of making the next autonomous refresh impossible.
-    encryptedRefreshToken: refreshed.refreshToken
-      ? dependencies.encryptConnectorToken(refreshed.refreshToken)
-      : authorization.encryptedRefreshToken,
-    accessTokenExpiresAt: refreshed.expiresAt,
-    tokenType: refreshed.tokenType,
-    grantedScopes: JSON.stringify(refreshed.grantedScopes),
-  });
-  return { accessToken: refreshed.accessToken, account };
 }
 
 async function markCloudAccessVerified(

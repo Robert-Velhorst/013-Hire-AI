@@ -1,11 +1,6 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
-import {
-  decryptConnectorToken,
-  encryptConnectorToken,
-  getConnectorOAuthConfig,
-  refreshConnectorAccessToken,
-  type OAuthConnectorProvider,
-} from "./connectorOAuth";
+import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
+import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
   getConnectorAuthorization,
   getUserConnectorAccount,
@@ -38,7 +33,6 @@ export type GitHubProfileCandidate = {
 };
 
 const MAX_REPOSITORIES = 10;
-const TOKEN_EXPIRY_SKEW_MS = 60_000;
 
 type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
@@ -125,37 +119,26 @@ async function getGitHubAccessToken(
     await markGitHubAccessNeedsReauth(userId, account, dependencies);
     throw new Error("GitHub authorization is unavailable. Reauthorize before profile discovery.");
   }
-  const accessToken = dependencies.decryptConnectorToken(authorization.encryptedAccessToken);
-  const expiresAt = authorization.accessTokenExpiresAt?.getTime() ?? null;
-  if (expiresAt !== null && expiresAt > now.getTime() + TOKEN_EXPIRY_SKEW_MS) {
+  try {
+    const accessToken = await getUsableConnectorAccessToken({
+      userId,
+      provider: "github",
+      authorization,
+      now,
+      fetcher,
+      dependencies,
+    });
     return { account, accessToken };
+  } catch (error) {
+    if (error instanceof ConnectorAccessTokenError && error.reason === "expired") {
+      await markGitHubAccessNeedsReauth(userId, account, dependencies);
+      throw new Error("GitHub authorization has expired. Reauthorize before profile discovery.");
+    }
+    if (error instanceof ConnectorAccessTokenError && error.reason === "renewal_not_configured") {
+      throw new Error("GitHub token renewal is not configured in this deployment.");
+    }
+    throw error;
   }
-  if (!authorization.encryptedRefreshToken) {
-    await markGitHubAccessNeedsReauth(userId, account, dependencies);
-    throw new Error("GitHub authorization has expired. Reauthorize before profile discovery.");
-  }
-  const config = dependencies.getConnectorOAuthConfig("github" as OAuthConnectorProvider);
-  if (!config) {
-    throw new Error("GitHub token renewal is not configured in this deployment.");
-  }
-  const refreshed = await dependencies.refreshConnectorAccessToken(
-    config,
-    dependencies.decryptConnectorToken(authorization.encryptedRefreshToken),
-    fetcher
-  );
-  await dependencies.upsertConnectorAuthorization({
-    userId,
-    provider: "github",
-    encryptedAccessToken: dependencies.encryptConnectorToken(refreshed.accessToken),
-    encryptedRefreshToken: refreshed.refreshToken
-      ? dependencies.encryptConnectorToken(refreshed.refreshToken)
-      : authorization.encryptedRefreshToken,
-    accessTokenExpiresAt: refreshed.expiresAt,
-    tokenType: refreshed.tokenType,
-    grantedScopes: JSON.stringify(refreshed.grantedScopes),
-  });
-
-  return { account, accessToken: refreshed.accessToken };
 }
 
 async function markGitHubAccessNeedsReauth(

@@ -102,8 +102,7 @@ describe("GitHub profile discovery", () => {
       accessTokenExpiresAt: new Date("2026-07-13T11:59:00.000Z"),
     });
     (deps.decryptConnectorToken as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce("expired-access-token")
-      .mockReturnValueOnce("github-refresh-token");
+      .mockReturnValue("github-refresh-token");
     (deps.refreshConnectorAccessToken as ReturnType<typeof vi.fn>).mockResolvedValue({
       accessToken: "renewed-github-token",
       refreshToken: "renewed-github-refresh-token",
@@ -142,8 +141,7 @@ describe("GitHub profile discovery", () => {
       accessTokenExpiresAt: null,
     });
     (deps.decryptConnectorToken as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce("expired-access-token")
-      .mockReturnValueOnce("github-refresh-token");
+      .mockReturnValue("github-refresh-token");
     (deps.refreshConnectorAccessToken as ReturnType<typeof vi.fn>).mockResolvedValue({
       accessToken: "renewed-github-token",
       refreshToken: null,

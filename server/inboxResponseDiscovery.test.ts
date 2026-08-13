@@ -295,9 +295,7 @@ describe("inbox response discovery", () => {
       encryptedRefreshToken: "encrypted-refresh",
       accessTokenExpiresAt: new Date("2026-07-13T11:59:00.000Z"),
     });
-    mocks.decryptConnectorToken
-      .mockReturnValueOnce("expired-access-token")
-      .mockReturnValueOnce("refresh-token");
+    mocks.decryptConnectorToken.mockReturnValue("refresh-token");
     mocks.getConnectorOAuthConfig.mockReturnValue({ provider: "gmail" });
     mocks.refreshConnectorAccessToken.mockResolvedValue({
       accessToken: "renewed-access-token",

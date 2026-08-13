@@ -1,11 +1,6 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
-import {
-  decryptConnectorToken,
-  encryptConnectorToken,
-  getConnectorOAuthConfig,
-  refreshConnectorAccessToken,
-  type OAuthConnectorProvider,
-} from "./connectorOAuth";
+import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
+import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
@@ -105,38 +100,26 @@ async function getInboxAccess(
     await markInboxAccessNeedsReauth(userId, account, dependencies);
     throw new Error(`${displayName(provider)} authorization is unavailable. Reauthorize before inbox discovery.`);
   }
-  const accessToken = dependencies.decryptConnectorToken(authorization.encryptedAccessToken);
-  const expiresAt = authorization.accessTokenExpiresAt?.getTime() ?? null;
-  if (expiresAt !== null && expiresAt > now.getTime() + TOKEN_EXPIRY_SKEW_MS) {
+  try {
+    const accessToken = await getUsableConnectorAccessToken({
+      userId,
+      provider,
+      authorization,
+      now,
+      fetcher,
+      dependencies,
+    });
     return { accessToken, account };
+  } catch (error) {
+    if (error instanceof ConnectorAccessTokenError && error.reason === "expired") {
+      await markInboxAccessNeedsReauth(userId, account, dependencies);
+      throw new Error(`${displayName(provider)} authorization has expired. Reauthorize before inbox discovery.`);
+    }
+    if (error instanceof ConnectorAccessTokenError && error.reason === "renewal_not_configured") {
+      throw new Error(`${displayName(provider)} token renewal is not configured in this deployment.`);
+    }
+    throw error;
   }
-  if (!authorization.encryptedRefreshToken) {
-    await markInboxAccessNeedsReauth(userId, account, dependencies);
-    throw new Error(`${displayName(provider)} authorization has expired. Reauthorize before inbox discovery.`);
-  }
-  const config = dependencies.getConnectorOAuthConfig(provider as OAuthConnectorProvider);
-  if (!config) {
-    throw new Error(`${displayName(provider)} token renewal is not configured in this deployment.`);
-  }
-  const refreshed = await dependencies.refreshConnectorAccessToken(
-    config,
-    dependencies.decryptConnectorToken(authorization.encryptedRefreshToken),
-    fetcher
-  );
-  await dependencies.upsertConnectorAuthorization({
-    userId,
-    provider,
-    encryptedAccessToken: dependencies.encryptConnectorToken(refreshed.accessToken),
-    // Providers often omit the unchanged refresh token during renewal. Retain
-    // the encrypted grant so the next access-token refresh remains possible.
-    encryptedRefreshToken: refreshed.refreshToken
-      ? dependencies.encryptConnectorToken(refreshed.refreshToken)
-      : authorization.encryptedRefreshToken,
-    accessTokenExpiresAt: refreshed.expiresAt,
-    tokenType: refreshed.tokenType,
-    grantedScopes: JSON.stringify(refreshed.grantedScopes),
-  });
-  return { accessToken: refreshed.accessToken, account };
 }
 
 async function markInboxAccessVerified(

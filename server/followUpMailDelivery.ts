@@ -8,13 +8,8 @@ import {
   jobs,
 } from "../drizzle/schema";
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
-import {
-  decryptConnectorToken,
-  encryptConnectorToken,
-  getConnectorOAuthConfig,
-  refreshConnectorAccessToken,
-  type OAuthConnectorProvider,
-} from "./connectorOAuth";
+import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
+import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
   getConnectorAuthorization,
   getDb,
@@ -59,8 +54,6 @@ const SEND_SCOPE: Record<FollowUpMailProvider, string> = {
   gmail: "email.messages.send",
   outlook: "mail.messages.send",
 };
-
-const TOKEN_EXPIRY_SKEW_MS = 60_000;
 
 function providerLabel(provider: FollowUpMailProvider) {
   return provider === "gmail" ? "Gmail" : "Outlook";
@@ -126,40 +119,27 @@ async function getMailAccess(
     await markMailAccessNeedsReauth(userId, account, dependencies);
     throw new Error(`${providerLabel(provider)} authorization is unavailable. Reauthorize before sending a follow-up.`);
   }
-  const accessToken = dependencies.decryptConnectorToken(authorization.encryptedAccessToken);
-  const expiresAt = authorization.accessTokenExpiresAt?.getTime() ?? null;
-  if (expiresAt !== null && expiresAt > now.getTime() + TOKEN_EXPIRY_SKEW_MS) {
+  try {
+    const accessToken = await getUsableConnectorAccessToken({
+      userId,
+      provider,
+      authorization,
+      now,
+      fetcher,
+      consentScopes: [SEND_SCOPE[provider]],
+      dependencies,
+    });
     return { accessToken, account };
+  } catch (error) {
+    if (error instanceof ConnectorAccessTokenError && error.reason === "expired") {
+      await markMailAccessNeedsReauth(userId, account, dependencies);
+      throw new Error(`${providerLabel(provider)} authorization has expired. Reauthorize before sending a follow-up.`);
+    }
+    if (error instanceof ConnectorAccessTokenError && error.reason === "renewal_not_configured") {
+      throw new Error(`${providerLabel(provider)} token renewal is not configured in this deployment.`);
+    }
+    throw error;
   }
-  if (!authorization.encryptedRefreshToken) {
-    await markMailAccessNeedsReauth(userId, account, dependencies);
-    throw new Error(`${providerLabel(provider)} authorization has expired. Reauthorize before sending a follow-up.`);
-  }
-  const config = dependencies.getConnectorOAuthConfig(
-    provider as OAuthConnectorProvider,
-    undefined,
-    [SEND_SCOPE[provider]]
-  );
-  if (!config) {
-    throw new Error(`${providerLabel(provider)} token renewal is not configured in this deployment.`);
-  }
-  const refreshed = await dependencies.refreshConnectorAccessToken(
-    config,
-    dependencies.decryptConnectorToken(authorization.encryptedRefreshToken),
-    fetcher
-  );
-  await dependencies.upsertConnectorAuthorization({
-    userId,
-    provider,
-    encryptedAccessToken: dependencies.encryptConnectorToken(refreshed.accessToken),
-    encryptedRefreshToken: refreshed.refreshToken
-      ? dependencies.encryptConnectorToken(refreshed.refreshToken)
-      : authorization.encryptedRefreshToken,
-    accessTokenExpiresAt: refreshed.expiresAt,
-    tokenType: refreshed.tokenType,
-    grantedScopes: JSON.stringify(refreshed.grantedScopes),
-  });
-  return { accessToken: refreshed.accessToken, account };
 }
 
 async function markMailAccessNeedsReauth(
