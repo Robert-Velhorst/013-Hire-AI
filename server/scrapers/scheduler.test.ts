@@ -15,6 +15,7 @@ vi.mock("../applicationFeatures", () => ({
 }));
 
 import { getScheduler, JobScrapingScheduler } from "./scheduler";
+import * as database from "../db";
 
 describe("job scraping scheduler", () => {
   beforeEach(() => {
@@ -287,5 +288,50 @@ describe("job scraping scheduler", () => {
     releaseCycle();
     await Promise.all([first, joined]);
     expect(scheduler.getStatus().totalRunsCompleted).toBe(1);
+  });
+
+  it("prevents separate scheduler instances from duplicating provider discovery", async () => {
+    let releaseCycle!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseCycle = resolve;
+    });
+    mocks.runScrapingCycle.mockImplementationOnce(async () => {
+      await gate;
+      return { totalSaved: 1, platformResults: { RemoteOK: { errors: [] } } };
+    });
+    const firstScheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+    const secondScheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+
+    const first = firstScheduler.runScraping();
+    await vi.waitFor(() => expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1));
+    await expect(secondScheduler.runScraping()).resolves.toBe("skipped");
+    expect(mocks.runScrapingCycle).toHaveBeenCalledTimes(1);
+    expect(secondScheduler.getStatus()).toMatchObject({
+      isRunning: false,
+      totalRunsCompleted: 0,
+      lastRunOutcome: null,
+    });
+
+    releaseCycle();
+    await expect(first).resolves.toBe("completed");
+  });
+
+  it("contains lease acquisition failures without starting provider discovery", async () => {
+    const leaseSpy = vi.spyOn(database, "acquireJobDiscoveryLease")
+      .mockRejectedValueOnce(new Error("database connection secret"));
+    const scheduler = new JobScrapingScheduler({ intervalMinutes: 60, maxJobsPerRun: 25 });
+
+    await expect(scheduler.runScraping()).resolves.toBe("failed");
+
+    expect(mocks.runScrapingCycle).not.toHaveBeenCalled();
+    expect(scheduler.getStatus()).toMatchObject({
+      isRunning: false,
+      totalRunsCompleted: 1,
+      totalFailedRuns: 1,
+      lastRunOutcome: "failed",
+      errors: ["Scraping run could not complete."],
+    });
+    expect(JSON.stringify(scheduler.getStatus())).not.toContain("database connection secret");
+    leaseSpy.mockRestore();
   });
 });

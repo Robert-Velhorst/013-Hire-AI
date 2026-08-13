@@ -31,6 +31,7 @@ import {
   userProjects,
   operationalFailureSignals,
   autonomousRunStates,
+  jobDiscoveryRunState,
   successFees,
   feePayments,
   type Job,
@@ -159,6 +160,85 @@ const memoryAutonomousRuns = new Map<number, {
   lastOutcomeDetail: string | null;
   lastRunSummary: string | null;
 }>();
+let memoryJobDiscoveryLease: {
+  leaseToken: string | null;
+  leaseExpiresAt: number;
+  lastStartedAt: number | null;
+  lastCompletedAt: number | null;
+} | null = null;
+
+const JOB_DISCOVERY_LEASE_NAME = "global";
+const JOB_DISCOVERY_LEASE_MS = 2 * 60 * 1000;
+
+export async function acquireJobDiscoveryLease(leaseToken: string) {
+  const db = await getDb();
+  const now = new Date();
+  const leaseExpiresAt = new Date(now.getTime() + JOB_DISCOVERY_LEASE_MS);
+  if (!db) {
+    if (memoryJobDiscoveryLease && memoryJobDiscoveryLease.leaseExpiresAt > now.getTime()) return false;
+    memoryJobDiscoveryLease = {
+      leaseToken,
+      leaseExpiresAt: leaseExpiresAt.getTime(),
+      lastStartedAt: now.getTime(),
+      lastCompletedAt: memoryJobDiscoveryLease?.lastCompletedAt ?? null,
+    };
+    return true;
+  }
+
+  const canAcquire = sql`(${jobDiscoveryRunState.leaseExpiresAt} IS NULL OR ${jobDiscoveryRunState.leaseExpiresAt} <= ${now})`;
+  await db.insert(jobDiscoveryRunState).values({
+    name: JOB_DISCOVERY_LEASE_NAME,
+    leaseToken,
+    leaseExpiresAt,
+    lastStartedAt: now,
+  }).onDuplicateKeyUpdate({ set: {
+    leaseToken: sql`IF(${canAcquire}, ${leaseToken}, ${jobDiscoveryRunState.leaseToken})`,
+    leaseExpiresAt: sql`IF(${canAcquire}, ${leaseExpiresAt}, ${jobDiscoveryRunState.leaseExpiresAt})`,
+    lastStartedAt: sql`IF(${canAcquire}, ${now}, ${jobDiscoveryRunState.lastStartedAt})`,
+  }});
+  const state = await db.select({ leaseToken: jobDiscoveryRunState.leaseToken })
+    .from(jobDiscoveryRunState)
+    .where(eq(jobDiscoveryRunState.name, JOB_DISCOVERY_LEASE_NAME))
+    .limit(1);
+  return state[0]?.leaseToken === leaseToken;
+}
+
+export async function renewJobDiscoveryLease(leaseToken: string) {
+  const db = await getDb();
+  const leaseExpiresAt = new Date(Date.now() + JOB_DISCOVERY_LEASE_MS);
+  if (!db) {
+    if (memoryJobDiscoveryLease?.leaseToken !== leaseToken) return false;
+    memoryJobDiscoveryLease.leaseExpiresAt = leaseExpiresAt.getTime();
+    return true;
+  }
+  const result = await db.update(jobDiscoveryRunState)
+    .set({ leaseExpiresAt })
+    .where(and(
+      eq(jobDiscoveryRunState.name, JOB_DISCOVERY_LEASE_NAME),
+      eq(jobDiscoveryRunState.leaseToken, leaseToken)
+    ));
+  return Number(result[0].affectedRows) > 0;
+}
+
+export async function releaseJobDiscoveryLease(leaseToken: string, completed = false) {
+  const db = await getDb();
+  if (!db) {
+    if (memoryJobDiscoveryLease?.leaseToken !== leaseToken) return false;
+    memoryJobDiscoveryLease.leaseToken = null;
+    memoryJobDiscoveryLease.leaseExpiresAt = 0;
+    if (completed) memoryJobDiscoveryLease.lastCompletedAt = Date.now();
+    return true;
+  }
+  const result = await db.update(jobDiscoveryRunState).set({
+    leaseToken: null,
+    leaseExpiresAt: null,
+    lastCompletedAt: completed ? new Date() : sql`${jobDiscoveryRunState.lastCompletedAt}`,
+  }).where(and(
+    eq(jobDiscoveryRunState.name, JOB_DISCOVERY_LEASE_NAME),
+    eq(jobDiscoveryRunState.leaseToken, leaseToken)
+  ));
+  return Number(result[0].affectedRows) > 0;
+}
 
 export interface AutonomousRunSummaryRecord {
   queuedApplicationRecords: number;

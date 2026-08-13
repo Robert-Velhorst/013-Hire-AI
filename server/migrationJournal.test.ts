@@ -243,6 +243,19 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("`operational_failure_signals_last_idx`");
   });
 
+  it("keeps the global job-discovery lease aligned with the runtime schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0072_job_discovery_run_lease.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('mysqlTable("job_discovery_run_state"');
+    expect(schema).toContain('index("job_discovery_run_state_lease_idx")');
+    expect(migration).toContain("`job_discovery_run_state`");
+    expect(migration).toContain("`job_discovery_run_state_lease_idx`");
+  });
+
   it("keeps the application ledger cursor index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

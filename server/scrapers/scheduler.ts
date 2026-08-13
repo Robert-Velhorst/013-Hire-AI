@@ -1,8 +1,17 @@
 import { getScraperManager } from "./scraperManager";
 import { processJobAlerts } from "../applicationFeatures";
+import { randomUUID } from "node:crypto";
+import {
+  acquireJobDiscoveryLease,
+  releaseJobDiscoveryLease,
+  renewJobDiscoveryLease,
+} from "../db";
 
 const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 const SCRAPE_CYCLE_FAILURE_MESSAGE = "Scraping run could not complete.";
+const LEASE_RENEWAL_INTERVAL_MS = 30_000;
+
+export type ScrapingRunResult = "completed" | "failed" | "joined" | "skipped";
 
 function sanitizePlatformErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
@@ -61,7 +70,7 @@ function classifyRunOutcome(platformResults: Record<string, { errors: string[] }
 export class JobScrapingScheduler {
   private config: SchedulerConfig;
   private intervalId: NodeJS.Timeout | null = null;
-  private activeCycle: Promise<void> | null = null;
+  private activeCycle: Promise<ScrapingRunResult> | null = null;
   private activeCycleController: AbortController | null = null;
   private status: SchedulerStatus = {
     isStarted: false,
@@ -138,16 +147,16 @@ export class JobScrapingScheduler {
   /**
    * Run a single scraping cycle
    */
-  async runScraping(): Promise<void> {
+  async runScraping(): Promise<ScrapingRunResult> {
     if (this.activeCycle) {
       console.log("[Scheduler] Scraping already in progress, joining current run");
-      await this.activeCycle;
-      return;
+      const result = await this.activeCycle;
+      return result === "failed" ? "failed" : "joined";
     }
 
     const controller = new AbortController();
     this.activeCycleController = controller;
-    let cycle: Promise<void>;
+    let cycle: Promise<ScrapingRunResult>;
     cycle = this.executeScraping(controller.signal).finally(() => {
       if (this.activeCycle === cycle) {
         this.activeCycle = null;
@@ -155,10 +164,45 @@ export class JobScrapingScheduler {
       }
     });
     this.activeCycle = cycle;
-    await cycle;
+    return await cycle;
   }
 
-  private async executeScraping(signal: AbortSignal): Promise<void> {
+  private async executeScraping(shutdownSignal: AbortSignal): Promise<ScrapingRunResult> {
+    const leaseToken = randomUUID();
+    let acquired = false;
+    try {
+      acquired = await acquireJobDiscoveryLease(leaseToken);
+    } catch {
+      console.error("[Scheduler] Discovery lease could not be acquired");
+      this.status.errors = [SCRAPE_CYCLE_FAILURE_MESSAGE];
+      this.status.totalRunsCompleted++;
+      this.status.totalFailedRuns++;
+      this.status.lastRunOutcome = "failed";
+      this.status.lastRunAt = new Date();
+      return "failed";
+    }
+    if (!acquired) {
+      console.log("[Scheduler] Discovery is already running on another server instance");
+      return "skipped";
+    }
+
+    const controller = new AbortController();
+    const abortForShutdown = () => controller.abort();
+    shutdownSignal.addEventListener("abort", abortForShutdown, { once: true });
+    let leaseLost = false;
+    const renewalTimer = setInterval(() => {
+      void renewJobDiscoveryLease(leaseToken).then((renewed) => {
+        if (!renewed) {
+          leaseLost = true;
+          controller.abort();
+        }
+      }).catch(() => {
+        leaseLost = true;
+        controller.abort();
+      });
+    }, LEASE_RENEWAL_INTERVAL_MS);
+    renewalTimer.unref();
+    let completed = false;
 
     this.status.isRunning = true;
     this.status.errors = [];
@@ -173,14 +217,14 @@ export class JobScrapingScheduler {
       
       const scrapingOptions: { limit: number; platformNames?: string[]; signal: AbortSignal } = {
         limit: this.config.maxJobsPerRun,
-        signal,
+        signal: controller.signal,
       };
       if (this.config.enabledPlatforms?.length) {
         scrapingOptions.platformNames = this.config.enabledPlatforms;
       }
       const result = await manager.runScrapingCycle(scrapingOptions);
 
-      if (signal.aborted) throw new Error("Scraping cycle was cancelled.");
+      if (controller.signal.aborted) throw new Error("Scraping cycle was cancelled.");
 
       this.status.totalJobsScraped += result.totalSaved;
       this.status.totalRunsCompleted++;
@@ -212,6 +256,7 @@ export class JobScrapingScheduler {
 
       const duration = (Date.now() - startTime) / 1000;
       console.log(`[Scheduler] Scraping complete in ${duration.toFixed(1)}s. Saved ${result.totalSaved} jobs.`);
+      completed = true;
 
     } catch {
       console.error(`[Scheduler] ${SCRAPE_CYCLE_FAILURE_MESSAGE}`);
@@ -221,11 +266,15 @@ export class JobScrapingScheduler {
       this.status.lastRunOutcome = "failed";
       this.status.lastRunAt = new Date();
     } finally {
+      clearInterval(renewalTimer);
+      shutdownSignal.removeEventListener("abort", abortForShutdown);
+      await releaseJobDiscoveryLease(leaseToken, completed && !leaseLost).catch(() => false);
       this.status.isRunning = false;
       this.status.nextRunAt = this.intervalId 
         ? new Date(Date.now() + this.config.intervalMinutes * 60 * 1000)
         : null;
     }
+    return this.status.lastRunOutcome === "failed" ? "failed" : "completed";
   }
 
   /**

@@ -505,6 +505,13 @@
       "when": 1786498320000,
       "tag": "0071_operational_failure_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1786498380000,
+      "tag": "0072_job_discovery_run_lease",
+      "breakpoints": true
     }
   ]
 }

@@ -737,6 +737,18 @@ export const interviewPreparation = mysqlTable("interview_preparation", {
   uniqueIndex("interview_prep_user_job_unique").on(table.userId, table.jobId),
 ]);
 
+/** Global lease preventing duplicate provider discovery across server replicas. */
+export const jobDiscoveryRunState = mysqlTable("job_discovery_run_state", {
+  name: varchar("name", { length: 64 }).primaryKey(),
+  leaseToken: varchar("lease_token", { length: 64 }),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  lastStartedAt: timestamp("last_started_at"),
+  lastCompletedAt: timestamp("last_completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  index("job_discovery_run_state_lease_idx").on(table.leaseExpiresAt),
+]);
+
 /**
  * Follow-ups
  * Tracks automated follow-up messages

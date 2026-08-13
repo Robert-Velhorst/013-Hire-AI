@@ -3215,8 +3215,18 @@ export const appRouter = router({
     runNow: adminProcedure.mutation(async () => {
       const { getScheduler } = await import("./scrapers/scheduler");
       const scheduler = getScheduler();
-      await scheduler.runScraping();
-      return { success: true, message: "Scraping run completed", scheduler: scheduler.getStatus() };
+      const result = await scheduler.runScraping();
+      return {
+        success: result !== "skipped" && result !== "failed",
+        message: result === "skipped"
+          ? "Scraping is already running on another server instance"
+          : result === "failed"
+            ? "Scraping run could not complete"
+            : result === "joined"
+              ? "Active scraping run completed"
+              : "Scraping run completed",
+        scheduler: scheduler.getStatus(),
+      };
     }),
   }),
 
