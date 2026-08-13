@@ -22,7 +22,7 @@ describe("supply-chain CI contract", () => {
     const workspace = readFileSync(resolve(process.cwd(), "pnpm-workspace.yaml"), "utf8");
 
     expect(packageJson).not.toContain('"pnpm": {');
-    expect(workspace).toContain('"nanoid@<3.3.17": "3.3.17"');
+    expect(workspace).toContain('"nanoid@<3.3.18": "3.3.18"');
     expect(workspace).toContain('"postcss@<=8.5.22": "8.5.23"');
     expect(workspace).toContain('"mermaid@<11.16.1": "11.16.1"');
     expect(workspace).toContain('"dompurify@<=3.4.12": "3.4.13"');
