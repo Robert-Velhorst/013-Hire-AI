@@ -11,7 +11,7 @@ import { normalizeSalary, normalizeLocation, normalizeJobType, normalizeExperien
 import { isJobCurrentForAutonomousProcessing } from "./autonomousOrchestrator";
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
-import { getRecentJobs, searchJobs, getDiscoveryStats, getSubscriptionManager } from "./realTimeDiscovery";
+import { getRecentJobs, searchJobs, getDiscoveryStats } from "./realTimeDiscovery";
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
 import { workspacesRouter } from "./routers/workspaces";
@@ -3931,7 +3931,7 @@ export const appRouter = router({
       }),
   }),
 
-  // Real-Time Job Discovery
+  // Job discovery catalog queries. Durable matching is handled by Job Alerts.
   discovery: router({
     getRecentJobs: publicProcedure
       .input(z.object({
@@ -3956,39 +3956,6 @@ export const appRouter = router({
 
     getStats: publicProcedure
       .query(async () => getDiscoveryStats()),
-
-    subscribe: protectedProcedure
-      .input(z.object({
-        keywords: z.array(boundedFilterText).max(20).optional(),
-        locations: z.array(boundedFilterText).max(20).optional(),
-        platformIds: z.array(z.number().int().positive()).max(100).optional(),
-        minSalary: z.number().int().min(0).max(10_000_000).optional(),
-        jobTypes: z.array(z.enum(["full-time", "part-time", "contract", "temporary"])).max(4).optional(),
-        experienceLevels: z.array(z.enum(["entry", "junior", "mid", "senior", "lead", "executive"])).max(6).optional(),
-      }))
-      .mutation(({ ctx, input }) => {
-        const manager = getSubscriptionManager();
-        manager.subscribe({
-          userId: ctx.user.id,
-          filters: input,
-          callback: (event) => console.log(`[Discovery] Event for user ${ctx.user.id}:`, event.type),
-        });
-        return { success: true, message: "Subscribed to job updates" };
-      }),
-
-    unsubscribe: protectedProcedure
-      .mutation(({ ctx }) => {
-        const manager = getSubscriptionManager();
-        manager.unsubscribe(ctx.user.id);
-        return { success: true, message: "Unsubscribed from job updates" };
-      }),
-
-    triggerCheck: protectedProcedure
-      .mutation(async () => {
-        const manager = getSubscriptionManager();
-        const jobs = await manager.triggerCheck();
-        return { jobs, count: jobs.length };
-      }),
   }),
 
   // Job Alerts

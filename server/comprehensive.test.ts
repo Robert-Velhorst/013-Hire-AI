@@ -76,16 +76,16 @@ describe("Job Normalization", () => {
   });
 });
 
-describe("Real-Time Job Discovery", () => {
-  it("exposes discovery methods", () => {
+describe("Job Discovery", () => {
+  it("exposes read-only discovery methods without process-local subscription mutations", () => {
     const caller = appRouter.createCaller(createMockContext());
 
     expect(caller.discovery.getRecentJobs).toBeDefined();
     expect(caller.discovery.searchJobs).toBeDefined();
     expect(caller.discovery.getStats).toBeDefined();
-    expect(caller.discovery.subscribe).toBeDefined();
-    expect(caller.discovery.unsubscribe).toBeDefined();
-    expect(caller.discovery.triggerCheck).toBeDefined();
+    expect(caller.discovery).not.toHaveProperty("subscribe");
+    expect(caller.discovery).not.toHaveProperty("unsubscribe");
+    expect(caller.discovery).not.toHaveProperty("triggerCheck");
   });
 
   it("passes job-type filters through the public discovery contract", async () => {
