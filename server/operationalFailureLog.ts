@@ -7,8 +7,15 @@ export type OperationalFailureSignal = {
 };
 
 const MAX_FAILURE_BUCKETS = 100;
+const PERSISTENCE_DELAY_MS = 1_000;
+const PERSISTENCE_RETRY_MS = 5_000;
 const processStartedAt = new Date().toISOString();
 const failureSignals = new Map<string, OperationalFailureSignal>();
+const pendingPersistence = new Map<string, OperationalFailureSignal>();
+type PersistenceSink = (signals: OperationalFailureSignal[]) => Promise<void>;
+let persistenceSink: PersistenceSink | null = null;
+let persistenceTimer: ReturnType<typeof setTimeout> | null = null;
+let persistenceFlush: Promise<void> | null = null;
 
 const knownFailureSignals = new Set([
   "AIMatching\u0000Decision-maker analysis",
@@ -50,6 +57,39 @@ function normalizeLabel(value: string): string {
   return normalized || "Unknown";
 }
 
+function mergeSignal(target: Map<string, OperationalFailureSignal>, signal: OperationalFailureSignal) {
+  const key = `${signal.scope}\u0000${signal.operation}`;
+  const existing = target.get(key);
+  if (existing) {
+    existing.count += signal.count;
+    if (signal.firstOccurredAt < existing.firstOccurredAt) existing.firstOccurredAt = signal.firstOccurredAt;
+    if (signal.lastOccurredAt > existing.lastOccurredAt) existing.lastOccurredAt = signal.lastOccurredAt;
+    return;
+  }
+  target.set(key, { ...signal });
+}
+
+function schedulePersistence(delayMs = PERSISTENCE_DELAY_MS) {
+  if (!persistenceSink || persistenceTimer || pendingPersistence.size === 0) return;
+  persistenceTimer = setTimeout(() => {
+    persistenceTimer = null;
+    void flushOperationalFailurePersistence().catch(() => schedulePersistence(PERSISTENCE_RETRY_MS));
+  }, delayMs);
+  persistenceTimer.unref?.();
+}
+
+function queuePersistence(scope: string, operation: string, timestamp: string) {
+  if (!persistenceSink) return;
+  mergeSignal(pendingPersistence, {
+    scope,
+    operation,
+    count: 1,
+    firstOccurredAt: timestamp,
+    lastOccurredAt: timestamp,
+  });
+  schedulePersistence();
+}
+
 function recordOperationalFailure(scope: string, operation: string, occurredAt = new Date()): void {
   const normalizedScope = normalizeLabel(scope);
   const normalizedOperation = normalizeLabel(operation);
@@ -59,6 +99,7 @@ function recordOperationalFailure(scope: string, operation: string, occurredAt =
   const safeOperation = isKnown ? normalizedOperation : "Unclassified failure";
   const key = `${safeScope}\u0000${safeOperation}`;
   const timestamp = occurredAt.toISOString();
+  queuePersistence(safeScope, safeOperation, timestamp);
   const existing = failureSignals.get(key);
   if (existing) {
     existing.count += 1;
@@ -83,6 +124,33 @@ function recordOperationalFailure(scope: string, operation: string, occurredAt =
   });
 }
 
+export function configureOperationalFailurePersistence(sink: PersistenceSink | null): void {
+  persistenceSink = sink;
+  if (!sink && persistenceTimer) {
+    clearTimeout(persistenceTimer);
+    persistenceTimer = null;
+  }
+}
+
+export async function flushOperationalFailurePersistence(): Promise<void> {
+  if (persistenceTimer) {
+    clearTimeout(persistenceTimer);
+    persistenceTimer = null;
+  }
+  if (persistenceFlush) await persistenceFlush;
+  if (!persistenceSink || pendingPersistence.size === 0) return;
+  const batch = Array.from(pendingPersistence.values()).map((signal) => ({ ...signal }));
+  pendingPersistence.clear();
+  persistenceFlush = persistenceSink(batch).catch((error) => {
+    for (const signal of batch) mergeSignal(pendingPersistence, signal);
+    throw error;
+  }).finally(() => {
+    persistenceFlush = null;
+  });
+  await persistenceFlush;
+  if (pendingPersistence.size > 0) schedulePersistence();
+}
+
 export function getOperationalFailureSnapshot(limit = 20) {
   const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
   const signals = Array.from(failureSignals.values())
@@ -100,6 +168,8 @@ export function getOperationalFailureSnapshot(limit = 20) {
 
 export function clearOperationalFailuresForTests(): void {
   failureSignals.clear();
+  pendingPersistence.clear();
+  configureOperationalFailurePersistence(null);
 }
 
 /** Emits a fixed marker and bounded metric without accepting an error object. */

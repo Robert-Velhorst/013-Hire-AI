@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   getApplicationCampaign,
   getAutonomousRunState,
+  getOperationalFailureAggregateSnapshot,
   getUserHaiStatusCounts,
 } from "./db";
 import {
@@ -9,7 +10,6 @@ import {
   type HaiConnectorConfig,
   validateHaiConnectorConfig,
 } from "./haiConnectorConfig";
-import { getOperationalFailureSnapshot } from "./operationalFailureLog";
 
 export type { HaiConnectorConfig } from "./haiConnectorConfig";
 
@@ -54,12 +54,12 @@ function constantTimeTokenMatch(expected: string, actual: string) {
 }
 
 export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobSearchSnapshot> {
-  const [campaign, counts, autonomousRun] = await Promise.all([
+  const [campaign, counts, autonomousRun, runtimeSignals] = await Promise.all([
     getApplicationCampaign(userId),
     getUserHaiStatusCounts(userId),
     getAutonomousRunState(userId),
+    getOperationalFailureAggregateSnapshot(),
   ]);
-  const runtimeSignals = getOperationalFailureSnapshot(1);
   const nextActions = [
     counts.pendingApprovals > 0 ? `Review ${counts.pendingApprovals} pending approval${counts.pendingApprovals === 1 ? "" : "s"}.` : "",
     counts.connectorsNeedingAttention > 0 ? `Resolve ${counts.connectorsNeedingAttention} connector setup item${counts.connectorsNeedingAttention === 1 ? "" : "s"}.` : "",
@@ -85,7 +85,7 @@ export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobS
     runtimeSignals: {
       totalFailures: runtimeSignals.totalFailures,
       uniqueSignals: runtimeSignals.uniqueSignals,
-      latestAt: runtimeSignals.signals[0]?.lastOccurredAt ?? null,
+      latestAt: runtimeSignals.latestAt,
     },
     nextActions,
     scope: "Read-only aggregate Hire.AI status. No personal profile, job, document, message, credential, payment amount, raw audit data, or individual runtime failure label is included.",

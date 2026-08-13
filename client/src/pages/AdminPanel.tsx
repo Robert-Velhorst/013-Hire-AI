@@ -564,11 +564,11 @@ export default function AdminPanel() {
                 <AlertTriangle className={operationalFailures?.totalFailures ? "h-5 w-5 text-amber-300" : "h-5 w-5 text-emerald-300"} />
                 <h2 id="runtime-failure-heading" className="text-sm font-semibold text-white">Runtime failure signals</h2>
                 <Badge variant="outline" className={operationalFailures?.totalFailures ? "border-amber-500/30 text-amber-300" : "border-emerald-500/30 text-emerald-300"}>
-                  {operationalFailures?.totalFailures ?? 0} since startup
+                  {operationalFailures?.totalFailures ?? 0} recorded
                 </Badge>
               </div>
               <p className="mt-1 max-w-2xl text-xs text-slate-400">
-                Redacted process-local counters for failed provider and runtime operations. Restarting the server resets this view; durable provider evidence remains in the operating ledger.
+                Redacted aggregate counters for failed provider and runtime operations across restarts and app instances. No exception text, user data, or credentials are stored.
               </p>
             </div>
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
@@ -578,11 +578,11 @@ export default function AdminPanel() {
                     {signal.scope}: {signal.operation}
                   </div>
                   <div className="mt-1 text-slate-500">
-                    {signal.count} occurrence{signal.count === 1 ? "" : "s"} · last {new Date(signal.lastOccurredAt).toLocaleString()}
+                    {signal.count} occurrence{signal.count === 1 ? "" : "s"} - last {new Date(signal.lastOccurredAt).toLocaleString()}
                   </div>
                 </div>
               )) : (
-                <div className="text-xs text-slate-500">No redacted failure signals have been recorded by this server process.</div>
+                <div className="text-xs text-slate-500">No redacted failure signals have been recorded.</div>
               )}
             </div>
           </div>

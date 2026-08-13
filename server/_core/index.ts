@@ -11,8 +11,17 @@ import { serveStatic } from "./static";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
-import { closeDatabaseConnection, ensureScraperPlatformCatalog, probeDatabaseConnection } from "../db";
-import { logOperationalFailure } from "../operationalFailureLog";
+import {
+  closeDatabaseConnection,
+  ensureScraperPlatformCatalog,
+  persistOperationalFailureSignals,
+  probeDatabaseConnection,
+} from "../db";
+import {
+  configureOperationalFailurePersistence,
+  flushOperationalFailurePersistence,
+  logOperationalFailure,
+} from "../operationalFailureLog";
 import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
 import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
 import { drainRuntime } from "./gracefulShutdown";
@@ -21,6 +30,7 @@ import { createDatabaseReadinessProbe } from "./databaseReadiness";
 async function startServer() {
   validateProductionEnv();
   await ensureScraperPlatformCatalog();
+  configureOperationalFailurePersistence(persistOperationalFailureSignals);
 
   const app = express();
   const server = createServer(app);
@@ -132,7 +142,7 @@ async function startServer() {
       await drainRuntime(server, [
         () => autonomousScheduler?.stop(),
         () => jobScrapingScheduler?.stop(),
-      ], [closeDatabaseConnection]);
+      ], [closeOperationalResources]);
       clearTimeout(forceExit);
       process.exit(0);
     } catch {
@@ -147,10 +157,25 @@ async function startServer() {
   console.log(`Server running on http://${displayHost(bindHost)}:${port}/ (bound to ${bindHost})`);
 }
 
+async function closeOperationalResources() {
+  let failed = false;
+  try {
+    await flushOperationalFailurePersistence();
+  } catch {
+    failed = true;
+  }
+  try {
+    await closeDatabaseConnection();
+  } catch {
+    failed = true;
+  }
+  if (failed) throw new Error("Operational resources could not close cleanly.");
+}
+
 startServer().catch(async () => {
   logOperationalFailure("Server", "Startup");
   try {
-    await closeDatabaseConnection();
+    await closeOperationalResources();
   } catch {
     logOperationalFailure("Database", "Startup cleanup");
   }

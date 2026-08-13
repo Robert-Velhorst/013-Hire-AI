@@ -229,6 +229,20 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("`connector_authorizations_refresh_lease_idx`");
   });
 
+  it("keeps durable operational failure aggregates aligned with the runtime schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0071_operational_failure_signals.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('mysqlTable("operational_failure_signals"');
+    expect(schema).toContain('uniqueIndex("operational_failure_signals_scope_operation_unique")');
+    expect(schema).toContain('index("operational_failure_signals_last_idx")');
+    expect(migration).toContain("`operational_failure_signals_scope_operation_unique`");
+    expect(migration).toContain("`operational_failure_signals_last_idx`");
+  });
+
   it("keeps the application ledger cursor index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

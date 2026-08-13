@@ -498,6 +498,13 @@
       "when": 1786498260000,
       "tag": "0070_connector_refresh_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1786498320000,
+      "tag": "0071_operational_failure_signals",
+      "breakpoints": true
     }
   ]
 }

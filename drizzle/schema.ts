@@ -26,6 +26,20 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+/** Redacted, cardinality-bounded runtime failure aggregates across instances. */
+export const operationalFailureSignals = mysqlTable("operational_failure_signals", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: varchar("scope", { length: 80 }).notNull(),
+  operation: varchar("operation", { length: 80 }).notNull(),
+  count: int("count", { unsigned: true }).default(1).notNull(),
+  firstOccurredAt: timestamp("first_occurred_at").notNull(),
+  lastOccurredAt: timestamp("last_occurred_at").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("operational_failure_signals_scope_operation_unique").on(table.scope, table.operation),
+  index("operational_failure_signals_last_idx").on(table.lastOccurredAt),
+]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 

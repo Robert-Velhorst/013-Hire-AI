@@ -29,6 +29,7 @@ import {
   educationEntries,
   userSkills,
   userProjects,
+  operationalFailureSignals,
   autonomousRunStates,
   successFees,
   feePayments,
@@ -86,7 +87,11 @@ import {
   getAutonomousSourceEligibility,
   type AutonomousJobSourceEligibility,
 } from "./autonomousSourceEligibility";
-import { logOperationalFailure } from "./operationalFailureLog";
+import {
+  getOperationalFailureSnapshot,
+  logOperationalFailure,
+  type OperationalFailureSignal,
+} from "./operationalFailureLog";
 
 type InsertJob = InferInsertModel<typeof jobs>;
 type InsertUserProfile = InferInsertModel<typeof userProfiles>;
@@ -284,6 +289,83 @@ export async function probeDatabaseConnection(): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database is not configured");
   await db.execute(sql`SELECT 1`);
+}
+
+export async function persistOperationalFailureSignals(signals: OperationalFailureSignal[]): Promise<void> {
+  if (signals.length === 0) return;
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(operationalFailureSignals)
+    .values(signals.slice(0, 100).map((signal) => ({
+      scope: signal.scope,
+      operation: signal.operation,
+      count: signal.count,
+      firstOccurredAt: new Date(signal.firstOccurredAt),
+      lastOccurredAt: new Date(signal.lastOccurredAt),
+    })))
+    .onDuplicateKeyUpdate({
+      set: {
+        count: sql`${operationalFailureSignals.count} + VALUES(${operationalFailureSignals.count})`,
+        firstOccurredAt: sql`LEAST(${operationalFailureSignals.firstOccurredAt}, VALUES(${operationalFailureSignals.firstOccurredAt}))`,
+        lastOccurredAt: sql`GREATEST(${operationalFailureSignals.lastOccurredAt}, VALUES(${operationalFailureSignals.lastOccurredAt}))`,
+      },
+    });
+}
+
+export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
+  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const db = await getDb();
+  if (!db) return getOperationalFailureSnapshot(boundedLimit);
+  const [summaryRows, rows] = await Promise.all([
+    db.select({
+      totalFailures: sql<number>`COALESCE(SUM(${operationalFailureSignals.count}), 0)`,
+      uniqueSignals: sql<number>`COUNT(*)`,
+      firstOccurredAt: sql<Date | null>`MIN(${operationalFailureSignals.firstOccurredAt})`,
+    }).from(operationalFailureSignals),
+    db.select({
+      scope: operationalFailureSignals.scope,
+      operation: operationalFailureSignals.operation,
+      count: operationalFailureSignals.count,
+      firstOccurredAt: operationalFailureSignals.firstOccurredAt,
+      lastOccurredAt: operationalFailureSignals.lastOccurredAt,
+    })
+      .from(operationalFailureSignals)
+      .orderBy(desc(operationalFailureSignals.lastOccurredAt))
+      .limit(boundedLimit),
+  ]);
+  return {
+    processStartedAt: summaryRows[0]?.firstOccurredAt?.toISOString() ?? new Date().toISOString(),
+    totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
+    uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
+    signals: rows.map((signal) => ({
+      ...signal,
+      firstOccurredAt: signal.firstOccurredAt.toISOString(),
+      lastOccurredAt: signal.lastOccurredAt.toISOString(),
+    })),
+  };
+}
+
+export async function getOperationalFailureAggregateSnapshot() {
+  const db = await getDb();
+  if (!db) {
+    const snapshot = getOperationalFailureSnapshot(1);
+    return {
+      totalFailures: snapshot.totalFailures,
+      uniqueSignals: snapshot.uniqueSignals,
+      latestAt: snapshot.signals[0]?.lastOccurredAt ?? null,
+    };
+  }
+  const rows = await db.select({
+    totalFailures: sql<number>`COALESCE(SUM(${operationalFailureSignals.count}), 0)`,
+    uniqueSignals: sql<number>`COUNT(*)`,
+    latestAt: sql<Date | null>`MAX(${operationalFailureSignals.lastOccurredAt})`,
+  }).from(operationalFailureSignals);
+  return {
+    totalFailures: Number(rows[0]?.totalFailures ?? 0),
+    uniqueSignals: Number(rows[0]?.uniqueSignals ?? 0),
+    latestAt: rows[0]?.latestAt?.toISOString() ?? null,
+  };
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
