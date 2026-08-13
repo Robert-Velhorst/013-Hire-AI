@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import { createPool, type Pool } from "mysql2/promise";
 import {
   InsertUser,
   users,
@@ -112,7 +113,9 @@ type InsertUserSkill = InferInsertModel<typeof userSkills>;
 type InsertUserProject = InferInsertModel<typeof userProjects>;
 type InsertSuccessFee = InferInsertModel<typeof successFees>;
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: MySql2Database | null = null;
+let _pool: Pool | null = null;
+let _poolClose: Promise<void> | null = null;
 const memoryUsers: (InsertUser & {
   id: number;
   role: "user" | "admin";
@@ -243,15 +246,38 @@ function parseAutonomousRunSummary(value: string | null | undefined): Autonomous
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (!_db && ENV.databaseUrl) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _pool = createPool({
+        uri: ENV.databaseUrl,
+        waitForConnections: true,
+        connectionLimit: ENV.databasePoolLimit,
+        maxIdle: ENV.databasePoolLimit,
+        idleTimeout: ENV.databasePoolIdleTimeoutMs,
+        queueLimit: ENV.databasePoolQueueLimit,
+        enableKeepAlive: true,
+      });
+      _db = drizzle(_pool);
     } catch {
       logOperationalFailure("Database", "Connection initialization");
+      _pool = null;
       _db = null;
     }
   }
   return _db;
+}
+
+/** Drain the explicit SQL pool after HTTP requests and workers have stopped. */
+export async function closeDatabaseConnection(): Promise<void> {
+  if (_poolClose) return _poolClose;
+  const pool = _pool;
+  if (!pool) return;
+  _db = null;
+  _pool = null;
+  _poolClose = pool.end().finally(() => {
+    _poolClose = null;
+  });
+  return _poolClose;
 }
 
 export async function probeDatabaseConnection(): Promise<void> {

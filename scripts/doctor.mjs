@@ -78,6 +78,26 @@ const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcu
   || (malwareScanMode === "windows_defender" && defenderAvailable)
   || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
 );
+
+const databasePoolLimit = Number(process.env.DATABASE_POOL_LIMIT || "10");
+const databasePoolQueueLimit = Number(process.env.DATABASE_POOL_QUEUE_LIMIT || "100");
+const databasePoolIdleTimeoutMs = Number(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS || "60000");
+const databasePoolPolicyValid = Number.isSafeInteger(databasePoolLimit)
+  && databasePoolLimit >= 1
+  && databasePoolLimit <= 50
+  && Number.isSafeInteger(databasePoolQueueLimit)
+  && databasePoolQueueLimit >= 1
+  && databasePoolQueueLimit <= 1000
+  && Number.isSafeInteger(databasePoolIdleTimeoutMs)
+  && databasePoolIdleTimeoutMs >= 10_000
+  && databasePoolIdleTimeoutMs <= 600_000;
+check(
+  "database pool policy",
+  databasePoolPolicyValid ? "pass" : "fail",
+  databasePoolPolicyValid
+    ? `${databasePoolLimit} connections, ${databasePoolQueueLimit} queued requests, ${databasePoolIdleTimeoutMs}ms idle timeout`
+    : "connections must be 1-50, queue limit 1-1000, and idle timeout 10000-600000ms"
+);
 check(
   "document malware scanning",
   !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",

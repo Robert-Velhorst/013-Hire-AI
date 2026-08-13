@@ -11,7 +11,7 @@ import { serveStatic } from "./static";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
-import { ensureScraperPlatformCatalog, probeDatabaseConnection } from "../db";
+import { closeDatabaseConnection, ensureScraperPlatformCatalog, probeDatabaseConnection } from "../db";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
 import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
@@ -132,7 +132,7 @@ async function startServer() {
       await drainRuntime(server, [
         () => autonomousScheduler?.stop(),
         () => jobScrapingScheduler?.stop(),
-      ]);
+      ], [closeDatabaseConnection]);
       clearTimeout(forceExit);
       process.exit(0);
     } catch {
@@ -147,7 +147,12 @@ async function startServer() {
   console.log(`Server running on http://${displayHost(bindHost)}:${port}/ (bound to ${bindHost})`);
 }
 
-startServer().catch(() => {
+startServer().catch(async () => {
   logOperationalFailure("Server", "Startup");
+  try {
+    await closeDatabaseConnection();
+  } catch {
+    logOperationalFailure("Database", "Startup cleanup");
+  }
   process.exitCode = 1;
 });

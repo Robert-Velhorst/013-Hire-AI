@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readBooleanFeatureFlag, resolveProductionRuntime } from "./env";
+import { readBooleanFeatureFlag, readBoundedIntegerValue, resolveProductionRuntime } from "./env";
 
 describe("runtime mode resolution", () => {
   it("uses explicit runtime modes when they are present", () => {
@@ -27,5 +27,19 @@ describe("readBooleanFeatureFlag", () => {
 
   it("does not turn malformed configuration into an accidental enablement", () => {
     expect(readBooleanFeatureFlag("enabled", false)).toBe(false);
+  });
+});
+
+describe("readBoundedIntegerValue", () => {
+  it("uses a safe fallback for absent or malformed values", () => {
+    expect(readBoundedIntegerValue(undefined, 10, 1, 50)).toBe(10);
+    expect(readBoundedIntegerValue("many", 10, 1, 50)).toBe(10);
+    expect(readBoundedIntegerValue("12connections", 10, 1, 50)).toBe(10);
+  });
+
+  it("clamps deployment resource settings to their supported range", () => {
+    expect(readBoundedIntegerValue("0", 10, 1, 50)).toBe(1);
+    expect(readBoundedIntegerValue("500", 10, 1, 50)).toBe(50);
+    expect(readBoundedIntegerValue("12", 10, 1, 50)).toBe(12);
   });
 });

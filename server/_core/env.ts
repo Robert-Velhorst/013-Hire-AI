@@ -15,10 +15,19 @@ export function readBooleanFeatureFlag(value: string | undefined, fallback: bool
   if (normalized === "false") return false;
   return fallback;
 }
+export const readBoundedIntegerValue = (
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) => {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) return fallback;
+  return Math.min(Math.max(parsed, minimum), maximum);
+};
 const readBoundedInteger = (name: string, fallback: number, minimum: number, maximum: number) => {
-  const value = Number.parseInt(readEnv(name), 10);
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(Math.max(value, minimum), maximum);
+  return readBoundedIntegerValue(readEnv(name), fallback, minimum, maximum);
 };
 const readOptionalCsv = (name: string) => {
   const values = readEnv(name)
@@ -37,6 +46,9 @@ export const ENV = {
   appId: readEnvWithLocalFallback("VITE_APP_ID", "hire-ai-local-dev"),
   cookieSecret: readEnvWithLocalFallback("JWT_SECRET", "hire-ai-local-dev-cookie-secret"),
   databaseUrl: readEnv("DATABASE_URL"),
+  databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
+  databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
+  databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
