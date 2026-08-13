@@ -2,9 +2,11 @@ import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
+  acquireConnectorRefreshLease,
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
   getUserConnectorAccount,
+  releaseConnectorRefreshLease,
   getUserInboxMatchApplications,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
@@ -40,6 +42,7 @@ const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const INBOX_RESPONSE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type InboxResponseDiscoveryDependencies = {
+  acquireConnectorRefreshLease: typeof acquireConnectorRefreshLease;
   findEmployerResponseSourceReferences: typeof findEmployerResponseSourceReferences;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getUserInboxMatchApplications: typeof getUserInboxMatchApplications;
@@ -50,9 +53,11 @@ export type InboxResponseDiscoveryDependencies = {
   encryptConnectorToken: typeof encryptConnectorToken;
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
+  releaseConnectorRefreshLease: typeof releaseConnectorRefreshLease;
 };
 
 const defaults: InboxResponseDiscoveryDependencies = {
+  acquireConnectorRefreshLease,
   findEmployerResponseSourceReferences,
   getConnectorAuthorization,
   getUserInboxMatchApplications,
@@ -63,6 +68,7 @@ const defaults: InboxResponseDiscoveryDependencies = {
   encryptConnectorToken,
   getConnectorOAuthConfig,
   refreshConnectorAccessToken,
+  releaseConnectorRefreshLease,
 };
 
 function displayName(provider: InboxProvider) {

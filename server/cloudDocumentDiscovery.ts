@@ -2,8 +2,10 @@ import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
+  acquireConnectorRefreshLease,
   getConnectorAuthorization,
   getUserConnectorAccount,
+  releaseConnectorRefreshLease,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -77,6 +79,7 @@ function requireCloudProvider(provider: string): asserts provider is CloudDocume
 type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
 export type CloudDocumentDiscoveryDependencies = {
+  acquireConnectorRefreshLease: typeof acquireConnectorRefreshLease;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
@@ -85,9 +88,11 @@ export type CloudDocumentDiscoveryDependencies = {
   encryptConnectorToken: typeof encryptConnectorToken;
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
+  releaseConnectorRefreshLease: typeof releaseConnectorRefreshLease;
 };
 
 const defaultDependencies: CloudDocumentDiscoveryDependencies = {
+  acquireConnectorRefreshLease,
   getConnectorAuthorization,
   getUserConnectorAccount,
   upsertConnectorAuthorization,
@@ -96,6 +101,7 @@ const defaultDependencies: CloudDocumentDiscoveryDependencies = {
   encryptConnectorToken,
   getConnectorOAuthConfig,
   refreshConnectorAccessToken,
+  releaseConnectorRefreshLease,
 };
 
 function parseScopes(value: string | null) {

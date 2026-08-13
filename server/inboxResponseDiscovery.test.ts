@@ -6,6 +6,7 @@ import {
 
 const now = new Date("2026-07-13T12:00:00.000Z");
 const mocks = {
+  acquireConnectorRefreshLease: vi.fn().mockResolvedValue(true),
   findEmployerResponseSourceReferences: vi.fn(),
   getConnectorAuthorization: vi.fn(),
   getUserInboxMatchApplications: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = {
   encryptConnectorToken: vi.fn(),
   getConnectorOAuthConfig: vi.fn(),
   refreshConnectorAccessToken: vi.fn(),
+  releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
 };
 const dependencies = mocks as unknown as InboxResponseDiscoveryDependencies;
 

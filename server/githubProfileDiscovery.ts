@@ -2,8 +2,10 @@ import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
+  acquireConnectorRefreshLease,
   getConnectorAuthorization,
   getUserConnectorAccount,
+  releaseConnectorRefreshLease,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -37,6 +39,7 @@ const MAX_REPOSITORIES = 10;
 type ConnectorAccount = NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>;
 
 export type GitHubProfileDiscoveryDependencies = {
+  acquireConnectorRefreshLease: typeof acquireConnectorRefreshLease;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getUserConnectorAccount: typeof getUserConnectorAccount;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
@@ -45,9 +48,11 @@ export type GitHubProfileDiscoveryDependencies = {
   encryptConnectorToken: typeof encryptConnectorToken;
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
+  releaseConnectorRefreshLease: typeof releaseConnectorRefreshLease;
 };
 
 const defaults: GitHubProfileDiscoveryDependencies = {
+  acquireConnectorRefreshLease,
   getConnectorAuthorization,
   getUserConnectorAccount,
   upsertConnectorAuthorization,
@@ -56,6 +61,7 @@ const defaults: GitHubProfileDiscoveryDependencies = {
   encryptConnectorToken,
   getConnectorOAuthConfig,
   refreshConnectorAccessToken,
+  releaseConnectorRefreshLease,
 };
 
 function stringValue(value: unknown, maxLength: number) {

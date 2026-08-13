@@ -1768,6 +1768,83 @@ export async function getConnectorAuthorization(
   return records[0] ?? null;
 }
 
+export async function acquireConnectorRefreshLease(
+  userId: number,
+  provider: InsertConnectorAuthorization["provider"],
+  leaseToken: string,
+  leaseDurationMs: number
+) {
+  const db = await getDb();
+  const now = new Date();
+  const refreshLeaseExpiresAt = new Date(now.getTime() + leaseDurationMs);
+  if (!db) {
+    const authorization = memoryConnectorAuthorizations.find((item) =>
+      item.userId === userId && item.provider === provider
+    );
+    if (!authorization || (authorization.refreshLeaseExpiresAt?.getTime() ?? 0) > now.getTime()) {
+      return false;
+    }
+    authorization.refreshLeaseToken = leaseToken;
+    authorization.refreshLeaseExpiresAt = refreshLeaseExpiresAt;
+    return true;
+  }
+
+  await db
+    .update(connectorAuthorizations)
+    .set({ refreshLeaseToken: leaseToken, refreshLeaseExpiresAt })
+    .where(and(
+      eq(connectorAuthorizations.userId, userId),
+      eq(connectorAuthorizations.provider, provider),
+      or(
+        isNull(connectorAuthorizations.refreshLeaseExpiresAt),
+        lte(connectorAuthorizations.refreshLeaseExpiresAt, now)
+      )
+    ));
+  const records = await db
+    .select({ refreshLeaseToken: connectorAuthorizations.refreshLeaseToken })
+    .from(connectorAuthorizations)
+    .where(and(
+      eq(connectorAuthorizations.userId, userId),
+      eq(connectorAuthorizations.provider, provider)
+    ))
+    .limit(1);
+  return records[0]?.refreshLeaseToken === leaseToken;
+}
+
+export async function releaseConnectorRefreshLease(
+  userId: number,
+  provider: InsertConnectorAuthorization["provider"],
+  leaseToken: string
+) {
+  const db = await getDb();
+  if (!db) {
+    const authorization = memoryConnectorAuthorizations.find((item) =>
+      item.userId === userId && item.provider === provider
+    );
+    if (authorization?.refreshLeaseToken !== leaseToken) return false;
+    authorization.refreshLeaseToken = null;
+    authorization.refreshLeaseExpiresAt = null;
+    return true;
+  }
+  await db
+    .update(connectorAuthorizations)
+    .set({ refreshLeaseToken: null, refreshLeaseExpiresAt: null })
+    .where(and(
+      eq(connectorAuthorizations.userId, userId),
+      eq(connectorAuthorizations.provider, provider),
+      eq(connectorAuthorizations.refreshLeaseToken, leaseToken)
+    ));
+  const records = await db
+    .select({ refreshLeaseToken: connectorAuthorizations.refreshLeaseToken })
+    .from(connectorAuthorizations)
+    .where(and(
+      eq(connectorAuthorizations.userId, userId),
+      eq(connectorAuthorizations.provider, provider)
+    ))
+    .limit(1);
+  return records[0]?.refreshLeaseToken !== leaseToken;
+}
+
 export async function upsertConnectorAuthorization(authorization: InsertConnectorAuthorization) {
   const db = await getDb();
   const now = new Date();
@@ -1781,6 +1858,8 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
       existing.accessTokenExpiresAt = authorization.accessTokenExpiresAt ?? null;
       existing.tokenType = authorization.tokenType ?? null;
       existing.grantedScopes = authorization.grantedScopes ?? null;
+      existing.refreshLeaseToken = authorization.refreshLeaseToken ?? existing.refreshLeaseToken ?? null;
+      existing.refreshLeaseExpiresAt = authorization.refreshLeaseExpiresAt ?? existing.refreshLeaseExpiresAt ?? null;
       existing.updatedAt = now;
       return existing as ConnectorAuthorization;
     }
@@ -1794,6 +1873,8 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
       accessTokenExpiresAt: authorization.accessTokenExpiresAt ?? null,
       tokenType: authorization.tokenType ?? null,
       grantedScopes: authorization.grantedScopes ?? null,
+      refreshLeaseToken: authorization.refreshLeaseToken ?? null,
+      refreshLeaseExpiresAt: authorization.refreshLeaseExpiresAt ?? null,
       createdAt: now,
       updatedAt: now,
     } satisfies InsertConnectorAuthorization & { id: number; createdAt: Date; updatedAt: Date };

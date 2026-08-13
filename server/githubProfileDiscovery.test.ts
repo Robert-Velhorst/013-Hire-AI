@@ -9,6 +9,7 @@ const now = new Date("2026-07-13T12:00:00.000Z");
 
 function dependencies(): GitHubProfileDiscoveryDependencies {
   return {
+    acquireConnectorRefreshLease: vi.fn().mockResolvedValue(true),
     getConnectorAuthorization: vi.fn().mockResolvedValue({
       encryptedAccessToken: "encrypted-github-token",
       accessTokenExpiresAt: new Date("2026-07-13T13:00:00.000Z"),
@@ -29,6 +30,7 @@ function dependencies(): GitHubProfileDiscoveryDependencies {
     encryptConnectorToken: vi.fn((value: string) => `encrypted-${value}`),
     getConnectorOAuthConfig: vi.fn().mockReturnValue({ provider: "github" }),
     refreshConnectorAccessToken: vi.fn(),
+    releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
   } as unknown as GitHubProfileDiscoveryDependencies;
 }
 

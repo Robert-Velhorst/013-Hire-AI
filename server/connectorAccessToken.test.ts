@@ -18,6 +18,8 @@ function authorization(overrides: Partial<ConnectorAuthorization> = {}): Connect
       "https://www.googleapis.com/auth/gmail.metadata",
       "https://www.googleapis.com/auth/gmail.send",
     ]),
+    refreshLeaseToken: null,
+    refreshLeaseExpiresAt: null,
     createdAt: new Date("2026-08-01T12:00:00.000Z"),
     updatedAt: new Date("2026-08-01T12:00:00.000Z"),
     ...overrides,
@@ -30,7 +32,13 @@ function dependencies(): ConnectorAccessTokenDependencies {
     encryptConnectorToken: vi.fn((token: string) => `encrypted:${token}`),
     getConnectorOAuthConfig: vi.fn(() => ({ provider: "gmail" } as never)),
     refreshConnectorAccessToken: vi.fn(),
+    acquireConnectorRefreshLease: vi.fn().mockResolvedValue(true),
+    getConnectorAuthorization: vi.fn().mockResolvedValue(null),
+    releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
     upsertConnectorAuthorization: vi.fn(),
+    createLeaseToken: vi.fn(() => "lease-token"),
+    sleep: vi.fn().mockResolvedValue(undefined),
+    currentTime: vi.fn(() => new Date("2026-08-14T12:00:00.000Z").getTime()),
   };
 }
 
@@ -119,5 +127,57 @@ describe("shared connector access tokens", () => {
     expect(token).toBe("old-access");
     expect(deps.refreshConnectorAccessToken).not.toHaveBeenCalled();
     expect(deps.upsertConnectorAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("waits for another instance and consumes its refreshed token", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.acquireConnectorRefreshLease).mockResolvedValue(false);
+    vi.mocked(deps.getConnectorAuthorization).mockResolvedValue(authorization({
+      encryptedAccessToken: "encrypted-other-access",
+      accessTokenExpiresAt: new Date("2026-08-14T13:00:00.000Z"),
+    }));
+    vi.mocked(deps.decryptConnectorToken).mockImplementation((token) =>
+      token === "encrypted-other-access" ? "other-access" : "old-refresh"
+    );
+
+    await expect(getUsableConnectorAccessToken({
+      userId: 10,
+      provider: "gmail",
+      authorization: authorization({ userId: 10 }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+      fetcher: vi.fn<typeof fetch>(),
+      dependencies: deps,
+    })).resolves.toBe("other-access");
+
+    expect(deps.refreshConnectorAccessToken).not.toHaveBeenCalled();
+    expect(deps.releaseConnectorRefreshLease).not.toHaveBeenCalled();
+  });
+
+  it("takes over an abandoned refresh lease after it becomes available", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.acquireConnectorRefreshLease)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    vi.mocked(deps.getConnectorAuthorization).mockResolvedValue(null);
+    vi.mocked(deps.refreshConnectorAccessToken).mockResolvedValue({
+      accessToken: "takeover-access",
+      refreshToken: null,
+      expiresAt: new Date("2026-08-14T13:00:00.000Z"),
+      tokenType: "Bearer",
+      grantedScopes: [],
+      scopeWasReturned: true,
+    });
+
+    await expect(getUsableConnectorAccessToken({
+      userId: 11,
+      provider: "gmail",
+      authorization: authorization({ userId: 11 }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+      fetcher: vi.fn<typeof fetch>(),
+      dependencies: deps,
+    })).resolves.toBe("takeover-access");
+
+    expect(deps.refreshConnectorAccessToken).toHaveBeenCalledTimes(1);
+    expect(deps.releaseConnectorRefreshLease).toHaveBeenCalledWith(11, "gmail", "lease-token");
   });
 });

@@ -11,9 +11,11 @@ import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
+  acquireConnectorRefreshLease,
   getConnectorAuthorization,
   getDb,
   getUserConnectorAccount,
+  releaseConnectorRefreshLease,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
@@ -29,23 +31,27 @@ export type SendApprovedFollowUpInput = {
 };
 
 type FollowUpMailDeliveryDependencies = {
+  acquireConnectorRefreshLease: typeof acquireConnectorRefreshLease;
   decryptConnectorToken: typeof decryptConnectorToken;
   encryptConnectorToken: typeof encryptConnectorToken;
   getConnectorAuthorization: typeof getConnectorAuthorization;
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
   getUserConnectorAccount: typeof getUserConnectorAccount;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
+  releaseConnectorRefreshLease: typeof releaseConnectorRefreshLease;
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
 };
 
 const defaults: FollowUpMailDeliveryDependencies = {
+  acquireConnectorRefreshLease,
   decryptConnectorToken,
   encryptConnectorToken,
   getConnectorAuthorization,
   getConnectorOAuthConfig,
   getUserConnectorAccount,
   refreshConnectorAccessToken,
+  releaseConnectorRefreshLease,
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 };

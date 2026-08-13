@@ -13,9 +13,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./db", () => ({
+  acquireConnectorRefreshLease: vi.fn().mockResolvedValue(true),
   getConnectorAuthorization: mocks.getConnectorAuthorization,
   getDb: mocks.getDb,
   getUserConnectorAccount: mocks.getUserConnectorAccount,
+  releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
   upsertConnectorAuthorization: mocks.upsertConnectorAuthorization,
   upsertUserConnectorAccount: mocks.upsertUserConnectorAccount,
 }));

@@ -214,6 +214,21 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("IF(JSON_VALID(`preferences`), `preferences`, '{}')");
   });
 
+  it("keeps the connector refresh lease aligned with the runtime schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0070_connector_refresh_lease.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('refreshLeaseToken: varchar("refresh_lease_token", { length: 64 })');
+    expect(schema).toContain('refreshLeaseExpiresAt: timestamp("refresh_lease_expires_at")');
+    expect(schema).toContain('index("connector_authorizations_refresh_lease_idx")');
+    expect(migration).toContain("`refresh_lease_token`");
+    expect(migration).toContain("`refresh_lease_expires_at`");
+    expect(migration).toContain("`connector_authorizations_refresh_lease_idx`");
+  });
+
   it("keeps the application ledger cursor index aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

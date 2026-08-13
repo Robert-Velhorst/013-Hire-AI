@@ -232,10 +232,13 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   accessTokenExpiresAt: timestamp("access_token_expires_at"),
   tokenType: varchar("token_type", { length: 64 }),
   grantedScopes: text("granted_scopes"),
+  refreshLeaseToken: varchar("refresh_lease_token", { length: 64 }),
+  refreshLeaseExpiresAt: timestamp("refresh_lease_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("connector_authorizations_user_provider_unique").on(table.userId, table.provider),
+  index("connector_authorizations_refresh_lease_idx").on(table.refreshLeaseExpiresAt),
 ]);
 
 /**

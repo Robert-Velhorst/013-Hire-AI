@@ -7,6 +7,7 @@ import {
 } from "./cloudDocumentDiscovery";
 
 const mocks = {
+  acquireConnectorRefreshLease: vi.fn().mockResolvedValue(true),
   getConnectorAuthorization: vi.fn(),
   getUserConnectorAccount: vi.fn(),
   upsertConnectorAuthorization: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = {
   encryptConnectorToken: vi.fn(),
   getConnectorOAuthConfig: vi.fn(),
   refreshConnectorAccessToken: vi.fn(),
+  releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
 };
 
 const dependencies = mocks as unknown as CloudDocumentDiscoveryDependencies;
