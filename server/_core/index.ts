@@ -30,6 +30,7 @@ import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostic
 import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { registerApplicationBodyParsers } from "./bodyParsers";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
+import { registerCookieOriginProtection } from "./cookieOriginProtection";
 
 let startupStage: StartupStage = "configuration validation";
 
@@ -76,6 +77,9 @@ async function startServer() {
   // The HAI bridge owns its bounded JSON parser and must be registered before
   // the general application parser can accept a larger request body.
   registerHaiConnectorRoutes(app);
+  // Browser session writes must prove that their Origin matches the direct or
+  // trusted-proxy request origin. Stripe and HAI use separate earlier routes.
+  registerCookieOriginProtection(app);
   // The JSON envelope accommodates the bounded 10 MiB document payload after
   // base64 expansion without reserving a 50 MiB parser budget for every request.
   registerApplicationBodyParsers(app);

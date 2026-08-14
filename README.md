@@ -352,6 +352,8 @@ The Node runtime independently limits request receipt to 120 seconds, header rec
 
 Forwarded request metadata is trusted only from a loopback peer, matching the local ngrok agent used by the Windows tunnel launcher. Direct LAN or public clients cannot make Hire.AI treat an arbitrary `X-Forwarded-Proto` value as authoritative. Session cookies are always `HttpOnly` and `SameSite=Lax`; they become `Secure` when Express observes HTTPS directly or through that trusted loopback proxy.
 
+Unsafe requests carrying the Hire.AI session cookie must also provide an `Origin` that exactly matches the effective request scheme and host. Missing, opaque, malformed, and cross-site origins receive `403` before body parsing or tRPC execution. Stripe webhooks and the bearer-authenticated HAI connector are registered before this browser-session boundary and retain their own signature/token verification.
+
 > **Note for contributors:** All CJS npm packages must be loaded via `createRequire(import.meta.url)` rather than ESM `import ... from` syntax to avoid `ERR_MODULE_NOT_FOUND` in the production ESM build. See `server/resumeParser.ts` for the established pattern.
 
 ---

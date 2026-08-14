@@ -29,6 +29,8 @@ The tunnel script requires an installed and authenticated ngrok CLI, verifies lo
 
 The application trusts forwarded protocol and client metadata only when the immediate peer is loopback, which matches the local ngrok agent. Do not place another non-loopback reverse proxy between ngrok and Hire.AI without first extending and testing the explicit proxy-trust policy; forwarded headers from direct LAN or public clients are intentionally ignored.
 
+Cookie-authenticated POST requests through the tunnel must retain ngrok's public `Host`, `X-Forwarded-Proto: https`, and the browser's matching `Origin`. The launcher and default ngrok forwarding behavior satisfy that contract. A proxy that rewrites the host inconsistently will receive `403` for session writes and must be corrected rather than bypassing origin enforcement.
+
 - Main sign-in: `https://hire-ai.example.ngrok.app/api/oauth/callback`
 - Account connectors: `https://hire-ai.example.ngrok.app/api/connectors/oauth/callback`
 - Stripe webhook: `https://hire-ai.example.ngrok.app/api/stripe/webhook`

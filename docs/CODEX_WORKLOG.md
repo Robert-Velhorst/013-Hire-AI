@@ -654,3 +654,11 @@
 - Changed HTTPS session cookies from `SameSite=None` to `SameSite=Lax`; the top-level OAuth callback remains compatible while cross-site credential exposure and CSRF surface are reduced.
 - Added real HTTP and compiled trust-function regressions for loopback HTTPS forwarding and rejection of private/public network peers, plus cookie and logout coverage for secure/Lax behavior and untrusted header spoofing.
 - Passed 246 test files / 1,213 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact Windows, container, and pushed-commit CI evidence follows at publication.
+
+## 2026-08-14 - Cookie-authenticated write-origin pass
+
+- Added server-side same-origin enforcement for every unsafe request carrying the Hire.AI session cookie instead of relying only on browser SameSite behavior.
+- Reject missing, opaque, malformed, and cross-site origins with `403` before the general parser or tRPC route executes; unauthenticated service requests remain outside the browser-session rule.
+- Kept Stripe's raw-body signature route and the bounded bearer-authenticated HAI route ahead of the origin middleware so each external boundary retains its correct authentication contract.
+- Compared against the effective direct/trusted-proxy protocol and request host, preserving standalone Windows and local-ngrok operation without accepting unrelated origins.
+- Added real loopback HTTP regressions for unauthenticated, same-origin, missing-origin, cross-site, opaque-origin, and public HTTPS ngrok-style requests plus a route-order contract. Passed 248 test files / 1,220 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact pushed-commit evidence follows at publication.
