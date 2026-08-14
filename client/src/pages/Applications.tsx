@@ -6,17 +6,17 @@ import {
   getApplicationPipelineControlSummary,
   type ApplicationPipelineTab,
 } from "@/lib/applicationPipelineControl";
-import { getApplicationLedgerSummary } from "@/lib/applicationLedgerSummary";
+import { getApplicationLedgerSummary, type ApplicationLedgerSummaryStatus } from "@/lib/applicationLedgerSummary";
 import { getApplicationMaterialEvidenceSummary } from "@/lib/applicationMaterialEvidence";
-import { getInterviewOperatingSummary } from "@/lib/interviewOperatingSummary";
-import { getInterviewSchedulingControl } from "@/lib/interviewSchedulingControl";
-import { getOfferOperatingSummary } from "@/lib/offerOperatingSummary";
+import { getInterviewOperatingSummary, type InterviewOperatingStatus } from "@/lib/interviewOperatingSummary";
+import { getInterviewSchedulingControl, type InterviewSchedulingRequirement } from "@/lib/interviewSchedulingControl";
+import { getOfferOperatingSummary, type OfferOperatingStatus } from "@/lib/offerOperatingSummary";
 import { getApplicationNextActions, type ApplicationNextActionId } from "@/lib/applicationNextActions";
 import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
 import { formatJobSalary } from "@/lib/jobSalary";
 import { formatCalendarDate } from "@/lib/calendarDate";
-import { useLocale } from "@/contexts/LocaleContext";
+import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { APPLICATION_LEDGER_WINDOW_LIMITS } from "@shared/applicationLedgerWindow";
 import { useLocation } from "wouter";
 import AppHeader from "@/components/AppHeader";
@@ -63,6 +63,58 @@ type EmployerResponseSource = "email" | "employer_portal" | "linkedin" | "phone"
 type InterviewType = "phone" | "video" | "onsite" | "technical" | "behavioral" | "panel";
 type InterviewOutcomeType = "next_round" | "offer" | "rejection" | "no_response" | "other";
 type FollowUpMessageType = "reminder" | "thank_you" | "status_check";
+
+type OperatingCopy = { label: TranslationKey; action: TranslationKey };
+
+const ledgerOperatingCopy: Record<ApplicationLedgerSummaryStatus, OperatingCopy> = {
+  approval_blocked: { label: "ledgerApprovalBlocked", action: "ledgerApprovalBlockedAction" },
+  evidence_required: { label: "ledgerEvidenceRequired", action: "ledgerEvidenceRequiredAction" },
+  ready_for_submission: { label: "ledgerPrepared", action: "ledgerPreparedAction" },
+  follow_up_review: { label: "ledgerFollowUpReview", action: "ledgerFollowUpReviewAction" },
+  follow_up_due: { label: "ledgerFollowUpCandidate", action: "ledgerFollowUpCandidateAction" },
+  response_received: { label: "ledgerResponseRecorded", action: "ledgerResponseRecordedAction" },
+  offer_action: { label: "ledgerOfferAction", action: "ledgerOfferActionDetail" },
+  closed: { label: "ledgerClosed", action: "ledgerClosedAction" },
+  in_progress: { label: "ledgerInProgress", action: "ledgerInProgressAction" },
+};
+
+const interviewOperatingCopy: Record<InterviewOperatingStatus, OperatingCopy> = {
+  not_applicable: { label: "interviewNoAction", action: "interviewNoActionDetail" },
+  needs_scheduling: { label: "interviewNeedsScheduling", action: "interviewNeedsSchedulingDetail" },
+  scheduled: { label: "interviewScheduled", action: "interviewScheduledDetail" },
+  completed: { label: "interviewCompleted", action: "interviewCompletedDetail" },
+  cancelled: { label: "interviewCancelled", action: "interviewCancelledDetail" },
+};
+
+const offerOperatingCopy: Record<OfferOperatingStatus, OperatingCopy> = {
+  not_applicable: { label: "offerNoAction", action: "offerNoActionDetail" },
+  offer_decision: { label: "offerDecision", action: "offerDecisionDetail" },
+  attribution_review: { label: "offerAttribution", action: "offerAttributionDetail" },
+  report_hire: { label: "offerReportHire", action: "offerReportHireDetail" },
+  verification_pending: { label: "offerVerificationPending", action: "offerVerificationPendingDetail" },
+  fee_active: { label: "offerFeeActive", action: "offerFeeActiveDetail" },
+  fee_closed: { label: "offerFeeClosed", action: "offerFeeClosedDetail" },
+  fee_attention: { label: "offerFeeAttention", action: "offerFeeAttentionDetail" },
+};
+
+const nextActionCopy: Record<ApplicationNextActionId, OperatingCopy> = {
+  review_queue: { label: "nextActionReviewQueue", action: "nextActionReviewQueueDetail" },
+  resolve_evidence: { label: "resolveEvidence", action: "nextActionResolveEvidenceDetail" },
+  confirm_submission: { label: "confirmSubmission", action: "nextActionConfirmSubmissionDetail" },
+  record_response: { label: "nextActionRecordResponse", action: "nextActionRecordResponseDetail" },
+  draft_follow_up: { label: "nextActionDraftFollowUp", action: "nextActionDraftFollowUpDetail" },
+  schedule_interview: { label: "scheduleInterviewTitle", action: "nextActionScheduleInterviewDetail" },
+  confirm_offer_acceptance: { label: "confirmOfferAcceptanceTitle", action: "nextActionConfirmOfferDetail" },
+  report_hire: { label: "reportHire", action: "nextActionReportHireDetail" },
+  view_audit: { label: "nextActionViewAudit", action: "nextActionViewAuditDetail" },
+  monitor: { label: "nextActionMonitor", action: "nextActionMonitorDetail" },
+};
+
+const interviewSchedulingCopy: Record<Exclude<InterviewSchedulingRequirement, null | undefined>, OperatingCopy> = {
+  new_invite: { label: "scheduleInterviewTitle", action: "interviewInviteReadyDetail" },
+  cancelled_schedule: { label: "recordNewInvitation", action: "interviewCancelledScheduleDetail" },
+  missing_schedule: { label: "recordInvitation", action: "interviewMissingScheduleDetail" },
+};
 
 function getFollowUpType(status?: string | null): FollowUpMessageType {
   if (status === "interview") return "thank_you";
@@ -647,6 +699,9 @@ export default function Applications() {
     : null;
   const selectedInterviewSchedulingControl = selectedInterviewSchedulingItem
     ? getInterviewSchedulingControl(selectedInterviewSchedulingItem.schedulingRequirement)
+    : null;
+  const selectedInterviewSchedulingCopy = selectedInterviewSchedulingItem
+    ? interviewSchedulingCopy[selectedInterviewSchedulingItem.schedulingRequirement || "missing_schedule"]
     : null;
   const canScheduleSelectedInterview = selectedInterviewSchedulingControl?.canSchedule === true;
   const selectedInterviewSummaryForActions = selectedInterviewSummary
@@ -1341,12 +1396,12 @@ export default function Applications() {
               <>
                 <DialogHeader>
                   <DialogTitle className="text-xl text-white">
-                    {selectedApplication.job?.title || "Application Details"}
+                    {selectedApplication.job?.title || t("applicationDetails")}
                   </DialogTitle>
                   <DialogDescription className="flex items-center gap-4 text-slate-400">
                     <span className="flex items-center gap-1">
                       <Building2 className="w-4 h-4" />
-                      {selectedApplication.job?.company || "Company"}
+                      {selectedApplication.job?.company || t("companyFallback")}
                     </span>
                     <Badge variant="outline" className={getStatusColor(selectedApplication.status)}>
                       {getStatusIcon(selectedApplication.status)}
@@ -1374,7 +1429,7 @@ export default function Applications() {
                           variant="outline"
                           className="border-cyan-500/40 text-cyan-300"
                         >
-                          Source: {selectedApplication.job.platformName}
+                          {t("sourceLabel")}: {selectedApplication.job.platformName}
                         </Badge>
                       )}
                     </div>
@@ -1383,23 +1438,23 @@ export default function Applications() {
                       <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h4 className="text-sm font-medium text-slate-200">Operating status</h4>
-                            <p className="mt-1 text-sm text-slate-400">{selectedLedgerSummary.nextAction}</p>
+                            <h4 className="text-sm font-medium text-slate-200">{t("operatingStatus")}</h4>
+                            <p className="mt-1 text-sm text-slate-400">{t(ledgerOperatingCopy[selectedLedgerSummary.status].action)}</p>
                           </div>
                           <Badge
                             variant="outline"
                             className={getLedgerSummaryBadgeClass(selectedLedgerSummary.status)}
                           >
-                            {selectedLedgerSummary.label}
+                            {t(ledgerOperatingCopy[selectedLedgerSummary.status].label)}
                           </Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 md:grid-cols-5">
                           {[
-                            ["Material", selectedLedgerSummary.hasPreparedMaterial ? "Ready" : "Missing"],
-                            ["Evidence", selectedLedgerSummary.hasSubmissionEvidence ? "Stored" : "Needed"],
-                            ["Approval", selectedLedgerSummary.pendingApproval ? "Pending" : selectedLedgerSummary.approvedSubmission ? "Approved" : "None"],
-                            ["Responses", selectedLedgerSummary.hasEmployerResponse ? "Recorded" : "None"],
-                            ["Audit", selectedLedgerSummary.auditEventCount],
+                            [t("materialLabel"), selectedLedgerSummary.hasPreparedMaterial ? t("readyLabel") : t("missingLabel")],
+                            [t("evidenceLabel"), selectedLedgerSummary.hasSubmissionEvidence ? t("storedLabel") : t("neededLabel")],
+                            [t("approvalLabel"), selectedLedgerSummary.pendingApproval ? t("pendingLabel") : selectedLedgerSummary.approvedSubmission ? t("approvedLabel") : t("noneLabel")],
+                            [t("responsesLabel"), selectedLedgerSummary.hasEmployerResponse ? t("recordedLabel") : t("noneLabel")],
+                            [t("auditLabel"), selectedLedgerSummary.auditEventCount],
                           ].map(([label, value]) => (
                             <div key={label} className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
                               <div className="text-slate-500">{label}</div>
@@ -1411,12 +1466,12 @@ export default function Applications() {
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
                             {selectedLedgerSummary.openFollowUpDrafts > 0 && (
                               <Badge variant="outline" className="border-amber-500/30 text-amber-300">
-                                {selectedLedgerSummary.openFollowUpDrafts} follow-up draft{selectedLedgerSummary.openFollowUpDrafts === 1 ? "" : "s"}
+                                {t("followUpDraftsCount", { count: selectedLedgerSummary.openFollowUpDrafts })}
                               </Badge>
                             )}
                             {selectedLedgerSummary.sentFollowUpsAwaitingResponse > 0 && (
                               <Badge variant="outline" className="border-blue-500/30 text-blue-300">
-                                {selectedLedgerSummary.sentFollowUpsAwaitingResponse} follow-up{selectedLedgerSummary.sentFollowUpsAwaitingResponse === 1 ? "" : "s"} awaiting response
+                                {t("followUpsAwaitingResponse", { count: selectedLedgerSummary.sentFollowUpsAwaitingResponse })}
                               </Badge>
                             )}
                           </div>
@@ -1428,7 +1483,7 @@ export default function Applications() {
                           >
                             <div className="mb-1 flex items-center gap-2 font-medium text-blue-200">
                               <Mail className="h-4 w-4" />
-                              Follow-up approval retired
+                              {t("followUpApprovalRetired")}
                             </div>
                             <p className="text-blue-100/90">
                               {selectedLedgerSummary.staleFollowUpCancellationReason}
@@ -1447,7 +1502,7 @@ export default function Applications() {
                           <div>
                             <div className="flex items-center gap-2 text-sm font-medium text-amber-100">
                               <AlertCircle className="h-4 w-4 text-amber-300" />
-                              Evidence gates active
+                              {t("evidenceGatesActive")}
                             </div>
                             <p className="mt-1 text-sm text-amber-50/90">{selectedEvidenceGateSummary.headline}</p>
                             <p className="mt-1 text-sm text-slate-300">{selectedEvidenceGateSummary.detail}</p>
@@ -1470,7 +1525,7 @@ export default function Applications() {
                         <div className="space-y-2">
                           {selectedEvidenceGateSummary.gates.slice(0, 3).map((gate) => (
                             <div key={gate.id || gate.label} className="rounded border border-amber-500/20 bg-slate-950/40 p-2 text-sm text-slate-300">
-                              <div className="font-medium text-amber-100">{gate.label || "Evidence gate"}</div>
+                              <div className="font-medium text-amber-100">{gate.label || t("evidenceGateFallback")}</div>
                               {gate.detail && <div className="mt-1 text-slate-400">{gate.detail}</div>}
                             </div>
                           ))}
@@ -1487,7 +1542,7 @@ export default function Applications() {
                           }}
                         >
                           <User className="mr-1 h-4 w-4" />
-                          Resolve evidence
+                          {t("resolveEvidence")}
                         </Button>
                       </div>
                     )}
@@ -1501,14 +1556,14 @@ export default function Applications() {
                           <div>
                             <div className="flex items-center gap-2 text-sm font-medium text-cyan-100">
                               <Activity className="h-4 w-4 text-cyan-300" />
-                              Next best action
+                              {t("nextBestAction")}
                             </div>
-                            <p className="mt-1 text-sm text-slate-300">{selectedNextActions.detail}</p>
+                            <p className="mt-1 text-sm text-slate-300">{t(nextActionCopy[selectedNextActions.primary.id].action)}</p>
                           </div>
                           <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
                             {selectedNextActions.attentionCount > 0
-                              ? `${selectedNextActions.attentionCount} item${selectedNextActions.attentionCount === 1 ? "" : "s"}`
-                              : "Clear"}
+                              ? t("attentionItemsCount", { count: selectedNextActions.attentionCount })
+                              : t("clearLabel")}
                           </Badge>
                         </div>
 
@@ -1526,7 +1581,7 @@ export default function Applications() {
                             {selectedNextActions.primary.id === "draft_follow_up" && generateFollowUpMutation.isPending
                               ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                               : <span className="mr-1">{getNextActionIcon(selectedNextActions.primary.id)}</span>}
-                            {selectedNextActions.headline}
+                            {t(nextActionCopy[selectedNextActions.primary.id].label)}
                           </Button>
 
                           {selectedNextActions.secondary.map((action) => (
@@ -1539,29 +1594,29 @@ export default function Applications() {
                               onClick={() => runApplicationNextAction(action.id)}
                             >
                               <span className="mr-1">{getNextActionIcon(action.id)}</span>
-                              {action.label}
+                              {t(nextActionCopy[action.id].label)}
                             </Button>
                           ))}
                         </div>
 
                         <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-3">
                           <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
-                            <div className="text-slate-500">Risk</div>
-                            <div className="mt-1 font-medium capitalize text-slate-200">{selectedNextActions.primary.risk}</div>
+                            <div className="text-slate-500">{t("riskHeading")}</div>
+                            <div className="mt-1 font-medium text-slate-200">{t(`risk_${selectedNextActions.primary.risk}` as TranslationKey)}</div>
                           </div>
                           <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
-                            <div className="text-slate-500">External action</div>
+                            <div className="text-slate-500">{t("externalAction")}</div>
                             <div className="mt-1 font-medium text-slate-200">
                               {selectedNextActions.primary.id === "resolve_evidence"
-                                ? "Evidence-gated"
+                                ? t("evidenceGated")
                                 : selectedNextActions.primary.requiresApproval
-                                  ? "Approval-gated"
-                                  : "Internal only"}
+                                  ? t("approvalGated")
+                                  : t("internalOnly")}
                             </div>
                           </div>
                           <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
-                            <div className="text-slate-500">Ledger source</div>
-                            <div className="mt-1 font-medium text-slate-200">Approvals, evidence, replies</div>
+                            <div className="text-slate-500">{t("ledgerSource")}</div>
+                            <div className="mt-1 font-medium text-slate-200">{t("ledgerSourceDetail")}</div>
                           </div>
                         </div>
                       </div>
@@ -1575,28 +1630,30 @@ export default function Applications() {
                       <div data-testid="application-interview-control" className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h4 className="text-sm font-medium text-slate-200">Interview Control</h4>
+                            <h4 className="text-sm font-medium text-slate-200">{t("interviewControl")}</h4>
                             <p className="mt-1 text-sm text-slate-400">
-                              {selectedInterviewSchedulingControl?.description || selectedInterviewSummary.nextAction}
+                              {selectedInterviewSchedulingCopy
+                                ? t(selectedInterviewSchedulingCopy.action)
+                                : t(interviewOperatingCopy[selectedInterviewSummary.status].action)}
                             </p>
                           </div>
                           <Badge
                             variant="outline"
                             className={getInterviewSummaryBadgeClass(selectedInterviewSummary.status)}
                           >
-                            {selectedInterviewSummary.label}
+                            {t(interviewOperatingCopy[selectedInterviewSummary.status].label)}
                           </Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 md:grid-cols-4">
                           {[
-                            ["Active", selectedInterviewSummary.activeInterviews],
-                            ["Completed shown", selectedInterviewSummary.completedInterviews],
-                            ["Cancelled shown", selectedInterviewSummary.cancelledInterviews],
+                            [t("activeLabel"), selectedInterviewSummary.activeInterviews],
+                            [t("completedShown"), selectedInterviewSummary.completedInterviews],
+                            [t("cancelledShown"), selectedInterviewSummary.cancelledInterviews],
                             [
-                              "Next",
+                              t("nextLabel"),
                               selectedInterviewSummary.nextInterviewAt
                                 ? selectedInterviewSummary.nextInterviewAt.toLocaleString(locale)
-                                : "None",
+                                : t("noneLabel"),
                             ],
                           ].map(([label, value]) => (
                             <div key={label} className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
@@ -1610,7 +1667,7 @@ export default function Applications() {
                           {interviewsLoading ? (
                             <div className="flex items-center gap-2 text-sm text-slate-400">
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              Loading interviews
+                              {t("loadingInterviews")}
                             </div>
                           ) : (interviews?.length || 0) > 0 ? (
                             interviews?.map((interview: any) => {
@@ -1636,12 +1693,12 @@ export default function Applications() {
                                     <span className="text-xs text-slate-500">{formatAttemptDate(interview.scheduledAt)}</span>
                                   </div>
                                   <div className="grid gap-1 text-sm text-slate-400">
-                                    {interview.duration && <div>{interview.duration} minutes</div>}
-                                    {interview.location && <div>Location: {interview.location}</div>}
-                                    {interview.meetingLink && <div>Meeting link: {interview.meetingLink}</div>}
+                                    {interview.duration && <div>{t("minutesCount", { count: interview.duration })}</div>}
+                                    {interview.location && <div>{t("locationLabel")}: {interview.location}</div>}
+                                    {interview.meetingLink && <div>{t("meetingLink")}: {interview.meetingLink}</div>}
                                     {(interview.interviewerName || interview.interviewerTitle) && (
                                       <div>
-                                        Interviewer: {[interview.interviewerName, interview.interviewerTitle].filter(Boolean).join(", ")}
+                                        {t("interviewerLabel")}: {[interview.interviewerName, interview.interviewerTitle].filter(Boolean).join(", ")}
                                       </div>
                                     )}
                                     {interview.notes && <div className="whitespace-pre-wrap">{interview.notes}</div>}
@@ -1658,7 +1715,7 @@ export default function Applications() {
                                         })}
                                       >
                                         <CheckCircle className="mr-1 h-4 w-4" />
-                                        Complete
+                                        {t("completeLabel")}
                                       </Button>
                                       <Button
                                         variant="ghost"
@@ -1670,7 +1727,7 @@ export default function Applications() {
                                         })}
                                       >
                                         <XCircle className="mr-1 h-4 w-4" />
-                                        Cancel
+                                        {t("cancel")}
                                       </Button>
                                     </div>
                                   )}
@@ -1687,7 +1744,7 @@ export default function Applications() {
                                         }}
                                       >
                                         <MessageSquare className="mr-1 h-4 w-4" />
-                                        Record Outcome
+                                        {t("recordInterviewOutcomeTitle")}
                                       </Button>
                                     </div>
                                   )}
@@ -1695,11 +1752,11 @@ export default function Applications() {
                               );
                             })
                           ) : (
-                            <p className="text-sm text-slate-400">No interview time has been recorded yet.</p>
+                            <p className="text-sm text-slate-400">{t("noInterviewTimeRecorded")}</p>
                           )}
                           {activeInterviewWindowTruncated && (
                             <p className="text-xs text-amber-300">
-                              More than 25 active interview rounds exist. Resolve older active rounds before scheduling another.
+                              {t("interviewWindowTruncated")}
                             </p>
                           )}
                           {hasEarlierInterviewHistory && (
@@ -1710,7 +1767,7 @@ export default function Applications() {
                               onClick={() => void fetchEarlierInterviewHistory()}
                             >
                               {isFetchingEarlierInterviewHistory && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                              Load earlier interview history
+                              {t("loadEarlierInterviewHistory")}
                             </Button>
                           )}
                         </div>
@@ -1736,7 +1793,7 @@ export default function Applications() {
                             onClick={() => openEmployerResponseDialog(selectedApplication, "interview_invite")}
                           >
                             <MessageSquare className="mr-1 h-4 w-4" />
-                            {selectedInterviewSchedulingControl.actionLabel}
+                            {selectedInterviewSchedulingCopy ? t(selectedInterviewSchedulingCopy.label) : t("recordInvitation")}
                           </Button>
                         )}
                       </div>
@@ -1746,31 +1803,31 @@ export default function Applications() {
                       <div data-testid="application-offer-control" className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h4 className="text-sm font-medium text-slate-200">Offer & Success-Fee Control</h4>
-                            <p className="mt-1 text-sm text-slate-400">{selectedOfferSummary.nextAction}</p>
+                            <h4 className="text-sm font-medium text-slate-200">{t("offerSuccessFeeControl")}</h4>
+                            <p className="mt-1 text-sm text-slate-400">{t(offerOperatingCopy[selectedOfferSummary.status].action)}</p>
                           </div>
                           <Badge
                             variant="outline"
                             className={getOfferSummaryBadgeClass(selectedOfferSummary.status)}
                           >
-                            {selectedOfferSummary.label}
+                            {t(offerOperatingCopy[selectedOfferSummary.status].label)}
                           </Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs text-slate-400 md:grid-cols-4">
                           {[
-                            ["Attribution", selectedOfferSummary.hasOfferAttributionReview ? "Pending" : "Clear"],
-                            ["Success fee", selectedOfferSummary.hasSuccessFee ? "Linked" : "Not reported"],
+                            [t("attributionLabel"), selectedOfferSummary.hasOfferAttributionReview ? t("pendingLabel") : t("clearLabel")],
+                            [t("successFeeLabel"), selectedOfferSummary.hasSuccessFee ? t("linkedLabel") : t("notReportedLabel")],
                             [
-                              "Monthly fee",
+                              t("monthlyFeeLabel"),
                               selectedOfferSummary.monthlyFeeCents > 0
-                                ? `$${(selectedOfferSummary.monthlyFeeCents / 100).toFixed(2)}`
-                                : "None",
+                                ? new Intl.NumberFormat(locale, { style: "currency", currency: selectedSuccessFee?.currency || "USD" }).format(selectedOfferSummary.monthlyFeeCents / 100)
+                                : t("noneLabel"),
                             ],
                             [
-                              "Verification",
+                              t("verificationLabel"),
                               selectedOfferSummary.nextVerificationDue
                                 ? formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)
-                                : "Not due",
+                                : t("notDueLabel"),
                             ],
                           ].map(([label, value]) => (
                             <div key={label} className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
@@ -1796,7 +1853,7 @@ export default function Applications() {
                             }}
                           >
                             <DollarSign className="mr-1 h-4 w-4" />
-                            Report Hire
+                            {t("reportHire")}
                           </Button>
                         )}
                       </div>

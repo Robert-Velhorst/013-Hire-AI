@@ -11,7 +11,7 @@ describe("interview history pagination wiring", () => {
     expect(router).toContain("getInterviewPage: protectedProcedure");
     expect(router).not.toContain("getInterviews: protectedProcedure");
     expect(page).toContain("trpc.applications.getInterviewPage.useInfiniteQuery");
-    expect(page).toContain("Load earlier interview history");
+    expect(page).toContain('t("loadEarlierInterviewHistory")');
     expect(page).toContain("activeItems");
     expect(service).toContain("export async function getInterviewSchedules(applicationId: number, userId: number)");
     expect(service).toContain("export async function getInterviewSchedulePage(");

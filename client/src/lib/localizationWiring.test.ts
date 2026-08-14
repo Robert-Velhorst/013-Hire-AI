@@ -116,12 +116,22 @@ describe("localization wiring", () => {
     expect(applications).toContain('t("applicationsTitle")');
     expect(applications).toContain('t("applicationPipelineControl")');
     expect(applications).toContain('t("applicationsAllCount"');
+    expect(applications).toContain('t("operatingStatus")');
+    expect(applications).toContain("ledgerOperatingCopy[selectedLedgerSummary.status]");
+    expect(applications).toContain("nextActionCopy[selectedNextActions.primary.id]");
+    expect(applications).toContain("interviewOperatingCopy[selectedInterviewSummary.status]");
+    expect(applications).toContain("offerOperatingCopy[selectedOfferSummary.status]");
+    expect(applications).toContain('t("offerSuccessFeeControl")');
+    expect(applications).toContain('new Intl.NumberFormat(locale');
     expect(applications).toContain("const renderApplicationCard = (application: any)");
     expect(applications).not.toContain("const ApplicationCard =");
     expect(applications).not.toContain(">Record Employer Response<");
     expect(applications).not.toContain(">Confirm Submission Evidence<");
     expect(applications).not.toContain(">Application Pipeline Control<");
     expect(applications).not.toContain(">Tracked Jobs<");
+    expect(applications).not.toContain(">Operating status<");
+    expect(applications).not.toContain(">Interview Control<");
+    expect(applications).not.toContain(">Offer & Success-Fee Control<");
     expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
@@ -132,6 +142,8 @@ describe("localization wiring", () => {
     expect(translate("nl", "confirmExternalSubmissionTitle")).toBe("Externe indiening bevestigen");
     expect(translate("nl", "applicationsTitle")).toBe("Sollicitaties");
     expect(translate("nl", "trackedApplicationsCount", { count: 4 })).toBe("4 gevolgd");
+    expect(translate("nl", "nextActionMonitor")).toBe("Bewaken");
+    expect(translate("nl", "offerSuccessFeeControl")).toContain("succesvergoeding");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

@@ -537,3 +537,10 @@
 - Replaced the render-local application card component type with a direct stable render path, preventing all visible cards from remounting when parent state changes.
 - Added localization and stable-render regressions and verified the seeded Dutch pipeline at desktop and compact widths with no horizontal overflow.
 - Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Applications operating-detail localization pass
+
+- Localized ledger state, next-best-action routing, interview scheduling, and offer/success-fee controls from stable workflow identifiers without changing autonomous decision logic.
+- Localized detail metrics, risk and approval boundaries, commands, interview timing labels, and success-fee currency display while retaining employer responses, audit reasons, and provider evidence verbatim.
+- Updated wiring regressions to require translation-key usage and verified the seeded Dutch offer workflow in the in-app browser; the browser-enforced compact width was 780 pixels and showed no horizontal overflow.
+- Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
