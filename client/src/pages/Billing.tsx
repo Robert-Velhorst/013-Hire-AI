@@ -19,7 +19,7 @@ import { openExternalUrl } from "@/lib/externalUrl";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
-import { formatBillingCurrency } from "@/lib/billingPresentation";
+import { formatBillingCurrency, formatBillingDate, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
 import {
   DollarSign, FileText, CheckCircle, Clock, AlertTriangle,
   XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck
@@ -173,7 +173,7 @@ export default function Billing() {
   const [reportHireApplicationId, setReportHireApplicationId] = useState<number | undefined>(undefined);
   const [verifyDialogFeeId, setVerifyDialogFeeId] = useState<number | null>(null);
   const [employmentEndFeeId, setEmploymentEndFeeId] = useState<number | null>(null);
-  const [employmentEndDate, setEmploymentEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [employmentEndDate, setEmploymentEndDate] = useState(getLocalCalendarDate);
   const [employmentEndResult, setEmploymentEndResult] = useState<EmploymentEndReportResultLike | null>(null);
 
   const {
@@ -270,7 +270,7 @@ export default function Billing() {
 
   const openEmploymentEndDialog = (feeId: number) => {
     setEmploymentEndFeeId(feeId);
-    setEmploymentEndDate(new Date().toISOString().slice(0, 10));
+    setEmploymentEndDate(getLocalCalendarDate());
     setEmploymentEndResult(null);
   };
 
@@ -448,7 +448,7 @@ export default function Billing() {
                 [
                   "Next due",
                   complianceSummary.nextVerificationDue
-                    ? complianceSummary.nextVerificationDue.toLocaleDateString()
+                    ? formatBillingDate(complianceSummary.nextVerificationDue, locale)
                     : "None",
                 ],
               ].map(([label, value]) => (
@@ -517,7 +517,7 @@ export default function Billing() {
                         ) : null}
                         <p className="mt-2 text-xs text-gray-500">
                           Approval #{review.approval.id}
-                          {response?.receivedAt ? ` - Response received ${new Date(response.receivedAt).toLocaleDateString()}` : ""}
+                          {response?.receivedAt ? ` - Response received ${formatBillingDate(response.receivedAt, locale)}` : ""}
                         </p>
                       </div>
                       <Button
@@ -595,8 +595,8 @@ export default function Billing() {
                           <p className="text-gray-400 text-sm">{fee.employerName}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-cyan-400 font-bold">${(fee.monthlyFeeAmount / 100).toFixed(2)}<span className="text-gray-500 text-xs font-normal">/mo</span></p>
-                          <p className="text-gray-500 text-xs">{fee.feePercent}% of ${fee.monthlySalary.toLocaleString()}</p>
+                          <p className="text-cyan-400 font-bold">{formatBillingCurrency(fee.monthlyFeeAmount, fee.currency, locale)}<span className="text-gray-500 text-xs font-normal">/mo</span></p>
+                          <p className="text-gray-500 text-xs">{fee.feePercent}% of {formatBillingSalary(fee.monthlySalary, fee.currency, locale)}</p>
                         </div>
                       </div>
 
@@ -608,7 +608,7 @@ export default function Billing() {
                             ? "Verification overdue! Submit proof of employment to avoid suspension."
                             : daysUntilVerification <= 14
                             ? `Verification due in ${daysUntilVerification} days`
-                            : `Next verification: ${new Date(fee.nextVerificationDue!).toLocaleDateString()}`}
+                            : `Next verification: ${formatBillingDate(fee.nextVerificationDue!, locale)}`}
                         </div>
                       )}
 
@@ -640,7 +640,7 @@ export default function Billing() {
 
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                         <Calendar className="w-3.5 h-3.5" />
-                        Started {new Date(fee.startDate).toLocaleDateString()}
+                        Started {formatBillingDate(fee.startDate, locale)}
                         {fee.hasOfferLetter && (
                           <>
                             <span className="text-gray-600">·</span>
@@ -722,14 +722,14 @@ export default function Billing() {
                         </p>
                         {payment.periodStart && payment.periodEnd && (
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {new Date(payment.periodStart).toLocaleDateString()} - {new Date(payment.periodEnd).toLocaleDateString()}
+                            {formatBillingDate(payment.periodStart, locale)} - {formatBillingDate(payment.periodEnd, locale)}
                           </p>
                         )}
                       </div>
                       <div className="flex items-center gap-3">
                         <PaymentStatusBadge status={payment.status} />
                         {payment.paidAt && (
-                          <span className="text-gray-500 text-xs">{new Date(payment.paidAt).toLocaleDateString()}</span>
+                          <span className="text-gray-500 text-xs">{formatBillingDate(payment.paidAt, locale)}</span>
                         )}
                       </div>
                     </div>

@@ -15,6 +15,9 @@ import {
 import { openExternalUrl } from "@/lib/externalUrl";
 import { toast } from "sonner";
 import { Upload, FileText, CheckCircle, AlertCircle, Briefcase, DollarSign, Calendar } from "lucide-react";
+import { useLocale } from "@/contexts/LocaleContext";
+import { formatBillingCurrency, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
+import { DEFAULT_BILLING_CURRENCY, MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES, type SupportedBillingCurrency } from "@shared/billing";
 
 interface ReportHireDialogProps {
   open: boolean;
@@ -24,14 +27,15 @@ interface ReportHireDialogProps {
 }
 
 export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess }: ReportHireDialogProps) {
+  const { locale } = useLocale();
   const [step, setStep] = useState<"form" | "terms" | "payment" | "success">("form");
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | undefined>(applicationId);
   const [formData, setFormData] = useState({
     employerName: "",
     jobTitle: "",
     monthlySalary: "",
-    currency: "USD",
-    startDate: new Date().toISOString().split("T")[0],
+    currency: DEFAULT_BILLING_CURRENCY,
+    startDate: getLocalCalendarDate(),
   });
   const [offerLetter, setOfferLetter] = useState<File | null>(null);
   const [offerLetterBase64, setOfferLetterBase64] = useState<string>("");
@@ -131,8 +135,8 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       toast.error("Please upload your offer letter");
       return;
     }
-    if (parseFloat(formData.monthlySalary) < 300) {
-      toast.error("Minimum monthly salary is $300");
+    if (parseFloat(formData.monthlySalary) < MIN_MONTHLY_SALARY) {
+      toast.error(`Minimum monthly salary is ${formatBillingSalary(MIN_MONTHLY_SALARY, formData.currency, locale)}`);
       return;
     }
     if (!evidenceSummary.canContinueToTerms) {
@@ -174,8 +178,8 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       employerName: "",
       jobTitle: "",
       monthlySalary: "",
-      currency: "USD",
-      startDate: new Date().toISOString().split("T")[0],
+      currency: DEFAULT_BILLING_CURRENCY,
+      startDate: getLocalCalendarDate(),
     });
     setOfferLetter(null);
     setOfferLetterBase64("");
@@ -301,7 +305,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-gray-300 flex items-center gap-1.5">
                     <DollarSign className="w-3.5 h-3.5" /> Monthly Salary <span className="text-red-400">*</span>
@@ -309,12 +313,32 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                   <Input
                     type="number"
                     placeholder="e.g. 5000"
-                    min={300}
+                    min={MIN_MONTHLY_SALARY}
                     value={formData.monthlySalary}
                     onChange={e => setFormData(p => ({ ...p, monthlySalary: e.target.value }))}
                     className="bg-[#161b22] border-[#30363d] text-white placeholder:text-gray-500"
                   />
-                  <p className="text-xs text-gray-500">Min. $300/month</p>
+                  <p className="text-xs text-gray-500">Min. {formatBillingSalary(MIN_MONTHLY_SALARY, formData.currency, locale)}/month</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-gray-300">Currency <span className="text-red-400">*</span></Label>
+                  <Select
+                    value={formData.currency}
+                    onValueChange={(currency) => setFormData((previous) => ({
+                      ...previous,
+                      currency: currency as SupportedBillingCurrency,
+                    }))}
+                  >
+                    <SelectTrigger aria-label="Salary currency" className="bg-[#161b22] border-[#30363d] text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#161b22] border-[#30363d]">
+                      {SUPPORTED_BILLING_CURRENCIES.map((currency) => (
+                        <SelectItem key={currency} value={currency}>{currency}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-1.5">
@@ -330,11 +354,11 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                 </div>
               </div>
 
-              {formData.monthlySalary && parseFloat(formData.monthlySalary) >= 300 && (
+              {formData.monthlySalary && parseFloat(formData.monthlySalary) >= MIN_MONTHLY_SALARY && (
                 <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
                   <p className="text-cyan-400 text-sm font-medium">Monthly Success Fee</p>
-                  <p className="text-2xl font-bold text-white mt-0.5">${monthlyFee} <span className="text-sm font-normal text-gray-400">/ month</span></p>
-                  <p className="text-xs text-gray-500 mt-1">5% of ${parseFloat(formData.monthlySalary).toLocaleString()} monthly salary</p>
+                  <p className="text-2xl font-bold text-white mt-0.5">{formatBillingSalary(Number(monthlyFee), formData.currency, locale)} <span className="text-sm font-normal text-gray-400">/ month</span></p>
+                  <p className="text-xs text-gray-500 mt-1">5% of {formatBillingSalary(parseFloat(formData.monthlySalary), formData.currency, locale)} monthly salary</p>
                 </div>
               )}
 
@@ -400,11 +424,11 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Monthly Salary</span>
-                  <span className="text-white font-medium">${parseFloat(formData.monthlySalary).toLocaleString()}</span>
+                  <span className="text-white font-medium">{formatBillingSalary(parseFloat(formData.monthlySalary), formData.currency, locale)}</span>
                 </div>
                 <div className="border-t border-[#30363d] pt-2 flex justify-between text-sm">
                   <span className="text-gray-400">Monthly Fee (5%)</span>
-                  <span className="text-cyan-400 font-bold">${monthlyFee}</span>
+                  <span className="text-cyan-400 font-bold">{formatBillingSalary(Number(monthlyFee), formData.currency, locale)}</span>
                 </div>
               </div>
 
@@ -496,7 +520,11 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                   <div>
                     <p className="text-gray-400">
                       Monthly fee: <span className="text-cyan-400 font-bold">
-                        ${(completionSummary.monthlyFeeCents / 100 || Number(monthlyFee)).toFixed(2)}
+                        {formatBillingCurrency(
+                          completionSummary.monthlyFeeCents || Math.round(Number(monthlyFee) * 100),
+                          formData.currency,
+                          locale,
+                        )}
                       </span>
                     </p>
                     {completionSummary.feeId && (

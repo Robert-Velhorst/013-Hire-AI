@@ -24,8 +24,8 @@ import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
 import { nanoid } from "nanoid";
 import { logOperationalFailure } from "../operationalFailureLog";
+import { MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES } from "@shared/billing";
 
-const MIN_MONTHLY_SALARY = 300; // USD
 const FEE_PERCENT = 5;
 const boundedDocumentBase64 = z.string().min(1).max(14_000_000);
 const boundedDocumentMimeType = z.string().trim().min(1).max(120);
@@ -45,6 +45,10 @@ const calendarDate = z.string().trim()
     const parsed = new Date(Date.UTC(year, month - 1, day));
     return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
   }, "Use a real calendar date.");
+const billingCurrency = z.preprocess(
+  (value) => typeof value === "string" ? value.trim().toUpperCase() : value,
+  z.enum(SUPPORTED_BILLING_CURRENCIES),
+);
 
 function toUserSuccessFeeView(fee: SuccessFee) {
   const { offerLetterKey, offerLetterUrl, stripeCheckoutSessionId, stripePriceId, ...view } = fee;
@@ -173,8 +177,8 @@ export const successFeesRouter = router({
     .input(z.object({
       employerName: z.string().min(1).max(255),
       jobTitle: z.string().min(1).max(255),
-      monthlySalary: z.number().finite().min(MIN_MONTHLY_SALARY, `Minimum salary is $${MIN_MONTHLY_SALARY}/month`).max(1_000_000_000),
-      currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform(value => value.toUpperCase()).default("USD"),
+      monthlySalary: z.number().finite().min(MIN_MONTHLY_SALARY, `Minimum monthly salary is ${MIN_MONTHLY_SALARY} in the selected currency.`).max(1_000_000_000),
+      currency: billingCurrency.default("USD"),
       startDate: calendarDate,
       applicationId: z.number().int().positive().optional(),
       offerLetterBase64: boundedDocumentBase64,
