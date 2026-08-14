@@ -97,11 +97,21 @@ describe("localization wiring", () => {
     expect(jobSearch).toContain("formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, locale)");
     expect(jobSearch).toContain('aria-label={t("openJobDetails"');
     expect(jobSearch).toContain('aria-label={t("saveJobForReview"');
+    expect(jobSearch).toContain('t("jobSearchTitle")');
+    expect(jobSearch).toContain('placeholder={t("searchJobsPlaceholder")}');
+    expect(jobSearch).toContain('t("matchDecision")');
+    expect(jobSearch).toContain('t("sourcingControlTitle")');
+    expect(jobSearch).not.toContain(">Job Search<");
+    expect(jobSearch).not.toContain('placeholder="Search jobs');
+    expect(jobSearch).not.toContain("Integration required");
+    expect(jobSearch).not.toContain("Ã‚Â·");
     expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)");
     expect(applications).toContain("<AppHeader />");
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
     expect(translate("nl", "statusWithdrawn")).toBe("Ingetrokken");
+    expect(translate("nl", "jobSearchTitle")).toBe("Vacatures zoeken");
+    expect(translate("nl", "visibleJobs", { count: 3 })).toContain("3");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

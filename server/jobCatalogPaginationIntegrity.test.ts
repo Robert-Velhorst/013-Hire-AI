@@ -29,7 +29,7 @@ describe("public job catalog pagination integrity", () => {
     expect(page).toContain('aria-label={t("openJobDetails"');
     expect(page).toContain('aria-label={t("saveJobForReview"');
     expect(page).toContain("page.items");
-    expect(page).toContain("Load more jobs");
+    expect(page).toContain('t("loadMoreJobs")');
     expect(page).not.toContain("limit: 250");
     expect(page).toContain("visibleJobIds.slice(index, index + 250)");
     expect(page).toContain("index += 250");

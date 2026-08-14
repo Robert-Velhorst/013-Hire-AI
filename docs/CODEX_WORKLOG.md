@@ -516,3 +516,10 @@
 - Replaced the render-local `JobCard` component type with a stable render path so parent state changes do not remount every visible listing, and corrected legitimate zero-percent match display.
 - Separated keyboard-accessible job-detail and save actions, kept the save action visible on touch layouts, added localized accessible names, and made the detail footer responsive.
 - Verified Job Search cards and the job-detail dialog in the in-app browser with no nested interactive controls, horizontal overflow, console warnings, or errors.
+
+## 2026-08-14 - Complete Job Search localization pass
+
+- Localized Job Search in English and Dutch across catalog filters, autonomous-plan metrics, sourcing/discovery status, match and risk summaries, operating-ledger decisions, detail evidence labels, empty states, and mutation feedback.
+- Preserved employer descriptions, provider warnings, and recorded evidence text verbatim so presentation never mutates the underlying audit evidence.
+- Added localization wiring regressions and updated the catalog pagination contract to assert the translated load-more control instead of literal English copy.
+- Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.

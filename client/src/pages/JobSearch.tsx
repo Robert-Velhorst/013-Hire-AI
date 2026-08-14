@@ -274,25 +274,25 @@ export default function JobSearch() {
     onSuccess: async (data: any) => {
       const score = data.overallScore || data.matchScore || 0;
       if (data.analysisSource === "deterministic_fallback") {
-        toast.info(`Profile-based match score: ${score}%. Review the evidence before acting.`);
+        toast.info(t("profileMatchScore", { score }));
       } else {
-        toast.success(`AI match score: ${score}%`);
+        toast.success(t("aiMatchScore", { score }));
       }
       await refetchJobMatches();
     },
     onError: () => {
-      toast.error("Failed to calculate match");
+      toast.error(t("matchCalculationFailed"));
     },
   });
 
   const decideMutation = trpc.applications.decide.useMutation({
     onSuccess: async (result, variables) => {
       if (variables.decision === "save") {
-        toast.success("Job saved with decision reason");
+        toast.success(t("jobSavedWithReason"));
       } else if (variables.decision === "ignore") {
-        toast.success("Job ignored");
+        toast.success(t("jobIgnored"));
       } else {
-        toast.success(result.existing ? "Decision updated" : "Application decision recorded");
+        toast.success(t(result.existing ? "decisionUpdated" : "applicationDecisionRecorded"));
       }
       await Promise.all([
         refetchApplicationDecisions(),
@@ -301,7 +301,7 @@ export default function JobSearch() {
       ]);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to record decision");
+      toast.error(error.message || t("decisionRecordFailed"));
     },
   });
 
@@ -321,18 +321,18 @@ export default function JobSearch() {
         refetchSchedulerStatus(),
       ]);
     },
-    onError: () => toast.error("Autonomous run failed"),
+    onError: () => toast.error(t("autonomousRunFailed")),
   });
   const saveJobSearchPolicyMutation = trpc.profile.updatePreferences.useMutation({
     onSuccess: async () => {
-      toast.success("Sourcing policy saved");
+      toast.success(t("sourcingPolicySaved"));
       await Promise.all([
         refetchProfileData(),
         refetchAutonomousPlan(),
         refetchOperatingLedger(),
       ]);
     },
-    onError: (error) => toast.error(error.message || "Failed to save sourcing policy"),
+    onError: (error) => toast.error(error.message || t("sourcingPolicySaveFailed")),
   });
 
   const autonomousDecisionByJobId = useMemo(() => {
@@ -457,11 +457,11 @@ export default function JobSearch() {
 
   const handleApply = async (job: any) => {
     if (!user) {
-      toast.error("Please log in to apply");
+      toast.error(t("signInToPrepareApplication"));
       return;
     }
     if (preparationEvidenceGate) {
-      toast.info(preparationEvidenceGate.detail || "Resolve profile evidence before preparing an application.");
+      toast.info(preparationEvidenceGate.detail || t("resolveProfileEvidence"));
       setLocation(preparationEvidenceGate.route || "/profile");
       return;
     }
@@ -476,7 +476,7 @@ export default function JobSearch() {
 
   const handleSaveJob = async (job: any) => {
     if (!user) {
-      toast.error("Please log in to save jobs");
+      toast.error(t("signInToSaveJobs"));
       return;
     }
     const summary = getJobMatchDecisionSummary(
@@ -500,7 +500,7 @@ export default function JobSearch() {
 
   const handleDecisionLifecycleAction = (job: any, action: JobDecisionLifecycleAction) => {
     if (!user) {
-      toast.error("Please log in to manage job decisions");
+      toast.error(t("signInToManageDecisions"));
       return;
     }
 
@@ -515,7 +515,7 @@ export default function JobSearch() {
 
   const handleCalculateMatch = async (job: any) => {
     if (!user) {
-      toast.error("Please log in to calculate match");
+      toast.error(t("signInToCalculateMatch"));
       return;
     }
     matchMutation.mutate({ jobId: job.id });
@@ -524,7 +524,7 @@ export default function JobSearch() {
   const handleAutonomousControlAction = () => {
     if (autonomousControl.runsAgent) {
       if (hasUnsavedJobSearchPolicy) {
-        toast.info("Save the sourcing policy before running it.");
+        toast.info(t("savePolicyBeforeRun"));
         return;
       }
       autonomousRunMutation.mutate({
@@ -564,6 +564,26 @@ export default function JobSearch() {
         return "border-slate-600 text-slate-300";
     }
   };
+  const getRiskLabel = (risk: string) => t(({
+    low: "severityLow", medium: "severityMedium", high: "severityHigh",
+  } as const)[risk as "low" | "medium" | "high"] || "severityMedium");
+  const getFitLabel = (fit: string) => t(({
+    fit: "fitLabel", partial: "partialFitLabel", gap: "gapLabel", unknown: "unknownLabel",
+  } as const)[fit as "fit" | "partial" | "gap" | "unknown"] || "unknownLabel");
+  const getDecisionLabel = (decision: string | null | undefined) => t(({
+    review: "queueReview", apply: "queueReview", manual_apply: "queueManualTask", save: "saveForLater", ignore: "ignoreAction",
+  } as const)[decision as "review" | "apply" | "manual_apply" | "save" | "ignore"] || "queueReview");
+  const autonomousControlCopy = ({
+    paused: ["controlPausedLabel", "controlPausedHeadline", "controlPausedCta"],
+    blocked: ["controlBlockedLabel", "controlBlockedHeadline", "controlBlockedCta"],
+    monitoring_attention: ["controlMonitoringLabel", "controlMonitoringHeadline", "controlMonitoringCta"],
+    review_ready: ["controlReviewLabel", "controlReviewHeadline", "controlReviewCta"],
+    manual_ready: ["controlManualLabel", "controlManualHeadline", "controlManualCta"],
+    follow_up_ready: ["controlFollowUpLabel", "controlFollowUpHeadline", "controlFollowUpCta"],
+    ready_to_run: ["controlRunLabel", "controlRunHeadline", "controlRunCta"],
+    scheduled: ["controlScheduledLabel", "controlScheduledHeadline", "controlScheduledCta"],
+    idle: ["controlIdleLabel", "controlIdleHeadline", "controlIdleCta"],
+  } as const)[autonomousControl.status];
   const sourcingTone = {
     empty: "border-slate-700 bg-slate-900/50",
     blocked: "border-amber-500/40 bg-amber-500/10",
@@ -655,7 +675,7 @@ export default function JobSearch() {
               {listingSafetyAssessment.status === "review" && (
                 <Badge variant="secondary" className="text-xs border border-amber-500/40 bg-amber-500/10 text-amber-200">
                   <AlertCircle className="w-3 h-3 mr-1" />
-                  Review signals
+                  {t("reviewSignals")}
                 </Badge>
               )}
             </div>
@@ -663,7 +683,7 @@ export default function JobSearch() {
               <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={getMatchBadgeColor(job.matchSummary.matchScore)}>
-                    {job.matchSummary.decisionLabel}
+                    {getDecisionLabel(job.matchSummary.recommendedDecision)}
                   </Badge>
                   <Badge
                     variant="outline"
@@ -673,11 +693,11 @@ export default function JobSearch() {
                         ? "border-emerald-500/40 text-emerald-300"
                         : "border-blue-500/40 text-blue-300"}
                   >
-                    {job.matchSummary.riskLevel} risk
+                    {t("riskLabel", { risk: getRiskLabel(job.matchSummary.riskLevel) })}
                   </Badge>
                   {job.matchSummary.blockers.length > 0 && (
                     <Badge variant="outline" className="border-orange-500/40 text-orange-300">
-                      {job.matchSummary.blockers.length} blocker{job.matchSummary.blockers.length === 1 ? "" : "s"}
+                      {t("blockersCount", { count: job.matchSummary.blockers.length })}
                     </Badge>
                   )}
                   {job.matchSummary.isDecided && (
@@ -686,7 +706,7 @@ export default function JobSearch() {
                       variant="outline"
                       className="border-cyan-500/40 text-cyan-300"
                     >
-                      Ledger: {job.matchSummary.ledgerDecisionLabel}
+                      {t("ledgerDecision", { decision: getDecisionLabel(job.matchSummary.ledgerDecision) })}
                     </Badge>
                   )}
                 </div>
@@ -735,9 +755,9 @@ export default function JobSearch() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Job Search</h1>
+            <h1 className="text-2xl font-bold text-white">{t("jobSearchTitle")}</h1>
             <p className="text-slate-400">
-              {filteredJobs.length} jobs loaded across {platformsData?.length || 0} platforms
+              {t("jobsAcrossPlatforms", { jobs: filteredJobs.length, platforms: platformsData?.length || 0 })}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -746,13 +766,13 @@ export default function JobSearch() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="review_first">Review first</SelectItem>
-                <SelectItem value="auto_apply">Accelerated</SelectItem>
+                <SelectItem value="review_first">{t("reviewFirst")}</SelectItem>
+                <SelectItem value="auto_apply">{t("accelerated")}</SelectItem>
               </SelectContent>
             </Select>
             {hasUnsavedJobSearchPolicy && (
               <Badge data-testid="job-search-unsaved-policy" variant="outline" className="border-amber-500/40 text-amber-300">
-                Unsaved policy
+                {t("unsavedPolicy")}
               </Badge>
             )}
             <Button
@@ -765,7 +785,7 @@ export default function JobSearch() {
               {saveJobSearchPolicyMutation.isPending
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 : <Save className="w-4 h-4 mr-2" />}
-              Save policy
+              {t("savePolicy")}
             </Button>
             <Button
               data-testid="job-search-autonomous-primary"
@@ -783,16 +803,16 @@ export default function JobSearch() {
                 : autonomousControl.runsAgent
                   ? <Sparkles className="w-4 h-4 mr-2" />
                   : <ExternalLink className="w-4 h-4 mr-2" />}
-              {autonomousControl.cta}
+              {t(autonomousControlCopy[2])}
             </Button>
             <Button
               variant="outline"
               size="sm"
-              title="Refresh displayed job listings and discovery status"
+              title={t("refreshListingsDescription")}
               onClick={() => void Promise.all([refetchJobs(), refetchDiscoveryStatus()])}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh listings
+              {t("refreshListings")}
             </Button>
           </div>
         </div>
@@ -804,16 +824,15 @@ export default function JobSearch() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Sparkles className="w-4 h-4 text-cyan-400" />
-                    <h2 className="text-sm font-semibold text-white">Autonomous sourcing plan</h2>
+                    <h2 className="text-sm font-semibold text-white">{t("autonomousSourcingPlan")}</h2>
                   </div>
                   <p className="text-sm text-slate-400">
-                    Scanned {autonomousPlan.summary.scanned} current jobs, found {autonomousPlan.summary.eligible} eligible matches,
-                    prepared {autonomousPlan.summary.queuedForReview} for review and identified {autonomousPlan.summary.manualApply} manual tasks.
+                     {t("autonomousPlanSummary", { scanned: autonomousPlan.summary.scanned, eligible: autonomousPlan.summary.eligible, review: autonomousPlan.summary.queuedForReview, manual: autonomousPlan.summary.manualApply })}
                     {autonomousPlan.summary.blocked > 0
-                      ? ` ${autonomousPlan.summary.blocked} high-fit role${autonomousPlan.summary.blocked === 1 ? " is" : "s are"} blocked by missing profile evidence.`
+                      ? ` ${t("blockedHighFitRoles", { count: autonomousPlan.summary.blocked })}`
                       : ""}
                     {autonomousPlan.summary.expiredJobsSkipped > 0
-                      ? ` Excluded ${autonomousPlan.summary.expiredJobsSkipped} expired or stale posting${autonomousPlan.summary.expiredJobsSkipped === 1 ? "" : "s"}.`
+                      ? ` ${t("excludedStalePostings", { count: autonomousPlan.summary.expiredJobsSkipped })}`
                       : ""}
                   </p>
                   {autonomousPlan.policyWarnings?.length > 0 && (
@@ -829,7 +848,7 @@ export default function JobSearch() {
                         <div key={gate.id || gate.label} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                           <div className="flex items-center gap-2 text-xs font-medium text-amber-200">
                             <AlertCircle className="h-3.5 w-3.5" />
-                            {gate.label || "Evidence gate"}
+                            {gate.label || t("evidenceGateFallback")}
                           </div>
                           <p className="mt-1 text-xs text-amber-100/80">{gate.detail}</p>
                         </div>
@@ -842,7 +861,7 @@ export default function JobSearch() {
                   >
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className={autonomousControlTone}>
-                        {autonomousControl.label}
+                        {t(autonomousControlCopy[0])}
                       </Badge>
                       <Badge
                         variant="outline"
@@ -850,56 +869,56 @@ export default function JobSearch() {
                           ? "border-amber-500/40 text-amber-300"
                           : "border-slate-700 text-slate-300"}
                       >
-                        {autonomousControl.approvalGated ? "Approval-gated" : "Internal"}
+                        {autonomousControl.approvalGated ? t("billingApprovalGated") : t("internalAction")}
                       </Badge>
                     </div>
-                    <p className="text-sm font-medium text-white">{autonomousControl.headline}</p>
+                    <p className="text-sm font-medium text-white">{t(autonomousControlCopy[1])}</p>
                     <p className="mt-1 text-sm text-slate-400">{autonomousControl.detail}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-7">
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-white">{autonomousPlan.summary.eligible}</p>
-                    <p className="text-xs text-slate-400">Eligible</p>
+                    <p className="text-xs text-slate-400">{t("eligible")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-cyan-400">{autonomousPlan.summary.queuedForReview}</p>
-                    <p className="text-xs text-slate-400">Review</p>
+                    <p className="text-xs text-slate-400">{t("reviewLabel")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-amber-400">{autonomousPlan.summary.manualApply}</p>
-                    <p className="text-xs text-slate-400">Manual</p>
+                    <p className="text-xs text-slate-400">{t("manualLabel")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-red-300">{autonomousPlan.summary.blocked || 0}</p>
-                    <p className="text-xs text-slate-400">Blocked</p>
+                    <p className="text-xs text-slate-400">{t("blockedLabel")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-purple-400">{autonomousPlan.summary.followUpsActionReady ?? autonomousPlan.summary.followUpsDue}</p>
-                    <p className="text-xs text-slate-400">Follow-ups ready</p>
+                    <p className="text-xs text-slate-400">{t("followUpsReady")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-amber-400">{autonomousPlan.evidenceGates?.length || 0}</p>
-                    <p className="text-xs text-slate-400">Gates</p>
+                    <p className="text-xs text-slate-400">{t("gatesLabel")}</p>
                   </div>
                   <div className="rounded-md bg-slate-800 px-3 py-2">
                     <p className="text-lg font-bold text-slate-300">{autonomousPlan.summary.expiredJobsSkipped || 0}</p>
-                    <p className="text-xs text-slate-400">Stale</p>
+                    <p className="text-xs text-slate-400">{t("staleLabel")}</p>
                   </div>
                 </div>
               </div>
               <div className="mt-4 grid gap-2 md:grid-cols-3">
                 <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-300">
                   <Checkbox checked={requireHumanReview} onCheckedChange={(checked) => setRequireHumanReview(Boolean(checked))} />
-                  Human review
+                  {t("humanReview")}
                 </label>
                 <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-300">
                   <Checkbox checked={allowUnsupportedATS} onCheckedChange={(checked) => setAllowUnsupportedATS(Boolean(checked))} />
-                  Manual tasks
+                  {t("manualTasks")}
                 </label>
                 <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-300">
                   <Checkbox checked={createFollowUps} onCheckedChange={(checked) => setCreateFollowUps(Boolean(checked))} />
-                  Queue follow-ups
+                  {t("queueFollowUps")}
                 </label>
               </div>
             </CardContent>
@@ -915,13 +934,13 @@ export default function JobSearch() {
                     {sourcingControl.label}
                   </Badge>
                   <Badge variant="outline" className="border-slate-700 text-slate-300">
-                    {sourcingControl.totalJobs} visible job{sourcingControl.totalJobs === 1 ? "" : "s"}
+                    {t("visibleJobs", { count: sourcingControl.totalJobs })}
                   </Badge>
                   <Badge variant="outline" className="border-slate-700 text-slate-300">
-                    {sourcingControl.averageScore}% avg match
+                    {t("averageMatch", { score: sourcingControl.averageScore })}
                   </Badge>
                 </div>
-                <h2 className="text-xl font-semibold text-white">Sourcing Control</h2>
+                <h2 className="text-xl font-semibold text-white">{t("sourcingControlTitle")}</h2>
                 <p className="mt-1 text-sm text-slate-300">{sourcingControl.headline}</p>
                 <p className="mt-2 max-w-3xl text-sm text-slate-400">{sourcingControl.nextAction}</p>
                 <div
@@ -934,13 +953,13 @@ export default function JobSearch() {
                       {discoveryControl.label}
                     </Badge>
                     <span className="text-xs font-medium">
-                      {discoveryControl.activeSources} active source{discoveryControl.activeSources === 1 ? "" : "s"}
+                      {t("activeSourcesCount", { count: discoveryControl.activeSources })}
                     </span>
                     <span className="text-xs">
-                      {discoveryControl.sourcesWithFreshScrape} fresh in 24h
+                      {t("freshSources24h", { count: discoveryControl.sourcesWithFreshScrape })}
                     </span>
                     <span className="text-xs">
-                      {discoveryControl.canonicalJobs} canonical job{discoveryControl.canonicalJobs === 1 ? "" : "s"}
+                      {t("canonicalJobsCount", { count: discoveryControl.canonicalJobs })}
                     </span>
                   </div>
                   <p className="mt-1 text-xs leading-5 opacity-90">{discoveryControl.detail}</p>
@@ -958,15 +977,15 @@ export default function JobSearch() {
 
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-9">
               {[
-                ["Review", sourcingControl.reviewReady, "excellent"],
-                ["Manual", sourcingControl.manualTasks, "good"],
-                ["Save", sourcingControl.saveForLater, "good"],
-                ["Ignore", sourcingControl.ignored, "fair"],
-                ["Decided", sourcingControl.decided, "decided"],
-                ["Blocked", sourcingControl.blocked, "all"],
-                ["High risk", sourcingControl.highRisk, "all"],
-                ["High match", sourcingControl.highMatch, "excellent"],
-                ["Average", `${sourcingControl.averageScore}%`, "all"],
+                [t("reviewLabel"), sourcingControl.reviewReady, "excellent"],
+                [t("manualLabel"), sourcingControl.manualTasks, "good"],
+                [t("metricSave"), sourcingControl.saveForLater, "good"],
+                [t("metricIgnore"), sourcingControl.ignored, "fair"],
+                [t("decisionLabel"), sourcingControl.decided, "decided"],
+                [t("blockedLabel"), sourcingControl.blocked, "all"],
+                [t("metricHighRisk"), sourcingControl.highRisk, "all"],
+                [t("metricHighMatch"), sourcingControl.highMatch, "excellent"],
+                [t("metricAverage"), `${sourcingControl.averageScore}%`, "all"],
               ].map(([label, value, tab]) => (
                 <button
                   key={String(label)}
@@ -990,7 +1009,7 @@ export default function JobSearch() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Search jobs, companies, skills..."
+                  placeholder={t("searchJobsPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-slate-800 border-slate-700"
@@ -1000,26 +1019,26 @@ export default function JobSearch() {
               <div className="flex flex-wrap gap-2">
                 <Select value={selectedJobType} onValueChange={(value) => setSelectedJobType(value as JobTypeFilter)}>
                   <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Job Type" />
+                    <SelectValue placeholder={t("jobTypeFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="full-time">Full-time</SelectItem>
-                    <SelectItem value="part-time">Part-time</SelectItem>
-                    <SelectItem value="contract">Contract</SelectItem>
-                    <SelectItem value="temporary">Temporary</SelectItem>
+                    <SelectItem value="all">{t("allJobTypes")}</SelectItem>
+                    <SelectItem value="full-time">{t("fullTime")}</SelectItem>
+                    <SelectItem value="part-time">{t("partTime")}</SelectItem>
+                    <SelectItem value="contract">{t("contract")}</SelectItem>
+                    <SelectItem value="temporary">{t("temporary")}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
                   <SelectTrigger className="w-[160px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Platform" />
+                    <SelectValue placeholder={t("platformFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Platforms</SelectItem>
+                    <SelectItem value="all">{t("allPlatforms")}</SelectItem>
                     {platformsData?.map((platform) => (
                       <SelectItem key={platform.id} value={platform.id.toString()}>
-                        {platform.name}{platform.discoveryPolicy?.mode === "automated" ? "" : " · Integration required"}
+                        {platform.name}{platform.discoveryPolicy?.mode === "automated" ? "" : ` - ${t("integrationRequired")}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1032,56 +1051,56 @@ export default function JobSearch() {
                     onCheckedChange={(checked) => setShowRemoteOnly(checked as boolean)}
                   />
                   <label htmlFor="remote" className="text-sm text-slate-300 cursor-pointer">
-                    Remote Only
+                     {t("remoteOnly")}
                   </label>
                 </div>
                 <Select value={selectedExperienceLevel} onValueChange={(value) => setSelectedExperienceLevel(value as JobExperienceLevel)}>
                   <SelectTrigger data-testid="job-filter-experience" className="w-[150px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Experience" />
+                    <SelectValue placeholder={t("experienceFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Levels</SelectItem>
-                    <SelectItem value="entry">Entry</SelectItem>
-                    <SelectItem value="junior">Junior</SelectItem>
-                    <SelectItem value="mid">Mid</SelectItem>
-                    <SelectItem value="senior">Senior</SelectItem>
-                    <SelectItem value="lead">Lead / Staff</SelectItem>
-                    <SelectItem value="executive">Executive</SelectItem>
+                    <SelectItem value="all">{t("allExperienceLevels")}</SelectItem>
+                    <SelectItem value="entry">{t("entryLevel")}</SelectItem>
+                    <SelectItem value="junior">{t("juniorLevel")}</SelectItem>
+                    <SelectItem value="mid">{t("midLevel")}</SelectItem>
+                    <SelectItem value="senior">{t("seniorLevel")}</SelectItem>
+                    <SelectItem value="lead">{t("leadLevel")}</SelectItem>
+                    <SelectItem value="executive">{t("executiveLevel")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={selectedApplicationProcess} onValueChange={(value) => setSelectedApplicationProcess(value as JobApplicationProcessFilter)}>
                   <SelectTrigger data-testid="job-filter-application-process" className="w-[150px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Application system" />
+                    <SelectValue placeholder={t("applicationSystemFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Systems</SelectItem>
+                    <SelectItem value="all">{t("allSystems")}</SelectItem>
                     <SelectItem value="greenhouse">Greenhouse</SelectItem>
                     <SelectItem value="lever">Lever</SelectItem>
                     <SelectItem value="workday">Workday</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="email">{t("emailLabel")}</SelectItem>
+                    <SelectItem value="other">{t("otherLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={listingSafety} onValueChange={(value) => setListingSafety(value as JobListingSafetyFilter)}>
                   <SelectTrigger data-testid="job-filter-listing-safety" className="w-[170px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Listing safety" />
+                    <SelectValue placeholder={t("listingSafetyFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="clear">No risk signals</SelectItem>
-                    <SelectItem value="review">Needs review</SelectItem>
-                    <SelectItem value="all">All non-blocked</SelectItem>
+                    <SelectItem value="clear">{t("noRiskSignals")}</SelectItem>
+                    <SelectItem value="review">{t("needsReview")}</SelectItem>
+                    <SelectItem value="all">{t("allNonBlocked")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={postedWithin} onValueChange={(value) => setPostedWithin(value as JobPostedWithin)}>
                   <SelectTrigger data-testid="job-filter-posted-within" className="w-[140px] bg-slate-800 border-slate-700">
-                    <SelectValue placeholder="Posted" />
+                    <SelectValue placeholder={t("postedFilter")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Any Date</SelectItem>
-                    <SelectItem value="1">Past 24 hours</SelectItem>
-                    <SelectItem value="3">Past 3 days</SelectItem>
-                    <SelectItem value="7">Past week</SelectItem>
-                    <SelectItem value="30">Past month</SelectItem>
+                    <SelectItem value="all">{t("anyDate")}</SelectItem>
+                    <SelectItem value="1">{t("past24Hours")}</SelectItem>
+                    <SelectItem value="3">{t("past3Days")}</SelectItem>
+                    <SelectItem value="7">{t("pastWeek")}</SelectItem>
+                    <SelectItem value="30">{t("pastMonth")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1089,17 +1108,17 @@ export default function JobSearch() {
 
             <div className="mt-4 pt-4 border-t border-slate-700">
               <div className="flex items-center justify-between gap-3 mb-2">
-                <span className="text-sm text-slate-400">Salary Range</span>
+                <span className="text-sm text-slate-400">{t("salaryRange")}</span>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-slate-300">
                     {selectedSalaryCurrency === "all"
-                      ? "Choose a currency"
+                      ? t("chooseCurrency")
                       : formatJobSalary(salaryRange[0], salaryRange[1], selectedSalaryCurrency, locale)}
                   </span>
                   {activeFilterCount > 0 && (
                     <Button data-testid="job-filter-clear" type="button" size="sm" variant="ghost" className="h-7 px-2 text-slate-300" onClick={resetFilters}>
                       <XCircle className="mr-1 h-3.5 w-3.5" />
-                      Clear {activeFilterCount}
+                      {t("clearFilters", { count: activeFilterCount })}
                     </Button>
                   )}
                 </div>
@@ -1109,7 +1128,7 @@ export default function JobSearch() {
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   data-testid="job-filter-location"
-                  placeholder="Location, region, or timezone"
+                  placeholder={t("jobLocationPlaceholder")}
                   value={selectedLocation}
                   onChange={(event) => setSelectedLocation(event.target.value)}
                   className="pl-10 bg-slate-800 border-slate-700"
@@ -1122,7 +1141,7 @@ export default function JobSearch() {
                   const value = event.target.value.trim().toUpperCase();
                   setSalaryCurrency(value);
                 }}
-                placeholder="Currency code, e.g. EUR"
+                placeholder={t("currencyCodePlaceholder")}
                 maxLength={3}
                 className="mb-3 bg-slate-800 border-slate-700 text-white"
               />
@@ -1137,10 +1156,10 @@ export default function JobSearch() {
               />
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
                 {[
-                  ["visa-sponsorship", "Visa sponsorship", visaSponsorshipOnly, setVisaSponsorshipOnly],
-                  ["open-hiring-support", "Open hiring support", openHiringSupportOnly, setOpenHiringSupportOnly],
-                  ["diversity-friendly", "Diversity-friendly", diversityFriendlyOnly, setDiversityFriendlyOnly],
-                  ["salary-disclosed", "Salary disclosed", salaryDisclosedOnly, setSalaryDisclosedOnly],
+                  ["visa-sponsorship", t("visaSponsorship"), visaSponsorshipOnly, setVisaSponsorshipOnly],
+                  ["open-hiring-support", t("openHiringSupport"), openHiringSupportOnly, setOpenHiringSupportOnly],
+                  ["diversity-friendly", t("diversityFriendly"), diversityFriendlyOnly, setDiversityFriendlyOnly],
+                  ["salary-disclosed", t("salaryDisclosed"), salaryDisclosedOnly, setSalaryDisclosedOnly],
                 ].map(([id, label, checked, setChecked]) => (
                   <div key={id as string} className="flex items-center gap-2">
                     <Checkbox
@@ -1160,22 +1179,22 @@ export default function JobSearch() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="h-auto flex-wrap justify-start bg-slate-800/50 border border-slate-700">
             <TabsTrigger value="all" className="data-[state=active]:bg-slate-700">
-              All Jobs ({filteredJobs.length})
+              {t("allJobsCount", { count: filteredJobs.length })}
             </TabsTrigger>
             <TabsTrigger value="excellent" className="data-[state=active]:bg-emerald-900/50">
               <Star className="w-4 h-4 mr-1 text-emerald-400" />
-              Excellent ({groupedJobs.excellent.length})
+              {t("excellentCount", { count: groupedJobs.excellent.length })}
             </TabsTrigger>
             <TabsTrigger value="good" className="data-[state=active]:bg-amber-900/50">
               <TrendingUp className="w-4 h-4 mr-1 text-amber-400" />
-              Good ({groupedJobs.good.length})
+              {t("goodCount", { count: groupedJobs.good.length })}
             </TabsTrigger>
             <TabsTrigger value="fair" className="data-[state=active]:bg-slate-700">
-              Fair ({groupedJobs.fair.length})
+              {t("fairCount", { count: groupedJobs.fair.length })}
             </TabsTrigger>
             <TabsTrigger value="decided" className="data-[state=active]:bg-cyan-900/50">
               <ClipboardCheck className="w-4 h-4 mr-1 text-cyan-400" />
-              Decided ({groupedJobs.decided.length})
+              {t("decidedCount", { count: groupedJobs.decided.length })}
             </TabsTrigger>
           </TabsList>
 
@@ -1193,7 +1212,7 @@ export default function JobSearch() {
                     ))}
                     {scoredJobs.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
-                        No jobs found matching your criteria
+                        {t("noMatchingJobs")}
                       </div>
                     )}
                   </div>
@@ -1207,8 +1226,8 @@ export default function JobSearch() {
                     {groupedJobs.excellent.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
                         <Sparkles className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-                        <p>No excellent matches yet</p>
-                        <p className="text-sm mt-2">Complete your profile to improve matching</p>
+                        <p>{t("noExcellentMatches")}</p>
+                        <p className="text-sm mt-2">{t("completeProfileForMatching")}</p>
                       </div>
                     )}
                   </div>
@@ -1238,7 +1257,7 @@ export default function JobSearch() {
                     {groupedJobs.decided.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
                         <ClipboardCheck className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-                        <p>No ledger decisions match the current filters</p>
+                        <p>{t("noLedgerDecisions")}</p>
                       </div>
                     )}
                   </div>
@@ -1252,7 +1271,7 @@ export default function JobSearch() {
                       disabled={jobsFetchingNextPage}
                     >
                       {jobsFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Load more jobs
+                      {t("loadMoreJobs")}
                     </Button>
                   </div>
                 )}
@@ -1271,11 +1290,11 @@ export default function JobSearch() {
                   <DialogDescription className="flex items-center gap-4 text-slate-400">
                     <span className="flex items-center gap-1">
                       <Building2 className="w-4 h-4" />
-                      {selectedJob.company || "Company"}
+                      {selectedJob.company || t("companyFallback")}
                     </span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-4 h-4" />
-                      {selectedJob.location || "Remote"}
+                      {selectedJob.location || t("remoteFallback")}
                     </span>
                   </DialogDescription>
                 </DialogHeader>
@@ -1286,7 +1305,7 @@ export default function JobSearch() {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={getMatchBadgeColor(selectedJob.matchScore)}>
                           <Target className="w-4 h-4 mr-1" />
-                          {selectedJob.matchScore}% Match
+                          {t("matchPercent", { score: selectedJob.matchScore })}
                         </Badge>
                         <Button
                           size="sm"
@@ -1295,7 +1314,7 @@ export default function JobSearch() {
                           disabled={matchMutation.isPending}
                         >
                           <Sparkles className="w-4 h-4 mr-1" />
-                          Recalculate
+                          {t("recalculate")}
                         </Button>
                       </div>
                     )}
@@ -1304,7 +1323,7 @@ export default function JobSearch() {
                       <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h4 className="text-sm font-medium text-slate-200">Match decision</h4>
+                            <h4 className="text-sm font-medium text-slate-200">{t("matchDecision")}</h4>
                             <p className="mt-1 text-sm text-slate-400">{selectedJobSummary.nextAction}</p>
                           </div>
                           <Badge variant="outline" className={getMatchBadgeColor(selectedJobSummary.matchScore)}>
@@ -1314,10 +1333,10 @@ export default function JobSearch() {
                         </div>
                         <div className="grid gap-2 text-xs text-slate-400 md:grid-cols-4">
                           {[
-                            ["Decision", selectedJobSummary.decisionLabel],
-                            ["Risk", selectedJobSummary.riskLevel],
-                            ["Salary", selectedJobSummary.salaryFit],
-                            ["Location", selectedJobSummary.locationFit],
+                            [t("decisionLabel"), getDecisionLabel(selectedJobSummary.recommendedDecision)],
+                            [t("riskHeading"), getRiskLabel(selectedJobSummary.riskLevel)],
+                            [t("salaryLabel"), getFitLabel(selectedJobSummary.salaryFit)],
+                            [t("locationLabel"), getFitLabel(selectedJobSummary.locationFit)],
                           ].map(([label, value]) => (
                             <div key={label} className="rounded border border-slate-700/70 bg-slate-900/60 p-2">
                               <div className="text-slate-500">{label}</div>
@@ -1333,17 +1352,17 @@ export default function JobSearch() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <div className="text-xs font-medium uppercase text-cyan-300">
-                                  Operating ledger decision
+                                   {t("operatingLedgerDecision")}
                                 </div>
                                 <p className="mt-1 text-sm text-slate-200">
-                                  {selectedJobSummary.ledgerDecisionLabel}
+                                  {getDecisionLabel(selectedJobSummary.ledgerDecision)}
                                   {selectedJobSummary.ledgerUpdatedAt
                                     ? ` ${t("recordedLabel")} ${selectedJobSummary.ledgerUpdatedAt.toLocaleDateString(locale)}`
                                     : ""}
                                 </p>
                               </div>
                               <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">
-                                {selectedJobSummary.ledgerDecision}
+                                {getDecisionLabel(selectedJobSummary.ledgerDecision)}
                               </Badge>
                             </div>
                             {selectedJobSummary.ledgerDecisionReason && (
@@ -1353,7 +1372,7 @@ export default function JobSearch() {
                             )}
                             {selectedJobSummary.ledgerReviewReason && (
                               <p className="mt-1 text-xs text-slate-400">
-                                Review context: {selectedJobSummary.ledgerReviewReason}
+                                {t("reviewContext", { context: selectedJobSummary.ledgerReviewReason })}
                               </p>
                             )}
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -1365,7 +1384,7 @@ export default function JobSearch() {
                                   onClick={() => handleDecisionLifecycleAction(selectedJob, "queue_review")}
                                 >
                                   <RefreshCw className="mr-2 h-4 w-4" />
-                                  Reopen Review
+                                  {t("reopenReview")}
                                 </Button>
                               )}
                               {selectedJobSummary.ledgerDecision !== "save" && (
@@ -1377,7 +1396,7 @@ export default function JobSearch() {
                                   onClick={() => handleDecisionLifecycleAction(selectedJob, "save")}
                                 >
                                   <Heart className="mr-2 h-4 w-4" />
-                                  Save for Later
+                                  {t("saveForLater")}
                                 </Button>
                               )}
                               {selectedJobSummary.ledgerDecision !== "ignore" && (
@@ -1390,7 +1409,7 @@ export default function JobSearch() {
                                   onClick={() => handleDecisionLifecycleAction(selectedJob, "ignore")}
                                 >
                                   <XCircle className="mr-2 h-4 w-4" />
-                                  Ignore
+                                  {t("ignoreAction")}
                                 </Button>
                               )}
                               <Button
@@ -1400,7 +1419,7 @@ export default function JobSearch() {
                                 onClick={() => setLocation("/review-queue")}
                               >
                                 <ClipboardCheck className="mr-2 h-4 w-4" />
-                                Review Queue
+                                {t("reviewQueue")}
                               </Button>
                             </div>
                           </div>
@@ -1427,43 +1446,43 @@ export default function JobSearch() {
                         )}
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <div>
-                            <div className="mb-2 text-xs font-medium text-slate-300">Matched skills</div>
+                            <div className="mb-2 text-xs font-medium text-slate-300">{t("matchedSkills")}</div>
                             <div className="flex flex-wrap gap-1">
                               {selectedJobSummary.matchedSkills.length > 0 ? selectedJobSummary.matchedSkills.map((skill) => (
                                 <Badge key={skill} variant="outline" className="border-emerald-500/30 text-emerald-300">
                                   {skill}
                                 </Badge>
                               )) : (
-                                <span className="text-xs text-slate-500">No direct skill evidence yet</span>
+                                <span className="text-xs text-slate-500">{t("noDirectSkillEvidence")}</span>
                               )}
                             </div>
                           </div>
                           <div>
-                            <div className="mb-2 text-xs font-medium text-slate-300">Missing / verify</div>
+                            <div className="mb-2 text-xs font-medium text-slate-300">{t("missingVerify")}</div>
                             <div className="flex flex-wrap gap-1">
                               {selectedJobSummary.missingSkills.length > 0 ? selectedJobSummary.missingSkills.map((skill) => (
                                 <Badge key={skill} variant="outline" className="border-amber-500/30 text-amber-300">
                                   {skill}
                                 </Badge>
                               )) : (
-                                <span className="text-xs text-slate-500">No missing skills detected from listing</span>
+                                <span className="text-xs text-slate-500">{t("noMissingSkills")}</span>
                               )}
                             </div>
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {["salaryFit", "locationFit"].map((key) => {
-                            const label = key === "salaryFit" ? "Salary fit" : "Location fit";
+                            const label = key === "salaryFit" ? t("salaryFit") : t("locationFit");
                             const fit = key === "salaryFit" ? selectedJobSummary.salaryFit : selectedJobSummary.locationFit;
                             return (
                               <Badge key={key} variant="outline" className={getFitBadgeClass(fit)}>
-                                {label}: {fit}
+                                {label}: {getFitLabel(fit)}
                               </Badge>
                             );
                           })}
                           {selectedJobSummary.remoteFit && (
                             <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
-                              Remote-compatible
+                              {t("remoteCompatible")}
                             </Badge>
                           )}
                         </div>
@@ -1491,18 +1510,18 @@ export default function JobSearch() {
                         className="border-l-2 border-cyan-400 bg-slate-800/40 py-2 pl-3"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium text-slate-200">Source coverage</p>
+                           <p className="text-sm font-medium text-slate-200">{t("sourceCoverage")}</p>
                           <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">
-                            {selectedJobSources.sources.length} linked sources
+                             {t("linkedSourcesCount", { count: selectedJobSources.sources.length })}
                           </Badge>
                         </div>
                         <p className="mt-1 text-xs text-slate-400">
-                          Hire.AI is showing one canonical listing while preserving every matched source for verification.
+                           {t("sourceCoverageDescription")}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1">
                           {selectedJobSources.sources.map((source) => (
                             <Badge key={source.id} variant="outline" className="border-slate-600 text-slate-300">
-                              {platformNameById.get(source.platformId) || `Platform #${source.platformId}`}
+                               {platformNameById.get(source.platformId) || t("platformNumber", { id: source.platformId })}
                             </Badge>
                           ))}
                         </div>
@@ -1511,7 +1530,7 @@ export default function JobSearch() {
 
                     {selectedJob.skills && (
                       <div>
-                        <h4 className="text-sm font-medium text-slate-300 mb-2">Required Skills</h4>
+                         <h4 className="text-sm font-medium text-slate-300 mb-2">{t("requiredSkills")}</h4>
                         <div className="flex flex-wrap gap-1">
                           {selectedJob.skills.split(",").map((skill: string, i: number) => (
                             <Badge key={i} variant="outline" className="text-xs border-slate-600">
@@ -1525,9 +1544,9 @@ export default function JobSearch() {
                     <Separator className="bg-slate-700" />
 
                     <div>
-                      <h4 className="text-sm font-medium text-slate-300 mb-2">Job Description</h4>
+                       <h4 className="text-sm font-medium text-slate-300 mb-2">{t("jobDescription")}</h4>
                       <p className="text-sm text-slate-400 whitespace-pre-wrap">
-                        {selectedJob.description || "No description available"}
+                         {selectedJob.description || t("noDescription")}
                       </p>
                     </div>
                   </div>
@@ -1542,7 +1561,7 @@ export default function JobSearch() {
                       disabled={decideMutation.isPending}
                     >
                       <Heart className="w-4 h-4 mr-1" />
-                      Save
+                       {t("saveForLater")}
                     </Button>
                     {getSafeExternalUrl(selectedJob.applicationUrl) && (
                       <Button
@@ -1551,13 +1570,13 @@ export default function JobSearch() {
                         onClick={() => openExternalUrl(selectedJob.applicationUrl)}
                       >
                         <ExternalLink className="w-4 h-4 mr-1" />
-                        View Original
+                         {t("viewOriginal")}
                       </Button>
                     )}
                   </div>
                   <Button
                     data-testid="job-prepare-or-resolve-evidence"
-                    title={preparationEvidenceGate?.detail || "Queue a controlled application review"}
+                     title={preparationEvidenceGate?.detail || t("queueControlledReview")}
                     onClick={() => handleApply(selectedJob)}
                     disabled={decideMutation.isPending}
                     className={preparationEvidenceGate
@@ -1572,12 +1591,12 @@ export default function JobSearch() {
                       <Send className="w-4 h-4 mr-2" />
                     )}
                     {preparationEvidenceGate
-                      ? "Resolve Evidence"
+                       ? t("resolveEvidence")
                       : selectedJobSummary?.recommendedDecision === "manual_apply"
-                      ? "Queue Manual Task"
+                       ? t("queueManualTask")
                       : selectedJobSummary?.recommendedDecision === "ignore"
-                        ? "Queue Exception Review"
-                        : "Queue Review"}
+                         ? t("queueExceptionReview")
+                         : t("queueReview")}
                   </Button>
                 </div>
               </>
