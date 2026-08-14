@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -42,6 +44,23 @@ function createAuthContext(): TrpcContext {
 }
 
 describe("platforms router", () => {
+  it("keeps public platform and status reads free of catalog initialization writes", () => {
+    const router = readFileSync(resolve(process.cwd(), "server", "routers.ts"), "utf8");
+    const database = readFileSync(resolve(process.cwd(), "server", "db.ts"), "utf8");
+    const runtime = readFileSync(resolve(process.cwd(), "server", "_core", "index.ts"), "utf8");
+    const manager = readFileSync(resolve(process.cwd(), "server", "scrapers", "scraperManager.ts"), "utf8");
+    const platformRouter = router.slice(router.indexOf("platforms: router"), router.indexOf("// Jobs"));
+    const discoveryStatus = database.slice(
+      database.indexOf("export async function getJobDiscoveryStatus"),
+      database.indexOf("export async function getActiveJobs")
+    );
+
+    expect(platformRouter).not.toContain("ensureScraperPlatformCatalog");
+    expect(discoveryStatus).not.toContain("ensureScraperPlatformCatalog");
+    expect(runtime).toContain("await ensureScraperPlatformCatalog()");
+    expect(manager).toContain("await ensureScraperPlatformCatalog()");
+  });
+
   it("should list all job platforms when the database is available, or return an empty list without DB", async () => {
     const caller = appRouter.createCaller(createPublicContext());
 

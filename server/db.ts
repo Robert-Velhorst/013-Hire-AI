@@ -725,7 +725,6 @@ const sampleDuplicateJobIds = new Set(sampleJobDuplicateLinks.map((link) => link
 export async function getJobDiscoveryStatus() {
   const now = new Date();
   const freshAfter = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  await ensureScraperPlatformCatalog();
   const db = await getDb();
   if (!db) {
     const trackedPlatforms = samplePlatforms.filter((platform) => platform.isActive === 1);

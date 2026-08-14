@@ -556,18 +556,16 @@ export const appRouter = router({
   // Job Platforms
   platforms: router({
     list: publicProcedure.query(async () => {
-      const { ensureScraperPlatformCatalog, getAllJobPlatforms } = await import("./db");
+      const { getAllJobPlatforms } = await import("./db");
       const { getPlatformDiscoveryPolicy } = await import("./scrapers/platformCatalog");
-      await ensureScraperPlatformCatalog();
       return (await getAllJobPlatforms()).map((platform) => ({
         ...platform,
         discoveryPolicy: getPlatformDiscoveryPolicy(platform.name),
       }));
     }),
     active: publicProcedure.query(async () => {
-      const { ensureScraperPlatformCatalog, getActiveJobPlatforms } = await import("./db");
+      const { getActiveJobPlatforms } = await import("./db");
       const { getPlatformDiscoveryPolicy } = await import("./scrapers/platformCatalog");
-      await ensureScraperPlatformCatalog();
       return (await getActiveJobPlatforms()).map((platform) => ({
         ...platform,
         discoveryPolicy: getPlatformDiscoveryPolicy(platform.name),
