@@ -27,6 +27,8 @@ npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3
 
 The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and verifies public `/readyz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
 
+The application trusts forwarded protocol and client metadata only when the immediate peer is loopback, which matches the local ngrok agent. Do not place another non-loopback reverse proxy between ngrok and Hire.AI without first extending and testing the explicit proxy-trust policy; forwarded headers from direct LAN or public clients are intentionally ignored.
+
 - Main sign-in: `https://hire-ai.example.ngrok.app/api/oauth/callback`
 - Account connectors: `https://hire-ai.example.ngrok.app/api/connectors/oauth/callback`
 - Stripe webhook: `https://hire-ai.example.ngrok.app/api/stripe/webhook`

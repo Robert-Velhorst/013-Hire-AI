@@ -646,3 +646,11 @@
 - Added one-year immutable caching for Vite fingerprinted assets while requiring app-shell and SPA-fallback revalidation, reducing repeat transfer without leaving clients on stale deployment entrypoints.
 - Added real loopback HTTP regressions proving oversized requests stop before route execution and production assets emit the intended cache headers, plus typed policy tests for every configured server limit.
 - Passed 245 test files / 1,210 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with 85 JavaScript chunks under the 350 KiB limit and 576,147 aggregate startup JavaScript bytes under the 600 KiB limit. Exact pushed-commit CI evidence follows at publication.
+
+## 2026-08-14 - Ngrok trusted-proxy and session-cookie pass
+
+- Replaced direct trust of any request-supplied `X-Forwarded-Proto` header with Express's explicit loopback-only trusted-proxy policy, matching the Windows launcher model where ngrok terminates TLS in a local process.
+- Prevented direct LAN/public peers from promoting arbitrary forwarded metadata into trusted HTTPS state while retaining secure-cookie behavior through a local ngrok tunnel.
+- Changed HTTPS session cookies from `SameSite=None` to `SameSite=Lax`; the top-level OAuth callback remains compatible while cross-site credential exposure and CSRF surface are reduced.
+- Added real HTTP and compiled trust-function regressions for loopback HTTPS forwarding and rejection of private/public network peers, plus cookie and logout coverage for secure/Lax behavior and untrusted header spoofing.
+- Passed 246 test files / 1,213 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact Windows, container, and pushed-commit CI evidence follows at publication.

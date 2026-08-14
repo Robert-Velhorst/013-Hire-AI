@@ -29,6 +29,7 @@ import { createDatabaseReadinessProbe } from "./databaseReadiness";
 import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostics";
 import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { registerApplicationBodyParsers } from "./bodyParsers";
+import { applyTrustedProxyPolicy } from "./proxyPolicy";
 
 let startupStage: StartupStage = "configuration validation";
 
@@ -40,6 +41,7 @@ async function startServer() {
   startupStage = "application assembly";
 
   const app = express();
+  applyTrustedProxyPolicy(app);
   const server = createServer(app);
   applyHttpRuntimePolicy(server);
   const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });

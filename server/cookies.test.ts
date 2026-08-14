@@ -5,8 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 describe("session cookie options", () => {
   it("uses lax cookies on local non-secure requests so browsers keep the session", () => {
     const options = getSessionCookieOptions({
-      protocol: "http",
-      headers: {},
+      secure: false,
     } as Request);
 
     expect(options).toMatchObject({
@@ -17,17 +16,25 @@ describe("session cookie options", () => {
     });
   });
 
-  it("uses none and secure on HTTPS requests for cross-site OAuth redirects", () => {
+  it("uses secure lax cookies on trusted HTTPS requests", () => {
     const options = getSessionCookieOptions({
-      protocol: "https",
-      headers: {},
+      secure: true,
     } as Request);
 
     expect(options).toMatchObject({
       httpOnly: true,
       path: "/",
-      sameSite: "none",
+      sameSite: "lax",
       secure: true,
     });
+  });
+
+  it("does not trust a forwarded protocol on an otherwise insecure request", () => {
+    const options = getSessionCookieOptions({
+      secure: false,
+      headers: { "x-forwarded-proto": "https" },
+    } as unknown as Request);
+
+    expect(options).toMatchObject({ secure: false, sameSite: "lax" });
   });
 });
