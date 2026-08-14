@@ -323,8 +323,8 @@ export default function AdminPanel() {
   const resolveReviewItem = trpc.admin.resolveReviewItem.useMutation({
     onSuccess: async (result) => {
       toast.success(result.erasurePlan
-        ? `Review recorded and erasure plan #${result.erasurePlan.run.id} created`
-        : "Review item updated");
+        ? ff("reviewPlanCreated", { id: result.erasurePlan.run.id })
+        : fc("reviewItemUpdated"));
       refetchReviewQueue();
       refetchStats();
       refetchOperatingCounts();
@@ -336,7 +336,7 @@ export default function AdminPanel() {
   });
   const executePrivacyErasureCleanup = trpc.admin.executePrivacyErasureCleanup.useMutation({
     onSuccess: async (result) => {
-      toast.success(`External cleanup finished with status ${result.status}`);
+      toast.success(ff("cleanupFinished", { status: statusLabel(result.status) }));
       setErasureCleanupConfirmation("");
       await refetchPrivacyErasurePlan();
     },
@@ -344,7 +344,7 @@ export default function AdminPanel() {
   });
   const confirmManualPrivacyCleanup = trpc.admin.confirmManualPrivacyCleanup.useMutation({
     onSuccess: async (_result, variables) => {
-      toast.success("Manual provider cleanup evidence recorded");
+      toast.success(fc("manualCleanupRecorded"));
       setManualCleanupEvidence((current) => ({ ...current, [variables.taskId]: "" }));
       await refetchPrivacyErasurePlan();
     },
@@ -352,7 +352,7 @@ export default function AdminPanel() {
   });
   const finalizePrivacyErasure = trpc.admin.finalizePrivacyErasure.useMutation({
     onSuccess: async () => {
-      toast.success("Database erasure completed transactionally");
+      toast.success(fc("databaseErasureCompleted"));
       setDatabaseErasureConfirmation("");
       await refetchPrivacyErasurePlan();
     },
@@ -1273,7 +1273,7 @@ export default function AdminPanel() {
                 <div className="space-y-4">
                   {reviewQueue?.map((item) => (
                     (() => {
-                      const evidence = getAdminReviewEvidenceSummary(item);
+                      const evidence = getAdminReviewEvidenceSummary(item, locale);
                       return (
                         <div
                           key={item.id}
@@ -1284,9 +1284,9 @@ export default function AdminPanel() {
                           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0 flex-1">
                               <div className="mb-2 flex flex-wrap items-center gap-2">
-                                <StatusBadge status={item.priority} />
-                                <StatusBadge status={item.category} />
-                                <span className="text-xs text-slate-500">{ff("entityReference", { entity: item.entityType, id: item.entityId })}</span>
+                                <StatusBadge status={item.priority} label={statusLabel(item.priority)} />
+                                <StatusBadge status={item.category} label={statusLabel(item.category)} />
+                                <span className="text-xs text-slate-500">{ff("entityReference", { entity: statusLabel(item.entityType), id: item.entityId })}</span>
                                 <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
                                   {evidence.label}
                                 </Badge>
@@ -1310,7 +1310,7 @@ export default function AdminPanel() {
                                           ? "border-amber-500/40 text-amber-300"
                                           : "border-slate-700 text-slate-300"}
                                   >
-                                    {evidence.risk}
+                                    {statusLabel(evidence.risk)}
                                   </Badge>
                                   {evidence.requiresManualDecision && (
                                     <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
@@ -1452,13 +1452,13 @@ export default function AdminPanel() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-cyan-400" />
-              Review Evidence
+              {fc("reviewEvidenceTitle")}
             </DialogTitle>
           </DialogHeader>
 
           {reviewEvidenceLoading ? (
             <div className="rounded-md border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-400">
-              Loading linked evidence...
+              {fc("loadingLinkedEvidence")}
             </div>
           ) : reviewEvidenceError ? (
             <div className="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
@@ -1468,12 +1468,12 @@ export default function AdminPanel() {
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Review item</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">{fc("reviewItem")}</div>
                   <div className="mt-1 font-medium text-white">{reviewEvidence.reviewItem.title}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <StatusBadge status={reviewEvidence.reviewItem.priority} />
-                    <StatusBadge status={reviewEvidence.reviewItem.category} />
-                    <StatusBadge status={reviewEvidence.reviewItem.status} />
+                    <StatusBadge status={reviewEvidence.reviewItem.priority} label={statusLabel(reviewEvidence.reviewItem.priority)} />
+                    <StatusBadge status={reviewEvidence.reviewItem.category} label={statusLabel(reviewEvidence.reviewItem.category)} />
+                    <StatusBadge status={reviewEvidence.reviewItem.status} label={statusLabel(reviewEvidence.reviewItem.status)} />
                   </div>
                   {reviewEvidence.reviewItem.description && (
                     <p className="mt-2 text-sm text-slate-400">{reviewEvidence.reviewItem.description}</p>
@@ -1481,13 +1481,13 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Job seeker</div>
-                  <div className="mt-1 font-medium text-white">{reviewEvidence.user?.name ?? "Unknown user"}</div>
-                  <div className="text-sm text-slate-400">{reviewEvidence.user?.email ?? "No email"}</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">{fc("jobSeeker")}</div>
+                  <div className="mt-1 font-medium text-white">{reviewEvidence.user?.name ?? fc("unknownUser")}</div>
+                  <div className="text-sm text-slate-400">{reviewEvidence.user?.email ?? fc("noEmail")}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <StatusBadge status={reviewEvidence.user?.accountStatus ?? "unknown"} />
+                    <StatusBadge status={reviewEvidence.user?.accountStatus ?? "unknown"} label={statusLabel(reviewEvidence.user?.accountStatus ?? "unknown")} />
                     <Badge variant="outline" className="border-slate-700 text-slate-300">
-                      ToS {reviewEvidence.user?.tosAcceptedAt ? "accepted" : "missing"}
+                      {fc(reviewEvidence.user?.tosAcceptedAt ? "tosAccepted" : "tosMissing")}
                     </Badge>
                   </div>
                 </div>
@@ -1495,12 +1495,12 @@ export default function AdminPanel() {
 
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 {[
-                  ["Decision", reviewEvidence.decision ? 1 : 0],
-                  ["Approvals", reviewEvidence.approvals.length],
-                  ["Attempts", reviewEvidence.attempts.length],
-                  ["Responses", reviewEvidence.employerResponses.length],
-                  ["Audit", reviewEvidence.auditEvents.length],
-                  ["Material", reviewEvidence.material ? 1 : 0],
+                  [fc("decision"), reviewEvidence.decision ? 1 : 0],
+                  [fc("approvals"), reviewEvidence.approvals.length],
+                  [fc("attempts"), reviewEvidence.attempts.length],
+                  [fc("responses"), reviewEvidence.employerResponses.length],
+                  [fc("audit"), reviewEvidence.auditEvents.length],
+                  [fc("material"), reviewEvidence.material ? 1 : 0],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
                     <div className="text-xs text-slate-500">{label}</div>
@@ -1516,31 +1516,31 @@ export default function AdminPanel() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-cyan-100">Retention and erasure preview</div>
+                      <div className="text-sm font-medium text-cyan-100">{fc("retentionPreview")}</div>
                       <p className="mt-1 text-sm text-slate-400">
-                        Read-only inventory. Previewing or resolving this review does not delete data.
+                        {fc("readOnlyInventory")}
                       </p>
                     </div>
                     {privacyErasurePreview?.policyVersion && (
                       <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
-                        Policy {privacyErasurePreview.policyVersion}
+                        {ff("policyVersion", { version: privacyErasurePreview.policyVersion })}
                       </Badge>
                     )}
                   </div>
 
                   {privacyErasurePreviewLoading ? (
-                    <p className="mt-3 text-sm text-slate-400">Counting user-owned records...</p>
+                    <p className="mt-3 text-sm text-slate-400">{fc("countingRecords")}</p>
                   ) : privacyErasurePreviewError ? (
                     <p className="mt-3 text-sm text-red-200">{privacyErasurePreviewError.message}</p>
                   ) : privacyErasurePreview?.available ? (
                     <>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                         {[
-                          ["Erase", privacyErasurePreview.summary.erase],
-                          ["Scrub and retain", privacyErasurePreview.summary.scrubAndRetain],
-                          ["Legally retained", privacyErasurePreview.summary.retain],
-                          ["Private object fields", privacyErasurePreview.summary.privateObjects],
-                          ["Provider revocations", privacyErasurePreview.summary.providerRevocations],
+                          [fc("erase"), privacyErasurePreview.summary.erase],
+                          [fc("scrubRetain"), privacyErasurePreview.summary.scrubAndRetain],
+                          [fc("legallyRetained"), privacyErasurePreview.summary.retain],
+                          [fc("privateObjectFields"), privacyErasurePreview.summary.privateObjects],
+                          [fc("providerRevocations"), privacyErasurePreview.summary.providerRevocations],
                         ].map(([label, value]) => (
                           <div key={label} className="rounded border border-slate-800 bg-slate-950/60 p-2">
                             <div className="text-xs text-slate-500">{label}</div>
@@ -1552,36 +1552,36 @@ export default function AdminPanel() {
                         {privacyErasurePreview.items.map((item) => (
                           <div key={item.table} className="grid gap-1 border-b border-slate-800 px-3 py-2 text-sm last:border-b-0 sm:grid-cols-[1fr_auto_auto] sm:items-center">
                             <span className="font-mono text-xs text-slate-300">{item.table}</span>
-                            <StatusBadge status={item.action} />
-                            <span className="text-slate-400">{item.recordCount} record{item.recordCount === 1 ? "" : "s"}</span>
+                            <StatusBadge status={item.action} label={statusLabel(item.action)} />
+                            <span className="text-slate-400">{ff("recordCount", { count: item.recordCount })}</span>
                           </div>
                         ))}
                       </div>
                       <p className="mt-3 text-xs text-amber-200">
-                        Resolving this review creates a non-destructive, itemized execution plan. It does not revoke providers, delete objects, or change user data.
+                        {fc("nonDestructivePlan")}
                       </p>
                       {privacyErasurePlan && (
                         <div className="mt-3 space-y-3 border-t border-cyan-500/20 pt-3" data-testid="privacy-erasure-plan">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
-                              <div className="text-sm font-medium text-white">Execution plan #{privacyErasurePlan.run.id}</div>
-                              <div className="text-xs text-slate-400">{privacyErasurePlan.tasks.length} itemized task{privacyErasurePlan.tasks.length === 1 ? "" : "s"}</div>
+                              <div className="text-sm font-medium text-white">{ff("executionPlan", { id: privacyErasurePlan.run.id })}</div>
+                              <div className="text-xs text-slate-400">{ff("itemizedTasks", { count: privacyErasurePlan.tasks.length })}</div>
                             </div>
-                            <StatusBadge status={privacyErasurePlan.run.status} />
+                            <StatusBadge status={privacyErasurePlan.run.status} label={statusLabel(privacyErasurePlan.run.status)} />
                           </div>
                           <div className="max-h-40 overflow-y-auto rounded border border-slate-800">
                             {privacyErasurePlan.tasks.map((task) => (
                               <div key={task.id} className="grid gap-1 border-b border-slate-800 px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center">
                                 <span className="text-slate-300">
-                                  {task.kind.replaceAll("_", " ")} - {task.provider ?? task.sourceTable}
+                                  {statusLabel(task.kind)} - {task.provider ?? task.sourceTable}
                                 </span>
-                                <StatusBadge status={task.status} />
+                                <StatusBadge status={task.status} label={statusLabel(task.status)} />
                               </div>
                             ))}
                           </div>
                           {["planned", "cleanup_in_progress", "failed"].includes(privacyErasurePlan.run.status) && (
                             <div className="space-y-2">
-                              <Label className="text-slate-300">External cleanup confirmation</Label>
+                              <Label className="text-slate-300">{fc("externalCleanupConfirmation")}</Label>
                               <code className="block break-all rounded bg-slate-950 px-2 py-1 text-xs text-cyan-200">
                                 {buildPrivacyCleanupConfirmation(privacyErasurePlan.run.userId, privacyErasurePlan.run.policyVersion)}
                               </code>
@@ -1590,7 +1590,7 @@ export default function AdminPanel() {
                                   value={erasureCleanupConfirmation}
                                   onChange={(event) => setErasureCleanupConfirmation(event.target.value)}
                                   className="border-slate-700 bg-slate-950 text-white"
-                                  aria-label="External cleanup confirmation"
+                                  aria-label={fc("externalCleanupConfirmation")}
                                 />
                                 <Button
                                   onClick={() => executePrivacyErasureCleanup.mutate({
@@ -1606,14 +1606,14 @@ export default function AdminPanel() {
                                   className="bg-red-700 hover:bg-red-800"
                                 >
                                   <Shield className="mr-2 h-4 w-4" />
-                                  Run cleanup
+                                  {fc("runCleanup")}
                                 </Button>
                               </div>
                             </div>
                           )}
                           {privacyErasurePlan.tasks.filter((task) => task.kind === "provider_revoke" && task.status === "blocked").map((task) => (
                             <div key={`manual-${task.id}`} className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
-                              <Label className="text-amber-100">Manual {task.provider} cleanup evidence</Label>
+                              <Label className="text-amber-100">{ff("manualCleanupEvidence", { provider: task.provider ?? "provider" })}</Label>
                               <Textarea
                                 value={manualCleanupEvidence[task.id] ?? ""}
                                 onChange={(event) => setManualCleanupEvidence((current) => ({ ...current, [task.id]: event.target.value }))}
@@ -1630,16 +1630,16 @@ export default function AdminPanel() {
                                 })}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />
-                                Confirm provider removal
+                                {fc("confirmProviderRemoval")}
                               </Button>
                             </div>
                           ))}
                           {privacyErasurePlan.run.status === "ready_for_database" && (
                             <div className="space-y-2 border-t border-red-500/20 pt-3">
                               <p className="text-xs text-amber-200">
-                                External cleanup is complete. This final action atomically erases product data, scrubs retained ledgers, pseudonymizes the account, and preserves regulated records.
+                                {fc("externalCleanupComplete")}
                               </p>
-                              <Label className="text-slate-300">Database erasure confirmation</Label>
+                              <Label className="text-slate-300">{fc("databaseErasureConfirmation")}</Label>
                               <code className="block break-all rounded bg-slate-950 px-2 py-1 text-xs text-red-200">
                                 {buildPrivacyDatabaseConfirmation(privacyErasurePlan.run.userId, privacyErasurePlan.run.policyVersion)}
                               </code>
@@ -1648,7 +1648,7 @@ export default function AdminPanel() {
                                   value={databaseErasureConfirmation}
                                   onChange={(event) => setDatabaseErasureConfirmation(event.target.value)}
                                   className="border-red-700/50 bg-slate-950 text-white"
-                                  aria-label="Database erasure confirmation"
+                                  aria-label={fc("databaseErasureConfirmation")}
                                 />
                                 <Button
                                   onClick={() => finalizePrivacyErasure.mutate({
@@ -1664,14 +1664,14 @@ export default function AdminPanel() {
                                   className="bg-red-800 hover:bg-red-900"
                                 >
                                   <Shield className="mr-2 h-4 w-4" />
-                                  Finalize erasure
+                                  {fc("finalizeErasure")}
                                 </Button>
                               </div>
                             </div>
                           )}
                           {privacyErasurePlan.run.status === "completed" && (
                             <p className="text-xs text-green-300">
-                              Erasure completed. Regulated records remain retained under the recorded policy with the account identity pseudonymized.
+                              {fc("erasureCompleted")}
                             </p>
                           )}
                         </div>
@@ -1688,24 +1688,24 @@ export default function AdminPanel() {
                 className="rounded-md border border-slate-800 bg-slate-950/50 p-3"
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-slate-300">Linked application</div>
-                  {reviewEvidence.application?.status && <StatusBadge status={reviewEvidence.application.status} />}
+                  <div className="text-sm font-medium text-slate-300">{fc("linkedApplication")}</div>
+                  {reviewEvidence.application?.status && <StatusBadge status={reviewEvidence.application.status} label={statusLabel(reviewEvidence.application.status)} />}
                 </div>
                 {reviewEvidence.application ? (
                   <div className="space-y-2">
                     <div>
                       <div className="font-medium text-white">
-                        {reviewEvidence.application.job?.title ?? `Application #${reviewEvidence.application.id}`}
+                        {reviewEvidence.application.job?.title ?? ff("applicationNumber", { id: reviewEvidence.application.id })}
                       </div>
                       <div className="text-sm text-slate-400">
-                        {reviewEvidence.application.job?.company ?? "Unknown company"} - {reviewEvidence.application.job?.location ?? "Unknown location"}
+                        {reviewEvidence.application.job?.company ?? fc("unknownCompany")} - {reviewEvidence.application.job?.location ?? fc("unknownLocation")}
                       </div>
                     </div>
-                    <p className="text-sm text-slate-400">{reviewEvidence.application.notes ?? "No application notes recorded."}</p>
+                    <p className="text-sm text-slate-400">{reviewEvidence.application.notes ?? fc("noApplicationNotes")}</p>
                   </div>
                 ) : (
                   <p className="text-sm text-orange-200">
-                    The review item points to an application record that could not be loaded for the linked user.
+                    {fc("linkedApplicationMissing")}
                   </p>
                 )}
               </div>}
@@ -1715,14 +1715,14 @@ export default function AdminPanel() {
                 className="rounded-md border border-slate-800 bg-slate-950/50 p-3"
               >
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-slate-300">Decision and policy</div>
+                  <div className="text-sm font-medium text-slate-300">{fc("decisionPolicy")}</div>
                   {reviewEvidence.decision ? (
                     <div className="flex flex-wrap gap-2">
-                      <StatusBadge status={reviewEvidence.decision.decision ?? "review"} />
-                      <StatusBadge status={reviewEvidence.decision.riskLevel ?? "medium"} />
+                      <StatusBadge status={reviewEvidence.decision.decision ?? "review"} label={statusLabel(reviewEvidence.decision.decision ?? "review")} />
+                      <StatusBadge status={reviewEvidence.decision.riskLevel ?? "medium"} label={statusLabel(reviewEvidence.decision.riskLevel ?? "medium")} />
                       {reviewEvidence.decision.matchScore != null && (
                         <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
-                          {reviewEvidence.decision.matchScore}% match
+                          {ff("matchPercent", { count: reviewEvidence.decision.matchScore })}
                         </Badge>
                       )}
                     </div>
@@ -1731,49 +1731,49 @@ export default function AdminPanel() {
                 {reviewEvidence.decision ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Decision reason</div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">{fc("decisionReason")}</div>
                       <p className="mt-1 text-sm text-slate-300">
-                        {reviewEvidence.decision.decisionReason || "No decision reason recorded."}
+                        {reviewEvidence.decision.decisionReason || fc("noDecisionReason")}
                       </p>
                     </div>
                     <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Review reason</div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">{fc("reviewReason")}</div>
                       <p className="mt-1 text-sm text-slate-300">
-                        {reviewEvidence.decision.reviewReason || "No review reason recorded."}
+                        {reviewEvidence.decision.reviewReason || fc("noReviewReason")}
                       </p>
                     </div>
                     <div className="rounded border border-slate-800 bg-slate-900/60 p-2 text-xs text-slate-400 md:col-span-2">
-                      Decided by {reviewEvidence.decision.decidedBy}. External action remains blocked until the approval gate and evidence checklist are resolved.
+                      {ff("decidedBy", { actor: reviewEvidence.decision.decidedBy ?? fc("unknown") })}
                     </div>
                   </div>
                 ) : (
                   <p className="text-sm text-slate-500">
-                    No application decision record is linked to this review item yet.
+                    {fc("noDecision")}
                   </p>
                 )}
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="mb-2 text-sm font-medium text-slate-300">Material and claims</div>
+                  <div className="mb-2 text-sm font-medium text-slate-300">{fc("materialClaims")}</div>
                   {reviewEvidence.material ? (
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-400">Cover letter</span>
+                        <span className="text-slate-400">{fc("coverLetter")}</span>
                         <span className={reviewEvidence.material.coverLetter ? "text-cyan-300" : "text-slate-500"}>
-                          {reviewEvidence.material.coverLetter ? "stored" : "missing"}
+                          {fc(reviewEvidence.material.coverLetter ? "stored" : "missing")}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-400">Custom answers</span>
+                        <span className="text-slate-400">{fc("customAnswers")}</span>
                         <span className={reviewEvidence.material.customAnswers ? "text-cyan-300" : "text-slate-500"}>
-                          {reviewEvidence.material.customAnswers ? "stored" : "missing"}
+                          {fc(reviewEvidence.material.customAnswers ? "stored" : "missing")}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-400">Supported claims</span>
+                        <span className="text-slate-400">{fc("supportedClaims")}</span>
                         <span className={reviewEvidence.material.claimsMade ? "text-cyan-300" : "text-slate-500"}>
-                          {reviewEvidence.material.claimsMade ? "stored" : "missing"}
+                          {fc(reviewEvidence.material.claimsMade ? "stored" : "missing")}
                         </span>
                       </div>
                       {reviewEvidence.material.claimsMade && (
@@ -1783,19 +1783,19 @@ export default function AdminPanel() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No prepared material is linked to this review item.</p>
+                    <p className="text-sm text-slate-500">{fc("noPreparedMaterial")}</p>
                   )}
                 </div>
 
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="mb-2 text-sm font-medium text-slate-300">Approval gates</div>
+                  <div className="mb-2 text-sm font-medium text-slate-300">{fc("approvalGates")}</div>
                   {reviewEvidence.approvals.length > 0 ? (
                     <div className="space-y-2">
                       {reviewEvidence.approvals.slice(0, 4).map((approval) => (
                         <div key={approval.id} className="rounded border border-slate-800 bg-slate-900/60 p-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={approval.status} />
-                            <StatusBadge status={approval.riskLevel} />
+                            <StatusBadge status={approval.status} label={statusLabel(approval.status)} />
+                            <StatusBadge status={approval.riskLevel} label={statusLabel(approval.riskLevel)} />
                             <span className="text-sm text-white">{approval.title}</span>
                           </div>
                           {approval.description && <p className="mt-1 text-xs text-slate-400">{approval.description}</p>}
@@ -1803,39 +1803,39 @@ export default function AdminPanel() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No approval gates are linked to this entity.</p>
+                    <p className="text-sm text-slate-500">{fc("noApprovalGates")}</p>
                   )}
                 </div>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="mb-2 text-sm font-medium text-slate-300">Submission attempts</div>
+                  <div className="mb-2 text-sm font-medium text-slate-300">{fc("submissionAttempts")}</div>
                   {reviewEvidence.attempts.length > 0 ? (
                     <div className="space-y-2">
                       {reviewEvidence.attempts.slice(0, 4).map((attempt) => (
                         <div key={attempt.id} className="rounded border border-slate-800 bg-slate-900/60 p-2 text-sm">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={attempt.status} />
-                            <span className="text-slate-300">{attempt.attemptType.replace(/_/g, " ")}</span>
+                            <StatusBadge status={attempt.status} label={statusLabel(attempt.status)} />
+                            <span className="text-slate-300">{statusLabel(attempt.attemptType)}</span>
                           </div>
                           {attempt.confirmationText && <p className="mt-1 text-xs text-slate-400">{attempt.confirmationText}</p>}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No submission attempt evidence has been recorded.</p>
+                    <p className="text-sm text-slate-500">{fc("noSubmissionAttempts")}</p>
                   )}
                 </div>
 
                 <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="mb-2 text-sm font-medium text-slate-300">Employer responses</div>
+                  <div className="mb-2 text-sm font-medium text-slate-300">{fc("employerResponses")}</div>
                   {reviewEvidence.employerResponses.length > 0 ? (
                     <div className="space-y-2">
                       {reviewEvidence.employerResponses.slice(0, 4).map((response) => (
                         <div key={response.id} className="rounded border border-slate-800 bg-slate-900/60 p-2 text-sm">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={response.responseType} />
+                            <StatusBadge status={response.responseType} label={statusLabel(response.responseType)} />
                             <span className="text-slate-400">{formatDate(response.receivedAt)}</span>
                           </div>
                           <p className="mt-1 text-xs text-slate-400">{response.summary}</p>
@@ -1843,7 +1843,7 @@ export default function AdminPanel() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No employer response is linked to this review item.</p>
+                    <p className="text-sm text-slate-500">{fc("noEmployerResponses")}</p>
                   )}
                 </div>
               </div>
@@ -1853,25 +1853,25 @@ export default function AdminPanel() {
                 className="rounded-md border border-slate-800 bg-slate-950/50 p-3"
               >
                 <div className="mb-2 text-sm font-medium text-slate-300">
-                  Audit trail ({reviewEvidence.auditEvents.length})
+                  {ff("auditTrail", { count: reviewEvidence.auditEvents.length })}
                 </div>
                 {reviewEvidence.auditEvents.length > 0 ? (
                   <div className="space-y-2">
                     {reviewEvidence.auditEvents.slice(0, 6).map((event) => (
                       <div key={event.id} className="border-l border-slate-700 pl-3 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
-                          <StatusBadge status={event.riskLevel} />
+                          <StatusBadge status={event.riskLevel} label={statusLabel(event.riskLevel)} />
                           <span className="font-medium text-white">{event.action}</span>
                           <span className="text-xs text-slate-500">{formatDate(event.createdAt)}</span>
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
-                          {event.actor} via {event.source ?? "unknown source"}
+                          {ff("actorVia", { actor: event.actor, source: event.source ?? fc("unknownSource") })}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500">No audit events are linked to this entity.</p>
+                  <p className="text-sm text-slate-500">{fc("noAuditEvents")}</p>
                 )}
               </div>
             </div>

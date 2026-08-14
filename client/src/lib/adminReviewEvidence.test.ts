@@ -88,4 +88,23 @@ describe("admin review evidence summary", () => {
     expect(summary.detail).toBe("Review custom queue item.");
     expect(summary.route).toBe("/admin");
   });
+
+  it("localizes generated policy guidance while preserving recorded descriptions", () => {
+    const privacy = getAdminReviewEvidenceSummary({
+      category: "privacy_deletion",
+      entityType: "user",
+      entityId: 81,
+      priority: "medium",
+    }, "nl");
+    const custom = getAdminReviewEvidenceSummary({
+      category: "custom",
+      description: "Provider evidence remains verbatim.",
+    }, "nl");
+
+    expect(privacy.label).toBe("Beoordeling privacyverwijdering");
+    expect(privacy.headline).toContain("gedocumenteerde bewaarplicht");
+    expect(privacy.risk).toBe("high");
+    expect(custom.label).toBe("Beoordelingsbewijs");
+    expect(custom.detail).toBe("Provider evidence remains verbatim.");
+  });
 });

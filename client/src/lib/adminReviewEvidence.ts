@@ -31,11 +31,13 @@ function entityRoute(item: AdminReviewEvidenceItemLike) {
 }
 
 export function getAdminReviewEvidenceSummary(
-  item: AdminReviewEvidenceItemLike
+  item: AdminReviewEvidenceItemLike,
+  locale: SupportedLocale = "en",
 ): AdminReviewEvidenceSummary {
   const risk = coerceRisk(item.priority);
   const route = entityRoute(item);
 
+  const summary: AdminReviewEvidenceSummary = (() => {
   switch (item.category) {
     case "application_review":
       return {
@@ -187,4 +189,52 @@ export function getAdminReviewEvidenceSummary(
         requiresManualDecision: true,
       };
   }
+  })();
+
+  if (locale === "en") return summary;
+
+  const dutch: Record<string, Pick<AdminReviewEvidenceSummary, "label" | "headline" | "detail" | "checklist">> = {
+    application_review: {
+      label: "Sollicitatiebewijs", headline: "Beoordeel sollicitatiematerialen voordat een externe actie plaatsvindt.", detail: "Bevestig dat het sollicitatieregister onderbouwde beweringen, voorbereid materiaal en de goedkeuringsstatus bevat en geen onbewezen indieningsclaim maakt.",
+      checklist: ["De voorbereide cv- of materiaalbron is zichtbaar.", "Beweringen worden ondersteund door profielbewijs.", "Goedkeuring voor indiening wacht of is expliciet besloten.", "Het controlespoor bevestigt dat niet voortijdig extern is ingediend."],
+    },
+    submission_evidence: {
+      label: "Indieningsbewijs", headline: "Verifieer deterministisch bewijs voordat een sollicitatie als ingediend wordt gemarkeerd.", detail: "Controleer bevestigingsgegevens van het portaal, ATS of e-mail voordat indieningsbewijs wordt geaccepteerd.",
+      checklist: ["Bevestigingsbron en tijdstip zijn vastgelegd.", "De bevestigings-URL of tekst identificeert de werkgever of sollicitatie.", "De sollicitatiestatus past bij het bewijs.", "Een controlegebeurtenis legt het bewijsbesluit vast."],
+    },
+    employer_response: {
+      label: "Werkgeversreactie", headline: "Classificeer de werkgeversreactie en stuur de volgende sollicitatiestap.", detail: "Scheid uitnodigingen, werkgeversvragen, afwijzingen en aanbiedingen voordat opvolgautomatisering doorgaat.",
+      checklist: ["De reactiebron is vastgelegd.", "Het reactietype past bij de berichtinhoud.", "Gespreks- of aanbiedingsprocessen staan zo nodig klaar.", "Routinematige opvolging is onderdrukt wanneer een direct antwoord behandeling vereist."],
+    },
+    offer_attribution: {
+      label: "Herkomst van aanbod", headline: "Bevestig herkomst via Hire.AI voordat succesvergoeding wordt gefactureerd.", detail: "Beoordeel bewijs van sollicitatie, reactie, gesprek en aanbod voordat factureringsverplichtingen worden aangemaakt of goedgekeurd.",
+      checklist: ["Bewijs van het aanbod is aanwezig en leesbaar.", "Het aanbod is herleidbaar tot een via Hire.AI gevonden sollicitatie of opvolging.", "Bewijs van salaris en startdatum ondersteunt de vergoedingsvoorwaarden.", "Toestemming en voorwaarden voor succesvergoeding zijn controleerbaar."],
+    },
+    verification_overdue: {
+      label: "Verificatie te laat", headline: "Beoordeel arbeidsverificatie voor opschorting of escalatie.", detail: "Gebruik vervaldata, respijttermijnen, eerder bewijs en accountcontext voordat handhaving plaatsvindt.",
+      checklist: ["Volgende verificatiedatum en einde van de respijttermijn zijn bekend.", "Recente verificatie-inzendingen zijn gecontroleerd.", "Accountherinneringen of notities zijn beoordeeld.", "Het besluit tot opschorting of escalatie is met reden vastgelegd."],
+    },
+    payment_failed: {
+      label: "Betalingsbewijs", headline: "Beoordeel de context van de mislukte betaling voordat de factureringsstatus wijzigt.", detail: "Controleer betalingsstatus, abonnementsstatus en beheernotities voor pauzeren, opschorten of escaleren.",
+      checklist: ["De mislukte betalingsregistratie en periode zijn zichtbaar.", "De abonnementsstatus is gecontroleerd.", "De accountstatus van de gebruiker is beoordeeld.", "De factureringsactie heeft een beheerreden."],
+    },
+    legal_escalation: {
+      label: "Juridisch bewijs", headline: "Bevestig het volledige controledossier voor juridische escalatie.", detail: "Juridische escalatie mag alleen volgen na beoordeling van acceptatie van voorwaarden, facturering, verificatiegeschiedenis en eerdere beheeracties.",
+      checklist: ["Acceptatie van voorwaarden en de succesvergoedingsplicht zijn herleidbaar.", "Facturering, betalingen en verificaties zijn beoordeeld.", "Eerdere waarschuwingen, notities en accountacties zijn zichtbaar.", "De escalatiereden is door een beheerder gedocumenteerd."],
+    },
+    employment_ended: {
+      label: "Bewijs einde dienstverband", headline: "Beoordeel de melding van einde dienstverband voordat succesvergoedingsplichten sluiten.", detail: "Controleer einddatum, abonnementsannulering, eindfacturering en arbeidsverificatie voordat de verplichting wordt opgelost.",
+      checklist: ["De gemelde einddatum is aannemelijk en vastgelegd.", "De annuleringsstatus van het Stripe-abonnement is zichtbaar.", "De laatste factureringsperiode en betalingen zijn gecontroleerd.", "Een controlegebeurtenis koppelt de gebruikersmelding aan beheerbeoordeling."],
+    },
+    privacy_deletion: {
+      label: "Beoordeling privacyverwijdering", headline: "Bepaal wat kan worden gewist en wat onder een gedocumenteerde bewaarplicht blijft.", detail: "Het oplossen van deze beoordeling legt alleen een beheerdersbesluit vast. Het verwijdert geen accountgegevens en omzeilt geen actieve facturering, geschillen, verificatie of juridische bewaarplicht.",
+      checklist: ["Bevestig dat het verzoek van de accounthouder is.", "Beoordeel actieve facturering, dienstverband, geschillen en juridische bewaarplichten.", "Identificeer providertoegang en privebestanden die kunnen worden ingetrokken of verwijderd.", "Leg de bewaarbasis en het afzonderlijke resterende uitvoeringswerk vast."],
+    },
+    default: {
+      label: "Beoordelingsbewijs", headline: "Controleer gekoppelde registraties voordat dit beheerpunt sluit.", detail: item.description || "Gebruik de gekoppelde entiteit, controlegeschiedenis en beschikbare notities voordat het punt wordt opgelost of afgewezen.",
+      checklist: ["De gekoppelde entiteitsregistratie is gecontroleerd.", "Relevante controlegebeurtenissen zijn beoordeeld.", "De besluitnotitie licht het besluit toe."],
+    },
+  };
+  return { ...summary, ...(dutch[item.category ?? "default"] ?? dutch.default) };
 }
+import type { SupportedLocale } from "@shared/localization";
