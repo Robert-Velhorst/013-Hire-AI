@@ -2,6 +2,29 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { getUserSuccessFeePage, getUserSuccessFeesForApplications, getUserSuccessFeeSummary } from "./db";
+import type { TrpcContext } from "./_core/context";
+import { successFeesRouter } from "./routers/successFees";
+
+function createContext(): TrpcContext {
+  return {
+    user: {
+      id: 987_654,
+      openId: "success-fee-pagination",
+      name: "Pagination User",
+      email: "pagination@example.local",
+      loginMethod: "test",
+      role: "user",
+      stripeCustomerId: null,
+      accountStatus: "active",
+      tosAcceptedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSignedIn: new Date(),
+    },
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: {} as TrpcContext["res"],
+  };
+}
 
 describe("success-fee operating window", () => {
   it("returns stable empty operating results without a configured database", async () => {
@@ -37,6 +60,19 @@ describe("success-fee operating window", () => {
     expect(billing).toContain("trpc.successFees.listMyFeePage.useInfiniteQuery");
     expect(billing).toContain("trpc.successFees.getMyFeeSummary.useQuery");
     expect(billing).toContain("Load older arrangements");
+  });
+
+  it("accepts the pagination direction added by tRPC infinite queries", async () => {
+    const caller = successFeesRouter.createCaller(createContext());
+
+    await expect(caller.listMyFeePage({ limit: 50, direction: "forward" })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    await expect(caller.getPaymentPage({ limit: 50, direction: "forward" })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
   });
 
   it("keeps the cursor and application indexes aligned with migration 0048", () => {

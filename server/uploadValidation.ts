@@ -4,8 +4,9 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
 
-const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
 const DEFAULT_SCAN_TIMEOUT_MS = 30_000;
 const MAX_SCANNER_RESPONSE_BYTES = 64 * 1024;
 let activeScans = 0;
@@ -231,16 +232,7 @@ export const RESUME_MIME_TYPES = new Set([
   "application/rtf",
 ]);
 
-export const VERIFICATION_MIME_TYPES = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/msword",
-  "text/plain",
-  "text/rtf",
-  "application/rtf",
-  "image/jpeg",
-  "image/png",
-]);
+export const VERIFICATION_MIME_TYPES = new Set<string>(VERIFICATION_UPLOAD_MIME_TYPES);
 
 export function sanitizeUploadFileName(fileName: string): string {
   const trimmed = fileName.trim().replace(/[/\\]/g, "_");

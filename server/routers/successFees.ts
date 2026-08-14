@@ -545,6 +545,7 @@ export const successFeesRouter = router({
     .input(z.object({
       limit: z.number().int().min(1).max(100).default(50),
       cursor: z.object({ createdAt: z.coerce.date(), id: z.number().int().positive() }).strict().optional(),
+      direction: z.enum(["forward", "backward"]).optional(),
     }).strict())
     .query(async ({ ctx, input }) => {
       const page = await getUserSuccessFeePage(ctx.user.id, input);
@@ -779,6 +780,7 @@ export const successFeesRouter = router({
     .input(z.object({
       limit: z.number().int().min(1).max(100).default(50),
       cursor: z.object({ createdAt: z.coerce.date(), id: z.number().int().positive() }).strict().optional(),
+      direction: z.enum(["forward", "backward"]).optional(),
     }).strict())
     .query(async ({ ctx, input }) => getUserFeePaymentPage(ctx.user.id, input)),
 

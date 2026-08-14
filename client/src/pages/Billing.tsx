@@ -20,9 +20,11 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { formatBillingCurrency, formatBillingDate, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
+import { getVerificationUploadMimeType, validateVerificationUpload, VERIFICATION_UPLOAD_ACCEPT } from "@shared/documentUploads";
+import { readFileAsBase64 } from "@/lib/documentUpload";
 import {
   DollarSign, FileText, CheckCircle, Clock, AlertTriangle,
-  XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck
+  XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck, PartyPopper
 } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
@@ -89,28 +91,60 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
   const [fileBase64, setFileBase64] = useState<string>("");
   const [documentType, setDocumentType] = useState<"paystub" | "employment_letter" | "bank_statement" | "other">("paystub");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileReadIdRef = useRef(0);
 
   const submitVerification = trpc.successFees.submitVerification.useMutation({
     onSuccess: () => {
       toast.success("Verification document submitted successfully!");
+      fileReadIdRef.current += 1;
+      setFile(null);
+      setFileBase64("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       onSuccess();
       onOpenChange(false);
     },
     onError: (err) => toast.error(err.message || "Failed to submit verification"),
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resetUpload = () => {
+    fileReadIdRef.current += 1;
+    setFile(null);
+    setFileBase64("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) resetUpload();
+    onOpenChange(nextOpen);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { toast.error("File must be under 10MB"); return; }
-    setFile(f);
-    const reader = new FileReader();
-    reader.onload = (ev) => setFileBase64((ev.target?.result as string).split(",")[1]);
-    reader.readAsDataURL(f);
+    const readId = ++fileReadIdRef.current;
+    setFile(null);
+    setFileBase64("");
+    const validationError = validateVerificationUpload(f);
+    if (validationError) {
+      toast.error(validationError);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const base64 = await readFileAsBase64(f);
+      if (readId !== fileReadIdRef.current) return;
+      setFile(f);
+      setFileBase64(base64);
+    } catch (error) {
+      if (readId === fileReadIdRef.current) {
+        toast.error(error instanceof Error ? error.message : "Unable to read the selected file.");
+        e.target.value = "";
+      }
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md bg-[#0d1117] border-[#21262d] text-white">
         <DialogHeader>
           <DialogTitle>Submit Verification Document</DialogTitle>
@@ -146,15 +180,15 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
             ) : (
               <div className="text-gray-500">
                 <Upload className="w-6 h-6 mx-auto mb-1" />
-                <p className="text-sm">Click to upload PDF or image</p>
+                <p className="text-sm">Click to upload a document or image</p>
               </div>
             )}
           </div>
-          <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={handleFileChange} className="hidden" />
+          <input ref={fileInputRef} type="file" accept={VERIFICATION_UPLOAD_ACCEPT} onChange={handleFileChange} className="hidden" />
 
           <Button
-            onClick={() => submitVerification.mutate({ successFeeId, documentBase64: fileBase64, documentType, documentFileName: file?.name ?? "document.pdf", documentMimeType: file?.type ?? "application/pdf" })}
-            disabled={!file || submitVerification.isPending}
+            onClick={() => submitVerification.mutate({ successFeeId, documentBase64: fileBase64, documentType, documentFileName: file!.name, documentMimeType: getVerificationUploadMimeType(file!)! })}
+            disabled={!file || !fileBase64 || submitVerification.isPending}
             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
           >
             {submitVerification.isPending ? "Uploading..." : "Submit Verification"}
@@ -347,7 +381,7 @@ export default function Billing() {
               }}
               className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-black font-semibold gap-1.5 sm:flex-none"
             >
-              🎉 Report a Hire
+              <PartyPopper className="h-4 w-4" /> Report a Hire
             </Button>
           </div>
         </div>

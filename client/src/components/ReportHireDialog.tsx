@@ -14,10 +14,12 @@ import {
 } from "@/lib/reportHireEvidence";
 import { openExternalUrl } from "@/lib/externalUrl";
 import { toast } from "sonner";
-import { Upload, FileText, CheckCircle, AlertCircle, Briefcase, DollarSign, Calendar } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, Briefcase, DollarSign, Calendar, PartyPopper } from "lucide-react";
 import { useLocale } from "@/contexts/LocaleContext";
 import { formatBillingCurrency, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
 import { DEFAULT_BILLING_CURRENCY, MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES, type SupportedBillingCurrency } from "@shared/billing";
+import { getVerificationUploadMimeType, validateVerificationUpload, VERIFICATION_UPLOAD_ACCEPT } from "@shared/documentUploads";
+import { readFileAsBase64 } from "@/lib/documentUpload";
 
 interface ReportHireDialogProps {
   open: boolean;
@@ -41,6 +43,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
   const [offerLetterBase64, setOfferLetterBase64] = useState<string>("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileReadIdRef = useRef(0);
   const { data: applications = [] } = trpc.applications.listAcceptedOffers.useQuery(
     { applicationId },
     { enabled: open }
@@ -102,28 +105,30 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
   });
   const completionSummary = getReportHireCompletionSummary(reportHire.data);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("File size must be under 10MB");
+    const readId = ++fileReadIdRef.current;
+    setOfferLetter(null);
+    setOfferLetterBase64("");
+    const validationError = validateVerificationUpload(file);
+    if (validationError) {
+      toast.error(validationError);
+      e.target.value = "";
       return;
     }
 
-    const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Please upload a PDF or image file");
-      return;
-    }
-
-    setOfferLetter(file);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64 = (e.target?.result as string).split(",")[1];
+    try {
+      const base64 = await readFileAsBase64(file);
+      if (readId !== fileReadIdRef.current) return;
+      setOfferLetter(file);
       setOfferLetterBase64(base64);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      if (readId === fileReadIdRef.current) {
+        toast.error(error instanceof Error ? error.message : "Unable to read the selected file.");
+        e.target.value = "";
+      }
+    }
   };
 
   const handleSubmit = () => {
@@ -164,7 +169,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       startDate: formData.startDate,
       applicationId: selectedApplicationId,
       offerLetterBase64,
-      offerLetterMimeType: offerLetter!.type,
+      offerLetterMimeType: getVerificationUploadMimeType(offerLetter!)!,
       offerLetterFileName: offerLetter!.name,
       termsAccepted: true,
     });
@@ -173,6 +178,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
   const monthlyFee = formData.monthlySalary ? (parseFloat(formData.monthlySalary) * 0.05).toFixed(2) : "0.00";
 
   const handleClose = () => {
+    fileReadIdRef.current += 1;
     setStep("form");
     setFormData({
       employerName: "",
@@ -183,6 +189,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
     });
     setOfferLetter(null);
     setOfferLetterBase64("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setTermsAccepted(false);
     setSelectedApplicationId(applicationId);
     reportHire.reset();
@@ -196,7 +203,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
-                <span>🎉</span> Congratulations! You Got Hired!
+                <PartyPopper className="h-5 w-5 text-cyan-300" /> Congratulations! You Got Hired!
               </DialogTitle>
               <DialogDescription className="text-gray-400">
                 Tell us about your new job so we can set up your success fee arrangement.
@@ -378,7 +385,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                   ) : (
                     <div className="text-gray-500">
                       <Upload className="w-6 h-6 mx-auto mb-1" />
-                      <p className="text-sm">Click to upload PDF or image</p>
+                      <p className="text-sm">Click to upload a document or image</p>
                       <p className="text-xs mt-0.5">Max 10MB</p>
                     </div>
                   )}
@@ -386,7 +393,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  accept={VERIFICATION_UPLOAD_ACCEPT}
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -395,7 +402,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
               <Button
                 onClick={handleSubmit}
                 className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
-                disabled={!formData.employerName || !formData.jobTitle || !formData.monthlySalary || !offerLetter}
+                disabled={!formData.employerName || !formData.jobTitle || !formData.monthlySalary || !offerLetter || !offerLetterBase64}
               >
                 Continue to Terms
               </Button>
