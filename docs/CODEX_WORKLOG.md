@@ -509,3 +509,10 @@
 - Preserved employer-provided response evidence and provider error details verbatim, while replacing the corrupted offer-letter separator and keeping Stripe cancellation fail-closed before any local closure mutation.
 - Verified the Dutch Billing page, verification dialog, and employment-end evidence panel in the in-app browser with localized dates, no horizontal overflow, and no console warnings or errors.
 - Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Job Search interaction and resource pass
+
+- Replaced React deferral with a cancellation-safe 250 ms server-query debounce so rapid search and filter changes no longer create avoidable catalog reads while immediate client-side filtering keeps the interface responsive.
+- Replaced the render-local `JobCard` component type with a stable render path so parent state changes do not remount every visible listing, and corrected legitimate zero-percent match display.
+- Separated keyboard-accessible job-detail and save actions, kept the save action visible on touch layouts, added localized accessible names, and made the detail footer responsive.
+- Verified Job Search cards and the job-detail dialog in the in-app browser with no nested interactive controls, horizontal overflow, console warnings, or errors.

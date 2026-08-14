@@ -20,7 +20,14 @@ describe("public job catalog pagination integrity", () => {
     const page = source("client/src/pages/JobSearch.tsx");
 
     expect(page).toContain("trpc.jobs.listPage.useInfiniteQuery");
-    expect(page).toContain("{ limit: 50, filters: deferredJobSearchFilters }");
+    expect(page).toContain("{ limit: 50, filters: serverJobSearchFilters }");
+    expect(page).toContain("window.setTimeout(() => setServerJobSearchFilters(jobSearchFilters), 250)");
+    expect(page).toContain("window.clearTimeout(timer)");
+    expect(page).toContain("const renderJobCard = (job: any, showMatchScore = true)");
+    expect(page).not.toContain("const JobCard =");
+    expect(page).toContain("job.matchScore != null");
+    expect(page).toContain('aria-label={t("openJobDetails"');
+    expect(page).toContain('aria-label={t("saveJobForReview"');
     expect(page).toContain("page.items");
     expect(page).toContain("Load more jobs");
     expect(page).not.toContain("limit: 250");

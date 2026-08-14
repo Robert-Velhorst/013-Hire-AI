@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -132,7 +132,12 @@ export default function JobSearch() {
     showRemoteOnly,
     visaSponsorshipOnly,
   ]);
-  const deferredJobSearchFilters = useDeferredValue(jobSearchFilters);
+  const [serverJobSearchFilters, setServerJobSearchFilters] = useState(jobSearchFilters);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setServerJobSearchFilters(jobSearchFilters), 250);
+    return () => window.clearTimeout(timer);
+  }, [jobSearchFilters]);
 
   // The API applies the same canonical filter contract before pagination.
   const {
@@ -143,7 +148,7 @@ export default function JobSearch() {
     fetchNextPage: fetchMoreJobs,
     refetch: refetchJobs,
   } = trpc.jobs.listPage.useInfiniteQuery(
-    { limit: 50, filters: deferredJobSearchFilters },
+    { limit: 50, filters: serverJobSearchFilters },
     { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined }
   );
   const jobsList = useMemo(
@@ -584,23 +589,34 @@ export default function JobSearch() {
     current: "border-emerald-500/40 bg-emerald-500/10 text-emerald-100",
   }[discoveryControl.status];
 
-  const JobCard = ({ job, showMatchScore = true }: { job: any; showMatchScore?: boolean }) => {
+  const renderJobCard = (job: any, showMatchScore = true) => {
     const listingDate = getJobListingDate(job);
     const listingSafetyAssessment = assessListingSafety(job);
 
     return (
       <Card
-      data-testid="job-card"
-      data-job-id={job.id}
-      className="group hover:border-cyan-500/50 transition-all duration-300 cursor-pointer bg-slate-900/50 border-slate-700/50"
-      onClick={() => setSelectedJob(job)}
-    >
+        key={job.id}
+        data-testid="job-card"
+        data-job-id={job.id}
+        className="group cursor-pointer border-slate-700/50 bg-slate-900/50 transition-all duration-300 hover:border-cyan-500/50"
+        onClick={() => setSelectedJob(job)}
+      >
       <CardContent className="p-4">
         <div className="flex justify-between items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-white truncate">{job.title}</h3>
-              {showMatchScore && job.matchScore && (
+              <button
+                type="button"
+                aria-label={t("openJobDetails", { title: job.title, company: job.company || t("companyFallback") })}
+                className="min-w-0 truncate text-left font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedJob(job);
+                }}
+              >
+                <h3 className="truncate">{job.title}</h3>
+              </button>
+              {showMatchScore && job.matchScore != null && (
                 <Badge variant="outline" className={getMatchBadgeColor(job.matchScore)}>
                   <Target className="w-3 h-3 mr-1" />
                   {job.matchScore}%
@@ -610,11 +626,11 @@ export default function JobSearch() {
             <div className="flex items-center gap-3 text-sm text-slate-400 mb-2">
               <span className="flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
-                {job.company || "Company"}
+                {job.company || t("companyFallback")}
               </span>
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3" />
-                {job.location || "Remote"}
+                {job.location || t("remoteFallback")}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -687,7 +703,8 @@ export default function JobSearch() {
             <Button
               size="sm"
               variant="outline"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label={t("saveJobForReview", { title: job.title })}
+              className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 handleSaveJob(job);
@@ -1172,7 +1189,7 @@ export default function JobSearch() {
                 <TabsContent value="all" className="mt-0">
                   <div className="grid gap-3">
                     {scoredJobs.map((job: any) => (
-                      <JobCard key={job.id} job={job} showMatchScore={false} />
+                      renderJobCard(job, false)
                     ))}
                     {scoredJobs.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
@@ -1185,7 +1202,7 @@ export default function JobSearch() {
                 <TabsContent value="excellent" className="mt-0">
                   <div className="grid gap-3">
                     {groupedJobs.excellent.map((job: any) => (
-                      <JobCard key={job.id} job={job} />
+                      renderJobCard(job)
                     ))}
                     {groupedJobs.excellent.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
@@ -1200,7 +1217,7 @@ export default function JobSearch() {
                 <TabsContent value="good" className="mt-0">
                   <div className="grid gap-3">
                     {groupedJobs.good.map((job: any) => (
-                      <JobCard key={job.id} job={job} />
+                      renderJobCard(job)
                     ))}
                   </div>
                 </TabsContent>
@@ -1208,7 +1225,7 @@ export default function JobSearch() {
                 <TabsContent value="fair" className="mt-0">
                   <div className="grid gap-3">
                     {groupedJobs.fair.map((job: any) => (
-                      <JobCard key={job.id} job={job} />
+                      renderJobCard(job)
                     ))}
                   </div>
                 </TabsContent>
@@ -1216,7 +1233,7 @@ export default function JobSearch() {
                 <TabsContent value="decided" className="mt-0">
                   <div className="grid gap-3" data-testid="job-decided-tab">
                     {groupedJobs.decided.map((job: any) => (
-                      <JobCard key={job.id} job={job} />
+                      renderJobCard(job)
                     ))}
                     {groupedJobs.decided.length === 0 && (
                       <div className="text-center py-12 text-slate-400">
@@ -1265,7 +1282,7 @@ export default function JobSearch() {
 
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4">
-                    {selectedJob.matchScore && (
+                    {selectedJob.matchScore != null && (
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={getMatchBadgeColor(selectedJob.matchScore)}>
                           <Target className="w-4 h-4 mr-1" />
@@ -1516,8 +1533,8 @@ export default function JobSearch() {
                   </div>
                 </ScrollArea>
 
-                <div className="flex justify-between items-center pt-4 border-t border-slate-700">
-                  <div className="flex gap-2">
+                <div className="flex flex-col gap-3 border-t border-slate-700 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"

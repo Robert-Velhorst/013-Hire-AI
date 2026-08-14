@@ -95,6 +95,8 @@ describe("localization wiring", () => {
       expect(source).not.toContain(".toLocaleString()");
     }
     expect(jobSearch).toContain("formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, locale)");
+    expect(jobSearch).toContain('aria-label={t("openJobDetails"');
+    expect(jobSearch).toContain('aria-label={t("saveJobForReview"');
     expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)");
     expect(applications).toContain("<AppHeader />");
     expect(reviewQueue).toContain('t("completedLabel")');
