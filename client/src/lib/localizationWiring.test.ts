@@ -129,6 +129,9 @@ describe("localization wiring", () => {
     expect(applications).toContain('t("recentAuditTrail")');
     expect(applications).toContain('t("followUpsHeading")');
     expect(applications).toContain('t("submissionApprovalWithStatus"');
+    expect(applications).toContain('t("resumeVersionEvidence"');
+    expect(applications).toContain('t("profileSkillEvidence"');
+    expect(applications).toContain("selectedMaterialEvidence.profileEvidence.salaryCurrency");
     expect(applications).toContain("const renderApplicationCard = (application: any)");
     expect(applications).not.toContain("const ApplicationCard =");
     expect(applications).not.toContain(">Record Employer Response<");
@@ -142,6 +145,8 @@ describe("localization wiring", () => {
     expect(applications).not.toContain(">Recent employer responses<");
     expect(applications).not.toContain(">Recent audit trail<");
     expect(applications).not.toContain(">Record Response<");
+    expect(applications).not.toContain("selectedMaterialEvidence?.resumeLabel");
+    expect(applications).not.toContain("selectedMaterialEvidence?.coverLetterLabel");
     expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
@@ -156,6 +161,7 @@ describe("localization wiring", () => {
     expect(translate("nl", "offerSuccessFeeControl")).toContain("succesvergoeding");
     expect(translate("nl", "applicationLedgerCounts", { attempts: 1, responses: 2, prep: 0, audit: 3 })).toContain("2 recente reacties");
     expect(translate("nl", "followUpSentThrough", { provider: "Gmail" })).toContain("Gmail");
+    expect(translate("nl", "profileSkillEvidence", { skill: "TypeScript" })).toContain("TypeScript");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

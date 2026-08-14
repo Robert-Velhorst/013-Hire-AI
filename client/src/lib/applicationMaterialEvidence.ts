@@ -9,21 +9,25 @@ export interface ApplicationMaterialEvidenceInput {
 
 export interface ApplicationMaterialEvidenceSummary {
   hasMaterial: boolean;
-  source: string;
-  resumeLabel: string;
-  coverLetterLabel: string;
+  source: string | null;
+  resumeState: "version" | "custom_text" | "profile_linked" | "missing";
+  resumeVersion: number | null;
+  coverLetterStored: boolean;
   customAnswerCount: number;
   customAnswerLabels: string[];
   supportSignals: string[];
+  supportedSkills: string[];
   blockers: string[];
-  honestyNote: string;
+  honestyNote: string | null;
   profileEvidence: {
     skills: string | null;
     experience: string | null;
     education: string | null;
     targetRoles: string | null;
     targetLocations: string | null;
-    salaryRange: string | null;
+    salaryMinimum: number | null;
+    salaryMaximum: number | null;
+    salaryCurrency: string;
     resumeConnected: boolean;
   };
 }
@@ -87,16 +91,6 @@ function getProfileRecord(snapshot: Record<string, unknown> | null): Record<stri
   return getNestedRecord(snapshot, "profile") || snapshot;
 }
 
-function salaryRange(profile: Record<string, unknown> | null) {
-  const min = numberValue(profile, "salaryExpectationMin");
-  const max = numberValue(profile, "salaryExpectationMax");
-  const formatSalary = (value: number) => value.toLocaleString("en-US");
-  if (min && max) return `$${formatSalary(min)} - $${formatSalary(max)}`;
-  if (min) return `$${formatSalary(min)}+`;
-  if (max) return `Up to $${formatSalary(max)}`;
-  return null;
-}
-
 export function getApplicationMaterialEvidenceSummary(
   material?: ApplicationMaterialEvidenceInput | null
 ): ApplicationMaterialEvidenceSummary {
@@ -114,15 +108,13 @@ export function getApplicationMaterialEvidenceSummary(
     : [];
   const supportSignals = [
     ...reasons,
-    ...supportedSkills.map((skill) => `Profile skill: ${skill}`),
     ...textClaims,
     ...automationNotes.filter((note) => !/unsupported|requires manual|must be connected/i.test(note)),
   ].map((item) => compactText(item)).filter(Boolean) as string[];
   const source = firstNonEmpty(
     stringValue(customAnswers, "source"),
-    stringValue(sourceProfileSnapshot, "source"),
-    material?.sourceProfileSnapshot ? "profile snapshot" : null
-  ) || "application material";
+    stringValue(sourceProfileSnapshot, "source")
+  );
   const resumeConnected = Boolean(
     material?.resumeId ||
     material?.customResume ||
@@ -132,23 +124,24 @@ export function getApplicationMaterialEvidenceSummary(
   return {
     hasMaterial: Boolean(material),
     source,
-    resumeLabel: material?.resumeId
-      ? `Resume version #${material.resumeId}`
+    resumeState: material?.resumeId
+      ? "version"
       : material?.customResume
-        ? "Custom resume text stored"
+        ? "custom_text"
         : resumeConnected
-          ? "Profile resume linked"
-          : "No resume evidence linked",
-    coverLetterLabel: material?.coverLetter ? "Cover letter stored" : "No cover letter stored",
+          ? "profile_linked"
+          : "missing",
+    resumeVersion: material?.resumeId ?? null,
+    coverLetterStored: Boolean(material?.coverLetter),
     customAnswerCount: customAnswerLabels.length,
     customAnswerLabels,
     supportSignals: Array.from(new Set(supportSignals)).slice(0, 6),
+    supportedSkills: Array.from(new Set(supportedSkills)).slice(0, 6),
     blockers: blockers.map((item) => compactText(item)).filter(Boolean).slice(0, 6) as string[],
     honestyNote: firstNonEmpty(
       stringValue(claimsMade, "note"),
-      material?.claimsMade && !claimsMade ? compactText(material.claimsMade) : null,
-      "Only profile-backed claims should be used in external applications."
-    ) || "Only profile-backed claims should be used in external applications.",
+      material?.claimsMade && !claimsMade ? compactText(material.claimsMade) : null
+    ),
     profileEvidence: {
       skills: compactText(stringValue(profile, "skills")),
       experience: compactText(stringValue(profile, "experience")),
@@ -161,7 +154,9 @@ export function getApplicationMaterialEvidenceSummary(
         stringValue(profile, "desiredLocations"),
         stringValue(profile, "targetLocations")
       )),
-      salaryRange: salaryRange(profile),
+      salaryMinimum: numberValue(profile, "salaryExpectationMin"),
+      salaryMaximum: numberValue(profile, "salaryExpectationMax"),
+      salaryCurrency: stringValue(profile, "salaryExpectationCurrency") || "USD",
       resumeConnected,
     },
   };

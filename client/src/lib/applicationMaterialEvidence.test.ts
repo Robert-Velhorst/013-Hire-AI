@@ -31,6 +31,7 @@ describe("application material evidence summary", () => {
           desiredLocations: "remote, worldwide",
           salaryExpectationMin: 90000,
           salaryExpectationMax: 130000,
+          salaryExpectationCurrency: "EUR",
           resumeUrl: "https://example.com/resume.pdf",
           resumeFileKey: "resumes/42/resume.pdf",
         },
@@ -38,7 +39,7 @@ describe("application material evidence summary", () => {
     });
 
     expect(summary.source).toBe("autonomousService");
-    expect(summary.coverLetterLabel).toBe("Cover letter stored");
+    expect(summary.coverLetterStored).toBe(true);
     expect(summary.customAnswerCount).toBe(3);
     expect(summary.supportSignals).toContain("3 required skills match the profile");
     expect(summary.supportSignals).toContain(
@@ -47,7 +48,9 @@ describe("application material evidence summary", () => {
     expect(summary.blockers).toContain("Resume is required before autonomous submission");
     expect(summary.honestyNote).toBe("No qualifications were fabricated.");
     expect(summary.profileEvidence.skills).toContain("React");
-    expect(summary.profileEvidence.salaryRange).toBe("$90,000 - $130,000");
+    expect(summary.profileEvidence.salaryMinimum).toBe(90000);
+    expect(summary.profileEvidence.salaryMaximum).toBe(130000);
+    expect(summary.profileEvidence.salaryCurrency).toBe("EUR");
     expect(summary.profileEvidence.resumeConnected).toBe(true);
   });
 
@@ -74,8 +77,8 @@ describe("application material evidence summary", () => {
       }),
     });
 
-    expect(summary.supportSignals).toContain("Profile skill: TypeScript");
-    expect(summary.supportSignals).toContain("Profile skill: AWS");
+    expect(summary.supportedSkills).toEqual(["TypeScript", "AWS"]);
+    expect(summary.supportSignals).not.toContain("Profile skill: TypeScript");
     expect(summary.honestyNote).toContain("Only profile-backed skills");
   });
 
@@ -83,9 +86,12 @@ describe("application material evidence summary", () => {
     const summary = getApplicationMaterialEvidenceSummary(null);
 
     expect(summary.hasMaterial).toBe(false);
-    expect(summary.resumeLabel).toBe("No resume evidence linked");
+    expect(summary.resumeState).toBe("missing");
+    expect(summary.resumeVersion).toBeNull();
     expect(summary.supportSignals).toEqual([]);
     expect(summary.blockers).toEqual([]);
     expect(summary.profileEvidence.resumeConnected).toBe(false);
+    expect(summary.profileEvidence.salaryCurrency).toBe("USD");
+    expect(summary.honestyNote).toBeNull();
   });
 });

@@ -645,6 +645,26 @@ export default function Applications() {
   const getFollowUpStateLabel = (followUp: any) =>
     followUp.responseReceived ? t("responseState") : followUp.sentDate ? t("sentState") : t("draftState");
 
+  const getResumeEvidenceLabel = () => {
+    if (!selectedMaterialEvidence) return t("resumeEvidenceMissingLabel");
+    switch (selectedMaterialEvidence.resumeState) {
+      case "version":
+        return t("resumeVersionEvidence", { version: selectedMaterialEvidence.resumeVersion || 0 });
+      case "custom_text":
+        return t("customResumeStored");
+      case "profile_linked":
+        return t("profileResumeLinked");
+      default:
+        return t("resumeEvidenceMissingLabel");
+    }
+  };
+
+  const getCustomAnswerLabel = (label: string) => ({
+    action: t("applicationActionLabel"),
+    atsType: t("applicationSystemFilter"),
+    automationSupported: t("automationSupportLabel"),
+  } as Record<string, string>)[label] || label.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
+
   const getApplicationDateLabel = (application: any) => {
     const date = application.appliedDate || application.createdAt;
     const prefix = application.status === "pending" ? t("queuedLabel") : t("appliedLabel");
@@ -1922,9 +1942,9 @@ export default function Applications() {
                                     {t("preparedMaterial")}
                                   </div>
                                   <div className="grid gap-2 text-sm text-slate-400">
-                                    <div>{t("resumeLabel")}: {selectedMaterialEvidence?.resumeLabel}</div>
-                                    <div>{selectedMaterialEvidence?.coverLetterLabel}</div>
-                                    <div>{t("sourceLabel")}: {selectedMaterialEvidence?.source}</div>
+                                    <div>{t("resumeLabel")}: {getResumeEvidenceLabel()}</div>
+                                    <div>{selectedMaterialEvidence?.coverLetterStored ? t("coverLetterStored") : t("coverLetterNotStored")}</div>
+                                    <div>{t("sourceLabel")}: {selectedMaterialEvidence?.source || t("sourceNotRecorded")}</div>
                                     {(selectedMaterialEvidence?.customAnswerCount || 0) > 0 && (
                                       <div>
                                         {t("customAnswersCaptured", { count: selectedMaterialEvidence?.customAnswerCount || 0 })}
@@ -1938,12 +1958,18 @@ export default function Applications() {
                                         <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                                           {t("supportedClaims")}
                                         </div>
-                                        {selectedMaterialEvidence.supportSignals.length > 0 ? (
+                                        {selectedMaterialEvidence.supportSignals.length > 0 || selectedMaterialEvidence.supportedSkills.length > 0 ? (
                                           <div className="space-y-2">
                                             {selectedMaterialEvidence.supportSignals.map((signal) => (
                                               <div key={signal} className="flex items-start gap-2 text-sm text-slate-300">
                                                 <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                                                 <span>{signal}</span>
+                                              </div>
+                                            ))}
+                                            {selectedMaterialEvidence.supportedSkills.map((skill) => (
+                                              <div key={`skill-${skill}`} className="flex items-start gap-2 text-sm text-slate-300">
+                                                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                                                <span>{t("profileSkillEvidence", { skill })}</span>
                                               </div>
                                             ))}
                                           </div>
@@ -1987,10 +2013,19 @@ export default function Applications() {
                                         <div>{t("educationLabel")}: {selectedMaterialEvidence.profileEvidence.education || t("notCaptured")}</div>
                                         <div>{t("targetRolesLabel")}: {selectedMaterialEvidence.profileEvidence.targetRoles || t("notCaptured")}</div>
                                         <div>{t("targetLocationsLabel")}: {selectedMaterialEvidence.profileEvidence.targetLocations || t("notCaptured")}</div>
-                                        <div>{t("salaryRange")}: {selectedMaterialEvidence.profileEvidence.salaryRange || t("notCaptured")}</div>
+                                        <div>{t("salaryRange")}: {
+                                          selectedMaterialEvidence.profileEvidence.salaryMinimum || selectedMaterialEvidence.profileEvidence.salaryMaximum
+                                            ? formatJobSalary(
+                                                selectedMaterialEvidence.profileEvidence.salaryMinimum,
+                                                selectedMaterialEvidence.profileEvidence.salaryMaximum,
+                                                selectedMaterialEvidence.profileEvidence.salaryCurrency,
+                                                locale
+                                              )
+                                            : t("notCaptured")
+                                        }</div>
                                       </div>
                                       <p className="mt-3 border-t border-slate-700 pt-3 text-sm text-slate-300">
-                                        {selectedMaterialEvidence.honestyNote}
+                                        {selectedMaterialEvidence.honestyNote || t("profileBackedClaimsOnly")}
                                       </p>
                                     </div>
                                   )}
@@ -1998,7 +2033,7 @@ export default function Applications() {
                                     <div className="mt-3 flex flex-wrap gap-2">
                                       {selectedMaterialEvidence?.customAnswerLabels.map((label) => (
                                         <Badge key={label} variant="outline" className="border-slate-600 text-slate-300">
-                                          {label.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim()}
+                                          {getCustomAnswerLabel(label)}
                                         </Badge>
                                       ))}
                                     </div>

@@ -551,3 +551,10 @@
 - Preserved cover-letter text, employer summaries, interview-preparation content, delivery confirmations and failures, provider references, and audit actor/action records verbatim as user/provider evidence.
 - Updated ledger and follow-up pagination wiring contracts to require translation keys and verified the seeded Dutch offer history in the in-app browser; its enforced compact width was 780 pixels with no horizontal overflow.
 - Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Structured material evidence and currency pass
+
+- Refactored the client material-evidence helper to return locale-neutral resume state, cover-letter state, supported skills, raw salary bounds, and recorded salary currency instead of English presentation strings.
+- Fixed salary evidence that previously rendered every profile expectation as USD with an English number format; Applications now uses the account locale and snapshot currency with legacy USD fallback only when old evidence lacks currency.
+- Localized resume and cover-letter evidence, supported-skill prefixes, default honesty guidance, and known custom-answer classifications while preserving recorded claims, blockers, source names, and user/provider evidence verbatim.
+- Verified the seeded Dutch prepared-application evidence panel and compact layout in the in-app browser, and passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, production build/budget, dependency audit, doctor, and patch-integrity checks.
