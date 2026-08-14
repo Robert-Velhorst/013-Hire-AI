@@ -26,6 +26,24 @@ export function createViteConfig(command: "build" | "serve"): UserConfig {
     build: {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            const moduleId = id.replaceAll("\\", "/");
+            if (!moduleId.includes("/node_modules/")) return undefined;
+            const packagePath = moduleId.slice(
+              moduleId.lastIndexOf("/node_modules/") + "/node_modules/".length,
+            );
+            if (["react/", "react-dom/", "scheduler/"].some((name) => packagePath.startsWith(name))) {
+              return "vendor-react";
+            }
+            if (["@trpc/", "@tanstack/", "superjson/"].some((name) => packagePath.startsWith(name))) {
+              return "vendor-data";
+            }
+            return undefined;
+          },
+        },
+      },
     },
     server: {
       host: true,

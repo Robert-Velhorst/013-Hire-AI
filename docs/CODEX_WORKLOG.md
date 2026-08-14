@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-14 - Cache-stable production browser bundles
+
+- Split the 577,363-byte browser entry into a 284,254-byte application entry plus independently cacheable React and data-client runtimes while leaving route-specific UI dependencies lazy.
+- Added build gates limiting every JavaScript chunk to 350 KiB and aggregate eagerly loaded JavaScript to 600 KiB; measured startup JavaScript remained slightly lower at 576,147 bytes instead of 577,363 bytes.
+- Removed 2,355 lines of unreferenced component-showcase and source-backup code from the TypeScript project. Development and production-bundle browser checks rendered the landing page, switched EN to NL, and reported no console warnings or errors.
+
 ## 2026-08-14 - Deterministic admin fee query plans
 
 - Split the admin success-fee page into an indexed, deterministic ID window followed by a bounded user-details join, preventing MySQL from choosing a user-scoped index for the global page.
