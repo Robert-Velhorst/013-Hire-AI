@@ -196,31 +196,31 @@ export default function Profile() {
   });
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => {
-      toast.success("Profile evidence saved");
+      toast.success(t("profileEvidenceSaved"));
       profileQuery.refetch();
       evidenceReadinessQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Failed to save profile evidence"),
+    onError: (error) => toast.error(error.message || t("failedSaveProfileEvidence")),
   });
   const updatePublicSocialProfiles = trpc.social.updatePublicProfiles.useMutation({
     onSuccess: async () => {
-      toast.success("Public social links saved");
+      toast.success(t("publicSocialLinksSaved"));
       await publicSocialProfilesQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Failed to save public social links"),
+    onError: (error) => toast.error(error.message || t("failedSavePublicSocialLinks")),
   });
   const startConnectorOAuth = trpc.connectors.startOAuth.useMutation({
     onSuccess: (result) => {
       window.location.assign(result.authorizationUrl);
     },
-    onError: (error) => toast.error(error.message || "Unable to start connector authorization"),
+    onError: (error) => toast.error(error.message || t("unableStartConnectorAuthorization")),
   });
   const requestConnectorConnection = trpc.connectors.requestConnection.useMutation({
     onSuccess: async (result) => {
-      toast.success(result.message || "Connector request recorded");
+      toast.success(t(result.requiresOAuth ? "connectorRequestNeedsOAuth" : "connectorRequestNeedsSource"));
       await evidenceReadinessQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to record connector request"),
+    onError: (error) => toast.error(error.message || t("unableRecordConnectorRequest")),
   });
   const disconnectConnector = trpc.connectors.disconnect.useMutation({
     onSuccess: async (result) => {
@@ -233,22 +233,22 @@ export default function Profile() {
       }
       await evidenceReadinessQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to disable connector access"),
+    onError: (error) => toast.error(error.message || t("unableDisableConnectorAccess")),
   });
   const discoverCloudDocuments = trpc.profile.discoverCloudDocuments.useMutation({
     onSuccess: (result) => {
       setCloudResumeDocuments(result.documents);
       toast.success(
         result.documents.length === 1
-          ? "Found 1 supported cloud resume"
-          : `Found ${result.documents.length} supported cloud resumes`
+          ? t("foundCloudResume")
+          : t("foundCloudResumes", { count: result.documents.length })
       );
     },
-    onError: (error) => toast.error(error.message || "Unable to discover cloud documents"),
+    onError: (error) => toast.error(error.message || t("unableDiscoverCloudDocuments")),
   });
   const importCloudResume = trpc.profile.importCloudResume.useMutation({
     onSuccess: async ({ resume }) => {
-      toast.success(`Cloud resume imported as version ${resume.version}`);
+      toast.success(t("cloudResumeImported", { version: resume.version }));
       setCloudResumeDocuments([]);
       await Promise.all([
         profileQuery.refetch(),
@@ -257,67 +257,67 @@ export default function Profile() {
         resumeVersionsQuery.refetch(),
       ]);
     },
-    onError: (error) => toast.error(error.message || "Unable to import this cloud resume"),
+    onError: (error) => toast.error(error.message || t("unableImportCloudResume")),
   });
   const discoverGitHubProfile = trpc.profile.discoverGitHubProfile.useMutation({
     onSuccess: (candidate) => {
       setGitHubProfileCandidate(candidate);
       setSelectedGitHubRepositoryUrls([]);
-      toast.success("GitHub profile ready for review");
+      toast.success(t("githubProfileReady"));
     },
-    onError: (error) => toast.error(error.message || "Unable to discover this GitHub profile"),
+    onError: (error) => toast.error(error.message || t("unableDiscoverGitHubProfile")),
   });
   const discoverLinkedInIdentity = trpc.profile.discoverLinkedInIdentity.useMutation({
     onSuccess: async (candidate) => {
       setLinkedInIdentityCandidate(candidate);
-      toast.success("LinkedIn identity ready for review");
+      toast.success(t("linkedInIdentityReady"));
       await evidenceReadinessQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to discover this LinkedIn identity"),
+    onError: (error) => toast.error(error.message || t("unableDiscoverLinkedInIdentity")),
   });
   const importGitHubProfile = trpc.profile.importGitHubProfile.useMutation({
     onSuccess: async ({ addedSkills }) => {
       toast.success(
         addedSkills.length === 1
-          ? "1 GitHub-backed skill added to your profile"
-          : `${addedSkills.length} GitHub-backed skills added to your profile`
+          ? t("githubSkillAdded")
+          : t("githubSkillsAdded", { count: addedSkills.length })
       );
       setGitHubProfileCandidate(null);
       setSelectedGitHubRepositoryUrls([]);
       await Promise.all([profileQuery.refetch(), evidenceReadinessQuery.refetch()]);
     },
-    onError: (error) => toast.error(error.message || "Unable to import this GitHub profile"),
+    onError: (error) => toast.error(error.message || t("unableImportGitHubProfile")),
   });
   const discoverInboxResponses = trpc.applications.discoverInboxResponses.useMutation({
     onSuccess: async (result) => {
       toast.success(
         result.candidates.length === 1
-          ? "Found 1 application-linked inbox response"
-          : `Found ${result.candidates.length} application-linked inbox responses`
+          ? t("foundInboxResponse")
+          : t("foundInboxResponses", { count: result.candidates.length })
       );
       await inboxResponseCandidatesQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to discover inbox responses"),
+    onError: (error) => toast.error(error.message || t("unableDiscoverInboxResponses")),
   });
   const ingestInboxResponse = trpc.applications.ingestInboxResponse.useMutation({
     onSuccess: async (result) => {
-      if (!result.existing) toast.success("Employer response recorded in the application ledger");
+      if (!result.existing) toast.success(t("employerResponseRecorded"));
       setInboxResponseTypeOverrides({});
       await inboxResponseCandidatesQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to record this inbox response"),
+    onError: (error) => toast.error(error.message || t("unableRecordInboxResponse")),
   });
   const dismissInboxResponseCandidate = trpc.applications.dismissInboxResponseCandidate.useMutation({
     onSuccess: async () => {
-      toast.success("Inbox response candidate dismissed");
+      toast.success(t("inboxResponseDismissed"));
       setInboxResponseTypeOverrides({});
       await inboxResponseCandidatesQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to dismiss this inbox response candidate"),
+    onError: (error) => toast.error(error.message || t("unableDismissInboxResponse")),
   });
   const parseResumeFile = trpc.resume.parseFile.useMutation({
     onSuccess: async ({ resume }) => {
-      toast.success(`Resume imported as version ${resume.version}. Profile details were refreshed for review.`);
+      toast.success(t("resumeImported", { version: resume.version }));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -325,15 +325,15 @@ export default function Profile() {
         resumeVersionsQuery.refetch(),
       ]);
     },
-    onError: (error) => toast.error(error.message || "Unable to import this resume"),
+    onError: (error) => toast.error(error.message || t("unableImportResume")),
   });
   const setActiveResume = trpc.resume.setActiveVersion.useMutation({
     onSuccess: async ({ success }) => {
       if (!success) {
-        toast.error("Unable to activate that resume version");
+        toast.error(t("unableActivateResume"));
         return;
       }
-      toast.success("Active resume updated");
+      toast.success(t("activeResumeUpdated"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -341,15 +341,15 @@ export default function Profile() {
         resumeVersionsQuery.refetch(),
       ]);
     },
-    onError: (error) => toast.error(error.message || "Unable to activate that resume version"),
+    onError: (error) => toast.error(error.message || t("unableActivateResume")),
   });
   const deleteResumeVersion = trpc.resume.deleteVersion.useMutation({
     onSuccess: async ({ success }) => {
       if (!success) {
-        toast.error("Unable to delete that resume version");
+        toast.error(t("unableDeleteResume"));
         return;
       }
-      toast.success("Resume version deleted");
+      toast.success(t("resumeVersionDeleted"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -357,7 +357,7 @@ export default function Profile() {
         resumeVersionsQuery.refetch(),
       ]);
     },
-    onError: (error) => toast.error(error.message || "Unable to delete that resume version"),
+    onError: (error) => toast.error(error.message || t("unableDeleteResume")),
   });
   const deleteWorkExperience = trpc.profile.deleteWorkExperience.useMutation({
     onSuccess: async () => {
@@ -470,12 +470,12 @@ export default function Profile() {
 
     const mimeType = getResumeMimeType(file);
     if (!mimeType) {
-      toast.error("Choose a PDF, DOCX, TXT, or RTF resume.");
+      toast.error(t("invalidResumeType"));
       e.target.value = "";
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("Resume files must be 10MB or smaller.");
+      toast.error(t("resumeTooLarge"));
       e.target.value = "";
       return;
     }
@@ -587,15 +587,15 @@ export default function Profile() {
     const minimum = parseOptionalSalary(salaryMinimum);
     const maximum = parseOptionalSalary(salaryMaximum);
     if (minimum === undefined || maximum === undefined) {
-      toast.error("Salary expectations must be whole, non-negative numbers.");
+      toast.error(t("salaryWholeNumbers"));
       return;
     }
     if (minimum !== null && maximum !== null && minimum > maximum) {
-      toast.error("Maximum salary must be at least the minimum salary.");
+      toast.error(t("salaryMaximumInvalid"));
       return;
     }
     if (!/^[A-Za-z]{3}$/.test(salaryCurrency.trim())) {
-      toast.error("Use a three-letter ISO salary currency code.");
+      toast.error(t("salaryCurrencyInvalid"));
       return;
     }
 
@@ -850,21 +850,21 @@ export default function Profile() {
                       {githubProfileCandidate.name || githubProfileCandidate.username}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Public GitHub evidence only. Review languages before adding them to your profile.
+                      {t("publicGitHubEvidence")}
                     </p>
                   </div>
                   <Badge variant="outline" className="border-slate-600 text-slate-300">
-                    {githubProfileCandidate.publicRepositoryCount} public repositories
+                    {t("publicRepositories", { count: githubProfileCandidate.publicRepositoryCount })}
                   </Badge>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {githubProfileCandidate.suggestedSkills.length > 0 ? githubProfileCandidate.suggestedSkills.map((skill) => (
                     <Badge key={skill} variant="outline" className="border-cyan-500/40 text-cyan-200">{skill}</Badge>
-                  )) : <span className="text-xs text-slate-500">No repository languages were available to add.</span>}
+                  )) : <span className="text-xs text-slate-500">{t("noRepositoryLanguages")}</span>}
                 </div>
                 {githubProfileCandidate.repositories.length > 0 && (
                   <div className="space-y-2 border-t border-slate-800 pt-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Repository evidence for the import audit</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("repositoryImportEvidence")}</p>
                     {githubProfileCandidate.repositories.map((repository) => (
                       <label key={repository.url} className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-800 px-3 py-2 text-sm text-slate-300">
                         <Checkbox
@@ -874,7 +874,7 @@ export default function Profile() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-white">{repository.name}</span>
                           <span className="block text-xs text-slate-500">
-                            {repository.language || "No primary language"}{repository.description ? ` - ${repository.description}` : ""}
+                            {repository.language || t("noPrimaryLanguage")}{repository.description ? ` - ${repository.description}` : ""}
                           </span>
                         </span>
                       </label>
@@ -888,7 +888,7 @@ export default function Profile() {
                     disabled={importGitHubProfile.isPending}
                   >
                     {importGitHubProfile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                    Import reviewed skills
+                    {t("importReviewedSkills")}
                   </Button>
                 </div>
               </div>
@@ -897,17 +897,17 @@ export default function Profile() {
               <div data-testid="linkedin-identity-candidate" className="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
                 <div>
                   <p className="text-sm font-medium text-white">
-                    {linkedInIdentityCandidate.name || "LinkedIn account"}
+                    {linkedInIdentityCandidate.name || t("linkedInAccount")}
                   </p>
                   {linkedInIdentityCandidate.email ? (
                     <p className="mt-1 text-xs text-slate-400">{linkedInIdentityCandidate.email}</p>
                   ) : null}
                 </div>
                 <Badge variant="outline" className="border-slate-600 text-slate-300">
-                  {linkedInIdentityCandidate.emailVerified ? "Email confirmed" : "Identity connected"}
+                  {linkedInIdentityCandidate.emailVerified ? t("emailConfirmed") : t("identityConnected")}
                 </Badge>
                 <p className="basis-full text-xs text-slate-500">
-                  LinkedIn account identity is available. Add professional evidence through a profile URL or reviewed profile text.
+                  {t("linkedInIdentityAvailable")}
                 </p>
               </div>
             ) : null}
@@ -916,14 +916,14 @@ export default function Profile() {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("inboxResponseCandidates")}</p>
                   <span className="text-xs text-slate-500">
-                    {inboxResponseCandidates.length} of {inboxResponseCandidatesQuery.data?.total ?? inboxResponseCandidates.length}
+                    {t("resultsOfTotal", { shown: inboxResponseCandidates.length, total: inboxResponseCandidatesQuery.data?.total ?? inboxResponseCandidates.length })}
                   </span>
                 </div>
                 {inboxResponseCandidates.map((candidate) => (
                   <div key={`${candidate.provider}:${candidate.messageId}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
                     <div className="min-w-0 max-w-2xl">
                       <p className="truncate text-sm font-medium text-white">{candidate.subject}</p>
-                      <p className="mt-1 text-xs text-slate-400">Application #{candidate.applicationId} - {candidate.suggestedResponseType.replace(/_/g, " ")}</p>
+                      <p className="mt-1 text-xs text-slate-400">{t("applicationResponseSummary", { id: candidate.applicationId, type: getInboxResponseTypeLabel(candidate.suggestedResponseType, t) })}</p>
                       <p className="mt-1 line-clamp-2 text-xs text-slate-500">{candidate.preview}</p>
                     </div>
                     <Button
@@ -946,15 +946,15 @@ export default function Profile() {
                           [candidate.id]: value,
                         }))}
                       >
-                        <SelectTrigger aria-label={`Classification for ${candidate.subject || `application ${candidate.applicationId}`}`}>
+                        <SelectTrigger aria-label={t("classificationFor", { subject: candidate.subject || `#${candidate.applicationId}` })}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="interview_invite">Interview invite</SelectItem>
-                          <SelectItem value="offer">Offer</SelectItem>
-                          <SelectItem value="employer_question">Employer question</SelectItem>
-                          <SelectItem value="rejection">Rejection</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectItem value="interview_invite">{t("interviewInviteLabel")}</SelectItem>
+                          <SelectItem value="offer">{t("offerLabel")}</SelectItem>
+                          <SelectItem value="employer_question">{t("employerQuestionLabel")}</SelectItem>
+                          <SelectItem value="rejection">{t("rejectionLabel")}</SelectItem>
+                          <SelectItem value="other">{t("otherLabel")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -986,7 +986,7 @@ export default function Profile() {
                     onClick={async () => {
                       const result = await resumeDownload.refetch();
                       if (!openExternalUrl(result.data?.url)) {
-                        toast.error("A secure download link could not be created");
+                        toast.error(t("secureDownloadFailed"));
                       }
                     }}
                   >
@@ -1015,9 +1015,10 @@ export default function Profile() {
                             variant="ghost"
                             className="text-red-300 hover:text-red-200"
                             onClick={() => {
-                              if (confirm(`Delete resume version ${resume.version}?`)) deleteResumeVersion.mutate({ version: resume.version });
+                              if (confirm(t("confirmDeleteResumeVersion", { version: resume.version }))) deleteResumeVersion.mutate({ version: resume.version });
                             }}
                             disabled={deleteResumeVersion.isPending}
+                            aria-label={t("deleteResumeVersionLabel", { version: resume.version })}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1034,7 +1035,7 @@ export default function Profile() {
                         onClick={() => resumeVersionsQuery.fetchNextPage()}
                       >
                         {resumeVersionsQuery.isFetchingNextPage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Load older versions
+                        {t("loadOlderVersions")}
                       </Button>
                     ) : null}
                   </div>
@@ -1049,17 +1050,17 @@ export default function Profile() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Globe className="w-5 h-5 text-cyan-400" />
-              Social Media & Portfolio
+              {t("socialPortfolio")}
             </CardTitle>
             <CardDescription>
-              Add links to your professional profiles and portfolio
+              {t("socialPortfolioDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-300 mb-2 block">
-                  LinkedIn URL
+                  {t("linkedInUrl")}
                 </label>
                 <Input
                   value={linkedinUrl}
@@ -1070,7 +1071,7 @@ export default function Profile() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-300 mb-2 block">
-                  GitHub URL
+                  {t("githubUrl")}
                 </label>
                 <Input
                   value={githubUrl}
@@ -1081,7 +1082,7 @@ export default function Profile() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-300 mb-2 block">
-                  Portfolio URL
+                  {t("portfolioUrl")}
                 </label>
                 <Input
                   value={portfolioUrl}
@@ -1098,20 +1099,20 @@ export default function Profile() {
                 className="bg-gradient-to-r from-cyan-500 to-blue-600"
               >
                 {updateProfile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Links
+                {t("saveLinks")}
               </Button>
             </div>
             <div className="mt-6 border-t border-slate-800 pt-5">
               <div className="mb-4">
-                <p className="text-sm font-medium text-slate-300">Public social profiles</p>
+                <p className="text-sm font-medium text-slate-300">{t("publicSocialProfiles")}</p>
                 <p className="mt-1 text-sm text-slate-400">
-                  Keep public Facebook and X/Twitter links on file. Hire.AI will not import or analyze them without a separate explicit consent flow.
+                  {t("publicSocialDescription")}
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label htmlFor="profile-facebook-url" className="mb-2 block text-sm font-medium text-slate-300">
-                    Facebook URL
+                    {t("facebookUrl")}
                   </label>
                   <Input
                     id="profile-facebook-url"
@@ -1123,7 +1124,7 @@ export default function Profile() {
                 </div>
                 <div>
                   <label htmlFor="profile-twitter-url" className="mb-2 block text-sm font-medium text-slate-300">
-                    X / Twitter URL
+                    {t("twitterUrl")}
                   </label>
                   <Input
                     id="profile-twitter-url"
@@ -1142,7 +1143,7 @@ export default function Profile() {
                   className="border-cyan-700 text-cyan-200 hover:bg-cyan-500/10"
                 >
                   {updatePublicSocialProfiles.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Save Public Links
+                  {t("savePublicLinks")}
                 </Button>
               </div>
             </div>
@@ -1153,45 +1154,45 @@ export default function Profile() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Target className="w-5 h-5 text-cyan-400" />
-              Job Search Targets
+              {t("jobSearchTargets")}
             </CardTitle>
             <CardDescription>
-              Define the role, location, compensation, and work-authorization constraints used to rank autonomous preparation work.
+              {t("jobSearchTargetsDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <label htmlFor="profile-target-roles" className="mb-2 block text-sm font-medium text-slate-300">
-                  Target roles or employment types
+                  {t("targetRoles")}
                 </label>
                 <Input
                   id="profile-target-roles"
                   data-testid="profile-target-roles"
                   value={targetRoles}
                   onChange={(event) => setTargetRoles(event.target.value)}
-                  placeholder="Frontend Engineer, full-time"
+                  placeholder={t("targetRolesPlaceholder")}
                   className="bg-slate-800 border-slate-700 text-white"
                 />
-                <p className="mt-1 text-xs text-slate-500">Use commas to list role titles, categories, or employment types.</p>
+                <p className="mt-1 text-xs text-slate-500">{t("targetRolesHelp")}</p>
               </div>
               <div>
                 <label htmlFor="profile-target-locations" className="mb-2 block text-sm font-medium text-slate-300">
-                  Target locations
+                  {t("targetLocations")}
                 </label>
                 <Input
                   id="profile-target-locations"
                   data-testid="profile-target-locations"
                   value={targetLocations}
                   onChange={(event) => setTargetLocations(event.target.value)}
-                  placeholder="Remote, Netherlands, Europe"
+                  placeholder={t("targetLocationsPlaceholder")}
                   className="bg-slate-800 border-slate-700 text-white"
                 />
-                <p className="mt-1 text-xs text-slate-500">Use commas to list acceptable remote, country, or regional locations.</p>
+                <p className="mt-1 text-xs text-slate-500">{t("targetLocationsHelp")}</p>
               </div>
               <div>
                 <label htmlFor="profile-salary-currency" className="mb-2 block text-sm font-medium text-slate-300">
-                  Salary currency
+                  {t("salaryCurrency")}
                 </label>
                 <Input
                   id="profile-salary-currency"
@@ -1205,7 +1206,7 @@ export default function Profile() {
               </div>
               <div>
                 <label htmlFor="profile-salary-minimum" className="mb-2 block text-sm font-medium text-slate-300">
-                  Minimum annual salary
+                  {t("salaryMinimum")}
                 </label>
                 <Input
                   id="profile-salary-minimum"
@@ -1219,7 +1220,7 @@ export default function Profile() {
               </div>
               <div>
                 <label htmlFor="profile-salary-maximum" className="mb-2 block text-sm font-medium text-slate-300">
-                  Maximum annual salary
+                  {t("salaryMaximum")}
                 </label>
                 <Input
                   id="profile-salary-maximum"
@@ -1240,9 +1241,9 @@ export default function Profile() {
               />
               <div>
                 <label htmlFor="profile-needs-visa" className="text-sm font-medium text-slate-200">
-                  I require visa sponsorship
+                  {t("requiresVisa")}
                 </label>
-                <p className="mt-1 text-xs text-slate-500">Roles without a sponsorship signal stay out of the autonomous preparation queue.</p>
+                <p className="mt-1 text-xs text-slate-500">{t("visaQueuePolicy")}</p>
               </div>
             </div>
             <div className="flex justify-end">
@@ -1253,7 +1254,7 @@ export default function Profile() {
                 className="bg-gradient-to-r from-cyan-500 to-blue-600"
               >
                 {updateProfile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Search Targets
+                {t("saveSearchTargets")}
               </Button>
             </div>
           </CardContent>
@@ -1522,6 +1523,17 @@ function parseOptionalSalary(value: string): number | null | undefined {
   return parsed;
 }
 
+function getInboxResponseTypeLabel(type: InboxResponseType, t: Translator): string {
+  const labels: Record<InboxResponseType, TranslationKey> = {
+    interview_invite: "interviewInviteLabel",
+    offer: "offerLabel",
+    employer_question: "employerQuestionLabel",
+    rejection: "rejectionLabel",
+    other: "otherLabel",
+  };
+  return t(labels[type]);
+}
+
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
@@ -1550,14 +1562,14 @@ function getProviderStatusClass(status: ProfileEvidenceProviderStatus) {
   }
 }
 
-function getProviderStatusLabel(status: ProfileEvidenceProviderStatus) {
+function getProviderStatusLabel(status: ProfileEvidenceProviderStatus, t: Translator) {
   switch (status) {
     case "connected":
-      return "Connected";
+      return t("providerConnected");
     case "missing":
-      return "Missing";
+      return t("providerMissing");
     case "consent_required":
-      return "Consent required";
+      return t("providerConsentRequired");
   }
 }
 
@@ -1589,6 +1601,7 @@ function EvidenceProviderRow({
   onDisconnect?: (provider: ConnectorProviderId) => void;
   onEnableMailboxSendConsent?: (provider: ConnectorProviderId) => void;
 }) {
+  const { t } = useLocale();
   const Icon = provider.status === "connected"
     ? CheckCircle2
     : provider.status === "missing"
@@ -1616,13 +1629,13 @@ function EvidenceProviderRow({
           <p className="mt-1 text-xs leading-5 text-slate-400">{provider.detail}</p>
           {provider.consentScopes && provider.consentScopes.length > 0 ? (
             <p className="mt-2 text-[11px] leading-4 text-slate-500">
-              Scopes: {provider.consentScopes.join(", ")}
+              {t("scopesLabel")}: {provider.consentScopes.join(", ")}
             </p>
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <span className={`text-xs font-medium ${getProviderStatusClass(provider.status)}`}>
-            {getProviderStatusLabel(provider.status)}
+            {getProviderStatusLabel(provider.status, t)}
           </span>
           {connectorActionAvailable ? (
             <Button
@@ -1634,7 +1647,7 @@ function EvidenceProviderRow({
               disabled={isRequesting || connectorAlreadyRequested}
               onClick={() => onRequestConnection(provider.id as ConnectorProviderId)}
             >
-              {connectorAlreadyRequested ? "Requested" : connectorNeedsAuthorization ? "Request consent" : "Request"}
+              {connectorAlreadyRequested ? t("requestedLabel") : connectorNeedsAuthorization ? t("requestConsent") : t("requestAction")}
             </Button>
           ) : null}
           {connectorCanEnableMailboxSend ? (
@@ -1647,7 +1660,7 @@ function EvidenceProviderRow({
               disabled={isRequesting}
               onClick={() => onEnableMailboxSendConsent(provider.id as ConnectorProviderId)}
             >
-              Enable sending
+              {t("enableSending")}
             </Button>
           ) : null}
           {connectorCanDisconnect ? (
@@ -1661,7 +1674,7 @@ function EvidenceProviderRow({
               onClick={() => onDisconnect(provider.id as ConnectorProviderId)}
             >
               <Unplug className="mr-1 h-3 w-3" />
-              {connectorAlreadyRequested ? "Cancel" : "Disconnect"}
+              {connectorAlreadyRequested ? t("cancel") : t("disconnectAction")}
             </Button>
           ) : null}
         </div>

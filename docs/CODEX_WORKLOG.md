@@ -495,3 +495,10 @@
 - Added accessible localized names to candidate-evidence edit/delete controls and moved the shared dialog close control from a hardcoded English label to the account locale for every dialog in the application.
 - Verified the Dutch Profile evidence workflow, empty-form validation, and shared Sluiten control in the in-app browser at desktop and mobile widths with no warnings, errors, or horizontal overflow.
 - Passed TypeScript, the production build and bundle budget, dependency audit, development doctor, patch-integrity checks, and the complete regression suite with one database-dependent privacy integration skipped.
+
+## 2026-08-14 - Complete Profile setup localization pass
+
+- Localized the remaining user-authored Profile setup across social and portfolio links, autonomous search targets, connector request/status actions, GitHub and LinkedIn review candidates, inbox response classifications, resume-version controls, file/salary validation, and mutation feedback.
+- Preserved provider names, candidate evidence, connector revocation details, and backend-generated readiness explanations verbatim so localization does not rewrite audit evidence or provider-supplied content.
+- Verified the Dutch social/search-target workflow, localized invalid-salary feedback, connector statuses, and responsive layout in the in-app browser at desktop and mobile widths with no warnings, errors, or horizontal overflow.
+- Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
