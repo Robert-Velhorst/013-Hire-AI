@@ -77,24 +77,26 @@ describe("Job Normalization", () => {
 });
 
 describe("Job Discovery", () => {
-  it("exposes read-only discovery methods without process-local subscription mutations", () => {
+  it("uses the canonical jobs API without exposing a duplicate discovery namespace", () => {
     const caller = appRouter.createCaller(createMockContext());
 
-    expect(caller.discovery.getRecentJobs).toBeDefined();
-    expect(caller.discovery.searchJobs).toBeDefined();
-    expect(caller.discovery.getStats).toBeDefined();
-    expect(caller.discovery).not.toHaveProperty("subscribe");
-    expect(caller.discovery).not.toHaveProperty("unsubscribe");
-    expect(caller.discovery).not.toHaveProperty("triggerCheck");
+    expect(caller.jobs.list).toBeDefined();
+    expect(caller.jobs.listPage).toBeDefined();
+    expect(caller.jobs.search).toBeDefined();
+    expect(caller).not.toHaveProperty("discovery");
   });
 
-  it("passes job-type filters through the public discovery contract", async () => {
+  it("passes job-type filters through the canonical public jobs contract", async () => {
     const caller = appRouter.createCaller(createPublicContext());
 
-    const result = await caller.discovery.getRecentJobs({ jobTypes: ["contract"] });
+    const result = await caller.jobs.list({
+      limit: 50,
+      offset: 0,
+      filters: { jobType: "contract", remoteOnly: false, listingSafety: "all" },
+    });
 
-    expect(result.total).toBeGreaterThan(0);
-    expect(result.jobs.every((job) => job.jobType === "contract")).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every((job) => job.jobType === "contract")).toBe(true);
   });
 });
 

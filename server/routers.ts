@@ -11,7 +11,6 @@ import { normalizeSalary, normalizeLocation, normalizeJobType, normalizeExperien
 import { isJobCurrentForAutonomousProcessing } from "./autonomousOrchestrator";
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
-import { getRecentJobs, searchJobs, getDiscoveryStats } from "./realTimeDiscovery";
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
 import { workspacesRouter } from "./routers/workspaces";
@@ -3929,33 +3928,6 @@ export const appRouter = router({
         deduplicator.addDocument(input.id, input.text);
         return { success: true, stats: deduplicator.getStats() };
       }),
-  }),
-
-  // Job discovery catalog queries. Durable matching is handled by Job Alerts.
-  discovery: router({
-    getRecentJobs: publicProcedure
-      .input(z.object({
-        limit: boundedPageSize.optional(),
-        offset: boundedOffset.optional(),
-        keywords: z.array(boundedFilterText).max(20).optional(),
-        locations: z.array(boundedFilterText).max(20).optional(),
-        platformIds: z.array(z.number().int().positive()).max(100).optional(),
-        minSalary: z.number().int().min(0).max(10_000_000).optional(),
-        jobTypes: z.array(z.enum(["full-time", "part-time", "contract", "temporary"])).max(4).optional(),
-        experienceLevels: z.array(z.enum(["entry", "junior", "mid", "senior", "lead", "executive"])).max(6).optional(),
-      }))
-      .query(async ({ input }) => getRecentJobs(input)),
-
-    searchJobs: publicProcedure
-      .input(z.object({
-        query: z.string().trim().min(1).max(500),
-        limit: boundedPageSize.optional(),
-        offset: boundedOffset.optional(),
-      }))
-      .query(async ({ input }) => searchJobs(input.query, { limit: input.limit, offset: input.offset })),
-
-    getStats: publicProcedure
-      .query(async () => getDiscoveryStats()),
   }),
 
   // Job Alerts

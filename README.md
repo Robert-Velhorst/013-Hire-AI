@@ -192,7 +192,6 @@ hire_ai_v2/
 │   ├── browserAutomation.ts     # Approval-gated manual employer-portal handoff
 │   ├── careerIntelligence.ts    # Salary benchmarking, skill gap analysis
 │   ├── jobNormalization.ts      # Normalise job data across platforms
-│   ├── realTimeDiscovery.ts     # Live job board scanning
 │   ├── resumeParser.ts          # PDF/DOCX resume parsing with LLM
 │   ├── resumeStorage.ts         # S3 resume upload helpers
 │   ├── stripeWebhook.ts         # Stripe webhook handler
