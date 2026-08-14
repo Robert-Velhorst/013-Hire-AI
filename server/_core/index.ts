@@ -26,11 +26,16 @@ import { registerHaiConnectorRoutes } from "../haiConnectorRoutes";
 import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPort } from "./network";
 import { drainRuntime } from "./gracefulShutdown";
 import { createDatabaseReadinessProbe } from "./databaseReadiness";
+import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostics";
+
+let startupStage: StartupStage = "configuration validation";
 
 async function startServer() {
   validateProductionEnv();
+  startupStage = "platform catalog initialization";
   await ensureScraperPlatformCatalog();
   configureOperationalFailurePersistence(persistOperationalFailureSignals);
+  startupStage = "application assembly";
 
   const app = express();
   const server = createServer(app);
@@ -114,6 +119,7 @@ async function startServer() {
     });
   }
 
+  startupStage = "listener binding";
   await new Promise<void>((resolve, reject) => {
     const handleError = (error: Error) => reject(error);
     server.once("error", handleError);
@@ -174,6 +180,7 @@ async function closeOperationalResources() {
 
 startServer().catch(async () => {
   logOperationalFailure("Server", "Startup");
+  writeStartupFailureStage(startupStage);
   try {
     await closeOperationalResources();
   } catch {
