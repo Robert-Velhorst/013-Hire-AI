@@ -32,6 +32,7 @@ describe("localization wiring", () => {
     const jobAlerts = readFileSync(resolve(process.cwd(), "client/src/pages/JobAlerts.tsx"), "utf8");
     const team = readFileSync(resolve(process.cwd(), "client/src/pages/Team.tsx"), "utf8");
     const aiPreferences = readFileSync(resolve(process.cwd(), "client/src/pages/AIPreferences.tsx"), "utf8");
+    const billing = readFileSync(resolve(process.cwd(), "client/src/pages/Billing.tsx"), "utf8");
 
     expect(savedJobs).toContain("const { locale, t } = useLocale()");
     expect(savedJobs).toContain('t("savedJobsTitle")');
@@ -47,6 +48,10 @@ describe("localization wiring", () => {
     expect(aiPreferences).toContain('toLocaleTimeString(locale');
     expect(aiPreferences).not.toContain(">Save AI Preferences<");
     expect(aiPreferences).not.toContain(">Scheduled Background Runs<");
+    expect(billing).toContain("const { locale } = useLocale()");
+    expect(billing).toContain("formatBillingCurrency(total.totalCents, total.currency, locale)");
+    expect(billing).toContain("t(cfg.labelKey)");
+    expect(billing).not.toContain('new Intl.NumberFormat("en-US"');
     expect(jobAlerts).not.toContain("â€¢");
     expect(translate("en", "daysAgo", { count: 3 })).toBe("3 days ago");
     expect(translate("nl", "savedOn", { date: "gisteren" })).toBe("Opgeslagen gisteren");

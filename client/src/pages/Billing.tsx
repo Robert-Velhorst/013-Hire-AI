@@ -18,66 +18,63 @@ import { getSuccessFeeComplianceAction, getSuccessFeeComplianceSummaryFromAggreg
 import { openExternalUrl } from "@/lib/externalUrl";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
+import { formatBillingCurrency } from "@/lib/billingPresentation";
 import {
   DollarSign, FileText, CheckCircle, Clock, AlertTriangle,
   XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck
 } from "lucide-react";
 
-function formatCurrency(cents: number, currency: string) {
-  const normalizedCurrency = currency.trim().toUpperCase();
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: normalizedCurrency,
-    }).format(cents / 100);
-  } catch {
-    return `${normalizedCurrency} ${(cents / 100).toFixed(2)}`;
-  }
-}
-
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    pending_verification: { label: "Pending Verification", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-    active: { label: "Active", className: "bg-green-500/20 text-green-400 border-green-500/30" },
-    paused: { label: "Paused", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
-    ended: { label: "Ended", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
-    suspended: { label: "Suspended", className: "bg-red-500/20 text-red-400 border-red-500/30" },
-    disputed: { label: "Disputed", className: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+  const { t } = useLocale();
+  const map: Record<string, { labelKey: TranslationKey; className: string }> = {
+    pending_verification: { labelKey: "pendingVerification", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+    active: { labelKey: "active", className: "bg-green-500/20 text-green-400 border-green-500/30" },
+    paused: { labelKey: "paused", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
+    ended: { labelKey: "ended", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
+    suspended: { labelKey: "suspended", className: "bg-red-500/20 text-red-400 border-red-500/30" },
+    disputed: { labelKey: "disputed", className: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
   };
-  const cfg = map[status] ?? { label: status, className: "bg-gray-500/20 text-gray-400" };
-  return <Badge className={`text-xs border ${cfg.className}`}>{cfg.label}</Badge>;
+  const cfg = map[status];
+  return <Badge className={`text-xs border ${cfg?.className ?? "bg-gray-500/20 text-gray-400"}`}>{cfg ? t(cfg.labelKey) : status}</Badge>;
 }
 
 function PaymentStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    paid: { label: "Paid", className: "bg-green-500/20 text-green-400 border-green-500/30" },
-    pending: { label: "Pending", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-    failed: { label: "Failed", className: "bg-red-500/20 text-red-400 border-red-500/30" },
-    refunded: { label: "Refunded", className: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  const { t } = useLocale();
+  const map: Record<string, { labelKey: TranslationKey; className: string }> = {
+    paid: { labelKey: "paid", className: "bg-green-500/20 text-green-400 border-green-500/30" },
+    pending: { labelKey: "pending", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+    failed: { labelKey: "failed", className: "bg-red-500/20 text-red-400 border-red-500/30" },
+    refunded: { labelKey: "refunded", className: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
   };
-  const cfg = map[status] ?? { label: status, className: "bg-gray-500/20 text-gray-400" };
-  return <Badge className={`text-xs border ${cfg.className}`}>{cfg.label}</Badge>;
+  const cfg = map[status];
+  return <Badge className={`text-xs border ${cfg?.className ?? "bg-gray-500/20 text-gray-400"}`}>{cfg ? t(cfg.labelKey) : status}</Badge>;
 }
 
 function ComplianceRiskBadge({ risk }: { risk: SuccessFeeComplianceRisk }) {
+  const { t } = useLocale();
   const map: Record<SuccessFeeComplianceRisk, string> = {
     low: "border-green-500/30 bg-green-500/10 text-green-300",
     medium: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
     high: "border-orange-500/30 bg-orange-500/10 text-orange-300",
     critical: "border-red-500/30 bg-red-500/10 text-red-300",
   };
-  return <Badge className={`text-xs border ${map[risk]}`}>{risk}</Badge>;
+  const labelKey: Record<SuccessFeeComplianceRisk, TranslationKey> = {
+    low: "severityLow", medium: "severityMedium", high: "severityHigh", critical: "severityCritical",
+  };
+  return <Badge className={`text-xs border ${map[risk]}`}>{t(labelKey[risk])}</Badge>;
 }
 
 function ComplianceStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    needs_attention: { label: "Needs Attention", className: "bg-red-500/20 text-red-400 border-red-500/30" },
-    due_soon: { label: "Verification Due", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-    clear: { label: "Current", className: "bg-green-500/20 text-green-400 border-green-500/30" },
-    none: { label: "No Active Fee", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
+  const { t } = useLocale();
+  const map: Record<string, { labelKey: TranslationKey; className: string }> = {
+    needs_attention: { labelKey: "needsAttention", className: "bg-red-500/20 text-red-400 border-red-500/30" },
+    due_soon: { labelKey: "verificationDue", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+    clear: { labelKey: "current", className: "bg-green-500/20 text-green-400 border-green-500/30" },
+    none: { labelKey: "noActiveFee", className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
   };
-  const cfg = map[status] ?? { label: status, className: "bg-gray-500/20 text-gray-400 border-gray-500/30" };
-  return <Badge className={`text-xs border ${cfg.className}`}>{cfg.label}</Badge>;
+  const cfg = map[status];
+  return <Badge className={`text-xs border ${cfg?.className ?? "bg-gray-500/20 text-gray-400 border-gray-500/30"}`}>{cfg ? t(cfg.labelKey) : status}</Badge>;
 }
 
 interface VerificationUploadDialogProps {
@@ -170,6 +167,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
 
 export default function Billing() {
   const { user, loading: authLoading } = useAuth();
+  const { locale } = useLocale();
   const [, setLocation] = useLocation();
   const [reportHireOpen, setReportHireOpen] = useState(false);
   const [reportHireApplicationId, setReportHireApplicationId] = useState<number | undefined>(undefined);
@@ -374,10 +372,10 @@ export default function Billing() {
               <div className="space-y-1">
                 {monthlyByCurrency.length > 0 ? monthlyByCurrency.map((total, index) => (
                   <p key={total.currency} className={index === 0 ? "text-2xl font-bold text-white" : "text-sm font-semibold text-gray-300"}>
-                    {formatCurrency(total.totalCents, total.currency)}
+                    {formatBillingCurrency(total.totalCents, total.currency, locale)}
                   </p>
                 )) : (
-                  <p className="text-2xl font-bold text-white">{formatCurrency(0, "USD")}</p>
+                  <p className="text-2xl font-bold text-white">{formatBillingCurrency(0, "USD", locale)}</p>
                 )}
               </div>
             </CardContent>
@@ -391,10 +389,10 @@ export default function Billing() {
               <div className="space-y-1">
                 {paidByCurrency.length > 0 ? paidByCurrency.map((total, index) => (
                   <p key={total.currency} className={index === 0 ? "text-2xl font-bold text-white" : "text-sm font-semibold text-gray-300"}>
-                    {formatCurrency(total.totalCents, total.currency)}
+                    {formatBillingCurrency(total.totalCents, total.currency, locale)}
                   </p>
                 )) : (
-                  <p className="text-2xl font-bold text-white">{formatCurrency(0, "USD")}</p>
+                  <p className="text-2xl font-bold text-white">{formatBillingCurrency(0, "USD", locale)}</p>
                 )}
               </div>
             </CardContent>
@@ -720,7 +718,7 @@ export default function Billing() {
                     <div key={payment.id} className="flex items-center justify-between p-4">
                       <div>
                         <p className="text-white text-sm font-medium">
-                          {formatCurrency(payment.amount, payment.currency)}
+                          {formatBillingCurrency(payment.amount, payment.currency, locale)}
                         </p>
                         {payment.periodStart && payment.periodEnd && (
                           <p className="text-gray-500 text-xs mt-0.5">
