@@ -16,6 +16,11 @@ import { formatCalendarDate } from "@/lib/calendarDate";
 import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { getApprovalEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import {
+  getApplicationDecisionTranslationKey,
+  getApprovalTypeTranslationKey,
+  getReviewQueueActionCopy,
+} from "@/lib/reviewQueueActionCopy";
+import {
   formatApplicationDecision,
   formatApprovalType,
   getApprovalDecisionNote,
@@ -80,6 +85,14 @@ export default function ReviewQueue() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { locale, t } = useLocale();
+  const formatLocalizedApprovalType = (value?: string | null) => {
+    const key = getApprovalTypeTranslationKey(value);
+    return key ? t(key) : formatApprovalType(value);
+  };
+  const formatLocalizedDecision = (value?: string | null) => {
+    const key = getApplicationDecisionTranslationKey(value);
+    return key ? t(key) : formatApplicationDecision(value);
+  };
   const [sendHandoff, setSendHandoff] = useState<{ followUpId: number; label: string } | null>(null);
   const [deliveryConfirmation, setDeliveryConfirmation] = useState("");
   const [inboxResponseTypeOverrides, setInboxResponseTypeOverrides] = useState<Record<number, InboxResponseType>>({});
@@ -381,7 +394,7 @@ export default function ReviewQueue() {
                             <div>
                               <CardTitle className="text-base">{approval.title}</CardTitle>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {formatApprovalType(approval.approvalType)}
+                                {formatLocalizedApprovalType(approval.approvalType)}
                               </p>
                             </div>
                             <Badge
@@ -678,6 +691,7 @@ export default function ReviewQueue() {
                   <div className="space-y-3">
                     {operatingLedger.queues.reviewDecisions.map((decision) => {
                       const actionSummary = getQueueAction("job_decision", decision);
+                      const actionCopy = getReviewQueueActionCopy(actionSummary);
                       const jobTitle = decision.job?.title || `Job #${decision.jobId}`;
                       const company = decision.job?.company ? ` at ${decision.job.company}` : "";
 
@@ -688,7 +702,7 @@ export default function ReviewQueue() {
                               <div>
                                 <p className="font-medium">{jobTitle}{company} needs review</p>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                  {formatApplicationDecision(decision.decision)}
+                                  {formatLocalizedDecision(decision.decision)}
                                   {decision.matchScore != null ? ` - ${decision.matchScore}% match` : ""}
                                   {decision.applicationId ? ` - Application #${decision.applicationId}` : ""}
                                 </p>
@@ -743,7 +757,7 @@ export default function ReviewQueue() {
                               </Button>
                               <Button variant="outline" size="sm" onClick={() => setLocation(actionSummary.route)}>
                                 <Search className="mr-2 h-4 w-4" />
-                                {actionSummary.cta}
+                                {t(actionCopy.cta)}
                               </Button>
                             </div>
                           </CardContent>
@@ -1405,34 +1419,38 @@ function QueueActionStrip({
   className?: string;
   showAction?: boolean;
 }) {
+  const { t } = useLocale();
+  const copy = getReviewQueueActionCopy(summary);
   const externalLabel = summary.externalAction === "delivery_reconciliation"
-    ? "Verification required"
+    ? t("verificationRequired")
     : summary.externalAction === "approved_delivery"
-    ? "Approved delivery"
+    ? t("controlApprovedDeliveryLabel")
     : summary.externalAction === "manual_handoff"
-    ? "Manual handoff"
+    ? t("manualHandoffLabel")
     : summary.externalAction === "blocked_until_approved"
-      ? "Blocked until approved"
-      : "Internal";
+      ? t("blockedUntilApproved")
+      : t("internalActionLabel");
 
   return (
     <div
       data-testid="review-queue-action"
-      data-action-label={summary.label}
+      data-action-label={summary.copyId}
       className={`rounded-md border border-cyan-500/20 bg-cyan-500/5 p-3 ${className}`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-cyan-200">{summary.label}</p>
+            <p className="text-sm font-medium text-cyan-200">{t(copy.label)}</p>
             <Badge variant="outline" className={getReviewRiskBadgeClass(summary.risk)}>
               {summary.risk}
             </Badge>
             <Badge variant="outline" className="border-slate-600 text-slate-300">
-              {summary.approvalGated ? "Approval-gated" : externalLabel}
+              {summary.approvalGated ? t("approvalGated") : externalLabel}
             </Badge>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">{summary.detail}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {summary.detailOverride || t(copy.detail)}
+          </p>
         </div>
         {showAction && (
           <Button
@@ -1442,7 +1460,7 @@ function QueueActionStrip({
             onClick={() => onOpen(summary.route)}
           >
             <ClipboardCheck className="mr-2 h-4 w-4" />
-            {summary.cta}
+            {t(copy.cta)}
           </Button>
         )}
       </div>

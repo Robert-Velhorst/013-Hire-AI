@@ -570,3 +570,9 @@
 - Replaced queue-level English label, headline, guidance, and command output with a stable exhaustive control identifier while preserving priority, routing, risk, approval, and external-action behavior.
 - Added a typed English/Dutch presentation map in the Review Queue, so new control states cannot compile without an explicit localized presentation contract; persisted audit-note generation remains separate and unchanged.
 - Added structured-output and localization wiring regressions and verified the seeded Dutch approval control at desktop and the browser-enforced 780-pixel compact width with no horizontal overflow.
+
+## 2026-08-14 - Structured Review Queue card-action pass
+
+- Replaced card-action labels, guidance, and commands with exhaustive structured variants covering approval, delivery, evidence, connectors, job decisions, interviews, inbox responses, employer replies, follow-ups, success fees, profile gaps, and administrative review.
+- Shared the typed action-copy contract between Review Queue and Dashboard, localized known approval and decision classifications, and preserved recorded evidence and connector details as verbatim overrides.
+- Added structured-output, shared-copy, evidence-preservation, and localization wiring regressions; verified seeded Dutch action cards at desktop and the browser-enforced 780-pixel compact width with no horizontal overflow.

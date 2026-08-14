@@ -122,13 +122,15 @@ describe("operating review queue helpers", () => {
       entityId: 42,
       riskLevel: "high",
     })).toMatchObject({
-      label: "Approval gate",
-      cta: "Open linked ledger",
+      copyId: "approval",
       route: "/applications?applicationId=42",
       risk: "high",
       approvalGated: true,
       externalAction: "blocked_until_approved",
     });
+    expect(getReviewQueueActionSummary("approval", {})).not.toHaveProperty("label");
+    expect(getReviewQueueActionSummary("approval", {})).not.toHaveProperty("detail");
+    expect(getReviewQueueActionSummary("approval", {})).not.toHaveProperty("cta");
   });
 
   it("routes approved follow-up handoffs back to the application ledger", () => {
@@ -136,8 +138,7 @@ describe("operating review queue helpers", () => {
       applicationId: 7,
       riskLevel: "medium",
     })).toMatchObject({
-      label: "Approved delivery",
-      cta: "Open delivery",
+      copyId: "approved_delivery",
       route: "/applications?applicationId=7&action=send-follow-up",
       approvalGated: false,
       externalAction: "approved_delivery",
@@ -151,7 +152,7 @@ describe("operating review queue helpers", () => {
       reviewRequired: 1,
       riskLevel: "high",
     })).toMatchObject({
-      cta: "Open application ledger",
+      copyId: "job_decision_blocked_linked",
       route: "/applications?applicationId=42",
       risk: "high",
       approvalGated: true,
@@ -164,7 +165,7 @@ describe("operating review queue helpers", () => {
       decision: "manual_apply",
       riskLevel: "medium",
     })).toMatchObject({
-      cta: "Review job",
+      copyId: "job_decision_manual_unlinked",
       route: "/jobs",
       approvalGated: false,
       externalAction: "manual_handoff",
@@ -175,8 +176,7 @@ describe("operating review queue helpers", () => {
     expect(getReviewQueueActionSummary("follow_up", {
       applicationId: 9,
     })).toMatchObject({
-      label: "Follow-up due",
-      cta: "Draft follow-up",
+      copyId: "follow_up",
       route: "/applications?applicationId=9&action=follow-up",
       risk: "medium",
       approvalGated: true,
@@ -231,8 +231,7 @@ describe("operating review queue helpers", () => {
       applicationId: 9,
       interviewId: 17,
     })).toMatchObject({
-      label: "Interview outcome",
-      cta: "Record outcome",
+      copyId: "interview_outcome",
       route: "/applications?applicationId=9&action=record-interview-outcome&interviewId=17",
       risk: "medium",
       approvalGated: false,
@@ -245,8 +244,7 @@ describe("operating review queue helpers", () => {
       applicationId: 9,
       suggestedResponseType: "interview_invite",
     })).toMatchObject({
-      label: "Inbox response candidate",
-      cta: "Review inbox candidate",
+      copyId: "inbox_response_candidate",
       route: "/review-queue",
       risk: "medium",
       approvalGated: false,
@@ -261,8 +259,8 @@ describe("operating review queue helpers", () => {
       detail: "Connect Gmail or Outlook before monitoring replies.",
       riskLevel: "medium",
     })).toMatchObject({
-      label: "Connector readiness",
-      cta: "Open profile connectors",
+      copyId: "connector_readiness",
+      detailOverride: "Connect Gmail or Outlook before monitoring replies.",
       route: "/profile",
       risk: "medium",
       approvalGated: false,
@@ -278,8 +276,8 @@ describe("operating review queue helpers", () => {
       severity: "high",
       route: "/profile",
     })).toMatchObject({
-      label: "Evidence gate",
-      cta: "Resolve evidence",
+      copyId: "evidence_gate",
+      detailOverride: "Add resume and work evidence before application submission can run.",
       route: "/profile",
       risk: "high",
       approvalGated: false,
@@ -293,7 +291,7 @@ describe("operating review queue helpers", () => {
       priority: "critical",
     })).toMatchObject({
       route: "/applications?applicationId=11",
-      cta: "Open offer ledger",
+      copyId: "success_fee_ledger",
       risk: "critical",
     });
 
@@ -301,7 +299,7 @@ describe("operating review queue helpers", () => {
       priority: "high",
     })).toMatchObject({
       route: "/billing",
-      cta: "Open billing",
+      copyId: "success_fee_billing",
       risk: "high",
     });
   });
@@ -403,7 +401,7 @@ describe("operating review queue helpers", () => {
       category: "employment_ended",
       priority: "high",
     })).toMatchObject({
-      label: "Admin review",
+      copyId: "admin_employment_ended",
       route: "/admin",
       risk: "high",
       approvalGated: true,
@@ -411,7 +409,7 @@ describe("operating review queue helpers", () => {
     });
     expect(getReviewQueueActionSummary("admin_review", {
       category: "employment_ended",
-    }).detail).toContain("subscription cancellation");
+    }).copyId).toBe("admin_employment_ended");
   });
 
   it("surfaces connector readiness before lower-priority queue work", () => {

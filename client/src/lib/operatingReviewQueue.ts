@@ -19,10 +19,33 @@ export type ReviewQueueActionKind =
 
 export type ReviewQueueActionRisk = "low" | "medium" | "high" | "critical";
 
+export type ReviewQueueActionCopyId =
+  | "approval"
+  | "approved_delivery"
+  | "delivery_reconciliation"
+  | "evidence_gate"
+  | "connector_readiness"
+  | "job_decision_manual_linked"
+  | "job_decision_manual_unlinked"
+  | "job_decision_blocked_linked"
+  | "job_decision_blocked_unlinked"
+  | "job_decision_resolve_linked"
+  | "job_decision_resolve_unlinked"
+  | "interview_scheduling"
+  | "interview_preparation"
+  | "interview_outcome"
+  | "inbox_response_candidate"
+  | "employer_reply"
+  | "follow_up"
+  | "success_fee_ledger"
+  | "success_fee_billing"
+  | "profile_gap"
+  | "admin_employment_ended"
+  | "admin_review";
+
 export interface ReviewQueueActionSummary {
-  label: string;
-  detail: string;
-  cta: string;
+  copyId: ReviewQueueActionCopyId;
+  detailOverride?: string;
   route: string;
   risk: ReviewQueueActionRisk;
   approvalGated: boolean;
@@ -188,11 +211,8 @@ export function getReviewQueueActionSummary(
 ): ReviewQueueActionSummary {
   switch (kind) {
     case "approval": {
-      const approvalType = typeof item.approvalType === "string" ? item.approvalType : null;
       return {
-        label: "Approval gate",
-        detail: `${formatApprovalType(approvalType)} cannot run silently. Review the linked ledger evidence, then approve or reject it.`,
-        cta: "Open linked ledger",
+        copyId: "approval",
         route: approvalRoute(item),
         risk: coerceRisk(typeof item.riskLevel === "string" ? item.riskLevel : null),
         approvalGated: true,
@@ -201,9 +221,7 @@ export function getReviewQueueActionSummary(
     }
     case "send_handoff":
       return {
-        label: "Approved delivery",
-        detail: "The draft is approved. Deliver through a connected Gmail or Outlook mailbox, or record a separately completed manual delivery before response tracking continues.",
-        cta: "Open delivery",
+        copyId: "approved_delivery",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "send-follow-up"),
         risk: coerceRisk(typeof item.riskLevel === "string" ? item.riskLevel : "medium"),
         approvalGated: false,
@@ -211,9 +229,7 @@ export function getReviewQueueActionSummary(
       };
     case "delivery_reconciliation":
       return {
-        label: "Delivery verification required",
-        detail: "Hire.AI could not determine whether the mailbox delivered this approved follow-up. Check the provider before recording a manual result; do not retry the send.",
-        cta: "Verify delivery",
+        copyId: "delivery_reconciliation",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "send-follow-up"),
         risk: "high",
         approvalGated: false,
@@ -221,11 +237,8 @@ export function getReviewQueueActionSummary(
       };
     case "evidence_gate":
       return {
-        label: "Evidence gate",
-        detail: typeof item.detail === "string"
-          ? item.detail
-          : "Resolve the missing profile or connector evidence before Hire.AI advances external actions.",
-        cta: "Resolve evidence",
+        copyId: "evidence_gate",
+        ...(typeof item.detail === "string" ? { detailOverride: item.detail } : {}),
         route: typeof item.route === "string" ? item.route : "/profile",
         risk: coerceRisk(typeof item.severity === "string" ? item.severity : "medium"),
         approvalGated: false,
@@ -233,11 +246,8 @@ export function getReviewQueueActionSummary(
       };
     case "connector_readiness":
       return {
-        label: "Connector readiness",
-        detail: typeof item.detail === "string"
-          ? item.detail
-          : "Complete the connector setup before Hire.AI depends on external inbox or cloud evidence.",
-        cta: "Open profile connectors",
+        copyId: "connector_readiness",
+        ...(typeof item.detail === "string" ? { detailOverride: item.detail } : {}),
         route: "/profile",
         risk: coerceRisk(typeof item.riskLevel === "string" ? item.riskLevel : "medium"),
         approvalGated: false,
@@ -252,14 +262,14 @@ export function getReviewQueueActionSummary(
         : reviewRequired || decision === "review"
           ? "blocked_until_approved"
           : "none";
+      const context = applicationId ? "linked" : "unlinked";
+      const copyId: ReviewQueueActionCopyId = externalAction === "manual_handoff"
+        ? `job_decision_manual_${context}`
+        : externalAction === "blocked_until_approved"
+          ? `job_decision_blocked_${context}`
+          : `job_decision_resolve_${context}`;
       return {
-        label: "Job decision",
-        detail: externalAction === "manual_handoff"
-          ? "This role must stay in manual-apply mode until the user handles the external ATS step and records the outcome."
-          : externalAction === "blocked_until_approved"
-            ? "This saved decision blocks autonomous application execution until the user resolves the review."
-            : "Resolve the saved decision so autonomous sourcing knows whether to prepare, save, ignore, or leave this role manual.",
-        cta: applicationId ? "Open application ledger" : "Review job",
+        copyId,
         route: applicationId ? applicationRoute(applicationId, "view") : "/jobs",
         risk: coerceRisk(typeof item.riskLevel === "string" ? item.riskLevel : "medium"),
         approvalGated: externalAction === "blocked_until_approved",
@@ -268,9 +278,7 @@ export function getReviewQueueActionSummary(
     }
     case "interview_scheduling":
       return {
-        label: "Interview scheduling",
-        detail: "Capture the agreed time, channel, and interviewer context before follow-up automation continues.",
-        cta: "Schedule interview",
+        copyId: "interview_scheduling",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "schedule-interview"),
         risk: "medium",
         approvalGated: false,
@@ -278,9 +286,7 @@ export function getReviewQueueActionSummary(
       };
     case "interview_preparation":
       return {
-        label: "Interview preparation",
-        detail: "Generate saved preparation from the application ledger before the scheduled interview starts.",
-        cta: "Open application",
+        copyId: "interview_preparation",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "view"),
         risk: "low",
         approvalGated: false,
@@ -288,9 +294,7 @@ export function getReviewQueueActionSummary(
       };
     case "interview_outcome":
       return {
-        label: "Interview outcome",
-        detail: "Record the verified post-interview result so follow-up, offer, and success-fee workflows use the correct ledger state.",
-        cta: "Record outcome",
+        copyId: "interview_outcome",
         route: applicationRoute(
           typeof item.applicationId === "number" ? item.applicationId : null,
           "record-interview-outcome",
@@ -302,9 +306,7 @@ export function getReviewQueueActionSummary(
       };
     case "inbox_response_candidate":
       return {
-        label: "Inbox response candidate",
-        detail: "A consented inbox scan found a message linked to this application. Confirm or dismiss the proposed classification before it changes the application ledger.",
-        cta: "Review inbox candidate",
+        copyId: "inbox_response_candidate",
         route: "/review-queue",
         risk: "medium",
         approvalGated: false,
@@ -312,9 +314,7 @@ export function getReviewQueueActionSummary(
       };
     case "employer_reply":
       return {
-        label: "Employer reply",
-        detail: "Classify the employer response and draft any reply inside the ledger before routine follow-ups resume.",
-        cta: "Open response",
+        copyId: "employer_reply",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "employer-response"),
         risk: "medium",
         approvalGated: false,
@@ -322,9 +322,7 @@ export function getReviewQueueActionSummary(
       };
     case "follow_up":
       return {
-        label: "Follow-up due",
-        detail: "Draft a follow-up internally. External sending remains a separate approval and handoff.",
-        cta: "Draft follow-up",
+        copyId: "follow_up",
         route: applicationRoute(typeof item.applicationId === "number" ? item.applicationId : null, "follow-up"),
         risk: "medium",
         approvalGated: true,
@@ -334,9 +332,7 @@ export function getReviewQueueActionSummary(
       const applicationId = typeof item.applicationId === "number" ? item.applicationId : null;
       const priority = typeof item.priority === "string" ? item.priority : "high";
       return {
-        label: "Success-fee compliance",
-        detail: "Resolve offer attribution, verification, or billing evidence before revenue enforcement advances.",
-        cta: applicationId ? "Open offer ledger" : "Open billing",
+        copyId: applicationId ? "success_fee_ledger" : "success_fee_billing",
         route: applicationId ? applicationRoute(applicationId, "view") : "/billing",
         risk: coerceRisk(priority),
         approvalGated: true,
@@ -345,9 +341,7 @@ export function getReviewQueueActionSummary(
     }
     case "profile_gap":
       return {
-        label: "Profile readiness",
-        detail: "Complete the missing candidate evidence before increasing autonomous application scope.",
-        cta: "Improve profile",
+        copyId: "profile_gap",
         route: "/profile",
         risk: "medium",
         approvalGated: false,
@@ -355,11 +349,7 @@ export function getReviewQueueActionSummary(
       };
     case "admin_review":
       return {
-        label: "Admin review",
-        detail: item.category === "employment_ended"
-          ? "Review the employment-ended report, final billing state, subscription cancellation, and verification context before closing the obligation."
-          : "Keep compliance, billing, suspension, and legal-adjacent decisions in the admin review path.",
-        cta: "Open admin panel",
+        copyId: item.category === "employment_ended" ? "admin_employment_ended" : "admin_review",
         route: "/admin",
         risk: coerceRisk(typeof item.priority === "string" ? item.priority : "high"),
         approvalGated: true,

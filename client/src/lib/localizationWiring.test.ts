@@ -88,6 +88,7 @@ describe("localization wiring", () => {
     const jobSearch = readFileSync(resolve(process.cwd(), "client/src/pages/JobSearch.tsx"), "utf8");
     const applications = readFileSync(resolve(process.cwd(), "client/src/pages/Applications.tsx"), "utf8");
     const reviewQueue = readFileSync(resolve(process.cwd(), "client/src/pages/ReviewQueue.tsx"), "utf8");
+    const dashboard = readFileSync(resolve(process.cwd(), "client/src/pages/Dashboard.tsx"), "utf8");
 
     for (const source of [jobSearch, applications, reviewQueue]) {
       expect(source).toContain("useLocale()");
@@ -159,6 +160,13 @@ describe("localization wiring", () => {
     expect(reviewQueue).not.toContain("queueControl.headline");
     expect(reviewQueue).not.toContain("queueControl.detail");
     expect(reviewQueue).not.toContain("queueControl.cta");
+    expect(reviewQueue).toContain("getReviewQueueActionCopy(summary)");
+    expect(reviewQueue).toContain("summary.detailOverride || t(copy.detail)");
+    expect(reviewQueue).not.toContain("summary.label");
+    expect(reviewQueue).not.toContain("summary.detail}</p>");
+    expect(reviewQueue).not.toContain("summary.cta");
+    expect(dashboard).toContain("getReviewQueueActionCopy(actionSummary)");
+    expect(dashboard).toContain('decision.matchScore != null ? ` - ${decision.matchScore}% match`');
     expect(reviewQueue).not.toContain(">Delivery Verification<");
     expect(reviewQueue).not.toContain(">Approved Send Handoffs<");
     expect(reviewQueue).not.toContain(">Confirm External Delivery<");

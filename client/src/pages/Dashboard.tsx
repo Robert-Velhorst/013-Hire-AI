@@ -36,11 +36,24 @@ import TosAcceptanceDialog from "@/components/TosAcceptanceDialog";
 import { formatCalendarDate } from "@/lib/calendarDate";
 import AppHeader from "@/components/AppHeader";
 import { useLocale } from "@/contexts/LocaleContext";
+import {
+  getApplicationDecisionTranslationKey,
+  getApprovalTypeTranslationKey,
+  getReviewQueueActionCopy,
+} from "@/lib/reviewQueueActionCopy";
 
 export default function Dashboard() {
   const { user, loading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { locale, t } = useLocale();
+  const formatLocalizedApprovalType = (value?: string | null) => {
+    const key = getApprovalTypeTranslationKey(value);
+    return key ? t(key) : formatApprovalType(value);
+  };
+  const formatLocalizedDecision = (value?: string | null) => {
+    const key = getApplicationDecisionTranslationKey(value);
+    return key ? t(key) : formatApplicationDecision(value);
+  };
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("all");
@@ -714,7 +727,7 @@ export default function Dashboard() {
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              {formatApprovalType(approval.approvalType)}
+                              {formatLocalizedApprovalType(approval.approvalType)}
                             </p>
                             {approval.description && (
                               <p className="mt-2 line-clamp-2 text-sm text-slate-300">
@@ -802,6 +815,7 @@ export default function Dashboard() {
 
                     {operatingLedger.queues.reviewDecisions.map((decision) => {
                       const actionSummary = getReviewQueueActionSummary("job_decision", decision);
+                      const actionCopy = getReviewQueueActionCopy(actionSummary);
                       const jobTitle = decision.job?.title || `Job #${decision.jobId}`;
 
                       return (
@@ -832,9 +846,9 @@ export default function Dashboard() {
                           )}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          {formatApplicationDecision(decision.decision)}
+                          {formatLocalizedDecision(decision.decision)}
                           {decision.applicationId ? ` - Application #${decision.applicationId}` : ""}
-                          {decision.matchScore != null ? ` · ${decision.matchScore}% match` : ""}
+                          {decision.matchScore != null ? ` - ${decision.matchScore}% match` : ""}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-300">
                           {decision.reviewReason || decision.decisionReason || "Review the saved application decision before execution."}
@@ -846,7 +860,7 @@ export default function Dashboard() {
                           onClick={() => setLocation(actionSummary.route)}
                         >
                           <Search className="mr-2 h-4 w-4" />
-                          {actionSummary.cta}
+                          {t(actionCopy.cta)}
                         </Button>
                       </div>
                       );
