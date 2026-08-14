@@ -36,6 +36,25 @@ export type ReviewQueueControlStatus =
   | "ready"
   | "clear";
 
+export type ReviewQueueControlCopyId =
+  | "pending_approvals"
+  | "delivery_reconciliation"
+  | "approved_delivery"
+  | "success_fee_compliance"
+  | "evidence_gates"
+  | "admin_reviews"
+  | "profile_blockers"
+  | "connector_readiness"
+  | "inbox_response_candidates"
+  | "employer_replies"
+  | "interview_scheduling"
+  | "interview_outcomes"
+  | "follow_up_drafting"
+  | "job_decisions"
+  | "interview_preparation"
+  | "profile_warnings"
+  | "queue_clear";
+
 export type ReviewQueueControlSection =
   | "approvals"
   | "send-handoffs"
@@ -56,10 +75,7 @@ export type ReviewQueueControlSection =
 
 export interface ReviewQueueControlSummary {
   status: ReviewQueueControlStatus;
-  label: string;
-  headline: string;
-  detail: string;
-  cta: string;
+  copyId: ReviewQueueControlCopyId;
   section: ReviewQueueControlSection;
   route: string;
   count: number;
@@ -362,10 +378,7 @@ function titleCaseFromToken(value: string) {
 
 function controlSummary(input: {
   status: ReviewQueueControlStatus;
-  label: string;
-  headline: string;
-  detail: string;
-  cta: string;
+  copyId: ReviewQueueControlCopyId;
   section: ReviewQueueControlSection;
   route?: string;
   count: number;
@@ -491,10 +504,7 @@ export function getReviewQueueControlSummary(
   if (counts.pendingApprovals > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Approval gate",
-      headline: `${counts.pendingApprovals} consequential action${counts.pendingApprovals === 1 ? "" : "s"} need a user decision.`,
-      detail: "Resolve submission, follow-up, offer attribution, or billing approvals before Hire.AI can advance external work.",
-      cta: "Review approvals",
+      copyId: "pending_approvals",
       section: "approvals",
       count: counts.pendingApprovals,
       risk: "high",
@@ -506,10 +516,7 @@ export function getReviewQueueControlSummary(
   if (counts.followUpDeliveryReconciliation > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Delivery verification",
-      headline: `${counts.followUpDeliveryReconciliation} follow-up delivery outcome${counts.followUpDeliveryReconciliation === 1 ? " is" : "s are"} uncertain.`,
-      detail: "Check the connected mailbox before recording a manual result. Hire.AI will not retry an uncertain external send.",
-      cta: "Verify delivery",
+      copyId: "delivery_reconciliation",
       section: "delivery-reconciliation",
       count: counts.followUpDeliveryReconciliation,
       risk: "high",
@@ -521,10 +528,7 @@ export function getReviewQueueControlSummary(
   if (counts.approvedFollowUpsReadyToSend > 0) {
     return controlSummary({
       status: "handoff",
-      label: "Approved delivery",
-      headline: `${counts.approvedFollowUpsReadyToSend} approved follow-up draft${counts.approvedFollowUpsReadyToSend === 1 ? "" : "s"} need delivery.`,
-      detail: "Deliver through a connected Gmail or Outlook mailbox, or record a separately completed manual delivery so response tracking continues from ledger state.",
-      cta: "Open delivery",
+      copyId: "approved_delivery",
       section: "send-handoffs",
       count: counts.approvedFollowUpsReadyToSend,
       risk: "medium",
@@ -536,10 +540,7 @@ export function getReviewQueueControlSummary(
   if (counts.successFeeCompliance > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Success-fee compliance",
-      headline: `${counts.successFeeCompliance} success-fee item${counts.successFeeCompliance === 1 ? "" : "s"} need review.`,
-      detail: "Handle offer attribution, verification, or billing evidence before revenue enforcement advances.",
-      cta: "Review compliance",
+      copyId: "success_fee_compliance",
       section: "success-fees",
       count: counts.successFeeCompliance,
       risk: "high",
@@ -551,10 +552,7 @@ export function getReviewQueueControlSummary(
   if (counts.evidenceGates > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Evidence gate",
-      headline: `${counts.evidenceGates} autonomous evidence gate${counts.evidenceGates === 1 ? "" : "s"} block external work.`,
-      detail: "Resolve missing profile, inbox, or cloud evidence before Hire.AI advances submissions, follow-up sending, reply monitoring, or document discovery.",
-      cta: "Review evidence gates",
+      copyId: "evidence_gates",
       section: "evidence-gates",
       route: "/profile",
       count: counts.evidenceGates,
@@ -567,10 +565,7 @@ export function getReviewQueueControlSummary(
   if (counts.adminReviews > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Admin review",
-      headline: `${counts.adminReviews} admin operating item${counts.adminReviews === 1 ? "" : "s"} need manual review.`,
-      detail: "Keep billing, suspension, verification, and legal-adjacent decisions in the admin control path.",
-      cta: "Review admin items",
+      copyId: "admin_reviews",
       section: "admin-reviews",
       count: counts.adminReviews,
       risk: "high",
@@ -582,10 +577,7 @@ export function getReviewQueueControlSummary(
   if (counts.profileBlockers > 0) {
     return controlSummary({
       status: "blocked",
-      label: "Profile blocker",
-      headline: `${counts.profileBlockers} profile blocker${counts.profileBlockers === 1 ? "" : "s"} stop safer automation.`,
-      detail: "Complete missing candidate evidence before expanding autonomous application scope.",
-      cta: "Review profile blockers",
+      copyId: "profile_blockers",
       section: "profile-readiness",
       route: "/profile",
       count: counts.profileBlockers,
@@ -598,10 +590,7 @@ export function getReviewQueueControlSummary(
   if (counts.connectorReadiness > 0) {
     return controlSummary({
       status: "attention",
-      label: "Connector readiness",
-      headline: `${counts.connectorReadiness} connector setup item${counts.connectorReadiness === 1 ? "" : "s"} need attention.`,
-      detail: "Complete inbox or cloud connector setup so Hire.AI can monitor replies and discover profile evidence only after explicit consent.",
-      cta: "Review connectors",
+      copyId: "connector_readiness",
       section: "connector-readiness",
       route: "/profile",
       count: counts.connectorReadiness,
@@ -614,10 +603,7 @@ export function getReviewQueueControlSummary(
   if (counts.inboxResponseCandidates > 0) {
     return controlSummary({
       status: "attention",
-      label: "Inbox response candidate",
-      headline: `${counts.inboxResponseCandidates} inbox response candidate${counts.inboxResponseCandidates === 1 ? " needs" : "s need"} confirmation.`,
-      detail: "Hire.AI found application-linked inbox messages but will not change application status or send an interview alert until you confirm the classification.",
-      cta: "Review inbox responses",
+      copyId: "inbox_response_candidates",
       section: "inbox-response-candidates",
       count: counts.inboxResponseCandidates,
       risk: "medium",
@@ -629,10 +615,7 @@ export function getReviewQueueControlSummary(
   if (counts.employerResponsesNeedingReply > 0) {
     return controlSummary({
       status: "attention",
-      label: "Employer reply",
-      headline: `${counts.employerResponsesNeedingReply} employer response${counts.employerResponsesNeedingReply === 1 ? "" : "s"} need classification or reply drafting.`,
-      detail: "Classify employer questions inside the application ledger before routine follow-up automation resumes.",
-      cta: "Open employer replies",
+      copyId: "employer_replies",
       section: "employer-replies",
       count: counts.employerResponsesNeedingReply,
       risk: "medium",
@@ -644,10 +627,7 @@ export function getReviewQueueControlSummary(
   if (counts.interviewScheduling > 0) {
     return controlSummary({
       status: "attention",
-      label: "Interview scheduling",
-      headline: `${counts.interviewScheduling} interview invite${counts.interviewScheduling === 1 ? "" : "s"} need scheduling details.`,
-      detail: "Capture time, channel, and interviewer context so interview preparation and follow-up state stay current.",
-      cta: "Open interview scheduling",
+      copyId: "interview_scheduling",
       section: "interview-scheduling",
       count: counts.interviewScheduling,
       risk: "medium",
@@ -659,10 +639,7 @@ export function getReviewQueueControlSummary(
   if (counts.interviewOutcomesNeeded > 0) {
     return controlSummary({
       status: "attention",
-      label: "Interview outcome",
-      headline: `${counts.interviewOutcomesNeeded} completed interview${counts.interviewOutcomesNeeded === 1 ? " needs" : "s need"} an outcome.`,
-      detail: "Record the verified result so Hire.AI can coordinate follow-up, offers, and success-fee workflows from the correct state.",
-      cta: "Review interview outcomes",
+      copyId: "interview_outcomes",
       section: "interview-outcomes",
       count: counts.interviewOutcomesNeeded,
       risk: "medium",
@@ -674,10 +651,7 @@ export function getReviewQueueControlSummary(
   if (counts.followUpsDue > 0) {
     return controlSummary({
       status: "ready",
-      label: "Follow-up drafting",
-      headline: `${counts.followUpsDue} quiet application${counts.followUpsDue === 1 ? "" : "s"} can receive a draft follow-up.`,
-      detail: "Draft internally first. External sending remains a separate approval and handoff.",
-      cta: "Open follow-ups",
+      copyId: "follow_up_drafting",
       section: "follow-ups",
       count: counts.followUpsDue,
       risk: "medium",
@@ -689,10 +663,7 @@ export function getReviewQueueControlSummary(
   if (counts.reviewDecisions > 0) {
     return controlSummary({
       status: "attention",
-      label: "Job decision",
-      headline: `${counts.reviewDecisions} job decision${counts.reviewDecisions === 1 ? "" : "s"} need review.`,
-      detail: "Resolve save or ignore decisions so sourcing knows what to prepare next.",
-      cta: "Open job decisions",
+      copyId: "job_decisions",
       section: "job-decisions",
       count: counts.reviewDecisions,
       risk: "medium",
@@ -704,10 +675,7 @@ export function getReviewQueueControlSummary(
   if (counts.interviewPreparationNeeded > 0) {
     return controlSummary({
       status: "ready",
-      label: "Interview prep",
-      headline: `${counts.interviewPreparationNeeded} scheduled interview${counts.interviewPreparationNeeded === 1 ? "" : "s"} need preparation.`,
-      detail: "Generate saved preparation from application evidence before the interview starts.",
-      cta: "Open interview prep",
+      copyId: "interview_preparation",
       section: "interview-preparation",
       count: counts.interviewPreparationNeeded,
       risk: "low",
@@ -719,10 +687,7 @@ export function getReviewQueueControlSummary(
   if (counts.profileWarnings > 0) {
     return controlSummary({
       status: "attention",
-      label: "Profile warning",
-      headline: `${counts.profileWarnings} profile warning${counts.profileWarnings === 1 ? "" : "s"} should be reviewed.`,
-      detail: "Improve candidate evidence to raise match quality and reduce review-required applications.",
-      cta: "Review profile warnings",
+      copyId: "profile_warnings",
       section: "profile-readiness",
       route: "/profile",
       count: counts.profileWarnings,
@@ -734,10 +699,7 @@ export function getReviewQueueControlSummary(
 
   return controlSummary({
     status: "clear",
-    label: "Queue clear",
-    headline: "No review queue items need attention.",
-    detail: "Hire.AI can keep preparing safe internal work while watching for replies, interviews, offers, and verification events.",
-    cta: "View audit trail",
+    copyId: "queue_clear",
     section: "audit",
     count: 0,
     risk: "low",

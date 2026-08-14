@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 import { getApplicationDeepLink } from "@/lib/applicationDeepLinks";
 import { getInterviewSchedulingControl } from "@/lib/interviewSchedulingControl";
 import { formatCalendarDate } from "@/lib/calendarDate";
-import { useLocale } from "@/contexts/LocaleContext";
+import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { getApprovalEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import {
   formatApplicationDecision,
@@ -26,6 +26,7 @@ import {
   getReviewRiskBadgeClass,
   type ReviewQueueActionKind,
   type ReviewQueueActionSummary,
+  type ReviewQueueControlCopyId,
   type ReviewDecisionResolution,
 } from "@/lib/operatingReviewQueue";
 import { toast } from "sonner";
@@ -45,6 +46,33 @@ import {
   User,
   XCircle,
 } from "lucide-react";
+
+type ReviewQueueControlCopyDefinition = {
+  label: TranslationKey;
+  headline: TranslationKey;
+  detail: TranslationKey;
+  cta: TranslationKey;
+};
+
+const REVIEW_QUEUE_CONTROL_COPY = {
+  pending_approvals: { label: "controlApprovalLabel", headline: "controlApprovalHeadline", detail: "controlApprovalDetail", cta: "controlApprovalCta" },
+  delivery_reconciliation: { label: "controlDeliveryCheckLabel", headline: "controlDeliveryCheckHeadline", detail: "controlDeliveryCheckDetail", cta: "controlDeliveryCheckCta" },
+  approved_delivery: { label: "controlApprovedDeliveryLabel", headline: "controlApprovedDeliveryHeadline", detail: "controlApprovedDeliveryDetail", cta: "controlApprovedDeliveryCta" },
+  success_fee_compliance: { label: "controlSuccessFeeLabel", headline: "controlSuccessFeeHeadline", detail: "controlSuccessFeeDetail", cta: "controlSuccessFeeCta" },
+  evidence_gates: { label: "controlEvidenceLabel", headline: "controlEvidenceHeadline", detail: "controlEvidenceDetail", cta: "controlEvidenceCta" },
+  admin_reviews: { label: "controlAdminLabel", headline: "controlAdminHeadline", detail: "controlAdminDetail", cta: "controlAdminCta" },
+  profile_blockers: { label: "controlProfileBlockerLabel", headline: "controlProfileBlockerHeadline", detail: "controlProfileBlockerDetail", cta: "controlProfileBlockerCta" },
+  connector_readiness: { label: "controlConnectorLabel", headline: "controlConnectorHeadline", detail: "controlConnectorDetail", cta: "controlConnectorCta" },
+  inbox_response_candidates: { label: "controlInboxLabel", headline: "controlInboxHeadline", detail: "controlInboxDetail", cta: "controlInboxCta" },
+  employer_replies: { label: "controlEmployerReplyLabel", headline: "controlEmployerReplyHeadline", detail: "controlEmployerReplyDetail", cta: "controlEmployerReplyCta" },
+  interview_scheduling: { label: "controlInterviewScheduleLabel", headline: "controlInterviewScheduleHeadline", detail: "controlInterviewScheduleDetail", cta: "controlInterviewScheduleCta" },
+  interview_outcomes: { label: "controlInterviewOutcomeLabel", headline: "controlInterviewOutcomeHeadline", detail: "controlInterviewOutcomeDetail", cta: "controlInterviewOutcomeCta" },
+  follow_up_drafting: { label: "reviewControlFollowUpLabel", headline: "reviewControlFollowUpHeadline", detail: "reviewControlFollowUpDetail", cta: "reviewControlFollowUpCta" },
+  job_decisions: { label: "controlJobDecisionLabel", headline: "controlJobDecisionHeadline", detail: "controlJobDecisionDetail", cta: "controlJobDecisionCta" },
+  interview_preparation: { label: "controlInterviewPrepLabel", headline: "controlInterviewPrepHeadline", detail: "controlInterviewPrepDetail", cta: "controlInterviewPrepCta" },
+  profile_warnings: { label: "controlProfileWarningLabel", headline: "controlProfileWarningHeadline", detail: "controlProfileWarningDetail", cta: "controlProfileWarningCta" },
+  queue_clear: { label: "controlQueueClearLabel", headline: "controlQueueClearHeadline", detail: "controlQueueClearDetail", cta: "controlQueueClearCta" },
+} satisfies Record<ReviewQueueControlCopyId, ReviewQueueControlCopyDefinition>;
 
 type InboxResponseType = "rejection" | "interview_invite" | "offer" | "employer_question" | "other";
 
@@ -140,6 +168,7 @@ export default function ReviewQueue() {
     () => getReviewQueueControlSummary(operatingLedger),
     [operatingLedger]
   );
+  const queueControlCopy = REVIEW_QUEUE_CONTROL_COPY[queueControl.copyId];
   const canReviewAdminItems = operatingLedger?.canReviewAdminItems === true;
   const summaryItems = [
     [t("pipelineApprovals"), counts.pendingApprovals],
@@ -267,7 +296,7 @@ export default function ReviewQueue() {
               <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={getReviewRiskBadgeClass(queueControl.risk)}>
-                    {queueControl.label}
+                    {t(queueControlCopy.label)}
                   </Badge>
                   <Badge variant="outline">
                     {t("reviewItemsCount", { count: queueControl.count })}
@@ -294,8 +323,10 @@ export default function ReviewQueue() {
                   )}
                 </div>
                 <h2 className="text-xl font-semibold tracking-tight">{t("reviewQueueControl")}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{queueControl.headline}</p>
-                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{queueControl.detail}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(queueControlCopy.headline, { count: queueControl.count })}
+                </p>
+                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t(queueControlCopy.detail)}</p>
               </div>
               <Button
                 data-testid="review-queue-primary"
@@ -304,7 +335,7 @@ export default function ReviewQueue() {
                 onClick={() => scrollToQueueSection(queueControl.section)}
               >
                 <ClipboardCheck className="mr-2 h-4 w-4" />
-                {queueControl.cta}
+                {t(queueControlCopy.cta)}
               </Button>
             </div>
           </CardContent>

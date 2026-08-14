@@ -154,6 +154,11 @@ describe("localization wiring", () => {
     expect(reviewQueue).toContain('t("deliveryVerification")');
     expect(reviewQueue).toContain('t("approvedSendHandoffs")');
     expect(reviewQueue).toContain('t("confirmExternalDelivery")');
+    expect(reviewQueue).toContain("REVIEW_QUEUE_CONTROL_COPY[queueControl.copyId]");
+    expect(reviewQueue).toContain("t(queueControlCopy.headline, { count: queueControl.count })");
+    expect(reviewQueue).not.toContain("queueControl.headline");
+    expect(reviewQueue).not.toContain("queueControl.detail");
+    expect(reviewQueue).not.toContain("queueControl.cta");
     expect(reviewQueue).not.toContain(">Delivery Verification<");
     expect(reviewQueue).not.toContain(">Approved Send Handoffs<");
     expect(reviewQueue).not.toContain(">Confirm External Delivery<");
@@ -173,6 +178,8 @@ describe("localization wiring", () => {
     expect(translate("nl", "reviewQueueTitle")).toBe("Beoordelingswachtrij");
     expect(translate("nl", "deliveryVerification")).toContain("Verzending");
     expect(translate("nl", "confirmExternalDeliveryDescription", { kind: "opvolging" })).toContain("opvolging");
+    expect(translate("nl", "controlApprovalHeadline", { count: 2 })).toContain("2");
+    expect(translate("nl", "controlApprovalCta")).toBe("Goedkeuringen beoordelen");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

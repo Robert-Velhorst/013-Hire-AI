@@ -216,11 +216,14 @@ describe("operating review queue helpers", () => {
 
     expect(summary).toMatchObject({
       status: "blocked",
-      label: "Delivery verification",
+      copyId: "delivery_reconciliation",
       section: "delivery-reconciliation",
       risk: "high",
       externalAction: "delivery_reconciliation",
     });
+    expect(summary).not.toHaveProperty("headline");
+    expect(summary).not.toHaveProperty("detail");
+    expect(summary).not.toHaveProperty("cta");
   });
 
   it("routes interview outcome work to the exact completed interview", () => {
@@ -314,7 +317,7 @@ describe("operating review queue helpers", () => {
 
     expect(summary).toMatchObject({
       status: "blocked",
-      label: "Approval gate",
+      copyId: "pending_approvals",
       section: "approvals",
       risk: "high",
       approvalGated: true,

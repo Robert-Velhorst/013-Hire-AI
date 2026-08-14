@@ -564,3 +564,9 @@
 - Localized the Review Queue shell, count summary, approval controls and feedback, uncertain-delivery reconciliation, approved send handoffs, and manual-delivery confirmation dialog in English and Dutch.
 - Preserved approval descriptions, employer messages, delivery failures, provider references, and audit events verbatim; helper-generated operating summaries remain English until their presentation strings are replaced with structured identifiers.
 - Added localization wiring regressions and verified the seeded Dutch queue and delivery dialog in the in-app browser. Its enforced compact width was 780 pixels and showed no horizontal overflow.
+
+## 2026-08-14 - Structured Review Queue control pass
+
+- Replaced queue-level English label, headline, guidance, and command output with a stable exhaustive control identifier while preserving priority, routing, risk, approval, and external-action behavior.
+- Added a typed English/Dutch presentation map in the Review Queue, so new control states cannot compile without an explicit localized presentation contract; persisted audit-note generation remains separate and unchanged.
+- Added structured-output and localization wiring regressions and verified the seeded Dutch approval control at desktop and the browser-enforced 780-pixel compact width with no horizontal overflow.
