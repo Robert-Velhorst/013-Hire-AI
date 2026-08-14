@@ -16,6 +16,7 @@ describe("localization wiring", () => {
     expect(provider).toContain("user?.locale");
     expect(layout).toContain("t(item.labelKey)");
     expect(settings).toContain("trpc.auth.updateLocale.useMutation");
+    expect(settings).toContain('translate(savedLocale, "languageSaved")');
     expect(settings).toContain("SUPPORTED_LOCALES.map");
     expect(settings).toContain('<AppHeader currentPage="settings" />');
     expect(settings).toContain('t("accountDeletionReviewDescription")');
@@ -24,6 +25,8 @@ describe("localization wiring", () => {
     expect(settings).not.toContain("Request an operator review of account erasure");
     expect(appHeader).toContain('aria-label={t("openAccountMenu")}');
     expect(appHeader).toContain('t("signOut")');
+    expect(appHeader).toContain('t("billingFees")');
+    expect(appHeader).toContain('t("adminPanel")');
   });
 
   it("localizes complete saved-job and not-found workflows with safe interpolation", () => {
@@ -58,5 +61,17 @@ describe("localization wiring", () => {
     expect(translate("en", "applicationsCount", { count: 10 })).toBe("10 applications");
     expect(translate("nl", "deletionStatusOpen")).toContain("geen gegevens verwijderd");
     expect(translate("nl", "jobTasksCount", { count: 4 })).toBe("4 vacaturtaken");
+  });
+
+  it("uses the shared localized header and localized onboarding on the dashboard", () => {
+    const dashboard = readFileSync(resolve(process.cwd(), "client/src/pages/Dashboard.tsx"), "utf8");
+
+    expect(dashboard).toContain('<AppHeader currentPage="dashboard" />');
+    expect(dashboard).toContain('const { locale, t } = useLocale()');
+    expect(dashboard).toContain('t("onboardingTitle")');
+    expect(dashboard).toContain('t("welcomeBack"');
+    expect(dashboard).not.toContain('aria-label="Open account menu"');
+    expect(translate("nl", "billingFees")).toBe("Facturatie en kosten");
+    expect(translate("nl", "welcomeBack", { name: "Sam" })).toBe("Welkom terug, Sam!");
   });
 });

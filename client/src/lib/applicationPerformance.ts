@@ -35,10 +35,20 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
  */
 export function getApplicationPerformanceSummary(
   input: ApplicationPerformanceInput,
+  locale = "en",
 ): ApplicationPerformanceSummary {
   const confirmedSubmissions = nonNegativeCount(input.confirmedSubmissions);
   const recordedResponseSignals = nonNegativeCount(input.recordedResponseSignals);
   const recordedInterviews = nonNegativeCount(input.recordedInterviews);
+
+  const isDutch = locale.toLowerCase().startsWith("nl");
+  const noSubmissions = isDutch ? "Nog geen bevestigde sollicitaties" : "No confirmed submissions yet";
+  const responseDetail = isDutch
+    ? `${recordedResponseSignals} ${recordedResponseSignals === 1 ? "sollicitatie" : "sollicitaties"} met een vastgelegde reactie of statussignaal uit ${confirmedSubmissions} bevestigde ${confirmedSubmissions === 1 ? "sollicitatie" : "sollicitaties"}`
+    : `${pluralize(recordedResponseSignals, "application")} with a recorded response or status signal from ${pluralize(confirmedSubmissions, "confirmed submission")}`;
+  const interviewDetail = isDutch
+    ? `${recordedInterviews} ${recordedInterviews === 1 ? "gepland gesprek" : "geplande gesprekken"} uit ${confirmedSubmissions} bevestigde ${confirmedSubmissions === 1 ? "sollicitatie" : "sollicitaties"}`
+    : `${pluralize(recordedInterviews, "scheduled interview")} from ${pluralize(confirmedSubmissions, "confirmed submission")}`;
 
   return {
     confirmedSubmissions,
@@ -46,11 +56,7 @@ export function getApplicationPerformanceSummary(
     recordedInterviews,
     responseRate: percentage(recordedResponseSignals, confirmedSubmissions),
     interviewRate: percentage(recordedInterviews, confirmedSubmissions),
-    responseDetail: confirmedSubmissions === 0
-      ? "No confirmed submissions yet"
-      : `${pluralize(recordedResponseSignals, "application")} with a recorded response or status signal from ${pluralize(confirmedSubmissions, "confirmed submission")}`,
-    interviewDetail: confirmedSubmissions === 0
-      ? "No confirmed submissions yet"
-      : `${pluralize(recordedInterviews, "scheduled interview")} from ${pluralize(confirmedSubmissions, "confirmed submission")}`,
+    responseDetail: confirmedSubmissions === 0 ? noSubmissions : responseDetail,
+    interviewDetail: confirmedSubmissions === 0 ? noSubmissions : interviewDetail,
   };
 }

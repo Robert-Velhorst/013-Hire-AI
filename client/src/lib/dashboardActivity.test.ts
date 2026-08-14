@@ -14,4 +14,10 @@ describe("formatDashboardActivityTarget", () => {
     expect(formatDashboardActivityTarget({ company: "Remote Co" })).toBe("Remote Co");
     expect(formatDashboardActivityTarget()).toBe("Job details unavailable");
   });
+
+  it("localizes the relationship and fallback for Dutch accounts", () => {
+    expect(formatDashboardActivityTarget({ title: "Ontwikkelaar", company: "Acme" }, "nl-NL"))
+      .toBe("Ontwikkelaar bij Acme");
+    expect(formatDashboardActivityTarget(null, "nl-NL")).toBe("Vacaturegegevens niet beschikbaar");
+  });
 });

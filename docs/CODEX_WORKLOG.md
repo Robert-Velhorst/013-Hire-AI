@@ -465,3 +465,11 @@
 - Preserved exact current-job history, user-decision locks, database-counted daily limits, profile evidence, connector gates, and follow-up readiness while exposing truncation through `operatingScope`.
 - Added a 251-application scale regression, cross-user decision isolation, and a route/service wiring contract.
 - Verified the live planner and preference refresh at desktop/mobile breakpoints with no overflow or browser errors; all 943 active tests, TypeScript, and the production bundle pass.
+
+## 2026-08-14 - Shared dashboard localization pass
+
+- Replaced the dashboard's duplicated account header with the shared localized header while preserving billing access and administrator-only navigation.
+- Localized dashboard loading, onboarding, welcome context, and preparation state; shared salary, activity-target, and application-performance presenters now honor English/Dutch account locale.
+- Fixed locale switching so its confirmation uses the newly selected language instead of the stale render language.
+- Verified the Dutch settings and dashboard flows in the in-app browser, including mobile layout, with localized employer relationships and performance evidence, no horizontal overflow, and no console warnings or errors.
+- Passed TypeScript, the production build and bundle budget, dependency audit, development doctor, and the full regression suite: 235 files / 1,181 tests passed with one database-dependent privacy integration skipped.

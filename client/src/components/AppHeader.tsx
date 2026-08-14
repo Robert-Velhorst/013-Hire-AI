@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Activity, User, Settings, LogOut, Zap } from "lucide-react";
+import { Activity, User, Settings, LogOut, Zap, DollarSign, Shield } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -97,6 +97,25 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
                 <Settings className="mr-2 h-4 w-4" />
                 {t("settings")}
               </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
+                onClick={() => setLocation("/billing")}
+              >
+                <DollarSign className="mr-2 h-4 w-4" />
+                {t("billingFees")}
+              </DropdownMenuItem>
+              {user?.role === "admin" && (
+                <>
+                  <DropdownMenuSeparator className="bg-slate-800" />
+                  <DropdownMenuItem
+                    className="text-amber-400 focus:bg-amber-500/10 focus:text-amber-400 cursor-pointer"
+                    onClick={() => setLocation("/admin")}
+                  >
+                    <Shield className="mr-2 h-4 w-4" />
+                    {t("adminPanel")}
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator className="bg-slate-800" />
               <DropdownMenuItem 
                 className="text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer"

@@ -22,11 +22,10 @@ describe("dashboard layout landmarks", () => {
 
     expect(header).toContain('aria-label={t("hireAiHome")}');
     expect(header).toContain('aria-label={t("openAccountMenu")}');
-    expect(dashboard).toContain('aria-label="Hire.AI home"');
-    expect(dashboard).toContain('aria-label="Open account menu"');
-    for (const source of [header, dashboard]) {
-      expect(source).not.toMatch(/<div[^>]+onClick=\{\(\) => setLocation\("\/"\)\}/);
-    }
+    expect(dashboard).toContain('<AppHeader currentPage="dashboard" />');
+    expect(dashboard).not.toContain('aria-label="Hire.AI home"');
+    expect(dashboard).not.toContain('aria-label="Open account menu"');
+    expect(header).not.toMatch(/<div[^>]+onClick=\{\(\) => setLocation\("\/"\)\}/);
   });
 
   it("allows sentence-length dashboard status badges to wrap", () => {

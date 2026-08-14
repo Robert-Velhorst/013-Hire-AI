@@ -1,7 +1,7 @@
 import { normalizeSalaryCurrency } from "@shared/salaryCurrency";
 
-function formatSalaryAmount(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
+function formatSalaryAmount(amount: number, currency: string, locale: string) {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     currencyDisplay: "code",
@@ -13,12 +13,14 @@ function formatSalaryAmount(amount: number, currency: string) {
 export function formatJobSalary(
   min?: number | null,
   max?: number | null,
-  salaryCurrency?: string | null
+  salaryCurrency?: string | null,
+  locale = "en-US",
 ) {
-  if (!min && !max) return "Not specified";
+  const isDutch = locale.toLowerCase().startsWith("nl");
+  if (!min && !max) return isDutch ? "Niet opgegeven" : "Not specified";
 
   const currency = normalizeSalaryCurrency(salaryCurrency);
-  if (min && max) return `${formatSalaryAmount(min, currency)} - ${formatSalaryAmount(max, currency)}`;
-  if (min) return `${formatSalaryAmount(min, currency)}+`;
-  return `Up to ${formatSalaryAmount(max!, currency)}`;
+  if (min && max) return `${formatSalaryAmount(min, currency, locale)} - ${formatSalaryAmount(max, currency, locale)}`;
+  if (min) return `${formatSalaryAmount(min, currency, locale)}+`;
+  return `${isDutch ? "Tot" : "Up to"} ${formatSalaryAmount(max!, currency, locale)}`;
 }

@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { useLocale } from "@/contexts/LocaleContext";
+import { translate, useLocale } from "@/contexts/LocaleContext";
 import { localeLabels, SUPPORTED_LOCALES, type SupportedLocale } from "@shared/localization";
 import AppHeader from "@/components/AppHeader";
 import {
@@ -69,7 +69,7 @@ export default function Settings() {
     onSuccess: ({ locale: savedLocale }) => {
       setLocale(savedLocale);
       utils.auth.me.setData(undefined, (current) => current ? { ...current, locale: savedLocale } : current);
-      toast.success(t("languageSaved"));
+      toast.success(translate(savedLocale, "languageSaved"));
     },
     onError: (error) => toast.error(error.message || t("languageSaveFailed")),
   });

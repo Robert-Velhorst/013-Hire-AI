@@ -190,7 +190,7 @@ export default function SavedJobs() {
                           {(job.salaryMin || job.salaryMax) && (
                             <span className="flex items-center gap-1 text-green-400">
                               <DollarSign className="w-4 h-4" />
-                              {formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency)}
+                              {formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, locale)}
                             </span>
                           )}
                           {job.postedDate && (

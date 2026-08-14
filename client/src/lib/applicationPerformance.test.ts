@@ -37,4 +37,15 @@ describe("application performance summary", () => {
     expect(summary.responseRate).toBe(100);
     expect(summary.interviewRate).toBe(100);
   });
+
+  it("localizes evidence details for Dutch accounts", () => {
+    const summary = getApplicationPerformanceSummary({
+      confirmedSubmissions: 2,
+      recordedResponseSignals: 1,
+      recordedInterviews: 1,
+    }, "nl-NL");
+
+    expect(summary.responseDetail).toContain("vastgelegde reactie");
+    expect(summary.interviewDetail).toContain("gepland gesprek");
+  });
 });

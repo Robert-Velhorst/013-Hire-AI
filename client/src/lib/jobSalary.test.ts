@@ -17,4 +17,9 @@ describe("job salary formatting", () => {
   it("does not render compensation when neither bound exists", () => {
     expect(formatJobSalary()).toBe("Not specified");
   });
+
+  it("uses the selected locale for salary language and number formatting", () => {
+    expect(formatJobSalary(null, 90000, "eur", "nl-NL")).toContain("Tot");
+    expect(formatJobSalary(undefined, undefined, undefined, "nl-NL")).toBe("Niet opgegeven");
+  });
 });

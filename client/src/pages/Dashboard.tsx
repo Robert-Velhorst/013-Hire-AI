@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Activity, Heart, TrendingUp, Briefcase, Send, Eye, Calendar, Target, Settings, LogOut, Search, FileText, Rocket, User, Bell, RefreshCw, Clock, CheckCircle, XCircle, MessageSquare, Building2, MapPin, DollarSign, ExternalLink, Loader2, AlertCircle, Mail, Pause, Play } from "lucide-react";
+import { Activity, Heart, TrendingUp, Briefcase, Send, Eye, Calendar, Target, Settings, Search, FileText, Rocket, User, Bell, RefreshCw, Clock, CheckCircle, XCircle, MessageSquare, Building2, MapPin, DollarSign, ExternalLink, Loader2, AlertCircle, Mail, Pause, Play, Shield } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
@@ -32,20 +32,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import TosAcceptanceDialog from "@/components/TosAcceptanceDialog";
-import { Shield } from "lucide-react";
 import { formatCalendarDate } from "@/lib/calendarDate";
+import AppHeader from "@/components/AppHeader";
+import { useLocale } from "@/contexts/LocaleContext";
 
 export default function Dashboard() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+  const { locale, t } = useLocale();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("all");
@@ -112,7 +107,7 @@ export default function Dashboard() {
     confirmedSubmissions: operatingLedger?.metrics.submittedApplications ?? submittedApplicationCount,
     recordedResponseSignals: operatingLedger?.metrics.employerResponses,
     recordedInterviews: operatingLedger?.metrics.interviews ?? interviewInvites,
-  });
+  }, locale);
 
   // Check if user needs ToS acceptance
   useEffect(() => {
@@ -138,12 +133,6 @@ export default function Dashboard() {
       window.location.href = getLoginUrl();
     }
   }, [loading, isAuthenticated]);
-
-  const handleLogout = async () => {
-    await logout();
-    setLocation("/");
-    toast.success("Logged out successfully");
-  };
 
   const handleRunAutonomousReview = () => {
     if (!autonomousControl.runsAgent) {
@@ -177,7 +166,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Activity className="h-12 w-12 text-cyan-400 animate-pulse mx-auto mb-4" />
-          <p className="text-slate-400">Loading your dashboard...</p>
+          <p className="text-slate-400">{t("dashboardLoading")}</p>
         </div>
       </div>
     );
@@ -264,10 +253,10 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="text-2xl flex items-center gap-2">
               <Rocket className="h-6 w-6 text-cyan-400" />
-              Welcome to Hire.AI!
+              {t("onboardingTitle")}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Set up your evidence and policy so Hire.AI can prepare reviewable job-search work.
+              {t("onboardingDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -276,8 +265,8 @@ export default function Dashboard() {
                 <FileText className="h-5 w-5 text-cyan-400" />
               </div>
               <div>
-                <h4 className="font-medium text-white">Step 1: Upload Your Resume</h4>
-                <p className="text-sm text-slate-400">Our AI will extract your skills and experience automatically.</p>
+                <h4 className="font-medium text-white">{t("onboardingResumeTitle")}</h4>
+                <p className="text-sm text-slate-400">{t("onboardingResumeDescription")}</p>
               </div>
             </div>
             <div className="flex items-start gap-4 p-4 bg-slate-800/50 rounded-lg">
@@ -285,8 +274,8 @@ export default function Dashboard() {
                 <Target className="h-5 w-5 text-blue-400" />
               </div>
               <div>
-                <h4 className="font-medium text-white">Step 2: Set Your Preferences</h4>
-                <p className="text-sm text-slate-400">Tell us what kind of jobs you're looking for.</p>
+                <h4 className="font-medium text-white">{t("onboardingPreferencesTitle")}</h4>
+                <p className="text-sm text-slate-400">{t("onboardingPreferencesDescription")}</p>
               </div>
             </div>
             <div className="flex items-start gap-4 p-4 bg-slate-800/50 rounded-lg">
@@ -294,8 +283,8 @@ export default function Dashboard() {
                 <Send className="h-5 w-5 text-purple-400" />
               </div>
               <div>
-                <h4 className="font-medium text-white">Step 3: Review Prepared Work</h4>
-                <p className="text-sm text-slate-400">Review matches and materials before confirming any external application handoff.</p>
+                <h4 className="font-medium text-white">{t("onboardingReviewTitle")}</h4>
+                <p className="text-sm text-slate-400">{t("onboardingReviewDescription")}</p>
               </div>
             </div>
           </div>
@@ -305,7 +294,7 @@ export default function Dashboard() {
               className="flex-1 border-slate-700 text-slate-300"
               onClick={() => setShowOnboarding(false)}
             >
-              I'll do this later
+              {t("doLater")}
             </Button>
             <Button
               className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600"
@@ -314,120 +303,26 @@ export default function Dashboard() {
                 setLocation("/profile");
               }}
             >
-              Get Started
+              {t("getStarted")}
               <Rocket className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Header */}
-      <header className="border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-            onClick={() => setLocation("/")}
-            aria-label="Hire.AI home"
-          >
-            <Activity className="h-8 w-8 text-cyan-400" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-              Hire.AI
-            </span>
-          </button>
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              className="text-cyan-400 bg-cyan-500/10"
-              onClick={() => setLocation("/dashboard")}
-            >
-              Dashboard
-            </Button>
-            
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600"
-                  aria-label="Open account menu"
-                >
-                  <span className="text-white font-semibold">
-                    {user?.name?.charAt(0).toUpperCase() || "U"}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-slate-900 border-slate-800" align="end">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium text-white">{user?.name || "User"}</p>
-                  <p className="text-xs text-slate-400">{user?.email}</p>
-                </div>
-                <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem 
-                  className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
-                  onClick={() => setLocation("/profile")}
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
-                  onClick={() => setLocation("/ai-preferences")}
-                >
-                  <Activity className="mr-2 h-4 w-4" />
-                  AI Preferences
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
-                  onClick={() => setLocation("/settings")}
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="text-slate-300 focus:bg-slate-800 focus:text-white cursor-pointer"
-                  onClick={() => setLocation("/billing")}
-                >
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  Billing & Fees
-                </DropdownMenuItem>
-                {(user as any)?.role === 'admin' && (
-                  <>
-                    <DropdownMenuSeparator className="bg-slate-800" />
-                    <DropdownMenuItem 
-                      className="text-amber-400 focus:bg-amber-500/10 focus:text-amber-400 cursor-pointer"
-                      onClick={() => setLocation("/admin")}
-                    >
-                      <Shield className="mr-2 h-4 w-4" />
-                      Admin Panel
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator className="bg-slate-800" />
-                <DropdownMenuItem 
-                  className="text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
+      <AppHeader currentPage="dashboard" />
 
       <main className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
         <div className="mb-8 flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">
-              Welcome back, {user?.name?.split(' ')[0] || "Job Seeker"}!
+              {t("welcomeBack", { name: user?.name?.split(" ")[0] || t("jobSeeker") })}
             </h1>
             <p className="text-slate-400">
               {isNewUser 
-                ? "Let's set up your profile to start finding your dream job"
-                : "Here's your job search health overview"
+                ? t("newUserDashboardDescription")
+                : t("dashboardDescription")
               }
             </p>
           </div>
@@ -447,7 +342,7 @@ export default function Dashboard() {
                 : <User className="mr-2 h-4 w-4" />
             )}
             {runAutonomousAgent.isPending && autonomousControl.runsAgent
-              ? "Preparing..."
+              ? t("preparing")
               : autonomousControl.cta}
           </Button>
         </div>
@@ -1613,11 +1508,11 @@ export default function Dashboard() {
                           {app.status === "pending" ? "Queued" : app.status}
                         </p>
                         <p className="text-xs text-slate-400 truncate">
-                          {formatDashboardActivityTarget(app.job)}
+                          {formatDashboardActivityTarget(app.job, locale)}
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
                           {app.status === "pending" ? "Queued" : "Applied"}{" "}
-                          {new Date(app.appliedDate || app.createdAt).toLocaleDateString()}
+                          {new Date(app.appliedDate || app.createdAt).toLocaleDateString(locale)}
                         </p>
                       </div>
                     </div>
@@ -1719,7 +1614,7 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-2 text-xs text-slate-500">
                                   <Calendar className="w-3 h-3" />
                                   {app.status === "pending" ? "Queued" : "Applied"}{" "}
-                                  {new Date(app.appliedDate || app.createdAt).toLocaleDateString()}
+                                  {new Date(app.appliedDate || app.createdAt).toLocaleDateString(locale)}
                                 </div>
                               </div>
                             </div>
@@ -1775,12 +1670,12 @@ export default function Dashboard() {
                       <Badge variant="secondary" className="bg-slate-800">
                         <Calendar className="w-3 h-3 mr-1" />
                         {selectedApplication.status === "pending" ? "Queued" : "Applied"}{" "}
-                        {new Date(selectedApplication.appliedDate || selectedApplication.createdAt).toLocaleDateString()}
+                        {new Date(selectedApplication.appliedDate || selectedApplication.createdAt).toLocaleDateString(locale)}
                       </Badge>
                       {(selectedApplication.job?.salaryMin || selectedApplication.job?.salaryMax) && (
                         <Badge variant="secondary" className="bg-slate-800">
                           <DollarSign className="w-3 h-3 mr-1" />
-                          {formatJobSalary(selectedApplication.job.salaryMin, selectedApplication.job.salaryMax, selectedApplication.job.salaryCurrency)}
+                          {formatJobSalary(selectedApplication.job.salaryMin, selectedApplication.job.salaryMax, selectedApplication.job.salaryCurrency, locale)}
                         </Badge>
                       )}
                     </div>
