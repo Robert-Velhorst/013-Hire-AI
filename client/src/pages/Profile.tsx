@@ -49,6 +49,7 @@ import {
 } from "@/lib/connectorConnectionControl";
 import { toast } from "sonner";
 import AppHeader from "@/components/AppHeader";
+import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { calendarDateForInput, calendarYear, formatCalendarDate } from "@/lib/calendarDate";
 import {
   Dialog,
@@ -106,6 +107,7 @@ type LinkedInIdentityCandidate = {
 };
 
 export default function Profile() {
+  const { locale, t } = useLocale();
   const { loading, isAuthenticated } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   
@@ -623,9 +625,9 @@ export default function Profile() {
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Your Profile</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">{t("yourProfile")}</h1>
           <p className="text-slate-400">
-            Build your professional profile to help our AI find the perfect job matches
+            {t("profileDescription")}
           </p>
         </div>
 
@@ -636,7 +638,7 @@ export default function Profile() {
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-cyan-400" />
-                  Profile Evidence Control
+                  {t("profileEvidenceControl")}
                 </CardTitle>
                 <CardDescription className="mt-2">
                   {evidenceControl.headline}
@@ -651,7 +653,7 @@ export default function Profile() {
             <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-slate-300">Readiness score</span>
+                  <span className="text-sm text-slate-300">{t("readinessScore")}</span>
                   <span className="text-sm font-semibold text-white">{evidenceControl.score}%</span>
                 </div>
                 <Progress value={evidenceControl.score} className="h-2" />
@@ -667,9 +669,9 @@ export default function Profile() {
             </div>
 
             <div className="grid grid-cols-3 gap-3">
-              <EvidenceMetric label="Connected" value={evidenceControl.connectedCount} />
-              <EvidenceMetric label="Missing" value={evidenceControl.missingCount} />
-              <EvidenceMetric label="Consent gated" value={evidenceControl.consentRequiredCount} />
+              <EvidenceMetric label={t("connectedLabel")} value={evidenceControl.connectedCount} />
+              <EvidenceMetric label={t("missingLabel")} value={evidenceControl.missingCount} />
+              <EvidenceMetric label={t("consentGated")} value={evidenceControl.consentRequiredCount} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -701,7 +703,7 @@ export default function Profile() {
             <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                External inbox and cloud access requires explicit consent. Available providers open their OAuth approval flow; Hire.AI cannot read data until authorization succeeds.
+                {t("profileConsentNotice")}
               </p>
             </div>
           </CardContent>
@@ -712,10 +714,10 @@ export default function Profile() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Upload className="w-5 h-5 text-cyan-400" />
-              Import Your Profile
+              {t("importYourProfile")}
             </CardTitle>
             <CardDescription>
-              Quickly populate your profile by connecting your accounts or uploading your resume
+              {t("importProfileDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -727,7 +729,7 @@ export default function Profile() {
                 disabled={connectorActionPending || discoverLinkedInIdentity.isPending}
               >
                 {discoverLinkedInIdentity.isPending ? <Loader2 className="w-6 h-6 animate-spin text-cyan-400" /> : <Linkedin className="w-6 h-6 text-blue-500" />}
-                <span className="text-white">{linkedInConnected ? "Review LinkedIn Identity" : "Connect LinkedIn"}</span>
+                <span className="text-white">{linkedInConnected ? t("reviewLinkedInIdentity") : t("connectLinkedIn")}</span>
               </Button>
               
               <Button
@@ -737,7 +739,7 @@ export default function Profile() {
                 disabled={connectorActionPending || discoverGitHubProfile.isPending}
               >
                 {discoverGitHubProfile.isPending ? <Loader2 className="w-6 h-6 animate-spin text-cyan-400" /> : <Github className="w-6 h-6 text-white" />}
-                <span className="text-white">{githubConnected ? "Review GitHub Profile" : "Connect GitHub"}</span>
+                <span className="text-white">{githubConnected ? t("reviewGitHubProfile") : t("connectGitHub")}</span>
               </Button>
 
               <Button
@@ -751,7 +753,7 @@ export default function Profile() {
                 ) : (
                   <Cloud className="w-6 h-6 text-cyan-400" />
                 )}
-                <span className="text-white">{googleDriveConnected ? "Find Drive Resumes" : "Connect Google Drive"}</span>
+                <span className="text-white">{googleDriveConnected ? t("findDriveResumes") : t("connectGoogleDrive")}</span>
               </Button>
 
               <Button
@@ -765,7 +767,7 @@ export default function Profile() {
                 ) : (
                   <Cloud className="w-6 h-6 text-cyan-400" />
                 )}
-                <span className="text-white">{dropboxConnected ? "Find Dropbox Resumes" : "Connect Dropbox"}</span>
+                <span className="text-white">{dropboxConnected ? t("findDropboxResumes") : t("connectDropbox")}</span>
               </Button>
 
               <Button
@@ -775,7 +777,7 @@ export default function Profile() {
                 disabled={connectorActionPending || discoverInboxResponses.isPending}
               >
                 {discoverInboxResponses.isPending ? <Loader2 className="w-6 h-6 animate-spin text-cyan-400" /> : <Mail className="w-6 h-6 text-cyan-400" />}
-                <span className="text-white">{gmailConnected ? "Find Gmail Replies" : "Connect Gmail"}</span>
+                <span className="text-white">{gmailConnected ? t("findGmailReplies") : t("connectGmail")}</span>
               </Button>
 
               <Button
@@ -785,7 +787,7 @@ export default function Profile() {
                 disabled={connectorActionPending || discoverInboxResponses.isPending}
               >
                 {discoverInboxResponses.isPending ? <Loader2 className="w-6 h-6 animate-spin text-cyan-400" /> : <Mail className="w-6 h-6 text-cyan-400" />}
-                <span className="text-white">{outlookConnected ? "Find Outlook Replies" : "Connect Outlook"}</span>
+                <span className="text-white">{outlookConnected ? t("findOutlookReplies") : t("connectOutlook")}</span>
               </Button>
               
               <label>
@@ -801,7 +803,7 @@ export default function Profile() {
                     ) : (
                       <Upload className="w-6 h-6 text-cyan-400" />
                     )}
-                    <span className="text-white">Upload Resume</span>
+                    <span className="text-white">{t("uploadResume")}</span>
                   </div>
                 </Button>
                 <input
@@ -815,7 +817,7 @@ export default function Profile() {
             </div>
             {cloudResumeDocuments.length > 0 ? (
               <div className="mt-4 space-y-2 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Cloud resume candidates</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("cloudResumeCandidates")}</p>
                 {cloudResumeDocuments.map((document) => (
                   <div key={`${document.provider}:${document.sourceId}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
                     <div className="min-w-0">
@@ -832,7 +834,7 @@ export default function Profile() {
                       disabled={importCloudResume.isPending}
                     >
                       {importCloudResume.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                      Import
+                      {t("importAction")}
                     </Button>
                   </div>
                 ))}
@@ -910,7 +912,7 @@ export default function Profile() {
             {inboxResponseCandidates.length > 0 ? (
               <div className="mt-4 space-y-2 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Inbox response candidates</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("inboxResponseCandidates")}</p>
                   <span className="text-xs text-slate-500">
                     {inboxResponseCandidates.length} of {inboxResponseCandidatesQuery.data?.total ?? inboxResponseCandidates.length}
                   </span>
@@ -932,7 +934,7 @@ export default function Profile() {
                       disabled={ingestInboxResponse.isPending}
                     >
                       {ingestInboxResponse.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      Confirm
+                      {t("confirmAction")}
                     </Button>
                     <div className="w-48">
                       <Select
@@ -960,7 +962,7 @@ export default function Profile() {
                       onClick={() => dismissInboxResponseCandidate.mutate({ candidateId: candidate.id })}
                       disabled={dismissInboxResponseCandidate.isPending}
                     >
-                      Dismiss
+                      {t("dismissAction")}
                     </Button>
                   </div>
                 ))}
@@ -972,7 +974,7 @@ export default function Profile() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-white">{activeResumeQuery.data.fileName}</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Active version {activeResumeQuery.data.version} used for application preparation
+                      {t("activeResumeVersion", { version: activeResumeQuery.data.version })}
                     </p>
                   </div>
                   <button
@@ -986,24 +988,24 @@ export default function Profile() {
                       }
                     }}
                   >
-                    View resume
+                    {t("viewResume")}
                   </button>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No active resume yet. Importing a resume creates the version used for future application preparation.</p>
+                <p className="text-sm text-slate-400">{t("noActiveResume")}</p>
               )}
               {resumeVersions.length > 1 ? (
                 <div className="mt-3 border-t border-slate-800 pt-3">
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Resume versions</p>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">{t("resumeVersions")}</p>
                   <div className="space-y-2">
                     {resumeVersions.map((resume) => (
                       <div key={resume.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="min-w-0 truncate text-slate-300">v{resume.version} - {resume.fileName}</span>
                         <div className="flex items-center gap-2">
-                          {resume.isActive ? <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">Active</Badge> : null}
+                          {resume.isActive ? <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">{t("activeLabel")}</Badge> : null}
                           {!resume.isActive ? (
                             <Button size="sm" variant="outline" onClick={() => setActiveResume.mutate({ version: resume.version })} disabled={setActiveResume.isPending}>
-                              Use this version
+                              {t("useThisVersion")}
                             </Button>
                           ) : null}
                           <Button
@@ -1293,6 +1295,8 @@ export default function Profile() {
                   <WorkExperienceCard
                     key={exp.id}
                     experience={exp}
+                    locale={locale}
+                    t={t}
                     onEdit={() => {
                       setEditingWorkExp(exp);
                       setWorkExpDialogOpen(true);
@@ -2105,7 +2109,13 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function WorkExperienceCard({ experience, onEdit, onDelete }: any) {
+function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
+  experience: any;
+  locale: string;
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="border border-slate-700 rounded-lg p-4 hover:border-cyan-500/50 transition-colors">
       <div className="flex justify-between items-start mb-2">
@@ -2123,7 +2133,7 @@ function WorkExperienceCard({ experience, onEdit, onDelete }: any) {
         </div>
       </div>
       <p className="text-sm text-slate-500 mb-2">
-        {formatCalendarDate(experience.startDate) || "Start date not recorded"} - {experience.isCurrent ? "Present" : formatCalendarDate(experience.endDate) || "End date not recorded"}
+        {formatCalendarDate(experience.startDate, locale) || t("startDateNotRecorded")} - {experience.isCurrent ? t("present") : formatCalendarDate(experience.endDate, locale) || t("endDateNotRecorded")}
       </p>
       {experience.description && (
         <p className="text-slate-400 text-sm">{experience.description}</p>

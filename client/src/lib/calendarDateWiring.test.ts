@@ -13,7 +13,8 @@ describe("calendar date wiring", () => {
     expect(billing).toContain("formatBillingCalendarDate(fee.startDate, locale)");
     expect(billing).toContain("formatBillingCalendarDate(payment.periodStart, locale)");
     expect(profile).toContain("calendarDateForInput(value)");
-    expect(profile).toContain("formatCalendarDate(experience.startDate)");
+    expect(profile).toContain("formatCalendarDate(experience.startDate, locale)");
+    expect(profile).toContain("formatCalendarDate(experience.endDate, locale)");
     expect(profile).toContain("calendarYear(education.endDate)");
     expect(profile).not.toContain("new Date(experience.endDate).toLocaleDateString()");
   });

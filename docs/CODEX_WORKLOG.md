@@ -481,3 +481,10 @@
 - Removed the false Dashboard-current state from the Applications account header.
 - Verified Dutch listing dates/salaries, application states/date ordering, review audit timestamps, and the Applications mobile width in the in-app browser with no warnings, errors, or horizontal overflow.
 - Passed TypeScript, production build and bundle budget, dependency audit, development doctor, and the full regression suite with one database-dependent privacy integration skipped.
+
+## 2026-08-14 - Profile evidence localization pass
+
+- Localized Profile readiness evidence, consent-gated import controls, connector actions, resume upload and selection, and inbox response candidate controls in English and Dutch.
+- Made work-history start and end dates honor the persisted account locale, with localized present and missing-date fallbacks, while preserving provider-supplied and backend evidence text verbatim.
+- Verified the Dutch Profile flow in the in-app browser at desktop and mobile widths with no console warnings, errors, or horizontal overflow.
+- Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.

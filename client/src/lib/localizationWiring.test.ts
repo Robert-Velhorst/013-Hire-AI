@@ -92,4 +92,18 @@ describe("localization wiring", () => {
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
     expect(translate("nl", "statusWithdrawn")).toBe("Ingetrokken");
   });
+
+  it("localizes primary candidate evidence and resume controls", () => {
+    const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
+
+    expect(profile).toContain('const { locale, t } = useLocale()');
+    expect(profile).toContain('t("profileEvidenceControl")');
+    expect(profile).toContain('t("profileConsentNotice")');
+    expect(profile).toContain('t("uploadResume")');
+    expect(profile).toContain('t("activeResumeVersion"');
+    expect(profile).toContain("formatCalendarDate(experience.startDate, locale)");
+    expect(profile).not.toContain("External inbox and cloud access requires explicit consent.");
+    expect(translate("nl", "yourProfile")).toBe("Je profiel");
+    expect(translate("nl", "activeResumeVersion", { version: 3 })).toContain("3");
+  });
 });
