@@ -5,6 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
 import { formatAdminOperatingCopy, getAdminOperatingActionCopy, getAdminOperatingCopy, getAdminOperatingSummaryCopy, type AdminOperatingCopyKey } from "@/lib/adminOperatingCopy";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
+import { formatAdminFinancialCopy, getAdminFinancialCopy, getAdminFinancialStatusCopy, type AdminFinancialCopyKey } from "@/lib/adminFinancialCopy";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
 import { openExternalUrl } from "@/lib/externalUrl";
 import {
@@ -51,24 +52,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-function formatCurrency(cents: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
-function formatDate(date: Date | string | null | undefined) {
-  if (!date) return "—";
-  return new Date(date).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, label }: { status: string; label?: string }) {
   const variants: Record<string, string> = {
     active: "bg-green-500/20 text-green-400 border-green-500/30",
     pending_verification: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
@@ -107,7 +91,7 @@ function StatusBadge({ status }: { status: string }) {
   const cls = variants[status] ?? "bg-slate-500/20 text-slate-400 border-slate-500/30";
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
-      {status.replace(/_/g, " ")}
+      {label ?? status.replace(/_/g, " ")}
     </span>
   );
 }
@@ -148,6 +132,9 @@ export default function AdminPanel() {
   const { locale, t } = useLocale();
   const ac = (key: AdminOperatingCopyKey) => getAdminOperatingCopy(locale, key);
   const af = (key: AdminOperatingCopyKey, values: Record<string, string | number>) => formatAdminOperatingCopy(locale, key, values);
+  const fc = (key: AdminFinancialCopyKey) => getAdminFinancialCopy(locale, key);
+  const ff = (key: AdminFinancialCopyKey, values: Record<string, string | number>) => formatAdminFinancialCopy(locale, key, values);
+  const statusLabel = (status: string) => getAdminFinancialStatusCopy(locale, status);
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", { style: "currency", currency: "USD" }),
     [locale],
@@ -156,6 +143,16 @@ export default function AdminPanel() {
     () => new Intl.DateTimeFormat(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" }),
     [locale],
   );
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale === "nl" ? "nl-NL" : "en-US", { year: "numeric", month: "short", day: "numeric" }),
+    [locale],
+  );
+  const formatDate = (date: Date | string | null | undefined) => date ? dateFormatter.format(new Date(date)) : "-";
+  const formatCurrency = (cents: number, currency = "USD") => new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
   const isAdmin = user?.role === "admin";
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
@@ -262,7 +259,7 @@ export default function AdminPanel() {
   // Mutations
   const updateStatus = trpc.admin.updateFeeStatus.useMutation({
     onSuccess: () => {
-      toast.success("Fee status updated");
+      toast.success(fc("feeStatusUpdated"));
       refetchFees();
       refetchStats();
       refetchOperatingCounts();
@@ -275,7 +272,7 @@ export default function AdminPanel() {
 
   const reviewVerification = trpc.admin.reviewVerification.useMutation({
     onSuccess: (data) => {
-      toast.success(data.approved ? "Verification approved" : "Verification rejected");
+      toast.success(fc(data.approved ? "verificationApproved" : "verificationRejected"));
       refetchVerifications();
       refetchOverdue();
       refetchStats();
@@ -287,7 +284,7 @@ export default function AdminPanel() {
 
   const flagEscalation = trpc.admin.flagLegalEscalation.useMutation({
     onSuccess: () => {
-      toast.success("Account flagged for legal escalation");
+      toast.success(fc("legalEscalationRecorded"));
       refetchFees();
       refetchStats();
       refetchOperatingCounts();
@@ -299,7 +296,7 @@ export default function AdminPanel() {
 
   const addNote = trpc.admin.addNote.useMutation({
     onSuccess: () => {
-      toast.success("Note added");
+      toast.success(fc("noteAdded"));
       refetchFees();
       setNoteDialog({ open: false, feeId: null });
       setNoteText("");
@@ -309,7 +306,7 @@ export default function AdminPanel() {
 
   const reinstateUser = trpc.admin.reinstateUser.useMutation({
     onSuccess: () => {
-      toast.success("User reinstated");
+      toast.success(fc("userReinstated"));
       refetchFees();
       refetchStats();
       refetchOperatingCounts();
@@ -319,9 +316,9 @@ export default function AdminPanel() {
 
   const verificationDocumentDownload = trpc.admin.getVerificationDocumentDownloadUrl.useMutation({
     onSuccess: (data) => {
-      if (!openExternalUrl(data.url)) toast.error("The verification download URL is invalid.");
+      if (!openExternalUrl(data.url)) toast.error(fc("invalidDownloadUrl"));
     },
-    onError: (err) => toast.error(err.message || "Could not open the verification document"),
+    onError: (err) => toast.error(err.message || fc("downloadFailed")),
   });
   const resolveReviewItem = trpc.admin.resolveReviewItem.useMutation({
     onSuccess: async (result) => {
@@ -1001,9 +998,9 @@ export default function AdminPanel() {
           <TabsContent value="overview">
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-white text-base">All Success Fees</CardTitle>
+                <CardTitle className="text-white text-base">{fc("allSuccessFees")}</CardTitle>
                 {(operatingCounts?.feesTotal ?? 0) > (fees?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.feesTotal} success fees.</p>
+                  <p className="text-xs text-slate-400">{ff("showingNewestFees", { count: operatingCounts?.feesTotal ?? 0 })}</p>
                 )}
               </CardHeader>
               <CardContent>
@@ -1011,20 +1008,20 @@ export default function AdminPanel() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400">
-                        <th className="text-left py-2 pr-4">User</th>
-                        <th className="text-left py-2 pr-4">Employer / Role</th>
-                        <th className="text-left py-2 pr-4">Salary</th>
-                        <th className="text-left py-2 pr-4">Monthly Fee</th>
-                        <th className="text-left py-2 pr-4">Status</th>
-                        <th className="text-left py-2 pr-4">Next Verification</th>
-                        <th className="text-left py-2">Actions</th>
+                        <th className="text-left py-2 pr-4">{fc("user")}</th>
+                        <th className="text-left py-2 pr-4">{fc("employerRole")}</th>
+                        <th className="text-left py-2 pr-4">{fc("salary")}</th>
+                        <th className="text-left py-2 pr-4">{fc("monthlyFee")}</th>
+                        <th className="text-left py-2 pr-4">{fc("status")}</th>
+                        <th className="text-left py-2 pr-4">{fc("nextVerification")}</th>
+                        <th className="text-left py-2">{fc("actions")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {fees?.map((fee) => (
                         <tr key={fee.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
                           <td className="py-3 pr-4">
-                            <div className="font-medium text-white">{fee.userName ?? "Unknown"}</div>
+                            <div className="font-medium text-white">{fee.userName ?? fc("unknown")}</div>
                             <div className="text-xs text-slate-500">{fee.userEmail ?? "—"}</div>
                           </td>
                           <td className="py-3 pr-4">
@@ -1032,13 +1029,13 @@ export default function AdminPanel() {
                             <div className="text-xs text-slate-500">{fee.jobTitle}</div>
                           </td>
                           <td className="py-3 pr-4 text-slate-300">
-                            ${fee.monthlySalary.toLocaleString()}/mo
+                            {new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", { style: "currency", currency: fee.currency, maximumFractionDigits: 0 }).format(fee.monthlySalary)} {fc("perMonth")}
                           </td>
                           <td className="py-3 pr-4 text-cyan-400 font-medium">
-                            {formatCurrency(fee.monthlyFeeAmount, fee.currency)}/mo
+                            {formatCurrency(fee.monthlyFeeAmount, fee.currency)} {fc("perMonth")}
                           </td>
                           <td className="py-3 pr-4">
-                            <StatusBadge status={fee.status} />
+                            <StatusBadge status={fee.status} label={statusLabel(fee.status)} />
                           </td>
                           <td className="py-3 pr-4 text-slate-400 text-xs">
                             {formatDate(fee.nextVerificationDue)}
@@ -1054,18 +1051,18 @@ export default function AdminPanel() {
                                   setNewStatus(fee.status);
                                 }}
                               >
-                                Status
+                                {fc("changeStatus")}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 className="h-7 text-xs text-orange-400 hover:text-orange-300 px-2"
                                 onClick={() => {
-                                  setEscalateDialog({ open: true, feeId: fee.id, userName: fee.userName ?? "Unknown" });
+                                  setEscalateDialog({ open: true, feeId: fee.id, userName: fee.userName ?? fc("unknown") });
                                 }}
                               >
                                 <Gavel className="h-3 w-3 mr-1" />
-                                Escalate
+                                {fc("escalate")}
                               </Button>
                               <Button
                                 size="sm"
@@ -1073,7 +1070,7 @@ export default function AdminPanel() {
                                 className="h-7 text-xs text-slate-400 hover:text-white px-2"
                                 onClick={() => setNoteDialog({ open: true, feeId: fee.id })}
                               >
-                                Note
+                                {fc("note")}
                               </Button>
                             </div>
                           </td>
@@ -1082,7 +1079,7 @@ export default function AdminPanel() {
                       {(!fees || fees.length === 0) && (
                         <tr>
                           <td colSpan={7} className="py-8 text-center text-slate-500">
-                            No success fees found.
+                            {fc("noSuccessFees")}
                           </td>
                         </tr>
                       )}
@@ -1099,10 +1096,10 @@ export default function AdminPanel() {
               <CardHeader>
                 <CardTitle className="text-white text-base flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-orange-400" />
-                  Overdue Verifications
+                  {fc("overdueVerifications")}
                 </CardTitle>
                 {(operatingCounts?.overdueVerifications ?? 0) > (overdue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">Showing the 100 oldest of {operatingCounts?.overdueVerifications} overdue records.</p>
+                  <p className="text-xs text-slate-400">{ff("showingOldestOverdue", { count: operatingCounts?.overdueVerifications ?? 0 })}</p>
                 )}
               </CardHeader>
               <CardContent>
@@ -1110,19 +1107,19 @@ export default function AdminPanel() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400">
-                        <th className="text-left py-2 pr-4">User</th>
-                        <th className="text-left py-2 pr-4">Employer / Role</th>
-                        <th className="text-left py-2 pr-4">Monthly Fee</th>
-                        <th className="text-left py-2 pr-4">Days Overdue</th>
-                        <th className="text-left py-2 pr-4">Grace Expired</th>
-                        <th className="text-left py-2">Actions</th>
+                        <th className="text-left py-2 pr-4">{fc("user")}</th>
+                        <th className="text-left py-2 pr-4">{fc("employerRole")}</th>
+                        <th className="text-left py-2 pr-4">{fc("monthlyFee")}</th>
+                        <th className="text-left py-2 pr-4">{fc("daysOverdue")}</th>
+                        <th className="text-left py-2 pr-4">{fc("graceExpired")}</th>
+                        <th className="text-left py-2">{fc("actions")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {overdue?.map((fee) => (
                         <tr key={fee.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
                           <td className="py-3 pr-4">
-                            <div className="font-medium text-white">{fee.userName ?? "Unknown"}</div>
+                            <div className="font-medium text-white">{fee.userName ?? fc("unknown")}</div>
                             <div className="text-xs text-slate-500">{fee.userEmail ?? "—"}</div>
                           </td>
                           <td className="py-3 pr-4">
@@ -1130,18 +1127,18 @@ export default function AdminPanel() {
                             <div className="text-xs text-slate-500">{fee.jobTitle}</div>
                           </td>
                           <td className="py-3 pr-4 text-cyan-400">
-                            {formatCurrency(fee.monthlyFeeAmount)}/mo
+                            {formatCurrency(fee.monthlyFeeAmount)} {fc("perMonth")}
                           </td>
                           <td className="py-3 pr-4">
                             <span className={`font-bold ${fee.daysOverdue > 14 ? "text-red-400" : "text-orange-400"}`}>
-                              {fee.daysOverdue} days
+                              {ff("daysCount", { count: fee.daysOverdue })}
                             </span>
                           </td>
                           <td className="py-3 pr-4">
                             {fee.graceExpired ? (
-                              <span className="text-red-400 font-medium">Yes — Suspend</span>
+                              <span className="text-red-400 font-medium">{fc("suspendRequired")}</span>
                             ) : (
-                              <span className="text-yellow-400">No — In Grace</span>
+                              <span className="text-yellow-400">{fc("withinGrace")}</span>
                             )}
                           </td>
                           <td className="py-3">
@@ -1151,20 +1148,20 @@ export default function AdminPanel() {
                                   size="sm"
                                   variant="ghost"
                                   className="h-7 text-xs text-red-400 hover:text-red-300 px-2"
-                                  onClick={() => updateStatus.mutate({ feeId: fee.id, status: "suspended", notes: `Auto-suspended: verification overdue by ${fee.daysOverdue} days` })}
+                                  onClick={() => updateStatus.mutate({ feeId: fee.id, status: "suspended", notes: ff("autoSuspendedNote", { count: fee.daysOverdue }) })}
                                 >
                                   <Ban className="h-3 w-3 mr-1" />
-                                  Suspend
+                                  {fc("suspend")}
                                 </Button>
                               )}
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 className="h-7 text-xs text-orange-400 hover:text-orange-300 px-2"
-                                onClick={() => setEscalateDialog({ open: true, feeId: fee.id, userName: fee.userName ?? "Unknown" })}
+                                onClick={() => setEscalateDialog({ open: true, feeId: fee.id, userName: fee.userName ?? fc("unknown") })}
                               >
                                 <Gavel className="h-3 w-3 mr-1" />
-                                Escalate
+                                {fc("escalate")}
                               </Button>
                             </div>
                           </td>
@@ -1173,7 +1170,7 @@ export default function AdminPanel() {
                       {(!overdue || overdue.length === 0) && (
                         <tr>
                           <td colSpan={6} className="py-8 text-center text-slate-500">
-                            No overdue verifications.
+                            {fc("noOverdue")}
                           </td>
                         </tr>
                       )}
@@ -1190,10 +1187,10 @@ export default function AdminPanel() {
               <CardHeader>
                 <CardTitle className="text-white text-base flex items-center gap-2">
                   <FileText className="h-5 w-5 text-yellow-400" />
-                  Pending Verification Reviews
+                  {fc("pendingVerificationReviews")}
                 </CardTitle>
                 {(operatingCounts?.pendingVerifications ?? 0) > (pendingVerifications?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.pendingVerifications} pending verifications.</p>
+                  <p className="text-xs text-slate-400">{ff("showingNewestVerifications", { count: operatingCounts?.pendingVerifications ?? 0 })}</p>
                 )}
               </CardHeader>
               <CardContent>
@@ -1203,15 +1200,18 @@ export default function AdminPanel() {
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-white">{v.userName ?? "Unknown"}</span>
-                            <StatusBadge status={v.verificationType ?? "initial"} />
-                            <StatusBadge status={v.documentType ?? "other"} />
+                            <span className="font-medium text-white">{v.userName ?? fc("unknown")}</span>
+                            <StatusBadge status={v.verificationType ?? "initial"} label={statusLabel(v.verificationType ?? "initial")} />
+                            <StatusBadge status={v.documentType ?? "other"} label={statusLabel(v.documentType ?? "other")} />
                           </div>
                           <div className="text-sm text-slate-400">
                             {v.employerName} — {v.jobTitle}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
-                            Submitted: {formatDate(v.submittedAt)} · Salary: ${v.monthlySalary?.toLocaleString()}/mo
+                            {ff("submittedSalary", {
+                              date: formatDate(v.submittedAt),
+                              salary: new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v.monthlySalary ?? 0),
+                            })}
                           </div>
                           {v.hasDocument && (
                             <button
@@ -1221,7 +1221,7 @@ export default function AdminPanel() {
                               className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 inline-flex items-center gap-1"
                             >
                               <FileText className="h-3 w-3" />
-                              View Document
+                              {fc("viewDocument")}
                             </button>
                           )}
                         </div>
@@ -1232,16 +1232,16 @@ export default function AdminPanel() {
                             onClick={() => reviewVerification.mutate({ verificationId: v.id, approved: true })}
                           >
                             <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                            Approve
+                            {fc("approve")}
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             className="border-red-500/50 text-red-400 hover:bg-red-500/10 h-8"
-                            onClick={() => reviewVerification.mutate({ verificationId: v.id, approved: false, notes: "Document insufficient or invalid" })}
+                            onClick={() => reviewVerification.mutate({ verificationId: v.id, approved: false, notes: fc("rejectionEvidenceNote") })}
                           >
                             <XCircle className="h-3.5 w-3.5 mr-1" />
-                            Reject
+                            {fc("reject")}
                           </Button>
                         </div>
                       </div>
@@ -1249,7 +1249,7 @@ export default function AdminPanel() {
                   ))}
                   {(!pendingVerifications || pendingVerifications.length === 0) && (
                     <div className="py-8 text-center text-slate-500">
-                      No pending verifications.
+                      {fc("noPendingVerifications")}
                     </div>
                   )}
                 </div>
@@ -1263,10 +1263,10 @@ export default function AdminPanel() {
               <CardHeader>
                 <CardTitle className="text-white text-base flex items-center gap-2">
                   <Shield className="h-5 w-5 text-cyan-400" />
-                  Operating Review Queue
+                  {fc("operatingReviewQueue")}
                 </CardTitle>
                 {(operatingCounts?.reviewTotal ?? 0) > (reviewQueue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">Showing the newest 100 of {operatingCounts?.reviewTotal} open reviews.</p>
+                  <p className="text-xs text-slate-400">{ff("showingNewestReviews", { count: operatingCounts?.reviewTotal ?? 0 })}</p>
                 )}
               </CardHeader>
               <CardContent>
@@ -1286,7 +1286,7 @@ export default function AdminPanel() {
                               <div className="mb-2 flex flex-wrap items-center gap-2">
                                 <StatusBadge status={item.priority} />
                                 <StatusBadge status={item.category} />
-                                <span className="text-xs text-slate-500">{item.entityType} #{item.entityId}</span>
+                                <span className="text-xs text-slate-500">{ff("entityReference", { entity: item.entityType, id: item.entityId })}</span>
                                 <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
                                   {evidence.label}
                                 </Badge>
@@ -1314,7 +1314,7 @@ export default function AdminPanel() {
                                   </Badge>
                                   {evidence.requiresManualDecision && (
                                     <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
-                                      Manual decision
+                                      {fc("manualDecision")}
                                     </Badge>
                                   )}
                                 </div>
@@ -1330,7 +1330,7 @@ export default function AdminPanel() {
                                 </div>
                               </div>
                               <div className="mt-2 text-xs text-slate-500">
-                                User #{item.userId} - Created {formatDate(item.createdAt)}
+                                {ff("userCreated", { userId: item.userId, date: formatDate(item.createdAt) })}
                               </div>
                             </div>
                             <div className="flex shrink-0 flex-wrap gap-2">
@@ -1342,7 +1342,7 @@ export default function AdminPanel() {
                                 onClick={() => setEvidenceDialog({ open: true, itemId: item.id })}
                               >
                                 <FileText className="h-3.5 w-3.5 mr-1" />
-                                Evidence
+                                {fc("evidence")}
                               </Button>
                               <Button
                                 size="sm"
@@ -1353,7 +1353,7 @@ export default function AdminPanel() {
                                 }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                {item.category === "privacy_deletion" ? "Record review" : "Resolve"}
+                                {fc(item.category === "privacy_deletion" ? "recordReview" : "resolve")}
                               </Button>
                               <Button
                                 size="sm"
@@ -1364,7 +1364,7 @@ export default function AdminPanel() {
                                   setReviewResolution("");
                                 }}
                               >
-                                {item.category === "privacy_deletion" ? "Close request" : "Dismiss"}
+                                {fc(item.category === "privacy_deletion" ? "closeRequest" : "dismiss")}
                               </Button>
                             </div>
                           </div>
@@ -1374,7 +1374,7 @@ export default function AdminPanel() {
                   ))}
                   {(!reviewQueue || reviewQueue.length === 0) && (
                     <div className="py-8 text-center text-slate-500">
-                      No open review items.
+                      {fc("noOpenReviews")}
                     </div>
                   )}
                 </div>
@@ -1388,10 +1388,10 @@ export default function AdminPanel() {
               <CardHeader>
                 <CardTitle className="text-white text-base flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-green-400" />
-                  Payment History
+                  {fc("paymentHistory")}
                 </CardTitle>
                 {(operatingCounts?.paymentsTotal ?? 0) > (payments?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">Showing the newest 50 of {operatingCounts?.paymentsTotal} payments.</p>
+                  <p className="text-xs text-slate-400">{ff("showingNewestPayments", { count: operatingCounts?.paymentsTotal ?? 0 })}</p>
                 )}
               </CardHeader>
               <CardContent>
@@ -1399,19 +1399,19 @@ export default function AdminPanel() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400">
-                        <th className="text-left py-2 pr-4">User</th>
-                        <th className="text-left py-2 pr-4">Employer</th>
-                        <th className="text-left py-2 pr-4">Amount</th>
-                        <th className="text-left py-2 pr-4">Status</th>
-                        <th className="text-left py-2 pr-4">Period</th>
-                        <th className="text-left py-2">Paid At</th>
+                        <th className="text-left py-2 pr-4">{fc("user")}</th>
+                        <th className="text-left py-2 pr-4">{fc("employer")}</th>
+                        <th className="text-left py-2 pr-4">{fc("amount")}</th>
+                        <th className="text-left py-2 pr-4">{fc("status")}</th>
+                        <th className="text-left py-2 pr-4">{fc("period")}</th>
+                        <th className="text-left py-2">{fc("paidAt")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {payments?.map((p) => (
                         <tr key={p.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
                           <td className="py-3 pr-4">
-                            <div className="font-medium text-white">{p.userName ?? "Unknown"}</div>
+                            <div className="font-medium text-white">{p.userName ?? fc("unknown")}</div>
                             <div className="text-xs text-slate-500">{p.userEmail ?? "—"}</div>
                           </td>
                           <td className="py-3 pr-4 text-slate-300">{p.employerName ?? "—"}</td>
@@ -1419,7 +1419,7 @@ export default function AdminPanel() {
                             {formatCurrency(p.amount, p.currency)}
                           </td>
                           <td className="py-3 pr-4">
-                            <StatusBadge status={p.status} />
+                            <StatusBadge status={p.status} label={statusLabel(p.status)} />
                           </td>
                           <td className="py-3 pr-4 text-slate-400 text-xs">
                             {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
@@ -1430,7 +1430,7 @@ export default function AdminPanel() {
                       {(!payments || payments.length === 0) && (
                         <tr>
                           <td colSpan={6} className="py-8 text-center text-slate-500">
-                            No payments recorded yet.
+                            {fc("noPayments")}
                           </td>
                         </tr>
                       )}
@@ -1885,29 +1885,29 @@ export default function AdminPanel() {
           <DialogHeader>
             <DialogTitle>
               {isPrivacyDeletionDialog
-                ? reviewDialog.status === "resolved" ? "Record Privacy Review" : "Close Privacy Request"
-                : reviewDialog.status === "resolved" ? "Resolve Review Item" : "Dismiss Review Item"}
+                ? fc(reviewDialog.status === "resolved" ? "recordPrivacyReview" : "closePrivacyRequest")
+                : fc(reviewDialog.status === "resolved" ? "resolveReviewItem" : "dismissReviewItem")}
             </DialogTitle>
           </DialogHeader>
           {isPrivacyDeletionDialog ? (
             <p className="text-sm text-amber-200/80">
-              A resolved decision records an itemized, restart-safe execution plan. Planning does not delete account data, revoke providers, or override an active legal hold.
+              {fc("privacyPlanningNotice")}
             </p>
           ) : null}
           <div>
-            <Label className="text-slate-300">Resolution Note</Label>
+            <Label className="text-slate-300">{fc("resolutionNote")}</Label>
             <Textarea
               value={reviewResolution}
               onChange={(e) => setReviewResolution(e.target.value)}
               placeholder={isPrivacyDeletionDialog
-                ? "Record the retention basis, data eligible for erasure, and the separate execution work required..."
-                : "Describe what was reviewed and why this item can be closed..."}
+                ? fc("privacyResolutionPlaceholder")
+                : fc("reviewResolutionPlaceholder")}
               className="bg-slate-800 border-slate-700 text-white mt-1"
               rows={4}
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setReviewDialog({ open: false, itemId: null, status: "resolved" })}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setReviewDialog({ open: false, itemId: null, status: "resolved" })}>{fc("cancel")}</Button>
             <Button
               className="bg-cyan-600 hover:bg-cyan-700"
               disabled={!reviewResolution.trim() || resolveReviewItem.isPending}
@@ -1922,8 +1922,8 @@ export default function AdminPanel() {
               }}
             >
               {isPrivacyDeletionDialog
-                ? reviewDialog.status === "resolved" ? "Record and plan" : "Close request"
-                : reviewDialog.status === "resolved" ? "Resolve" : "Dismiss"}
+                ? fc(reviewDialog.status === "resolved" ? "recordAndPlan" : "closeRequest")
+                : fc(reviewDialog.status === "resolved" ? "resolve" : "dismiss")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1933,34 +1933,34 @@ export default function AdminPanel() {
       <Dialog open={statusDialog.open} onOpenChange={(o) => !o && setStatusDialog({ open: false, feeId: null, currentStatus: "" })}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white">
           <DialogHeader>
-            <DialogTitle>Update Fee Status</DialogTitle>
+            <DialogTitle>{fc("updateFeeStatus")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-slate-300">New Status</Label>
+              <Label className="text-slate-300">{fc("newStatus")}</Label>
               <select
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
                 className="w-full mt-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-white text-sm"
               >
                 {["pending_verification", "active", "paused", "ended", "suspended", "disputed"].map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                  <option key={s} value={s}>{statusLabel(s)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <Label className="text-slate-300">Note (optional)</Label>
+              <Label className="text-slate-300">{fc("optionalNote")}</Label>
               <Textarea
                 value={statusNote}
                 onChange={(e) => setStatusNote(e.target.value)}
-                placeholder="Reason for status change..."
+                placeholder={fc("statusReasonPlaceholder")}
                 className="bg-slate-800 border-slate-700 text-white mt-1"
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setStatusDialog({ open: false, feeId: null, currentStatus: "" })}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setStatusDialog({ open: false, feeId: null, currentStatus: "" })}>{fc("cancel")}</Button>
             <Button
               className="bg-cyan-600 hover:bg-cyan-700"
               disabled={updateStatus.isPending}
@@ -1970,7 +1970,7 @@ export default function AdminPanel() {
                 }
               }}
             >
-              Update Status
+              {fc("updateStatus")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1982,26 +1982,26 @@ export default function AdminPanel() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Gavel className="h-5 w-5 text-orange-400" />
-              Flag for Legal Escalation
+              {fc("legalEscalation")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-400">
-              This will mark <span className="text-white font-medium">{escalateDialog.userName}</span>'s account as disputed and suspend it. This action is logged and cannot be undone without manual review.
+              {ff("legalEscalationDetail", { name: escalateDialog.userName })}
             </p>
             <div>
-              <Label className="text-slate-300">Reason for Escalation</Label>
+              <Label className="text-slate-300">{fc("escalationReason")}</Label>
               <Textarea
                 value={escalateReason}
                 onChange={(e) => setEscalateReason(e.target.value)}
-                placeholder="Describe the non-compliance or reason for legal escalation..."
+                placeholder={fc("escalationPlaceholder")}
                 className="bg-slate-800 border-slate-700 text-white mt-1"
                 rows={4}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEscalateDialog({ open: false, feeId: null, userName: "" })}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setEscalateDialog({ open: false, feeId: null, userName: "" })}>{fc("cancel")}</Button>
             <Button
               className="bg-orange-600 hover:bg-orange-700"
               disabled={!escalateReason.trim() || flagEscalation.isPending}
@@ -2012,7 +2012,7 @@ export default function AdminPanel() {
               }}
             >
               <Gavel className="h-4 w-4 mr-2" />
-              Confirm Escalation
+              {fc("confirmEscalation")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2022,20 +2022,20 @@ export default function AdminPanel() {
       <Dialog open={noteDialog.open} onOpenChange={(o) => !o && setNoteDialog({ open: false, feeId: null })}>
         <DialogContent className="bg-slate-900 border-slate-800 text-white">
           <DialogHeader>
-            <DialogTitle>Add Admin Note</DialogTitle>
+            <DialogTitle>{fc("addAdminNote")}</DialogTitle>
           </DialogHeader>
           <div>
-            <Label className="text-slate-300">Note</Label>
+            <Label className="text-slate-300">{fc("adminNote")}</Label>
             <Textarea
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add an internal note..."
+              placeholder={fc("adminNotePlaceholder")}
               className="bg-slate-800 border-slate-700 text-white mt-1"
               rows={4}
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setNoteDialog({ open: false, feeId: null })}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setNoteDialog({ open: false, feeId: null })}>{fc("cancel")}</Button>
             <Button
               className="bg-cyan-600 hover:bg-cyan-700"
               disabled={!noteText.trim() || addNote.isPending}
@@ -2045,7 +2045,7 @@ export default function AdminPanel() {
                 }
               }}
             >
-              Save Note
+              {fc("saveNote")}
             </Button>
           </DialogFooter>
         </DialogContent>

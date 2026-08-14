@@ -609,3 +609,11 @@
 - Added language-independent discovery metric identifiers and locale-aware date/time formatting, preserving the bounded 30-second status polling and existing concurrency/timeout controls.
 - Verified the seeded Dutch discovery workflow in the in-app browser with 18 rendered metrics, Dutch adapter descriptions and controls, no English adapter prose, document language `nl`, and no horizontal document overflow.
 - Passed TypeScript, 238 test files / 1,190 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The shared application chunk remained 577.36 kB and the lazy admin chunk is 96.14 kB; the doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.
+
+## 2026-08-14 - Admin financial operations localization pass
+
+- Localized the populated success-fee, overdue-verification, pending-verification, and payment-history operator tables plus fixed review-queue controls and metadata in English and Dutch while retaining user, employer, evidence, and audit content verbatim.
+- Added account-locale currency/date formatting and local presentation for stable fee, payment, priority, and verification statuses without changing the tRPC or database contracts.
+- Localized fee-status, legal-escalation, admin-note, and review-resolution dialogs plus mutation feedback, rejection evidence, and auditable suspension notes.
+- Verified the seeded Dutch fee row, status dialog, and payment empty state in the in-app browser with Dutch account persistence, document language `nl`, no residual fixed English financial headings, and no horizontal document overflow. The deep evidence/privacy-erasure dialog remains a separate localization boundary.
+- Passed TypeScript, 239 test files / 1,192 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The shared application chunk remained 577.36 kB and the lazy admin chunk is 104.54 kB; the doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.
