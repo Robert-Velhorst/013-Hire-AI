@@ -1008,9 +1008,40 @@ export default function Applications() {
     follow_up_candidate: "border-cyan-500/40 text-cyan-300",
     clear: "border-slate-600 text-slate-300",
   }[pipelineSummary.status];
+  const pipelineCopy = ({
+    empty: {
+      label: t("pipelineEmptyLabel"), headline: t("pipelineEmptyHeadline"),
+      nextAction: t("pipelineEmptyAction"), cta: t("pipelineAllApplications"),
+    },
+    approval_blocked: {
+      label: t("pipelineApprovalBlockedLabel"), headline: t("pipelineApprovalBlockedHeadline", { count: pipelineSummary.approvalBlocked }),
+      nextAction: t("pipelineApprovalBlockedAction"), cta: t("pipelineReviewApprovals"),
+    },
+    evidence_needed: {
+      label: t("pipelineEvidenceNeededLabel"), headline: t("pipelineEvidenceNeededHeadline", { count: pipelineSummary.evidenceNeeded }),
+      nextAction: t("pipelineEvidenceNeededAction"), cta: t("pipelineReviewPrepared"),
+    },
+    offer_action: {
+      label: t("pipelineOfferActionLabel"), headline: t("pipelineOfferActionHeadline", { count: pipelineSummary.offerActions }),
+      nextAction: t("pipelineOfferActionAction"), cta: t("pipelineReviewOffers"),
+    },
+    response_active: {
+      label: t("pipelineResponsesActiveLabel"), headline: t("pipelineResponsesActiveHeadline", { count: pipelineSummary.responseActive }),
+      nextAction: t("pipelineResponsesActiveAction"), cta: t(pipelineSummary.primaryTab === "interviewing" ? "pipelineOpenInterviews" : "pipelineOpenActive"),
+    },
+    follow_up_candidate: {
+      label: t("pipelineFollowUpLabel"), headline: t("pipelineFollowUpHeadline", { count: pipelineSummary.followUpCandidates }),
+      nextAction: t("pipelineFollowUpAction"), cta: t("pipelineReviewActive"),
+    },
+    clear: {
+      label: t("pipelineCurrentLabel"), headline: t("pipelineCurrentHeadline"),
+      nextAction: t("pipelineCurrentAction"), cta: t(pipelineSummary.primaryTab === "active" ? "pipelineOpenActive" : "pipelineAllApplications"),
+    },
+  } as const)[pipelineSummary.status];
 
-  const ApplicationCard = ({ application }: { application: any }) => (
+  const renderApplicationCard = (application: any) => (
     <Card
+      key={application.id}
       data-testid="application-card"
       data-application-id={application.id}
       data-application-status={application.status}
@@ -1022,7 +1053,7 @@ export default function Applications() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-semibold text-white truncate">
-                {application.job?.title || "Job Title"}
+                {application.job?.title || t("jobTitleFallback")}
               </h3>
               <Badge variant="outline" className={getStatusColor(application.status)}>
                 {getStatusIcon(application.status)}
@@ -1032,11 +1063,11 @@ export default function Applications() {
             <div className="flex items-center gap-3 text-sm text-slate-400 mb-2">
               <span className="flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
-                {application.job?.company || "Company"}
+                {application.job?.company || t("companyFallback")}
               </span>
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3" />
-                {application.job?.location || "Remote"}
+                {application.job?.location || t("remoteFallback")}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -1076,8 +1107,8 @@ export default function Applications() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Applications</h1>
-            <p className="text-slate-400">Track and manage your job applications</p>
+            <h1 className="text-2xl font-bold text-white">{t("applicationsTitle")}</h1>
+            <p className="text-slate-400">{t("applicationsDescription")}</p>
           </div>
           <Button
             variant="outline"
@@ -1088,7 +1119,7 @@ export default function Applications() {
             }}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
+            {t("refreshApplications")}
           </Button>
         </div>
 
@@ -1098,15 +1129,15 @@ export default function Applications() {
               <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={pipelineBadgeTone}>
-                    {pipelineSummary.label}
+                    {pipelineCopy.label}
                   </Badge>
                   <Badge variant="outline" className="border-slate-700 text-slate-300">
-                    {pipelineSummary.trackedApplications} tracked
+                    {t("trackedApplicationsCount", { count: pipelineSummary.trackedApplications })}
                   </Badge>
                 </div>
-                <h2 className="text-xl font-semibold text-white">Application Pipeline Control</h2>
-                <p className="mt-1 text-sm text-slate-300">{pipelineSummary.headline}</p>
-                <p className="mt-2 max-w-3xl text-sm text-slate-400">{pipelineSummary.nextAction}</p>
+                <h2 className="text-xl font-semibold text-white">{t("applicationPipelineControl")}</h2>
+                <p className="mt-1 text-sm text-slate-300">{pipelineCopy.headline}</p>
+                <p className="mt-2 max-w-3xl text-sm text-slate-400">{pipelineCopy.nextAction}</p>
               </div>
               <Button
                 data-testid="application-pipeline-primary"
@@ -1114,19 +1145,19 @@ export default function Applications() {
                 onClick={() => setActiveTab(pipelineSummary.primaryTab)}
               >
                 <Target className="mr-2 h-4 w-4" />
-                {pipelineSummary.primaryCta}
+                {pipelineCopy.cta}
               </Button>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
               {([
-                ["Approvals", pipelineSummary.approvalBlocked, "approvals"],
-                ["Evidence", pipelineSummary.evidenceNeeded, "evidence"],
-                ["Active", pipelineSummary.activeApplications, "active"],
-                ["Responses", pipelineSummary.responseActive, "active"],
-                ["Interviews", pipelineSummary.interviewPipeline, "interviewing"],
-                ["Offers", pipelineSummary.offerActions, "offered"],
-                ["Closed", pipelineSummary.closedApplications, "closed"],
+                [t("pipelineApprovals"), pipelineSummary.approvalBlocked, "approvals"],
+                [t("pipelineEvidence"), pipelineSummary.evidenceNeeded, "evidence"],
+                [t("pipelineActive"), pipelineSummary.activeApplications, "active"],
+                [t("pipelineResponses"), pipelineSummary.responseActive, "active"],
+                [t("pipelineInterviews"), pipelineSummary.interviewPipeline, "interviewing"],
+                [t("pipelineOffers"), pipelineSummary.offerActions, "offered"],
+                [t("pipelineClosed"), pipelineSummary.closedApplications, "closed"],
               ] as Array<[string, number, ApplicationPipelineTab]>).map(([label, value, tab]) => (
                 <button
                   key={String(label)}
@@ -1149,7 +1180,7 @@ export default function Applications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-400">Tracked Jobs</p>
+                  <p className="text-sm text-slate-400">{t("trackedJobs")}</p>
                   <p className="text-2xl font-bold text-white">{stats.total}</p>
                 </div>
                 <Send className="w-8 h-8 text-cyan-500/50" />
@@ -1161,7 +1192,7 @@ export default function Applications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-400">Active</p>
+                  <p className="text-sm text-slate-400">{t("pipelineActive")}</p>
                   <p className="text-2xl font-bold text-white">{stats.active}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-blue-500/50" />
@@ -1173,7 +1204,7 @@ export default function Applications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-400">Response Rate</p>
+                  <p className="text-sm text-slate-400">{t("responseRate")}</p>
                   <p className="text-2xl font-bold text-white">{stats.responseRate}%</p>
                 </div>
                 <Target className="w-8 h-8 text-purple-500/50" />
@@ -1186,7 +1217,7 @@ export default function Applications() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-400">Interview Rate</p>
+                  <p className="text-sm text-slate-400">{t("interviewRate")}</p>
                   <p className="text-2xl font-bold text-white">{stats.interviewRate}%</p>
                 </div>
                 <MessageSquare className="w-8 h-8 text-amber-500/50" />
@@ -1200,25 +1231,25 @@ export default function Applications() {
         <Tabs value={activeTab} onValueChange={(tab) => setActiveTab(tab as ApplicationPipelineTab)}>
           <TabsList className="h-auto flex-wrap justify-start bg-slate-800/50 border border-slate-700">
             <TabsTrigger value="all" className="data-[state=active]:bg-slate-700">
-              All ({tabCounts.all})
+              {t("applicationsAllCount", { count: tabCounts.all })}
             </TabsTrigger>
             <TabsTrigger value="active" className="data-[state=active]:bg-blue-900/50">
-              Active ({tabCounts.active})
+              {t("applicationsActiveCount", { count: tabCounts.active })}
             </TabsTrigger>
             <TabsTrigger value="approvals" className="data-[state=active]:bg-amber-900/50">
-              Approvals ({tabCounts.approvals})
+              {t("applicationsApprovalsCount", { count: tabCounts.approvals })}
             </TabsTrigger>
             <TabsTrigger value="evidence" className="data-[state=active]:bg-amber-900/50">
-              Evidence ({tabCounts.evidence})
+              {t("applicationsEvidenceCount", { count: tabCounts.evidence })}
             </TabsTrigger>
             <TabsTrigger value="interviewing" className="data-[state=active]:bg-amber-900/50">
-              Interviewing ({tabCounts.interviewing})
+              {t("applicationsInterviewingCount", { count: tabCounts.interviewing })}
             </TabsTrigger>
             <TabsTrigger value="offered" className="data-[state=active]:bg-emerald-900/50">
-              Offered ({tabCounts.offered})
+              {t("applicationsOfferedCount", { count: tabCounts.offered })}
             </TabsTrigger>
             <TabsTrigger value="closed" className="data-[state=active]:bg-slate-700">
-              Closed ({tabCounts.closed})
+              {t("applicationsClosedCount", { count: tabCounts.closed })}
             </TabsTrigger>
           </TabsList>
 
@@ -1233,7 +1264,7 @@ export default function Applications() {
                   <TabsContent key={tab} value={tab} className="mt-0">
                     <div className="grid gap-3">
                       {groupedApplications[tab].map((app: any) => (
-                        <ApplicationCard key={app.id} application={app} />
+                        renderApplicationCard(app)
                       ))}
                       {groupedApplications[tab].length === 0 && (
                         <div className="text-center py-16 px-4">
@@ -1242,36 +1273,36 @@ export default function Applications() {
                           </div>
                           {tab === 'all' ? (
                             <>
-                              <h3 className="text-xl font-semibold text-white mb-2">No applications yet</h3>
+                              <h3 className="text-xl font-semibold text-white mb-2">{t("noApplicationsYet")}</h3>
                               <p className="text-slate-400 mb-6 max-w-md mx-auto">
-                                Start your job search journey! Browse available positions and let our AI help you find the perfect match.
+                                {t("noApplicationsDescription")}
                               </p>
                               <Button 
                                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
                                 onClick={() => window.location.href = '/profile'}
                               >
-                                Complete Profile
+                                {t("completeProfileAction")}
                               </Button>
                             </>
                           ) : tab === 'interviewing' ? (
                             <>
-                              <h3 className="text-xl font-semibold text-white mb-2">No interviews scheduled</h3>
+                              <h3 className="text-xl font-semibold text-white mb-2">{t("noInterviewsScheduled")}</h3>
                               <p className="text-slate-400 max-w-md mx-auto">
-                                Keep applying! Interview invitations will appear here once employers respond to your applications.
+                                {t("noInterviewsDescription")}
                               </p>
                             </>
                           ) : tab === 'offered' ? (
                             <>
-                              <h3 className="text-xl font-semibold text-white mb-2">No offers yet</h3>
+                              <h3 className="text-xl font-semibold text-white mb-2">{t("noOffersYet")}</h3>
                               <p className="text-slate-400 max-w-md mx-auto">
-                                Job offers will appear here. Keep interviewing and stay positive!
+                                {t("noOffersDescription")}
                               </p>
                             </>
                           ) : (
                             <>
-                              <h3 className="text-xl font-semibold text-white mb-2">No applications in this category</h3>
+                              <h3 className="text-xl font-semibold text-white mb-2">{t("noApplicationsCategory")}</h3>
                               <p className="text-slate-400 max-w-md mx-auto">
-                                Applications matching this filter will appear here.
+                                {t("applicationsCategoryDescription")}
                               </p>
                             </>
                           )}

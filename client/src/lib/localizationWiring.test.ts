@@ -113,8 +113,15 @@ describe("localization wiring", () => {
     expect(applications).toContain('t("completeFollowUpDelivery")');
     expect(applications).toContain('t("confirmOfferAcceptanceTitle")');
     expect(applications).toContain('t("declineOfferTitle")');
+    expect(applications).toContain('t("applicationsTitle")');
+    expect(applications).toContain('t("applicationPipelineControl")');
+    expect(applications).toContain('t("applicationsAllCount"');
+    expect(applications).toContain("const renderApplicationCard = (application: any)");
+    expect(applications).not.toContain("const ApplicationCard =");
     expect(applications).not.toContain(">Record Employer Response<");
     expect(applications).not.toContain(">Confirm Submission Evidence<");
+    expect(applications).not.toContain(">Application Pipeline Control<");
+    expect(applications).not.toContain(">Tracked Jobs<");
     expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
@@ -123,6 +130,8 @@ describe("localization wiring", () => {
     expect(translate("nl", "visibleJobs", { count: 3 })).toContain("3");
     expect(translate("nl", "recordEmployerResponseTitle")).toBe("Werkgeversreactie vastleggen");
     expect(translate("nl", "confirmExternalSubmissionTitle")).toBe("Externe indiening bevestigen");
+    expect(translate("nl", "applicationsTitle")).toBe("Sollicitaties");
+    expect(translate("nl", "trackedApplicationsCount", { count: 4 })).toBe("4 gevolgd");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

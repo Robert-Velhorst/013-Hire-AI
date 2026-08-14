@@ -530,3 +530,10 @@
 - Kept user-authored summaries, employer messages, provider references, and audit-ledger evidence verbatim while localizing the surrounding instructions, classifications, validation guidance, and commands.
 - Added localization wiring regressions for the evidence-critical dialogs and verified a seeded Dutch offer-decline workflow in the in-app browser with accessible names and no horizontal overflow.
 - Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Applications pipeline localization and render pass
+
+- Localized the Applications heading, refresh action, pipeline state/action summary, metrics, statistics, filter tabs, card fallbacks, and category empty states in English and Dutch.
+- Replaced the render-local application card component type with a direct stable render path, preventing all visible cards from remounting when parent state changes.
+- Added localization and stable-render regressions and verified the seeded Dutch pipeline at desktop and compact widths with no horizontal overflow.
+- Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
