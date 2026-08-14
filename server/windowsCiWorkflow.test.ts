@@ -44,4 +44,23 @@ describe("Windows runtime CI contract", () => {
     expect(ngrokLauncher.match(/\/readyz/g)).toHaveLength(2);
     expect(ngrokLauncher).toContain("$response.ready -eq $true");
   });
+
+  it("prepares and verifies the database before starting the Windows server", () => {
+    const windowsLauncher = readFileSync(
+      resolve(process.cwd(), "scripts", "start-windows.ps1"),
+      "utf8"
+    );
+    const migration = windowsLauncher.indexOf("'scripts/database-migrate.mjs'");
+    const schemaAudit = windowsLauncher.indexOf("'dist/database-schema-audit.js'");
+    const serverStart = windowsLauncher.indexOf(
+      "Start-Process -FilePath $node.Source"
+    );
+
+    expect(windowsLauncher).toContain("[switch]$SkipDatabaseMigration");
+    expect(windowsLauncher).toContain("if (-not $SkipDatabaseMigration)");
+    expect(migration).toBeGreaterThan(-1);
+    expect(schemaAudit).toBeGreaterThan(migration);
+    expect(serverStart).toBeGreaterThan(schemaAudit);
+    expect(windowsLauncher).toContain("The service was not started.");
+  });
 });

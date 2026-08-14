@@ -29,6 +29,17 @@ foreach ($launcherPath in $launcherPaths) {
     }
 }
 
+$windowsLauncher = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'start-windows.ps1') -Raw
+$migrationPosition = $windowsLauncher.IndexOf("'scripts/database-migrate.mjs'")
+$schemaAuditPosition = $windowsLauncher.IndexOf("'dist/database-schema-audit.js'")
+$serverStartPosition = $windowsLauncher.IndexOf('Start-Process -FilePath $node.Source')
+if ($migrationPosition -lt 0 -or $schemaAuditPosition -lt 0 -or $serverStartPosition -lt 0) {
+    throw 'The Windows launcher must migrate, audit, and start the database-backed runtime.'
+}
+if (-not ($migrationPosition -lt $schemaAuditPosition -and $schemaAuditPosition -lt $serverStartPosition)) {
+    throw 'The Windows launcher must migrate and audit the database before starting the server.'
+}
+
 $distEntry = Join-Path $repoRoot 'dist\index.js'
 if (Test-Path -LiteralPath $distEntry -PathType Container) {
     throw "Production entry path is unexpectedly a directory: $distEntry"

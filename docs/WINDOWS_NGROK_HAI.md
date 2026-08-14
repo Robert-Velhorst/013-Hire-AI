@@ -6,14 +6,16 @@ Hire.AI runs as a native Node.js process; Docker is not required. Production ope
 
 1. Install Node.js 22 and a MySQL-compatible database.
 2. Copy `.env.example` to `.env` and replace every required production value.
-3. Apply migrations with `npm.cmd run db:migrate`.
+3. Record and verify a database backup before the first start after an upgrade.
 4. Start the checked and built service:
 
 ```powershell
 npm.cmd run start:windows -- -Port 3000
 ```
 
-The script builds the app, runs the production doctor, starts a hidden child process, and reports success only after `/readyz` confirms the configured database is reachable. It binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
+The script builds the app, runs the production doctor, applies lock-protected database migrations, audits the resulting schema, starts a hidden child process, and reports success only after `/readyz` confirms the configured database is reachable. Every preparation step fails closed before server startup. Use `-SkipDatabaseMigration` only when migrations were applied separately from the same checkout; the schema audit still runs and rejects an outdated database.
+
+The service binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
 
 ## ngrok tunnel
 

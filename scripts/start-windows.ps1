@@ -4,7 +4,8 @@ param(
     [int]$Port = 3000,
     [ValidateSet('127.0.0.1', '0.0.0.0', '::1', '::')]
     [string]$HostAddress = '127.0.0.1',
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$SkipDatabaseMigration
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,18 @@ try {
     & $npm.Source run doctor
     if ($LASTEXITCODE -ne 0) {
         throw 'Production configuration audit failed. Correct the reported settings before startup.'
+    }
+
+    if (-not $SkipDatabaseMigration) {
+        & $node.Source 'scripts/database-migrate.mjs'
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Database migration failed. The service was not started.'
+        }
+    }
+
+    & $node.Source 'dist/database-schema-audit.js'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Database schema audit failed. Apply the required migrations before startup.'
     }
 
     $stdoutPath = Join-Path $env:TEMP "hire-ai-windows-$Port.out.log"
