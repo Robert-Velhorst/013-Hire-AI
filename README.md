@@ -348,6 +348,8 @@ The production runtime is a Node.js-only Cloud Run container (no Python, no nati
 - **Request timeout:** 180 seconds
 - **Cold starts:** Enabled (min-instances=0)
 
+The Node runtime independently limits request receipt to 120 seconds, header receipt to 15 seconds, keep-alive idling to 5 seconds, 100 headers, and 1,000 requests per socket. General JSON requests are limited to 16 MiB so the bounded 10 MiB binary document contract can survive base64 expansion; URL-encoded forms are limited to 1 MiB. Fingerprinted production assets are cached immutably for one year, while `index.html` and SPA fallbacks require revalidation so deployments cannot strand clients on an old application shell.
+
 > **Note for contributors:** All CJS npm packages must be loaded via `createRequire(import.meta.url)` rather than ESM `import ... from` syntax to avoid `ERR_MODULE_NOT_FOUND` in the production ESM build. See `server/resumeParser.ts` for the established pattern.
 
 ---

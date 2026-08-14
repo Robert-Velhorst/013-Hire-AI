@@ -27,6 +27,8 @@ import { displayHost, resolveAvailablePort, resolveBindHost, resolvePreferredPor
 import { drainRuntime } from "./gracefulShutdown";
 import { createDatabaseReadinessProbe } from "./databaseReadiness";
 import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostics";
+import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
+import { registerApplicationBodyParsers } from "./bodyParsers";
 
 let startupStage: StartupStage = "configuration validation";
 
@@ -39,6 +41,7 @@ async function startServer() {
 
   const app = express();
   const server = createServer(app);
+  applyHttpRuntimePolicy(server);
   const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });
   app.disable("x-powered-by");
   app.use((_req, res, next) => {
@@ -71,9 +74,9 @@ async function startServer() {
   // The HAI bridge owns its bounded JSON parser and must be registered before
   // the general application parser can accept a larger request body.
   registerHaiConnectorRoutes(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // The JSON envelope accommodates the bounded 10 MiB document payload after
+  // base64 expansion without reserving a 50 MiB parser budget for every request.
+  registerApplicationBodyParsers(app);
   // Development-only authenticated QA routes for protected operating-ledger pages.
   registerDevAuthRoutes(app);
   // OAuth callback under /api/oauth/callback
