@@ -4,13 +4,30 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Activity, Rocket, ArrowRight, Search, FileText, Send, Globe, Menu, X, ChevronDown, ShieldCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import { useRef, useState } from "react";
+import { useLocale } from "@/contexts/LocaleContext";
+import { getLandingCopy, type LandingCopyKey } from "@/lib/landingCopy";
+
+const OPERATING_STEPS = [
+  ["1", "versionedEvidence", "versionedEvidenceDetail"],
+  ["2", "sourceAwareDiscovery", "sourceAwareDiscoveryDetail"],
+  ["3", "reviewGatedExecution", "reviewGatedExecutionDetail"],
+] as const satisfies ReadonlyArray<readonly [string, LandingCopyKey, LandingCopyKey]>;
+
+const FAQ_ITEMS = [
+  ["faqApplicationsQuestion", "faqApplicationsAnswer"],
+  ["faqSecurityQuestion", "faqSecurityAnswer"],
+  ["faqAutomationQuestion", "faqAutomationAnswer"],
+  ["faqVolumeQuestion", "faqVolumeAnswer"],
+  ["faqPlatformsQuestion", "faqPlatformsAnswer"],
+  ["faqReviewQuestion", "faqReviewAnswer"],
+] as const satisfies ReadonlyArray<readonly [LandingCopyKey, LandingCopyKey]>;
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
+  const { locale, setLocale, t } = useLocale();
+  const lp = (key: LandingCopyKey) => getLandingCopy(locale, key);
   const featuresRef = useRef<HTMLElement>(null);
-  const missionRef = useRef<HTMLElement>(null);
-  const faqRef = useRef<HTMLElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
 
@@ -27,15 +44,6 @@ export default function LandingPage() {
     setMobileMenuOpen(false);
   };
 
-  const scrollToMission = () => {
-    missionRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToFaq = () => {
-    faqRef.current?.scrollIntoView({ behavior: "smooth" });
-    setMobileMenuOpen(false);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
       {/* Header */}
@@ -47,19 +55,32 @@ export default function LandingPage() {
               <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                 Hire.AI
               </span>
-              <span className="text-xs text-slate-500 -mt-1">Job hunting done right.</span>
+              <span className="text-xs text-slate-500 -mt-1">{lp("tagline")}</span>
             </div>
           </div>
           
           {/* Desktop Navigation */}
           <div className="hidden md:flex gap-4 items-center">
+            <div className="flex rounded-md border border-slate-700 p-0.5" role="group" aria-label={t("language")}>
+              {(["en", "nl"] as const).map((language) => (
+                <button
+                  key={language}
+                  type="button"
+                  className={`min-w-10 rounded px-2 py-1 text-xs font-medium ${locale === language ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-white"}`}
+                  aria-pressed={locale === language}
+                  onClick={() => setLocale(language)}
+                >
+                  {language.toUpperCase()}
+                </button>
+              ))}
+            </div>
             {isAuthenticated ? (
               <Button
                 variant="outline"
                 className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
                 onClick={() => setLocation("/dashboard")}
               >
-                Dashboard
+                {t("dashboard")}
               </Button>
             ) : (
               <Button
@@ -67,7 +88,7 @@ export default function LandingPage() {
                 className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10"
                 onClick={() => window.location.href = getLoginUrl()}
               >
-                Sign In
+                {t("signIn")}
               </Button>
             )}
           </div>
@@ -76,7 +97,7 @@ export default function LandingPage() {
           <button
             className="md:hidden p-2 text-slate-300 hover:text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
+            aria-label={t("toggleNavigation")}
           >
             {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
@@ -86,6 +107,19 @@ export default function LandingPage() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-800/50 bg-slate-950/95 backdrop-blur-sm">
             <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
+              <div className="flex rounded-md border border-slate-700 p-0.5" role="group" aria-label={t("language")}>
+                {(["en", "nl"] as const).map((language) => (
+                  <button
+                    key={language}
+                    type="button"
+                    className={`flex-1 rounded px-3 py-2 text-sm font-medium ${locale === language ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400"}`}
+                    aria-pressed={locale === language}
+                    onClick={() => setLocale(language)}
+                  >
+                    {language.toUpperCase()}
+                  </button>
+                ))}
+              </div>
               {isAuthenticated ? (
                 <Button
                   className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white w-full mt-2"
@@ -94,7 +128,7 @@ export default function LandingPage() {
                     setMobileMenuOpen(false);
                   }}
                 >
-                  Dashboard
+                  {t("dashboard")}
                 </Button>
               ) : (
                 <Button
@@ -103,7 +137,7 @@ export default function LandingPage() {
                     window.location.href = getLoginUrl();
                   }}
                 >
-                  Sign In
+                  {t("signIn")}
                 </Button>
               )}
             </div>
@@ -117,11 +151,11 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h1 className="text-4xl lg:text-5xl font-bold leading-tight">
               <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">
-                Your job search, under control.
+                {lp("heroTitle")}
               </span>
             </h1>
             <p className="text-xl text-slate-300 leading-relaxed">
-              Discover roles from configured sources, build tailored materials, and keep applications, follow-ups, and responses in one reviewable operating ledger.
+              {lp("heroDescription")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
@@ -129,7 +163,7 @@ export default function LandingPage() {
                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-8 text-lg"
                 onClick={handleGetStarted}
               >
-                {isAuthenticated ? "Go to Dashboard" : "Build Your Search Workspace"}
+                {lp(isAuthenticated ? "goToDashboard" : "buildWorkspace")}
                 <Rocket className="ml-2 h-5 w-5" />
               </Button>
               <Button
@@ -138,14 +172,14 @@ export default function LandingPage() {
                 className="border-slate-700 text-slate-300 hover:bg-slate-800"
                 onClick={scrollToFeatures}
               >
-                See How It Works
+                {lp("seeHowItWorks")}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
             
             <div className="flex items-center gap-3 pt-4 text-sm text-slate-300">
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
-              <span>External applications and follow-ups stay behind explicit approval and confirmation steps.</span>
+              <span>{lp("approvalBoundary")}</span>
             </div>
           </div>
 
@@ -154,20 +188,16 @@ export default function LandingPage() {
             <div className="relative bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
               <div className="space-y-6">
                 <div>
-                  <p className="text-sm font-medium text-cyan-300">Operating model</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">Prepare, review, and record every next step.</h2>
+                  <p className="text-sm font-medium text-cyan-300">{lp("operatingModel")}</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">{lp("operatingModelTitle")}</h2>
                 </div>
                 <div className="space-y-4">
-                  {[
-                    ["1", "Versioned candidate evidence", "Resume versions and profile data remain attributable to each prepared application."],
-                    ["2", "Source-aware job discovery", "Configured supported sources feed normalized listings and duplicate relationships."],
-                    ["3", "Review-gated execution", "Hire.AI prepares decisions and drafts; users confirm consequential external actions."],
-                  ].map(([step, title, detail]) => (
+                  {OPERATING_STEPS.map(([step, title, detail]) => (
                     <div key={step} className="flex gap-4 border-t border-slate-700/60 pt-4 first:border-t-0 first:pt-0">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/15 text-sm font-semibold text-cyan-300">{step}</span>
                       <div>
-                        <p className="font-medium text-white">{title}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-400">{detail}</p>
+                        <p className="font-medium text-white">{lp(title)}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-400">{lp(detail)}</p>
                       </div>
                     </div>
                   ))}
@@ -183,24 +213,24 @@ export default function LandingPage() {
       {/* Operating principles */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-white mb-4">Designed for accountable job searching</h2>
-          <p className="text-xl text-slate-400">The system records why work was prepared and what still needs your decision.</p>
+          <h2 className="text-4xl font-bold text-white mb-4">{lp("accountableTitle")}</h2>
+          <p className="text-xl text-slate-400">{lp("accountableDescription")}</p>
         </div>
         
         <div className="grid md:grid-cols-3 gap-8">
           <div className="border-t border-slate-700/60 pt-6">
-            <p className="text-lg font-semibold text-white">Evidence before action</p>
-            <p className="mt-3 leading-7 text-slate-400">Prepared applications retain the resume version, profile snapshot, decision rationale, and review state used to create them.</p>
+            <p className="text-lg font-semibold text-white">{lp("evidenceBeforeAction")}</p>
+            <p className="mt-3 leading-7 text-slate-400">{lp("evidenceBeforeActionDetail")}</p>
           </div>
           
           <div className="border-t border-slate-700/60 pt-6">
-            <p className="text-lg font-semibold text-white">Control at external boundaries</p>
-            <p className="mt-3 leading-7 text-slate-400">Application submission and follow-up delivery require explicit approval and a confirmed handoff. The ledger does not invent submission evidence.</p>
+            <p className="text-lg font-semibold text-white">{lp("externalControl")}</p>
+            <p className="mt-3 leading-7 text-slate-400">{lp("externalControlDetail")}</p>
           </div>
           
           <div className="border-t border-slate-700/60 pt-6">
-            <p className="text-lg font-semibold text-white">One operating record</p>
-            <p className="mt-3 leading-7 text-slate-400">Responses, interviews, offers, follow-ups, and compliance work are connected to the originating application for clear next actions.</p>
+            <p className="text-lg font-semibold text-white">{lp("oneRecord")}</p>
+            <p className="mt-3 leading-7 text-slate-400">{lp("oneRecordDetail")}</p>
           </div>
         </div>
       </section>
@@ -208,8 +238,8 @@ export default function LandingPage() {
       {/* How It Works Section */}
       <section className="container mx-auto px-4 py-20" ref={featuresRef}>
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-white mb-4">How It Works</h2>
-          <p className="text-xl text-slate-400">A controlled workflow from candidate evidence to external handoff</p>
+          <h2 className="text-4xl font-bold text-white mb-4">{lp("howItWorks")}</h2>
+          <p className="text-xl text-slate-400">{lp("howItWorksDescription")}</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
@@ -219,9 +249,9 @@ export default function LandingPage() {
               <div className="h-16 w-16 rounded-2xl bg-cyan-500/10 flex items-center justify-center mb-6">
                 <FileText className="h-8 w-8 text-cyan-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-3">Import Candidate Evidence</h3>
+              <h3 className="text-xl font-semibold text-white mb-3">{lp("importEvidence")}</h3>
               <p className="text-slate-400">
-                Import a resume version, then review the skills, history, and preferences that inform future application preparation.
+                {lp("importEvidenceDetail")}
               </p>
             </div>
           </div>
@@ -232,9 +262,9 @@ export default function LandingPage() {
               <div className="h-16 w-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-6">
                 <Search className="h-8 w-8 text-blue-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-3">Scan Configured Sources</h3>
+              <h3 className="text-xl font-semibold text-white mb-3">{lp("scanSources")}</h3>
               <p className="text-slate-400">
-                Choose from the supported sources available to your workspace. Hire.AI normalizes listings and keeps duplicate relationships visible.
+                {lp("scanSourcesDetail")}
               </p>
             </div>
           </div>
@@ -245,9 +275,9 @@ export default function LandingPage() {
               <div className="h-16 w-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6">
                 <Send className="h-8 w-8 text-purple-400" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-3">Review Prepared Work</h3>
+              <h3 className="text-xl font-semibold text-white mb-3">{lp("reviewWork")}</h3>
               <p className="text-slate-400">
-                Review matches, materials, follow-up drafts, and evidence before confirming a consequential external handoff.
+                {lp("reviewWorkDetail")}
               </p>
             </div>
           </div>
@@ -255,51 +285,26 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ Section */}
-      <section ref={faqRef} className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-white mb-4">Frequently Asked Questions</h2>
+          <h2 className="text-4xl font-bold text-white mb-4">{lp("faqTitle")}</h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Everything you need to know about how Hire.AI works
+            {lp("faqDescription")}
           </p>
         </div>
         
         <div className="max-w-3xl mx-auto space-y-4">
-          {[
-            {
-              question: "How does Hire.AI handle applications?",
-              answer: "Hire.AI prepares match decisions and application materials from your profile evidence. External application submission remains a separate, review-gated handoff that you explicitly approve and confirm."
-            },
-            {
-              question: "Is my data safe and secure?",
-              answer: "Resume versions and application evidence are tracked so you can see what was used. External inbox and cloud connectors remain unavailable until explicit provider authorization is completed. Do not treat the current prototype as a finished production data-processing service."
-            },
-            {
-              question: "Will employers know I'm using an automated service?",
-              answer: "Hire.AI does not silently submit applications. You control the external handoff through the intended employer channel after reviewing the prepared materials."
-            },
-            {
-              question: "How many applications can Hire.AI prepare per day?",
-              answer: "You control the daily preparation limit. Hire.AI prioritizes high-fit roles and adds them to a review queue before any final submission."
-            },
-            {
-              question: "What job platforms do you support?",
-              answer: "We aggregate opportunities from supported sources and prepare review workflows for common ATS platforms such as Greenhouse and Lever. Final submission remains under your control."
-            },
-            {
-              question: "Can I review applications before they're sent?",
-              answer: "Yes. Every prepared application remains in a review queue until you verify the details and submit it."
-            },
-          ].map((faq, index) => (
+          {FAQ_ITEMS.map(([question, answer]) => (
             <details 
-              key={index} 
+              key={question}
               className="group bg-slate-900/50 backdrop-blur-sm border border-slate-800/50 rounded-xl overflow-hidden"
             >
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="text-lg font-medium text-white pr-4">{faq.question}</span>
+                <span className="text-lg font-medium text-white pr-4">{lp(question)}</span>
                 <ChevronDown className="h-5 w-5 text-slate-400 transition-transform group-open:rotate-180 flex-shrink-0" />
               </summary>
               <div className="px-6 pb-6 text-slate-400 leading-relaxed">
-                {faq.answer}
+                {lp(answer)}
               </div>
             </details>
           ))}
@@ -310,20 +315,20 @@ export default function LandingPage() {
       <section className="container mx-auto px-4 py-20">
         <div className="text-center space-y-6">
           <h2 className="text-4xl lg:text-5xl font-bold text-white">
-            Ready to run your job search from one place?
+            {lp("ctaTitle")}
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Build a traceable workflow for job discovery, preparation, approvals, and follow-up.
+            {lp("ctaDescription")}
           </p>
           <Button
             size="lg"
             className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-12 py-6 text-lg"
             onClick={handleGetStarted}
           >
-            {isAuthenticated ? "Go to Dashboard" : "Build Your Search Workspace"}
+            {lp(isAuthenticated ? "goToDashboard" : "buildWorkspace")}
             <Rocket className="ml-2 h-5 w-5" />
           </Button>
-          <p className="text-sm text-slate-500">Set up your profile evidence and job-search policy before preparing work.</p>
+          <p className="text-sm text-slate-500">{lp("ctaHint")}</p>
         </div>
       </section>
 
@@ -335,20 +340,20 @@ export default function LandingPage() {
               <Activity className="h-6 w-6 text-cyan-400" />
               <div>
                 <span className="text-lg font-semibold text-slate-300">Hire.AI</span>
-                <span className="text-slate-500 text-sm ml-2">Job hunting done right.</span>
+                <span className="text-slate-500 text-sm ml-2">{lp("tagline")}</span>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-emerald-400">
               <Globe className="h-4 w-4" />
-              <span>On a mission to reduce worldwide unemployment</span>
+              <span>{lp("mission")}</span>
             </div>
             <div className="flex items-center gap-4 text-sm text-slate-500">
-              <span>© 2026 Hire.AI. All rights reserved.</span>
+              <span>{lp("copyright")}</span>
               <a
                 href="/terms"
                 className="text-slate-400 hover:text-cyan-400 transition-colors hover:underline underline-offset-4"
               >
-                Terms of Service
+                {lp("terms")}
               </a>
             </div>
           </div>

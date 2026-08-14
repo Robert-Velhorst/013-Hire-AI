@@ -583,3 +583,12 @@
 - Reused canonical locale keys where available, localized interview-scheduling controls from stable requirements, and retained provider messages, employer content, saved reasons, profile recommendations, and audit records verbatim.
 - Added wiring and Dutch-copy regressions and verified all 16 populated Dutch sections in the in-app browser without console errors or horizontal document overflow.
 - Passed TypeScript, 236 test files / 1,185 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.
+
+## 2026-08-14 - Public landing localization and locale-control pass
+
+- Localized the complete public landing workflow in English and Dutch: navigation, hero, operating model, accountability principles, workflow, FAQ, conversion actions, mission, copyright, and terms link.
+- Added accessible EN/NL controls for unauthenticated and authenticated visitors in desktop and mobile navigation; the shared locale provider updates the document language and retains the browser preference.
+- Kept the landing catalog in the lazy public route instead of the global application locale bundle, restoring the shared minified chunk from 587.35 kB to 577.36 kB so authenticated routes do not download landing-only prose.
+- Kept review-first, no-silent-submission, provider-consent, and prototype-readiness claims under regression coverage after moving them into the locale catalog. Terms content itself remains unchanged pending approved localized legal text.
+- Verified Dutch rendering and live switching to English in the in-app browser with no console errors or horizontal document overflow. The browser viewport override did not expose the requested compact width, so no new mobile-render claim is recorded for this pass.
+- Passed TypeScript, 236 test files / 1,186 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.

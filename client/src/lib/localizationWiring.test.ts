@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { translate } from "../contexts/LocaleContext";
+import { getLandingCopy } from "./landingCopy";
 
 describe("localization wiring", () => {
   it("wires the account locale through the provider, shell, and settings mutation", () => {
@@ -256,5 +257,22 @@ describe("localization wiring", () => {
     expect(translate("nl", "foundCloudResumes", { count: 4 })).toContain("4");
     expect(translate("nl", "applicationResponseSummary", { id: 12, type: "Aanbod" })).toBe("Sollicitatie #12 - Aanbod");
     expect(translate("nl", "publicRepositories", { count: 8 })).toContain("8");
+  });
+
+  it("localizes the public landing workflow and exposes a public locale control", () => {
+    const landing = readFileSync(resolve(process.cwd(), "client/src/pages/LandingPage.tsx"), "utf8");
+
+    expect(landing).toContain("const { locale, setLocale, t } = useLocale()");
+    expect(landing).toContain("setLocale(language)");
+    expect(landing).toContain('lp("heroTitle")');
+    expect(landing).toContain('lp("approvalBoundary")');
+    expect(landing).toContain("getLandingCopy(locale, key)");
+    expect(landing).toContain("FAQ_ITEMS.map");
+    expect(landing).not.toContain("Your job search, under control.");
+    expect(landing).not.toContain("How does Hire.AI handle applications?");
+    expect(landing).not.toContain("© 2026 Hire.AI. All rights reserved.");
+    expect(getLandingCopy("nl", "heroTitle")).toContain("onder controle");
+    expect(getLandingCopy("nl", "approvalBoundary")).toContain("expliciete");
+    expect(getLandingCopy("nl", "faqAutomationAnswer")).toContain("niet stil in");
   });
 });
