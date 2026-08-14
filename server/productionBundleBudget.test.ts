@@ -12,6 +12,8 @@ describe("production browser bundle budget", () => {
     expect(config).toContain('moduleId.lastIndexOf("/node_modules/")');
     expect(config).not.toContain('return "vendor-ui"');
     expect(config).not.toContain('return "vendor-common"');
+    expect(config).toContain('if (command === "build") process.env.NODE_ENV = "production"');
+    expect(config).toContain('{ define: { "process.env.NODE_ENV": JSON.stringify("production") } }');
   });
 
   it("enforces a maximum production JavaScript chunk size", () => {

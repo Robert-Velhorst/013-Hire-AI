@@ -7,7 +7,11 @@ import { defineConfig, type UserConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 export function createViteConfig(command: "build" | "serve"): UserConfig {
+  if (command === "build") process.env.NODE_ENV = "production";
   return {
+    ...(command === "build"
+      ? { define: { "process.env.NODE_ENV": JSON.stringify("production") } }
+      : {}),
     plugins: [
       react(),
       tailwindcss(),
