@@ -49,6 +49,7 @@ import {
 } from "@/lib/connectorConnectionControl";
 import { toast } from "sonner";
 import AppHeader from "@/components/AppHeader";
+import { calendarDateForInput, calendarYear, formatCalendarDate } from "@/lib/calendarDate";
 import {
   Dialog,
   DialogContent,
@@ -2064,10 +2065,7 @@ function optionalText(value: string): string | undefined {
 }
 
 function dateForInput(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+  return calendarDateForInput(value);
 }
 
 function isHttpUrl(value: string) {
@@ -2125,7 +2123,7 @@ function WorkExperienceCard({ experience, onEdit, onDelete }: any) {
         </div>
       </div>
       <p className="text-sm text-slate-500 mb-2">
-        {new Date(experience.startDate).toLocaleDateString()} - {experience.isCurrent ? "Present" : new Date(experience.endDate).toLocaleDateString()}
+        {formatCalendarDate(experience.startDate) || "Start date not recorded"} - {experience.isCurrent ? "Present" : formatCalendarDate(experience.endDate) || "End date not recorded"}
       </p>
       {experience.description && (
         <p className="text-slate-400 text-sm">{experience.description}</p>
@@ -2155,7 +2153,7 @@ function EducationCard({ education, onEdit, onDelete }: any) {
         <p className="text-slate-400 text-sm mb-1">{education.fieldOfStudy}</p>
       )}
       <p className="text-sm text-slate-500">
-        {education.endDate ? new Date(education.endDate).getFullYear() : "In Progress"}
+        {calendarYear(education.endDate) || (education.isCurrent ? "In Progress" : "End year not recorded")}
       </p>
     </div>
   );
@@ -2192,7 +2190,7 @@ function ProjectCard({ project, onEdit, onDelete }: any) {
           <h3 className="text-white font-semibold">{project.title}</h3>
           {project.url && isHttpUrl(project.url) && (
             <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline">
-              View Project →
+              View project
             </a>
           )}
         </div>

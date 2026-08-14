@@ -15,6 +15,7 @@ import { getApplicationNextActions, type ApplicationNextActionId } from "@/lib/a
 import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
 import { formatJobSalary } from "@/lib/jobSalary";
+import { formatCalendarDate } from "@/lib/calendarDate";
 import { APPLICATION_LEDGER_WINDOW_LIMITS } from "@shared/applicationLedgerWindow";
 import { useLocation } from "wouter";
 import AppHeader from "@/components/AppHeader";
@@ -1727,7 +1728,7 @@ export default function Applications() {
                             [
                               "Verification",
                               selectedOfferSummary.nextVerificationDue
-                                ? selectedOfferSummary.nextVerificationDue.toLocaleDateString()
+                                ? formatCalendarDate(selectedOfferSummary.nextVerificationDue)
                                 : "Not due",
                             ],
                           ].map(([label, value]) => (

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import TosAcceptanceDialog from "@/components/TosAcceptanceDialog";
 import { Shield } from "lucide-react";
+import { formatCalendarDate } from "@/lib/calendarDate";
 
 export default function Dashboard() {
   const { user, loading, isAuthenticated, logout } = useAuth();
@@ -1268,7 +1269,7 @@ export default function Dashboard() {
                 </div>
                 {successFeeCompliance.nextVerificationDue && (
                   <p className="text-xs text-slate-500">
-                    Next verification: {successFeeCompliance.nextVerificationDue.toLocaleDateString()}
+                    Next verification: {formatCalendarDate(successFeeCompliance.nextVerificationDue)}
                     {successFeeCompliance.daysUntilNextVerification !== null
                       ? ` (${successFeeCompliance.daysUntilNextVerification} days)`
                       : ""}

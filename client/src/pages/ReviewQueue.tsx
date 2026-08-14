@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { getApplicationDeepLink } from "@/lib/applicationDeepLinks";
 import { getInterviewSchedulingControl } from "@/lib/interviewSchedulingControl";
+import { formatCalendarDate } from "@/lib/calendarDate";
 import { getApprovalEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import {
   formatApplicationDecision,
@@ -1101,7 +1102,7 @@ export default function ReviewQueue() {
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.jobTitle || item.action}
                                 {item.nextVerificationDue
-                                  ? ` - due ${new Date(item.nextVerificationDue).toLocaleDateString()}`
+                                  ? ` - due ${formatCalendarDate(item.nextVerificationDue)}`
                                   : ""}
                               </p>
                             </div>

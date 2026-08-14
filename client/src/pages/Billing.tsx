@@ -19,7 +19,7 @@ import { openExternalUrl } from "@/lib/externalUrl";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
-import { formatBillingCurrency, formatBillingDate, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
+import { formatBillingCalendarDate, formatBillingCurrency, formatBillingDate, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
 import { getVerificationUploadMimeType, validateVerificationUpload, VERIFICATION_UPLOAD_ACCEPT } from "@shared/documentUploads";
 import { readFileAsBase64 } from "@/lib/documentUpload";
 import {
@@ -482,7 +482,7 @@ export default function Billing() {
                 [
                   "Next due",
                   complianceSummary.nextVerificationDue
-                    ? formatBillingDate(complianceSummary.nextVerificationDue, locale)
+                    ? formatBillingCalendarDate(complianceSummary.nextVerificationDue, locale)
                     : "None",
                 ],
               ].map(([label, value]) => (
@@ -642,7 +642,7 @@ export default function Billing() {
                             ? "Verification overdue! Submit proof of employment to avoid suspension."
                             : daysUntilVerification <= 14
                             ? `Verification due in ${daysUntilVerification} days`
-                            : `Next verification: ${formatBillingDate(fee.nextVerificationDue!, locale)}`}
+                            : `Next verification: ${formatBillingCalendarDate(fee.nextVerificationDue!, locale)}`}
                         </div>
                       )}
 
@@ -674,7 +674,7 @@ export default function Billing() {
 
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                         <Calendar className="w-3.5 h-3.5" />
-                        Started {formatBillingDate(fee.startDate, locale)}
+                        Started {formatBillingCalendarDate(fee.startDate, locale)}
                         {fee.hasOfferLetter && (
                           <>
                             <span className="text-gray-600">·</span>
@@ -756,7 +756,7 @@ export default function Billing() {
                         </p>
                         {payment.periodStart && payment.periodEnd && (
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {formatBillingDate(payment.periodStart, locale)} - {formatBillingDate(payment.periodEnd, locale)}
+                            {formatBillingCalendarDate(payment.periodStart, locale)} - {formatBillingCalendarDate(payment.periodEnd, locale)}
                           </p>
                         )}
                       </div>

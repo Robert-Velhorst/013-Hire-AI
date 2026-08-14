@@ -1,4 +1,5 @@
 import type { SupportedLocale } from "@shared/localization";
+import { formatCalendarDate } from "./calendarDate";
 
 const MAX_CACHED_FORMATTERS = 32;
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
@@ -59,4 +60,11 @@ export function formatBillingDate(
 ) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(locale);
+}
+
+export function formatBillingCalendarDate(
+  value: string | number | Date | null | undefined,
+  locale: SupportedLocale,
+) {
+  return formatCalendarDate(value, locale);
 }

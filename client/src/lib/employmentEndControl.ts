@@ -1,3 +1,5 @@
+import { formatCalendarDate } from "./calendarDate";
+
 export interface EmploymentEndFeeLike {
   id?: number | null;
   employerName?: string | null;
@@ -38,9 +40,7 @@ const REPORTABLE_STATUSES = new Set(["active", "pending_verification"]);
 
 function formatDate(value?: Date | string | null) {
   if (!value) return "Not recorded";
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not recorded";
-  return date.toLocaleDateString();
+  return formatCalendarDate(value) || "Not recorded";
 }
 
 export function getEmploymentEndControlSummary(
