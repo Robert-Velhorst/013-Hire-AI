@@ -1693,7 +1693,7 @@ export default function Applications() {
                             onClick={() => openScheduleInterviewDialog(selectedApplication)}
                           >
                             <Calendar className="mr-1 h-4 w-4" />
-                            Schedule Interview
+                            {t("scheduleInterviewTitle")}
                           </Button>
                         )}
                         {selectedInterviewSchedulingControl && !canScheduleSelectedInterview && (
@@ -2325,7 +2325,7 @@ export default function Applications() {
                           onClick={() => openOfferDeclineDialog(selectedApplication)}
                         >
                           <XCircle className="w-4 h-4 mr-1" />
-                          Decline Offer
+                          {t("declineOfferTitle")}
                         </Button>
                       </>
                     )}
@@ -2341,7 +2341,7 @@ export default function Applications() {
                       {generateFollowUpMutation.isPending
                         ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                         : <Mail className="w-4 h-4 mr-1" />}
-                      Follow Up
+                      {t("followUpAction")}
                     </Button>
                     <Button
                       className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
@@ -2352,7 +2352,7 @@ export default function Applications() {
                       )}
                     >
                       <ExternalLink className="w-4 h-4 mr-1" />
-                      View Job
+                      {t("viewJob")}
                     </Button>
                   </div>
                 </div>
@@ -2373,14 +2373,14 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Record Employer Response</DialogTitle>
+              <DialogTitle className="text-white">{t("recordEmployerResponseTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Classify the reply and add a concise ledger note.
+                {t("recordEmployerResponseDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Response type</label>
+                <label className="text-sm font-medium text-slate-300">{t("responseType")}</label>
                 <Select
                   value={employerResponseType}
                   onValueChange={(value) => setEmployerResponseType(value as EmployerResponseType)}
@@ -2389,17 +2389,17 @@ export default function Applications() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="viewed">Application viewed</SelectItem>
-                    <SelectItem value="employer_question">Employer question</SelectItem>
-                    <SelectItem value="interview_invite">Interview invite</SelectItem>
-                    <SelectItem value="offer">Offer</SelectItem>
-                    <SelectItem value="rejection">Rejection</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="viewed">{t("applicationViewed")}</SelectItem>
+                    <SelectItem value="employer_question">{t("employerQuestionLabel")}</SelectItem>
+                    <SelectItem value="interview_invite">{t("interviewInviteLabel")}</SelectItem>
+                    <SelectItem value="offer">{t("offerLabel")}</SelectItem>
+                    <SelectItem value="rejection">{t("rejectionLabel")}</SelectItem>
+                    <SelectItem value="other">{t("otherLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Source</label>
+                <label className="text-sm font-medium text-slate-300">{t("sourceLabel")}</label>
                 <Select
                   value={employerResponseSource}
                   onValueChange={(value) => setEmployerResponseSource(value as EmployerResponseSource)}
@@ -2408,32 +2408,32 @@ export default function Applications() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="employer_portal">Employer portal</SelectItem>
+                    <SelectItem value="email">{t("emailLabel")}</SelectItem>
+                    <SelectItem value="employer_portal">{t("employerPortal")}</SelectItem>
                     <SelectItem value="linkedin">LinkedIn</SelectItem>
-                    <SelectItem value="phone">Phone</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="phone">{t("phoneLabel")}</SelectItem>
+                    <SelectItem value="other">{t("otherLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300">
-                  Message or portal reference{["interview_invite", "offer"].includes(employerResponseType) ? " (required for interview alerts and offer attribution)" : ""}
+                  {t("messagePortalReference")}{["interview_invite", "offer"].includes(employerResponseType) ? ` (${t("referenceRequiredForInterviewOffer")})` : ""}
                 </label>
                 <Input
                   value={employerResponseSourceReference}
                   onChange={(event) => setEmployerResponseSourceReference(event.target.value)}
                   className="bg-slate-800 border-slate-700 text-white"
-                  placeholder={["interview_invite", "offer"].includes(employerResponseType) ? "Required: message, portal, phone, or LinkedIn reference" : "Optional: message or portal ID"}
+                  placeholder={t(["interview_invite", "offer"].includes(employerResponseType) ? "requiredSourceReferencePlaceholder" : "optionalSourceReferencePlaceholder")}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-300">Response summary</label>
+                <label className="text-sm font-medium text-slate-300">{t("responseSummary")}</label>
                 <Textarea
                   value={employerResponseSummary}
                   onChange={(event) => setEmployerResponseSummary(event.target.value)}
                   className="min-h-36 bg-slate-800 border-slate-700 text-white"
-                  placeholder="Example: Recruiter emailed asking for interview availability next week."
+                  placeholder={t("responseSummaryPlaceholder")}
                 />
               </div>
             </div>
@@ -2446,7 +2446,7 @@ export default function Applications() {
                   setEmployerResponseSummary("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={!employerResponseSummary.trim() || (["interview_invite", "offer"].includes(employerResponseType) && !employerResponseSourceReference.trim()) || recordResponseMutation.isPending}
@@ -2462,7 +2462,7 @@ export default function Applications() {
                 }}
               >
                 {recordResponseMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save Response
+                {t("saveResponse")}
               </Button>
             </div>
           </DialogContent>
@@ -2482,14 +2482,14 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Record Interview Outcome</DialogTitle>
+              <DialogTitle className="text-white">{t("recordInterviewOutcomeTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Capture what happened after the interview. Offers and rejections update the application ledger and keep the audit trail connected.
+                {t("recordInterviewOutcomeDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Outcome</label>
+                <label className="text-sm font-medium text-slate-300">{t("outcomeLabel")}</label>
                 <Select
                   value={interviewOutcome}
                   onValueChange={(value) => setInterviewOutcome(value as InterviewOutcomeType)}
@@ -2498,24 +2498,24 @@ export default function Applications() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="next_round">Next round</SelectItem>
-                    <SelectItem value="offer">Offer</SelectItem>
-                    <SelectItem value="rejection">Rejection</SelectItem>
-                    <SelectItem value="no_response">No response yet</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="next_round">{t("nextRound")}</SelectItem>
+                    <SelectItem value="offer">{t("offerLabel")}</SelectItem>
+                    <SelectItem value="rejection">{t("rejectionLabel")}</SelectItem>
+                    <SelectItem value="no_response">{t("noResponseYet")}</SelectItem>
+                    <SelectItem value="other">{t("otherLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {interviewOutcome === "no_response" ? (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">Source</label>
+                  <label className="text-sm font-medium text-slate-300">{t("sourceLabel")}</label>
                   <p className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-400">
-                    Internal status check
+                    {t("internalStatusCheck")}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">Source</label>
+                  <label className="text-sm font-medium text-slate-300">{t("sourceLabel")}</label>
                   <Select
                     value={interviewOutcomeSource}
                     onValueChange={(value) => setInterviewOutcomeSource(value as EmployerResponseSource)}
@@ -2524,33 +2524,33 @@ export default function Applications() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="employer_portal">Employer portal</SelectItem>
+                      <SelectItem value="email">{t("emailLabel")}</SelectItem>
+                      <SelectItem value="employer_portal">{t("employerPortal")}</SelectItem>
                       <SelectItem value="linkedin">LinkedIn</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="phone">{t("phoneLabel")}</SelectItem>
+                      <SelectItem value="other">{t("otherLabel")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-slate-300">
-                  Message or portal reference{["next_round", "offer"].includes(interviewOutcome) ? " (required for next-round invites and offer attribution)" : ""}
+                  {t("messagePortalReference")}{["next_round", "offer"].includes(interviewOutcome) ? ` (${t("referenceRequiredForNextRoundOffer")})` : ""}
                 </label>
                 <Input
                   value={interviewOutcomeSourceReference}
                   onChange={(event) => setInterviewOutcomeSourceReference(event.target.value)}
                   className="bg-slate-800 border-slate-700 text-white"
-                  placeholder={["next_round", "offer"].includes(interviewOutcome) ? "Required: message, portal, phone, or LinkedIn reference" : "Optional: message or portal ID"}
+                  placeholder={t(["next_round", "offer"].includes(interviewOutcome) ? "requiredSourceReferencePlaceholder" : "optionalSourceReferencePlaceholder")}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-300">Outcome summary</label>
+                <label className="text-sm font-medium text-slate-300">{t("outcomeSummary")}</label>
                 <Textarea
                   value={interviewOutcomeSummary}
                   onChange={(event) => setInterviewOutcomeSummary(event.target.value)}
                   className="min-h-36 bg-slate-800 border-slate-700 text-white"
-                  placeholder="Example: Recruiter emailed after the interview that the team wants to schedule a technical round."
+                  placeholder={t("outcomeSummaryPlaceholder")}
                 />
               </div>
             </div>
@@ -2563,7 +2563,7 @@ export default function Applications() {
                   setInterviewOutcomeSummary("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={!interviewOutcomeSummary.trim() || (["next_round", "offer"].includes(interviewOutcome) && !interviewOutcomeSourceReference.trim()) || recordInterviewOutcomeMutation.isPending}
@@ -2579,7 +2579,7 @@ export default function Applications() {
                 }}
               >
                 {recordInterviewOutcomeMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save Outcome
+                {t("saveOutcome")}
               </Button>
             </div>
           </DialogContent>
@@ -2602,14 +2602,14 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Schedule Interview</DialogTitle>
+              <DialogTitle className="text-white">{t("scheduleInterviewTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Record the agreed interview time and channel. Hire.AI stores this as an approved interview event with audit history.
+                {t("scheduleInterviewDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Interview type</label>
+                <label className="text-sm font-medium text-slate-300">{t("interviewType")}</label>
                 <Select
                   value={interviewType}
                   onValueChange={(value) => setInterviewType(value as InterviewType)}
@@ -2618,17 +2618,17 @@ export default function Applications() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="phone">Phone</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="onsite">Onsite</SelectItem>
-                    <SelectItem value="technical">Technical</SelectItem>
-                    <SelectItem value="behavioral">Behavioral</SelectItem>
-                    <SelectItem value="panel">Panel</SelectItem>
+                    <SelectItem value="phone">{t("phoneLabel")}</SelectItem>
+                    <SelectItem value="video">{t("videoLabel")}</SelectItem>
+                    <SelectItem value="onsite">{t("onsiteLabel")}</SelectItem>
+                    <SelectItem value="technical">{t("technicalLabel")}</SelectItem>
+                    <SelectItem value="behavioral">{t("behavioralLabel")}</SelectItem>
+                    <SelectItem value="panel">{t("panelLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Scheduled time</label>
+                <label className="text-sm font-medium text-slate-300">{t("scheduledTime")}</label>
                 <Input
                   type="datetime-local"
                   value={interviewScheduledAt}
@@ -2637,7 +2637,7 @@ export default function Applications() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Duration</label>
+                <label className="text-sm font-medium text-slate-300">{t("durationMinutes")}</label>
                 <Input
                   type="number"
                   min={5}
@@ -2648,16 +2648,16 @@ export default function Applications() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Location or channel</label>
+                <label className="text-sm font-medium text-slate-300">{t("locationOrChannel")}</label>
                 <Input
                   value={interviewLocation}
                   onChange={(event) => setInterviewLocation(event.target.value)}
                   className="bg-slate-800 border-slate-700 text-white"
-                  placeholder="Zoom, phone, office, or hiring platform"
+                  placeholder={t("locationChannelPlaceholder")}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-300">Meeting link</label>
+                <label className="text-sm font-medium text-slate-300">{t("meetingLink")}</label>
                 <Input
                   value={interviewMeetingLink}
                   onChange={(event) => setInterviewMeetingLink(event.target.value)}
@@ -2666,30 +2666,30 @@ export default function Applications() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Interviewer name</label>
+                <label className="text-sm font-medium text-slate-300">{t("interviewerName")}</label>
                 <Input
                   value={interviewerName}
                   onChange={(event) => setInterviewerName(event.target.value)}
                   className="bg-slate-800 border-slate-700 text-white"
-                  placeholder="Recruiter or hiring manager"
+                  placeholder={t("interviewerNamePlaceholder")}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Interviewer title</label>
+                <label className="text-sm font-medium text-slate-300">{t("interviewerTitle")}</label>
                 <Input
                   value={interviewerTitle}
                   onChange={(event) => setInterviewerTitle(event.target.value)}
                   className="bg-slate-800 border-slate-700 text-white"
-                  placeholder="Talent Partner, Engineering Manager"
+                  placeholder={t("interviewerTitlePlaceholder")}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-medium text-slate-300">Notes</label>
+                <label className="text-sm font-medium text-slate-300">{t("interviewNotes")}</label>
                 <Textarea
                   value={interviewNotes}
                   onChange={(event) => setInterviewNotes(event.target.value)}
                   className="min-h-28 bg-slate-800 border-slate-700 text-white"
-                  placeholder="Topics, preparation notes, or requested materials."
+                  placeholder={t("interviewNotesPlaceholder")}
                 />
               </div>
             </div>
@@ -2701,14 +2701,14 @@ export default function Applications() {
                   setInterviewNotes("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={!interviewScheduledAt || scheduleInterviewMutation.isPending}
                 onClick={submitInterviewSchedule}
               >
                 {scheduleInterviewMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save Interview
+                 {t("saveInterview")}
               </Button>
             </div>
           </DialogContent>
@@ -2726,14 +2726,14 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Confirm Submission Evidence</DialogTitle>
+              <DialogTitle className="text-white">{t("confirmExternalSubmissionTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Record what proves this application was actually submitted. This also records explicit approval for the submission evidence.
+                {t("confirmExternalSubmissionDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Evidence source</label>
+                <label className="text-sm font-medium text-slate-300">{t("proofSource")}</label>
                 <Select
                   value={submissionSource}
                   onValueChange={(value) => setSubmissionSource(value as SubmissionEvidenceSource)}
@@ -2742,24 +2742,24 @@ export default function Applications() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="employer_portal">Employer portal</SelectItem>
-                    <SelectItem value="email_confirmation">Email confirmation</SelectItem>
-                    <SelectItem value="ats_confirmation">ATS confirmation</SelectItem>
-                    <SelectItem value="manual">Manual confirmation</SelectItem>
+                    <SelectItem value="employer_portal">{t("employerPortal")}</SelectItem>
+                    <SelectItem value="email_confirmation">{t("emailConfirmation")}</SelectItem>
+                    <SelectItem value="ats_confirmation">{t("atsConfirmation")}</SelectItem>
+                    <SelectItem value="manual">{t("manualConfirmation")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Proof note</label>
+                <label className="text-sm font-medium text-slate-300">{t("proofNote")}</label>
                 <Textarea
                   value={submissionEvidence}
                   onChange={(event) => setSubmissionEvidence(event.target.value)}
                   className="min-h-32 bg-slate-800 border-slate-700 text-white"
-                  placeholder="Example: Employer portal showed 'Application submitted' with confirmation ID ABC-123."
+                  placeholder={t("proofNotePlaceholder")}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Confirmation URL</label>
+                <label className="text-sm font-medium text-slate-300">{t("confirmationUrl")}</label>
                 <Input
                   value={submissionConfirmationUrl}
                   onChange={(event) => setSubmissionConfirmationUrl(event.target.value)}
@@ -2777,7 +2777,7 @@ export default function Applications() {
                   setSubmissionConfirmationUrl("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={!submissionEvidence.trim() || confirmSubmissionMutation.isPending}
@@ -2792,7 +2792,7 @@ export default function Applications() {
                 }}
               >
                 {confirmSubmissionMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Confirm Submission
+                 {t("confirmSubmission")}
               </Button>
             </div>
           </DialogContent>
@@ -2812,10 +2812,10 @@ export default function Applications() {
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
               <DialogTitle className="text-white">
-                {followUpDraftPurpose === "employer_reply" ? "Review Employer Reply Draft" : "Review Follow-up Draft"}
+                {t(followUpDraftPurpose === "employer_reply" ? "reviewEmployerReplyDraft" : "reviewFollowUpDraft")}
               </DialogTitle>
               <DialogDescription className="text-slate-400">
-                Edit the generated message before saving it to the application. Saving creates an approval gate before anything external is sent.
+                {t("reviewDraftDescription")}
               </DialogDescription>
             </DialogHeader>
             <Textarea
@@ -2833,7 +2833,7 @@ export default function Applications() {
                   setFollowUpSourceResponseId(null);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={!followUpDraft.trim() || createFollowUpMutation.isPending}
@@ -2848,7 +2848,7 @@ export default function Applications() {
                 }}
               >
                 {createFollowUpMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Save Draft
+                 {t("saveDraft")}
               </Button>
             </div>
           </DialogContent>
@@ -2866,25 +2866,25 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Complete Approved Follow-up Delivery</DialogTitle>
+              <DialogTitle className="text-white">{t("completeFollowUpDelivery")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Send the approved draft through an authorized mailbox below, or record a separately completed manual delivery in the application ledger.
+                {t("completeFollowUpDeliveryDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Manual delivery confirmation</label>
+              <label className="text-sm font-medium text-slate-300">{t("manualDeliveryConfirmation")}</label>
               <Textarea
                 value={followUpDeliveryConfirmation}
                 onChange={(event) => setFollowUpDeliveryConfirmation(event.target.value)}
                 className="min-h-28 bg-slate-800 border-slate-700 text-white"
                 maxLength={1000}
-                placeholder="For example: Sent via my email account to the recruiter on 13 July."
+                placeholder={t("manualDeliveryPlaceholder")}
               />
             </div>
             <div className="space-y-3 rounded-md border border-slate-700 bg-slate-950/40 p-3">
               <div>
-                <p className="text-sm font-medium text-slate-200">Send through a connected mailbox</p>
-                <p className="mt-1 text-xs leading-5 text-slate-400">Uses the approved draft exactly as shown. A freshly authorized mailbox with send consent is required.</p>
+                <p className="text-sm font-medium text-slate-200">{t("sendConnectedMailbox")}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">{t("connectedMailboxDescription")}</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
                 <Select value={followUpMailProvider} onValueChange={(value) => setFollowUpMailProvider(value as "gmail" | "outlook")}>
@@ -2925,7 +2925,7 @@ export default function Applications() {
               >
                 {sendFollowUpMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Mail className="mr-2 h-4 w-4" />
-                Send Approved Draft
+                 {t("sendApprovedDraft")}
               </Button>
             </div>
             <div className="flex justify-end gap-2">
@@ -2938,7 +2938,7 @@ export default function Applications() {
                   setFollowUpMailRecipient("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 disabled={
@@ -2956,7 +2956,7 @@ export default function Applications() {
                 }}
               >
                 {markFollowUpSentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Record Manual Send
+                 {t("recordManualSend")}
               </Button>
             </div>
           </DialogContent>
@@ -2974,26 +2974,26 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Confirm Offer Acceptance</DialogTitle>
+              <DialogTitle className="text-white">{t("confirmOfferAcceptanceTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                This records your explicit decision in the application ledger. It does not send anything to the employer or create billing.
+                {t("confirmOfferAcceptanceDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="rounded-md border border-slate-700 bg-slate-800/70 p-3 text-sm text-slate-300">
-                <p className="font-medium text-white">{acceptingOfferApplication?.job?.title || "Offer"}</p>
-                <p>{acceptingOfferApplication?.job?.company || "Employer"}</p>
+                <p className="font-medium text-white">{acceptingOfferApplication?.job?.title || t("offerLabel")}</p>
+                <p>{acceptingOfferApplication?.job?.company || t("employerFallback")}</p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300" htmlFor="offer-acceptance-note">
-                  Confirmation note
+                  {t("confirmationNote")}
                 </label>
                 <Textarea
                   id="offer-acceptance-note"
                   data-testid="offer-acceptance-note"
                   value={offerAcceptanceNote}
                   onChange={(event) => setOfferAcceptanceNote(event.target.value)}
-                  placeholder="Example: I accepted the written offer on July 10."
+                  placeholder={t("offerAcceptanceNotePlaceholder")}
                   className="min-h-24 bg-slate-800 border-slate-700 text-white"
                 />
               </div>
@@ -3003,7 +3003,7 @@ export default function Applications() {
                   checked={offerAcceptanceConfirmed}
                   onCheckedChange={(checked) => setOfferAcceptanceConfirmed(checked === true)}
                 />
-                <span>I confirm that I accepted this employer offer.</span>
+                <span>{t("confirmAcceptedOffer")}</span>
               </label>
             </div>
             <div className="flex justify-end gap-2">
@@ -3016,7 +3016,7 @@ export default function Applications() {
                   setOfferAcceptanceNote("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 data-testid="confirm-offer-acceptance-submit"
@@ -3036,7 +3036,7 @@ export default function Applications() {
                 }}
               >
                 {confirmOfferAcceptanceMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Record Acceptance
+                 {t("recordAcceptance")}
               </Button>
             </div>
           </DialogContent>
@@ -3054,26 +3054,26 @@ export default function Applications() {
         >
           <DialogContent className="bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle className="text-white">Decline Offer</DialogTitle>
+              <DialogTitle className="text-white">{t("declineOfferTitle")}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                This records that you declined the offer. It does not contact the employer or create billing.
+                {t("declineOfferDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="rounded-md border border-slate-700 bg-slate-800/70 p-3 text-sm text-slate-300">
-                <p className="font-medium text-white">{decliningOfferApplication?.job?.title || "Offer"}</p>
-                <p>{decliningOfferApplication?.job?.company || "Employer"}</p>
+                <p className="font-medium text-white">{decliningOfferApplication?.job?.title || t("offerLabel")}</p>
+                <p>{decliningOfferApplication?.job?.company || t("employerFallback")}</p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300" htmlFor="offer-decline-note">
-                  Decision note
+                  {t("decisionNote")}
                 </label>
                 <Textarea
                   id="offer-decline-note"
                   data-testid="offer-decline-note"
                   value={offerDeclineNote}
                   onChange={(event) => setOfferDeclineNote(event.target.value)}
-                  placeholder="Example: I am declining this offer after reviewing the terms."
+                  placeholder={t("offerDeclineNotePlaceholder")}
                   className="min-h-24 bg-slate-800 border-slate-700 text-white"
                 />
               </div>
@@ -3083,7 +3083,7 @@ export default function Applications() {
                   checked={offerDeclineConfirmed}
                   onCheckedChange={(checked) => setOfferDeclineConfirmed(checked === true)}
                 />
-                <span>I confirm that I declined this employer offer.</span>
+                <span>{t("confirmDeclinedOffer")}</span>
               </label>
             </div>
             <div className="flex justify-end gap-2">
@@ -3096,7 +3096,7 @@ export default function Applications() {
                   setOfferDeclineNote("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 data-testid="decline-offer-submit"
@@ -3116,7 +3116,7 @@ export default function Applications() {
                 }}
               >
                 {declineOfferMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Record Decline
+                 {t("recordDecline")}
               </Button>
             </div>
           </DialogContent>

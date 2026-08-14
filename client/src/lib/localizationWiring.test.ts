@@ -107,11 +107,22 @@ describe("localization wiring", () => {
     expect(jobSearch).not.toContain("Ã‚Â·");
     expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)");
     expect(applications).toContain("<AppHeader />");
+    expect(applications).toContain('t("recordEmployerResponseTitle")');
+    expect(applications).toContain('t("recordInterviewOutcomeTitle")');
+    expect(applications).toContain('t("confirmExternalSubmissionTitle")');
+    expect(applications).toContain('t("completeFollowUpDelivery")');
+    expect(applications).toContain('t("confirmOfferAcceptanceTitle")');
+    expect(applications).toContain('t("declineOfferTitle")');
+    expect(applications).not.toContain(">Record Employer Response<");
+    expect(applications).not.toContain(">Confirm Submission Evidence<");
+    expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
     expect(translate("nl", "statusWithdrawn")).toBe("Ingetrokken");
     expect(translate("nl", "jobSearchTitle")).toBe("Vacatures zoeken");
     expect(translate("nl", "visibleJobs", { count: 3 })).toContain("3");
+    expect(translate("nl", "recordEmployerResponseTitle")).toBe("Werkgeversreactie vastleggen");
+    expect(translate("nl", "confirmExternalSubmissionTitle")).toBe("Externe indiening bevestigen");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

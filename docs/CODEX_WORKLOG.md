@@ -523,3 +523,10 @@
 - Preserved employer descriptions, provider warnings, and recorded evidence text verbatim so presentation never mutates the underlying audit evidence.
 - Added localization wiring regressions and updated the catalog pagination contract to assert the translated load-more control instead of literal English copy.
 - Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Applications evidence and handoff localization pass
+
+- Localized the Applications dialogs that record employer responses, interview outcomes and schedules, deterministic submission proof, follow-up drafts and delivery, and explicit offer acceptance or decline decisions.
+- Kept user-authored summaries, employer messages, provider references, and audit-ledger evidence verbatim while localizing the surrounding instructions, classifications, validation guidance, and commands.
+- Added localization wiring regressions for the evidence-critical dialogs and verified a seeded Dutch offer-decline workflow in the in-app browser with accessible names and no horizontal overflow.
+- Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
