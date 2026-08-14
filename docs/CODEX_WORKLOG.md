@@ -558,3 +558,9 @@
 - Fixed salary evidence that previously rendered every profile expectation as USD with an English number format; Applications now uses the account locale and snapshot currency with legacy USD fallback only when old evidence lacks currency.
 - Localized resume and cover-letter evidence, supported-skill prefixes, default honesty guidance, and known custom-answer classifications while preserving recorded claims, blockers, source names, and user/provider evidence verbatim.
 - Verified the seeded Dutch prepared-application evidence panel and compact layout in the in-app browser, and passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, production build/budget, dependency audit, doctor, and patch-integrity checks.
+
+## 2026-08-14 - Review Queue handoff localization pass
+
+- Localized the Review Queue shell, count summary, approval controls and feedback, uncertain-delivery reconciliation, approved send handoffs, and manual-delivery confirmation dialog in English and Dutch.
+- Preserved approval descriptions, employer messages, delivery failures, provider references, and audit events verbatim; helper-generated operating summaries remain English until their presentation strings are replaced with structured identifiers.
+- Added localization wiring regressions and verified the seeded Dutch queue and delivery dialog in the in-app browser. Its enforced compact width was 780 pixels and showed no horizontal overflow.

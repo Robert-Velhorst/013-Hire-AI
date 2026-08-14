@@ -71,64 +71,64 @@ export default function ReviewQueue() {
   );
   const resolveApproval = trpc.applications.resolveApproval.useMutation({
     onSuccess: async (_, variables) => {
-      toast.success(variables.status === "approved" ? "Approval recorded" : "Approval rejected");
+      toast.success(t(variables.status === "approved" ? "approvalRecorded" : "approvalRejected"));
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to resolve approval");
+      toast.error(error.message || t("approvalResolveFailed"));
     },
   });
   const resolveDecision = trpc.applications.decide.useMutation({
     onSuccess: async (_, variables) => {
       toast.success(
         variables.decision === "save"
-          ? "Job saved for later review"
-          : "Job ignored from the queue"
+          ? t("jobSavedForReview")
+          : t("jobIgnoredFromQueue")
       );
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to resolve job decision");
+      toast.error(error.message || t("jobDecisionResolveFailed"));
     },
   });
   const generateInterviewPreparation = trpc.applications.generateInterviewPreparation.useMutation({
     onSuccess: async (result) => {
-      toast.success(result.existing ? "Interview preparation already exists" : "Interview preparation generated");
+      toast.success(t(result.existing ? "interviewPrepAlreadyExists" : "interviewPrepGenerated"));
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to generate interview preparation");
+      toast.error(error.message || t("interviewPrepGenerateFailed"));
     },
   });
   const markFollowUpSent = trpc.applications.markFollowUpSent.useMutation({
     onSuccess: async () => {
-      toast.success("Follow-up send handoff recorded");
+      toast.success(t("followUpHandoffRecorded"));
       setSendHandoff(null);
       setDeliveryConfirmation("");
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to record follow-up send handoff");
+      toast.error(error.message || t("followUpHandoffFailed"));
     },
   });
   const ingestInboxResponse = trpc.applications.ingestInboxResponse.useMutation({
     onSuccess: async (result) => {
-      toast.success(result.existing ? "Existing employer response kept" : "Employer response recorded");
+      toast.success(t(result.existing ? "existingEmployerResponseKept" : "responseRecorded"));
       setInboxResponseTypeOverrides({});
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to confirm inbox response");
+      toast.error(error.message || t("inboxResponseConfirmFailed"));
     },
   });
   const dismissInboxResponseCandidate = trpc.applications.dismissInboxResponseCandidate.useMutation({
     onSuccess: async () => {
-      toast.success("Inbox response candidate dismissed");
+      toast.success(t("inboxCandidateDismissed"));
       setInboxResponseTypeOverrides({});
       await Promise.all([refetch(), refetchAuditTrail()]);
     },
     onError: (error) => {
-      toast.error(error.message || "Unable to dismiss inbox response candidate");
+      toast.error(error.message || t("inboxCandidateDismissFailed"));
     },
   });
 
@@ -142,22 +142,22 @@ export default function ReviewQueue() {
   );
   const canReviewAdminItems = operatingLedger?.canReviewAdminItems === true;
   const summaryItems = [
-    ["Approvals", counts.pendingApprovals],
-    ["Job decisions", counts.reviewDecisions],
-    ["Interviews", counts.interviewScheduling],
-    ["Interview prep", counts.interviewPreparationNeeded],
-    ["Outcomes", counts.interviewOutcomesNeeded],
-    ["Inbox responses", counts.inboxResponseCandidates],
-    ["Evidence gates", counts.evidenceGates],
-    ["Connectors", counts.connectorReadiness],
-    ["Employer replies", counts.employerResponsesNeedingReply],
-    ["Follow-ups", counts.followUpsDue],
-    ["Delivery checks", counts.followUpDeliveryReconciliation],
-    ["Send handoffs", counts.approvedFollowUpsReadyToSend],
-    ["Success fees", counts.successFeeCompliance],
-    ["Profile blockers", counts.profileBlockers],
-    ["Profile warnings", counts.profileWarnings],
-    ...(canReviewAdminItems ? [["Admin reviews", counts.adminReviews]] : []),
+    [t("pipelineApprovals"), counts.pendingApprovals],
+    [t("jobDecisions"), counts.reviewDecisions],
+    [t("pipelineInterviews"), counts.interviewScheduling],
+    [t("interviewPrepLabel"), counts.interviewPreparationNeeded],
+    [t("outcomesLabel"), counts.interviewOutcomesNeeded],
+    [t("inboxResponsesLabel"), counts.inboxResponseCandidates],
+    [t("evidenceGatesLabel"), counts.evidenceGates],
+    [t("connectorsLabel"), counts.connectorReadiness],
+    [t("employerRepliesLabel"), counts.employerResponsesNeedingReply],
+    [t("followUpsHeading"), counts.followUpsDue],
+    [t("deliveryChecksLabel"), counts.followUpDeliveryReconciliation],
+    [t("sendHandoffsLabel"), counts.approvedFollowUpsReadyToSend],
+    [t("successFeesLabel"), counts.successFeeCompliance],
+    [t("profileBlockersLabel"), counts.profileBlockers],
+    [t("profileWarningsLabel"), counts.profileWarnings],
+    ...(canReviewAdminItems ? [[t("adminReviewsLabel"), counts.adminReviews]] : []),
   ];
 
   const handleResolveApproval = (
@@ -242,22 +242,21 @@ export default function ReviewQueue() {
           <div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ClipboardCheck className="h-4 w-4" />
-              Application operating ledger
+              {t("applicationOperatingLedger")}
             </div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Review Queue</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">{t("reviewQueueTitle")}</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Resolve the decisions that should not run silently: external submissions, follow-ups,
-              offer attribution, profile blockers{canReviewAdminItems ? ", and admin operating reviews." : "."}
+              {t(canReviewAdminItems ? "reviewQueueDescriptionAdmin" : "reviewQueueDescription")}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setLocation("/dashboard")}>
               <Shield className="mr-2 h-4 w-4" />
-              Dashboard
+              {t("dashboard")}
             </Button>
             <Button variant="outline" onClick={() => setLocation("/applications")}>
               <Briefcase className="mr-2 h-4 w-4" />
-              Application Ledger
+              {t("applicationLedger")}
             </Button>
           </div>
         </div>
@@ -271,30 +270,30 @@ export default function ReviewQueue() {
                     {queueControl.label}
                   </Badge>
                   <Badge variant="outline">
-                    {queueControl.count} item{queueControl.count === 1 ? "" : "s"}
+                    {t("reviewItemsCount", { count: queueControl.count })}
                   </Badge>
                   {queueControl.approvalGated && (
                     <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">
-                      Approval gated
+                      {t("approvalGated")}
                     </Badge>
                   )}
                   {queueControl.externalAction === "approved_delivery" && (
                     <Badge variant="outline" className="border-blue-500/40 text-blue-300">
-                      Delivery ready
+                      {t("deliveryReady")}
                     </Badge>
                   )}
                   {queueControl.externalAction === "delivery_reconciliation" && (
                     <Badge variant="outline" className="border-red-500/40 text-red-300">
-                      Do not retry
+                      {t("doNotRetry")}
                     </Badge>
                   )}
                   {queueControl.externalAction === "blocked_until_evidence" && (
                     <Badge variant="outline" className="border-amber-500/40 text-amber-300">
-                      Evidence gated
+                      {t("evidenceGated")}
                     </Badge>
                   )}
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight">Review Queue Control</h2>
+                <h2 className="text-xl font-semibold tracking-tight">{t("reviewQueueControl")}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{queueControl.headline}</p>
                 <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{queueControl.detail}</p>
               </div>
@@ -324,7 +323,7 @@ export default function ReviewQueue() {
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-emerald-300">
             <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
-              No review queue items need attention.
+              {t("reviewQueueClear")}
             </div>
           </div>
         ) : (
@@ -332,7 +331,7 @@ export default function ReviewQueue() {
             <div className="space-y-6">
               <section id="review-queue-section-approvals" data-testid="review-queue-section-approvals" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">User Approval Gates</h2>
+                  <h2 className="text-lg font-semibold">{t("userApprovalGates")}</h2>
                   <Badge variant="outline">{counts.pendingApprovals}</Badge>
                 </div>
                 {operatingLedger?.queues.pendingApprovals.length ? (
@@ -385,7 +384,7 @@ export default function ReviewQueue() {
                               onClick={() => handleResolveApproval(approval, "approved")}
                             >
                               <CheckCircle className="mr-2 h-4 w-4" />
-                              Approve
+                              {t("approveAction")}
                             </Button>
                             <Button
                               variant="outline"
@@ -397,7 +396,7 @@ export default function ReviewQueue() {
                               onClick={() => handleResolveApproval(approval, "rejected")}
                             >
                               <XCircle className="mr-2 h-4 w-4" />
-                              Reject
+                              {t("rejectAction")}
                             </Button>
                             {evidenceBlocked && (
                               <Button
@@ -407,7 +406,7 @@ export default function ReviewQueue() {
                                 onClick={() => setLocation(evidenceGate.route)}
                               >
                                 <User className="mr-2 h-4 w-4" />
-                                Resolve Evidence
+                                {t("resolveEvidence")}
                               </Button>
                             )}
                           </div>
@@ -417,13 +416,13 @@ export default function ReviewQueue() {
                     })}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No pending user approvals." />
+                  <EmptyQueueLine label={t("noPendingApprovals")} />
                 )}
               </section>
 
               <section id="review-queue-section-delivery-reconciliation" data-testid="review-queue-section-delivery-reconciliation" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Delivery Verification</h2>
+                  <h2 className="text-lg font-semibold">{t("deliveryVerification")}</h2>
                   <Badge variant="outline" className="border-red-500/40 text-red-300">{counts.followUpDeliveryReconciliation}</Badge>
                 </div>
                 {operatingLedger?.queues.followUpDeliveryReconciliation.length ? (
@@ -435,17 +434,17 @@ export default function ReviewQueue() {
                             <div>
                               <p className="font-medium">{item.job?.title || `Application #${item.applicationId}`}</p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.deliveryProvider ? ` - ${item.deliveryProvider}` : ""}
-                                {item.deliveryRecipient ? ` to ${item.deliveryRecipient}` : ""}
+                                {item.deliveryRecipient ? ` ${t("toRecipient", { recipient: item.deliveryRecipient })}` : ""}
                               </p>
                             </div>
                             <Badge variant="outline" className="border-red-500/40 text-red-300">
-                              {item.deliveryState} outcome
+                              {t("deliveryOutcome", { state: item.deliveryState })}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            This approved follow-up may already have left the mailbox. Check the provider first, then record a manual delivery result only if it is confirmed. Do not retry the send.
+                            {t("deliveryVerificationDetail")}
                           </p>
                           {item.deliveryFailureMessage && (
                             <p className="rounded-md border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-100">
@@ -460,20 +459,20 @@ export default function ReviewQueue() {
                             onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "send-follow-up"))}
                           >
                             <Mail className="mr-2 h-4 w-4" />
-                            Verify Delivery
+                            {t("verifyDelivery")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No uncertain mailbox deliveries need verification." />
+                  <EmptyQueueLine label={t("noDeliveryVerification")} />
                 )}
               </section>
 
               <section id="review-queue-section-send-handoffs" data-testid="review-queue-section-send-handoffs" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Approved Send Handoffs</h2>
+                  <h2 className="text-lg font-semibold">{t("approvedSendHandoffs")}</h2>
                   <Badge variant="outline">{counts.approvedFollowUpsReadyToSend}</Badge>
                 </div>
                 {operatingLedger?.queues.approvedFollowUpsReadyToSend.length ? (
@@ -495,12 +494,11 @@ export default function ReviewQueue() {
                               variant="outline"
                               className={getReviewRiskBadgeClass(item.riskLevel)}
                             >
-                              {item.purpose === "employer_reply" ? "Employer reply" : "Follow-up"}
+                              {item.purpose === "employer_reply" ? t("employerReplyLabel") : t("followUpLabel")}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            This draft is approved. Deliver it through a connected Gmail or Outlook mailbox,
-                            or record a separately completed manual delivery in the application ledger.
+                            {t("approvedHandoffDetail")}
                           </p>
                           {item.messagePreview && (
                             <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
@@ -518,7 +516,9 @@ export default function ReviewQueue() {
                               disabled={markFollowUpSent.isPending}
                               onClick={() => openSendHandoff(
                                 item.followUpId,
-                                item.purpose === "employer_reply" ? "employer reply" : "follow-up"
+                                item.purpose === "employer_reply"
+                                  ? t("employerReplyLabel").toLowerCase()
+                                  : t("followUpLabel").toLowerCase()
                               )}
                             >
                               {markFollowUpSent.isPending ? (
@@ -526,7 +526,7 @@ export default function ReviewQueue() {
                               ) : (
                                 <CheckCircle className="mr-2 h-4 w-4" />
                               )}
-                              Record Manual Send
+                              {t("recordManualSend")}
                             </Button>
                             <Button
                               variant="outline"
@@ -534,7 +534,7 @@ export default function ReviewQueue() {
                               onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "send-follow-up"))}
                             >
                               <Mail className="mr-2 h-4 w-4" />
-                              Send via Connected Mailbox
+                              {t("sendConnectedMailbox")}
                             </Button>
                           </div>
                         </CardContent>
@@ -542,7 +542,7 @@ export default function ReviewQueue() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No approved follow-up drafts are waiting for send handoff." />
+                  <EmptyQueueLine label={t("noApprovedSendHandoffs")} />
                 )}
               </section>
 
@@ -859,7 +859,7 @@ export default function ReviewQueue() {
                                 {item.job?.title || `Application #${item.applicationId}`}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.completedAt ? ` - ${t("completedLabel")} ${new Date(item.completedAt).toLocaleDateString(locale)}` : ""}
                               </p>
                             </div>
@@ -1303,20 +1303,22 @@ export default function ReviewQueue() {
       >
         <DialogContent className="bg-slate-900 border-slate-700">
           <DialogHeader>
-            <DialogTitle className="text-white">Confirm External Delivery</DialogTitle>
+            <DialogTitle className="text-white">{t("confirmExternalDelivery")}</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Record a manual delivery for this {sendHandoff?.label || "follow-up"}. To deliver through a connected Gmail or Outlook mailbox, use Send via Connected Mailbox from the queue card.
+              {t("confirmExternalDeliveryDescription", {
+                kind: sendHandoff?.label || t("followUpLabel").toLowerCase(),
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-200" htmlFor="follow-up-delivery-confirmation">
-              Delivery confirmation
+              {t("deliveryConfirmation")}
             </label>
             <Textarea
               id="follow-up-delivery-confirmation"
               value={deliveryConfirmation}
               onChange={(event) => setDeliveryConfirmation(event.target.value)}
-              placeholder="For example: Sent via my email account to the recruiter on 13 July."
+              placeholder={t("manualDeliveryPlaceholder")}
               className="min-h-24 bg-slate-800 border-slate-700 text-white"
               maxLength={1000}
             />
@@ -1331,7 +1333,7 @@ export default function ReviewQueue() {
                 setDeliveryConfirmation("");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               type="button"
@@ -1345,7 +1347,7 @@ export default function ReviewQueue() {
               }}
             >
               {markFollowUpSent.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-              Record Manual Send
+              {t("recordManualSend")}
             </Button>
           </div>
         </DialogContent>

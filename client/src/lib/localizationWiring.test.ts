@@ -149,6 +149,14 @@ describe("localization wiring", () => {
     expect(applications).not.toContain("selectedMaterialEvidence?.coverLetterLabel");
     expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
+    expect(reviewQueue).toContain('t("reviewQueueTitle")');
+    expect(reviewQueue).toContain('t("reviewQueueControl")');
+    expect(reviewQueue).toContain('t("deliveryVerification")');
+    expect(reviewQueue).toContain('t("approvedSendHandoffs")');
+    expect(reviewQueue).toContain('t("confirmExternalDelivery")');
+    expect(reviewQueue).not.toContain(">Delivery Verification<");
+    expect(reviewQueue).not.toContain(">Approved Send Handoffs<");
+    expect(reviewQueue).not.toContain(">Confirm External Delivery<");
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
     expect(translate("nl", "statusWithdrawn")).toBe("Ingetrokken");
     expect(translate("nl", "jobSearchTitle")).toBe("Vacatures zoeken");
@@ -162,6 +170,9 @@ describe("localization wiring", () => {
     expect(translate("nl", "applicationLedgerCounts", { attempts: 1, responses: 2, prep: 0, audit: 3 })).toContain("2 recente reacties");
     expect(translate("nl", "followUpSentThrough", { provider: "Gmail" })).toContain("Gmail");
     expect(translate("nl", "profileSkillEvidence", { skill: "TypeScript" })).toContain("TypeScript");
+    expect(translate("nl", "reviewQueueTitle")).toBe("Beoordelingswachtrij");
+    expect(translate("nl", "deliveryVerification")).toContain("Verzending");
+    expect(translate("nl", "confirmExternalDeliveryDescription", { kind: "opvolging" })).toContain("opvolging");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {
