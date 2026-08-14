@@ -18,5 +18,8 @@ describe("admin operational failure wiring", () => {
     expect(adminPage).toContain("trpc.admin.getOperationalFailures.useQuery");
     expect(adminPage).toContain('data-testid="admin-runtime-failure-signals"');
     expect(adminPage).toContain("refetchInterval: 30_000");
+    expect(adminPage).toContain('ac("runtimeFailureSignals")');
+    expect(adminPage).toContain('dateTimeFormatter.format(new Date(signal.lastOccurredAt))');
+    expect(adminPage).not.toContain(">Runtime failure signals<");
   });
 });

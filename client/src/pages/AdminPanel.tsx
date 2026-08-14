@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
-import { getAdminOperatingActionCopy, getAdminOperatingCopy, getAdminOperatingSummaryCopy, type AdminOperatingCopyKey } from "@/lib/adminOperatingCopy";
+import { formatAdminOperatingCopy, getAdminOperatingActionCopy, getAdminOperatingCopy, getAdminOperatingSummaryCopy, type AdminOperatingCopyKey } from "@/lib/adminOperatingCopy";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
 import { openExternalUrl } from "@/lib/externalUrl";
@@ -16,6 +16,7 @@ import {
 import {
   getScraperSourceHealthSummary,
   getScraperSourceOutcomeCounts,
+  type ScraperSourceOutcome,
 } from "@/lib/scraperSourceHealth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,23 +112,48 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ScraperRunOutcomeBadge({ outcome }: { outcome: "success" | "partial" | "failed" | null | undefined }) {
+function ScraperRunOutcomeBadge({ outcome, label }: { outcome: "success" | "partial" | "failed" | null | undefined; label: string | null }) {
   if (!outcome) return null;
 
   const details = {
-    success: { label: "Last cycle clean", tone: "border-emerald-500/30 text-emerald-300" },
-    partial: { label: "Last cycle partial", tone: "border-amber-500/30 text-amber-300" },
-    failed: { label: "Last cycle failed", tone: "border-red-500/30 text-red-300" },
+    success: { tone: "border-emerald-500/30 text-emerald-300" },
+    partial: { tone: "border-amber-500/30 text-amber-300" },
+    failed: { tone: "border-red-500/30 text-red-300" },
   }[outcome];
-  return <Badge variant="outline" className={details.tone}>{details.label}</Badge>;
+  return <Badge variant="outline" className={details.tone}>{label}</Badge>;
 }
+
+const RUN_OUTCOME_COPY_KEYS = {
+  success: "lastCycleClean",
+  partial: "lastCyclePartial",
+  failed: "lastCycleFailed",
+} as const satisfies Record<"success" | "partial" | "failed", AdminOperatingCopyKey>;
+
+const SOURCE_OUTCOME_COPY_KEYS = {
+  success: "outcomeSuccess",
+  empty: "outcomeEmpty",
+  partial: "outcomePartial",
+  failed: "outcomeFailed",
+  awaiting: "outcomeAwaiting",
+} as const satisfies Record<ScraperSourceOutcome, AdminOperatingCopyKey>;
+
+const ADAPTER_COPY_KEYS = {
+  dedicated: { label: "dedicatedAdapterLabel", detail: "dedicatedAdapterDetail" },
+  generic_rss: { label: "rssAdapterLabel", detail: "rssAdapterDetail" },
+  generic_html: { label: "htmlAdapterLabel", detail: "htmlAdapterDetail" },
+} as const satisfies Record<string, { label: AdminOperatingCopyKey; detail: AdminOperatingCopyKey }>;
 
 export default function AdminPanel() {
   const { user, loading } = useAuth();
   const { locale, t } = useLocale();
   const ac = (key: AdminOperatingCopyKey) => getAdminOperatingCopy(locale, key);
+  const af = (key: AdminOperatingCopyKey, values: Record<string, string | number>) => formatAdminOperatingCopy(locale, key, values);
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", { style: "currency", currency: "USD" }),
+    [locale],
+  );
+  const dateTimeFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale === "nl" ? "nl-NL" : "en-US", { dateStyle: "medium", timeStyle: "short" }),
     [locale],
   );
   const isAdmin = user?.role === "admin";
@@ -336,22 +362,24 @@ export default function AdminPanel() {
     onError: (err) => toast.error(err.message),
   });
   const startScrapingScheduler = trpc.scraping.startScheduler.useMutation({
-    onSuccess: (result) => {
-      toast.success(result.message);
+    onSuccess: () => {
+      toast.success(ac("schedulerStarted"));
       refetchScrapingStatus();
     },
     onError: (err) => toast.error(err.message),
   });
   const stopScrapingScheduler = trpc.scraping.stopScheduler.useMutation({
-    onSuccess: (result) => {
-      toast.success(result.message);
+    onSuccess: () => {
+      toast.success(ac("schedulerStopped"));
       refetchScrapingStatus();
     },
     onError: (err) => toast.error(err.message),
   });
   const runScrapingNow = trpc.scraping.runNow.useMutation({
     onSuccess: (result) => {
-      toast.success(result.message);
+      if (result.outcome === "failed") toast.error(ac("discoveryRunFailed"));
+      else if (result.outcome === "skipped") toast.info(ac("discoveryRunSkipped"));
+      else toast.success(ac(result.outcome === "joined" ? "discoveryRunJoined" : "discoveryRunStarted"));
       refetchScrapingStatus();
     },
     onError: (err) => toast.error(err.message),
@@ -361,15 +389,15 @@ export default function AdminPanel() {
     const intervalMinutes = Number(scrapingIntervalMinutes);
     const maxJobsPerRun = Number(scrapingMaxJobsPerRun);
     if (!Number.isInteger(intervalMinutes) || intervalMinutes < 5 || intervalMinutes > 1440) {
-      toast.error("Choose an interval between 5 minutes and 24 hours.");
+      toast.error(ac("invalidInterval"));
       return;
     }
     if (!Number.isInteger(maxJobsPerRun) || maxJobsPerRun < 10 || maxJobsPerRun > 1000) {
-      toast.error("Choose 10 to 1,000 jobs per run.");
+      toast.error(ac("invalidJobLimit"));
       return;
     }
     if (restrictScrapingSources && selectedScrapingSources.length === 0) {
-      toast.error("Select at least one source or use all active sources.");
+      toast.error(ac("selectSource"));
       return;
     }
     startScrapingScheduler.mutate({
@@ -449,6 +477,29 @@ export default function AdminPanel() {
     high: "border-amber-500/30 bg-amber-500/10 text-amber-300",
     critical: "border-red-500/30 bg-red-500/10 text-red-300",
   }[operatingAction.risk];
+  const freshEmptySources = scrapingStatus?.coverage.freshZeroListingSources ?? scraperSourceOutcomes.freshEmpty;
+  const freshFailedSources = scrapingStatus?.coverage.freshFailedLatestSources ?? scraperSourceOutcomes.freshFailed;
+  const freshPartialSources = scrapingStatus?.coverage.freshPartialLatestSources ?? scraperSourceOutcomes.freshPartial;
+  const discoveryMetrics = [
+    ["ready-sources", ac("readySources"), scrapingStatus?.coverage.readySources ?? 0],
+    ["fresh-sources", ac("freshSources"), scrapingStatus?.coverage.freshReadySources ?? 0],
+    ["dedicated-adapters", ac("dedicatedAdapters"), scrapingStatus?.coverage.configuredDedicatedAdapterSources ?? 0],
+    ["generic-adapters", ac("genericAdapters"), (scrapingStatus?.coverage.configuredGenericRssAdapterSources ?? 0) + (scrapingStatus?.coverage.configuredGenericHtmlAdapterSources ?? 0)],
+    ["fresh-empty", ac("freshEmptySources"), freshEmptySources],
+    ["fresh-failed", ac("freshFailedSources"), freshFailedSources],
+    ["fresh-partial", ac("freshPartialSources"), freshPartialSources],
+    ["historical-outcomes", ac("historicalOutcomes"), scraperSourceOutcomes.staleOutcomes],
+    ["registry-sources", ac("registrySources"), scrapingStatus?.coverage.registeredSources ?? 0],
+    ["completed-cycles", ac("completedCycles"), scrapingStatus?.scheduler.totalRunsCompleted ?? 0],
+    ["clean-cycles", ac("cleanCycles"), scrapingStatus?.scheduler.totalSuccessfulRuns ?? 0],
+    ["partial-cycles", ac("partialCycles"), scrapingStatus?.scheduler.totalPartialRuns ?? 0],
+    ["failed-cycles", ac("failedCycles"), scrapingStatus?.scheduler.totalFailedRuns ?? 0],
+    ["jobs-saved", ac("jobsSaved"), scrapingStatus?.scheduler.totalJobsScraped ?? 0],
+    ["alert-matches", ac("alertMatches"), scrapingStatus?.scheduler.lastJobAlertsProcessed ?? 0],
+    ["concurrency-cap", ac("concurrentSourceCap"), scrapingStatus?.executionPolicy.maxConcurrentScrapes ?? 0],
+    ["source-timeout", ac("sourceTimeout"), `${Math.round((scrapingStatus?.executionPolicy.scrapeTimeoutMs ?? 0) / 1000)}s`],
+    ["attention-signals", ac("attentionSignals"), (scrapingStatus?.coverage.freshSourceIssues ?? scraperSourceOutcomes.freshIssues) + (scrapingStatus?.scheduler.errors.length ?? 0) + (scrapingStatus?.coverage.unavailableConfiguredSources ?? 0)],
+  ] as const;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -572,13 +623,13 @@ export default function AdminPanel() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <AlertTriangle className={operationalFailures?.totalFailures ? "h-5 w-5 text-amber-300" : "h-5 w-5 text-emerald-300"} />
-                <h2 id="runtime-failure-heading" className="text-sm font-semibold text-white">Runtime failure signals</h2>
+                <h2 id="runtime-failure-heading" className="text-sm font-semibold text-white">{ac("runtimeFailureSignals")}</h2>
                 <Badge variant="outline" className={operationalFailures?.totalFailures ? "border-amber-500/30 text-amber-300" : "border-emerald-500/30 text-emerald-300"}>
-                  {operationalFailures?.totalFailures ?? 0} recorded
+                  {af("failuresRecorded", { count: operationalFailures?.totalFailures ?? 0 })}
                 </Badge>
               </div>
               <p className="mt-1 max-w-2xl text-xs text-slate-400">
-                Redacted aggregate counters for failed provider and runtime operations across restarts and app instances. No exception text, user data, or credentials are stored.
+                {ac("runtimeFailureDescription")}
               </p>
             </div>
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
@@ -588,11 +639,11 @@ export default function AdminPanel() {
                     {signal.scope}: {signal.operation}
                   </div>
                   <div className="mt-1 text-slate-500">
-                    {signal.count} occurrence{signal.count === 1 ? "" : "s"} - last {new Date(signal.lastOccurredAt).toLocaleString()}
+                    {af("occurrencesLast", { count: signal.count, date: dateTimeFormatter.format(new Date(signal.lastOccurredAt)) })}
                   </div>
                 </div>
               )) : (
-                <div className="text-xs text-slate-500">No redacted failure signals have been recorded.</div>
+                <div className="text-xs text-slate-500">{ac("noFailureSignals")}</div>
               )}
             </div>
           </div>
@@ -615,26 +666,26 @@ export default function AdminPanel() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 h-auto flex flex-wrap justify-start bg-slate-900 border border-slate-800">
             <TabsTrigger value="overview" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
-              All Fees
+              {ac("allFees")}
             </TabsTrigger>
             <TabsTrigger value="overdue" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-400">
-              Overdue {(operatingCounts?.overdueVerifications ?? overdue?.length ?? 0) > 0 && <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">{operatingCounts?.overdueVerifications ?? overdue?.length}</Badge>}
+              {ac("overdueTab")} {(operatingCounts?.overdueVerifications ?? overdue?.length ?? 0) > 0 && <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">{operatingCounts?.overdueVerifications ?? overdue?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="verifications" className="data-[state=active]:bg-yellow-500/20 data-[state=active]:text-yellow-400">
-              Verifications {(operatingCounts?.pendingVerifications ?? pendingVerifications?.length ?? 0) > 0 && <Badge className="ml-1 bg-yellow-500 text-white text-xs px-1.5">{operatingCounts?.pendingVerifications ?? pendingVerifications?.length}</Badge>}
+              {ac("verificationsTab")} {(operatingCounts?.pendingVerifications ?? pendingVerifications?.length ?? 0) > 0 && <Badge className="ml-1 bg-yellow-500 text-white text-xs px-1.5">{operatingCounts?.pendingVerifications ?? pendingVerifications?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="review" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
-              Review {(operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0) > 0 && <Badge className="ml-1 bg-cyan-500 text-white text-xs px-1.5">{operatingCounts?.reviewTotal ?? reviewQueue?.length}</Badge>}
+              {ac("reviewTab")} {(operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0) > 0 && <Badge className="ml-1 bg-cyan-500 text-white text-xs px-1.5">{operatingCounts?.reviewTotal ?? reviewQueue?.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="payments" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400">
-              Payments
+              {ac("paymentsTab")}
             </TabsTrigger>
             <TabsTrigger
               value="discovery"
               data-testid="admin-job-discovery-tab"
               className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300"
             >
-              Job discovery
+              {ac("jobDiscovery")}
             </TabsTrigger>
           </TabsList>
 
@@ -644,46 +695,32 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base text-white">
                     <Activity className="h-5 w-5 text-blue-300" />
-                    Job discovery scheduler
+                    {ac("discoveryScheduler")}
                     <Badge
                       variant="outline"
                       className={scrapingStatus?.scheduler.isStarted
                         ? "border-emerald-500/30 text-emerald-300"
                         : "border-slate-600 text-slate-400"}
                     >
-                      {scrapingStatus?.scheduler.isStarted ? "Scheduled" : "Stopped"}
+                      {ac(scrapingStatus?.scheduler.isStarted ? "scheduled" : "stopped")}
                     </Badge>
                     {scrapingStatus?.scheduler.isRunning && (
                       <Badge variant="outline" className="border-blue-500/30 text-blue-300">
-                        Running
+                        {ac("running")}
                       </Badge>
                     )}
-                    <ScraperRunOutcomeBadge outcome={scrapingStatus?.scheduler.lastRunOutcome} />
+                    <ScraperRunOutcomeBadge
+                      outcome={scrapingStatus?.scheduler.lastRunOutcome}
+                      label={scrapingStatus?.scheduler.lastRunOutcome
+                        ? ac(RUN_OUTCOME_COPY_KEYS[scrapingStatus.scheduler.lastRunOutcome])
+                        : null}
+                    />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {[
-                      ["Ready sources", scrapingStatus?.coverage.readySources ?? 0],
-                      ["Fresh sources", scrapingStatus?.coverage.freshReadySources ?? 0],
-                      ["Source-specific adapters", scrapingStatus?.coverage.configuredDedicatedAdapterSources ?? 0],
-                      ["Generic adapters", (scrapingStatus?.coverage.configuredGenericRssAdapterSources ?? 0) + (scrapingStatus?.coverage.configuredGenericHtmlAdapterSources ?? 0)],
-                      ["Fresh no-listing sources", scrapingStatus?.coverage.freshZeroListingSources ?? scraperSourceOutcomes.freshEmpty],
-                      ["Fresh failed sources", scrapingStatus?.coverage.freshFailedLatestSources ?? scraperSourceOutcomes.freshFailed],
-                      ["Fresh partial sources", scrapingStatus?.coverage.freshPartialLatestSources ?? scraperSourceOutcomes.freshPartial],
-                      ["Historical source outcomes", scraperSourceOutcomes.staleOutcomes],
-                      ["Registry sources", scrapingStatus?.coverage.registeredSources ?? 0],
-                      ["Completed cycles", scrapingStatus?.scheduler.totalRunsCompleted ?? 0],
-                      ["Clean cycles", scrapingStatus?.scheduler.totalSuccessfulRuns ?? 0],
-                      ["Partial cycles", scrapingStatus?.scheduler.totalPartialRuns ?? 0],
-                      ["Failed cycles", scrapingStatus?.scheduler.totalFailedRuns ?? 0],
-                      ["Jobs saved", scrapingStatus?.scheduler.totalJobsScraped ?? 0],
-                      ["Alert matches", scrapingStatus?.scheduler.lastJobAlertsProcessed ?? 0],
-                      ["Concurrent source cap", scrapingStatus?.executionPolicy.maxConcurrentScrapes ?? 0],
-                      ["Source timeout", `${Math.round((scrapingStatus?.executionPolicy.scrapeTimeoutMs ?? 0) / 1000)}s`],
-                      ["Current attention signals", (scrapingStatus?.coverage.freshSourceIssues ?? scraperSourceOutcomes.freshIssues) + (scrapingStatus?.scheduler.errors.length ?? 0) + (scrapingStatus?.coverage.unavailableConfiguredSources ?? 0)],
-                    ].map(([label, value]) => (
-                      <div key={String(label)} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
+                    {discoveryMetrics.map(([id, label, value]) => (
+                      <div key={id} data-testid={`admin-discovery-metric-${id}`} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
                         <div className="text-xs text-slate-500">{label}</div>
                         <div className="mt-1 text-lg font-semibold text-white">{value}</div>
                       </div>
@@ -691,68 +728,68 @@ export default function AdminPanel() {
                   </div>
                   <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                     <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Last cycle</div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">{ac("lastCycle")}</div>
                       <div className="mt-1 text-slate-200">
                         {scrapingStatus?.scheduler.lastRunAt
-                          ? new Date(scrapingStatus.scheduler.lastRunAt).toLocaleString()
-                          : "No recorded cycle"}
+                          ? dateTimeFormatter.format(new Date(scrapingStatus.scheduler.lastRunAt))
+                          : ac("noRecordedCycle")}
                       </div>
                     </div>
                     <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                      <div className="text-xs uppercase tracking-wide text-slate-500">Next scheduled run</div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">{ac("nextScheduledRun")}</div>
                       <div className="mt-1 text-slate-200">
                         {scrapingStatus?.scheduler.nextRunAt
-                          ? new Date(scrapingStatus.scheduler.nextRunAt).toLocaleString()
-                          : "Not scheduled"}
+                          ? dateTimeFormatter.format(new Date(scrapingStatus.scheduler.nextRunAt))
+                          : ac("notScheduled")}
                       </div>
                     </div>
                   </div>
                   <p className="mt-4 text-xs leading-5 text-slate-500">
-                    Adapter type describes the parser implementation, not verified production coverage. Use each source's health and latest outcome to assess discovery reliability.
+                    {ac("adapterEvidenceNotice")}
                   </p>
                   {(scrapingStatus?.coverage.unconfiguredSources ?? 0) > 0 && (
                     <div data-testid="admin-scraping-coverage-gap" className="mt-4 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
-                      <div className="font-medium">Source registry needs configuration</div>
+                      <div className="font-medium">{ac("registryConfigurationTitle")}</div>
                       <p className="mt-1 text-xs text-blue-200">
-                        {scrapingStatus?.coverage.unconfiguredSources} registered source{scrapingStatus?.coverage.unconfiguredSources === 1 ? " is" : "s are"} not configured for this deployment. The scheduler only runs ready sources with durable provenance.
+                        {af("registryConfigurationDetail", { count: scrapingStatus?.coverage.unconfiguredSources ?? 0 })}
                       </p>
                     </div>
                   )}
                   {(scrapingStatus?.coverage.unavailableConfiguredSources ?? 0) > 0 && (
                     <div data-testid="admin-scraping-unavailable-sources" className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      <div className="font-medium">Configured sources need attention</div>
+                      <div className="font-medium">{ac("configuredAttentionTitle")}</div>
                       <p className="mt-1 text-xs text-amber-200">
-                        {scrapingStatus?.coverage.unavailableConfiguredSources} active source{scrapingStatus?.coverage.unavailableConfiguredSources === 1 ? " is" : "s are"} configured but not ready. They are excluded from scheduling until initialization succeeds.
+                        {af("configuredAttentionDetail", { count: scrapingStatus?.coverage.unavailableConfiguredSources ?? 0 })}
                       </p>
                     </div>
                   )}
-                  {(scrapingStatus?.coverage.freshZeroListingSources ?? scraperSourceOutcomes.freshEmpty) > 0 && (
+                  {freshEmptySources > 0 && (
                     <div data-testid="admin-scraping-empty-sources" className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      <div className="font-medium">Source scans returned no listings</div>
+                      <div className="font-medium">{ac("emptySourcesTitle")}</div>
                       <p className="mt-1 text-xs text-amber-200">
-                        {scrapingStatus?.coverage.freshZeroListingSources ?? scraperSourceOutcomes.freshEmpty} active source{(scrapingStatus?.coverage.freshZeroListingSources ?? scraperSourceOutcomes.freshEmpty) === 1 ? " returned" : "s returned"} no listings in the last 24 hours. This is not a transport failure, but it is not evidence of current discovery coverage.
+                        {af("emptySourcesDetail", { count: freshEmptySources })}
                       </p>
                     </div>
                   )}
-                  {((scrapingStatus?.coverage.freshFailedLatestSources ?? scraperSourceOutcomes.freshFailed) + (scrapingStatus?.coverage.freshPartialLatestSources ?? scraperSourceOutcomes.freshPartial)) > 0 && (
+                  {(freshFailedSources + freshPartialSources) > 0 && (
                     <div data-testid="admin-scraping-outcome-issues" className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
-                      <div className="font-medium">Latest source outcomes need attention</div>
+                      <div className="font-medium">{ac("sourceOutcomesTitle")}</div>
                       <p className="mt-1 text-xs text-red-200">
-                        {scrapingStatus?.coverage.freshFailedLatestSources ?? scraperSourceOutcomes.freshFailed} failed and {scrapingStatus?.coverage.freshPartialLatestSources ?? scraperSourceOutcomes.freshPartial} partial source outcome{((scrapingStatus?.coverage.freshFailedLatestSources ?? scraperSourceOutcomes.freshFailed) + (scrapingStatus?.coverage.freshPartialLatestSources ?? scraperSourceOutcomes.freshPartial)) === 1 ? " was" : "s were"} recorded in the last 24 hours. Inspect the source health table before relying on full discovery coverage.
+                        {af("sourceOutcomesDetail", { failed: freshFailedSources, partial: freshPartialSources })}
                       </p>
                     </div>
                   )}
                   {scrapingStatus?.scheduler.jobAlertRefreshFailed && (
                     <div data-testid="admin-scraping-alert-refresh-failed" className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      <div className="font-medium">Job alerts need refresh attention</div>
+                      <div className="font-medium">{ac("alertRefreshTitle")}</div>
                       <p className="mt-1 text-xs text-amber-200">
-                        The scrape completed, but internal job-alert matching could not refresh. Existing discovery results remain available and no external job-match notification was sent.
+                        {ac("alertRefreshDetail")}
                       </p>
                     </div>
                   )}
                   {scrapingStatus?.scheduler.errors.length ? (
                     <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      <div className="font-medium">Latest source issues</div>
+                      <div className="font-medium">{ac("latestSourceIssues")}</div>
                       <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-200">
                         {scrapingStatus.scheduler.errors.slice(0, 5).map((error) => <li key={error}>{error}</li>)}
                       </ul>
@@ -763,12 +800,12 @@ export default function AdminPanel() {
 
               <Card className="bg-slate-900/60 border-slate-800/50">
                 <CardHeader>
-                  <CardTitle className="text-base text-white">Runtime schedule</CardTitle>
+                  <CardTitle className="text-base text-white">{ac("runtimeSchedule")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="scraping-interval" className="text-slate-300">Interval (minutes)</Label>
+                      <Label htmlFor="scraping-interval" className="text-slate-300">{ac("intervalMinutes")}</Label>
                       <Input
                         id="scraping-interval"
                         data-testid="admin-scraping-interval"
@@ -781,7 +818,7 @@ export default function AdminPanel() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="scraping-max-jobs" className="text-slate-300">Maximum jobs per run</Label>
+                      <Label htmlFor="scraping-max-jobs" className="text-slate-300">{ac("maximumJobs")}</Label>
                       <Input
                         id="scraping-max-jobs"
                         data-testid="admin-scraping-max-jobs"
@@ -803,7 +840,7 @@ export default function AdminPanel() {
                         onCheckedChange={(checked) => setRestrictScrapingSources(Boolean(checked))}
                       />
                       <Label htmlFor="restrict-scraping-sources" className="text-sm text-slate-200">
-                        Limit discovery to selected sources
+                        {ac("limitSources")}
                       </Label>
                     </div>
                     {restrictScrapingSources && (
@@ -839,7 +876,7 @@ export default function AdminPanel() {
                       onClick={handleStartScrapingScheduler}
                     >
                       <Play className="mr-2 h-4 w-4" />
-                      {scrapingStatus?.scheduler.isStarted ? "Update schedule" : "Start schedule"}
+                      {ac(scrapingStatus?.scheduler.isStarted ? "updateSchedule" : "startSchedule")}
                     </Button>
                     <Button
                       data-testid="admin-stop-scraping-scheduler"
@@ -849,7 +886,7 @@ export default function AdminPanel() {
                       onClick={() => stopScrapingScheduler.mutate()}
                     >
                       <Pause className="mr-2 h-4 w-4" />
-                      Stop
+                      {ac("stopAction")}
                     </Button>
                     <Button
                       data-testid="admin-run-scraping-now"
@@ -859,14 +896,15 @@ export default function AdminPanel() {
                       onClick={() => runScrapingNow.mutate()}
                     >
                       <RefreshCw className="mr-2 h-4 w-4" />
-                      Run discovery now
+                      {ac("runDiscoveryNow")}
                     </Button>
                   </div>
                   <div className="text-xs text-slate-500">
-                    Current: every {scrapingStatus?.scheduler.intervalMinutes ?? 60} minutes, up to {scrapingStatus?.scheduler.maxJobsPerRun ?? 100} jobs per run.
+                    {af("currentSchedule", { minutes: scrapingStatus?.scheduler.intervalMinutes ?? 60, jobs: scrapingStatus?.scheduler.maxJobsPerRun ?? 100 })}
+                    {" "}
                     {scrapingStatus?.scheduler.enabledPlatforms?.length
-                      ? ` Restricted to ${scrapingStatus.scheduler.enabledPlatforms.length} selected source${scrapingStatus.scheduler.enabledPlatforms.length === 1 ? "" : "s"}.`
-                      : " All active configured sources are included."}
+                      ? af("restrictedSources", { count: scrapingStatus.scheduler.enabledPlatforms.length })
+                      : ac("allConfiguredSources")}
                   </div>
                 </CardContent>
               </Card>
@@ -874,21 +912,21 @@ export default function AdminPanel() {
 
             <Card className="mt-4 bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-base text-white">Active source health</CardTitle>
+                <CardTitle className="text-base text-white">{ac("activeSourceHealth")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400">
-                        <th className="py-2 pr-4 text-left">Source</th>
-                        <th className="py-2 pr-4 text-left">Adapter</th>
-                        <th className="py-2 pr-4 text-left">Readiness</th>
-                        <th className="py-2 pr-4 text-left">Latest outcome</th>
-                        <th className="py-2 pr-4 text-left">Freshness</th>
-                        <th className="py-2 pr-4 text-left">Listings</th>
-                        <th className="py-2 pr-4 text-left">Last attempt</th>
-                        <th className="py-2 text-left">Last successful scrape</th>
+                        <th className="py-2 pr-4 text-left">{ac("source")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("adapter")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("readiness")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("latestOutcome")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("freshness")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("listings")}</th>
+                        <th className="py-2 pr-4 text-left">{ac("lastAttempt")}</th>
+                        <th className="py-2 text-left">{ac("lastSuccessfulScrape")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -898,7 +936,7 @@ export default function AdminPanel() {
                         <tr key={platform.id} className="border-b border-slate-800/50">
                           <td className="py-3 pr-4">
                             <div className="font-medium text-white">{platform.name}</div>
-                            <div className="mt-0.5 text-xs text-slate-500">{platform.tier} · {platform.category || "General"}</div>
+                            <div className="mt-0.5 text-xs text-slate-500">{platform.tier} | {platform.category || ac("general")}</div>
                           </td>
                           <td className="py-3 pr-4">
                             <Badge
@@ -907,17 +945,17 @@ export default function AdminPanel() {
                                 ? "border-blue-500/30 text-blue-300"
                                 : "border-slate-600 text-slate-300"}
                             >
-                              {platform.adapter.label}
+                              {ac(ADAPTER_COPY_KEYS[platform.adapter.kind].label)}
                             </Badge>
-                            <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">{platform.adapter.detail}</p>
+                            <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">{ac(ADAPTER_COPY_KEYS[platform.adapter.kind].detail)}</p>
                           </td>
                           <td className="py-3 pr-4">
                             <Badge variant="outline" className={platform.readiness === "ready" ? "border-emerald-500/30 text-emerald-300" : "border-amber-500/30 text-amber-300"}>
-                              {platform.readiness === "ready" ? "Ready" : "Unavailable"}
+                              {ac(platform.readiness === "ready" ? "ready" : "unavailable")}
                             </Badge>
                           </td>
                           <td className="py-3 pr-4">
-                            <Badge variant="outline" className={sourceHealth.tone}>{sourceHealth.label}</Badge>
+                            <Badge variant="outline" className={sourceHealth.tone}>{ac(SOURCE_OUTCOME_COPY_KEYS[sourceHealth.outcome])}</Badge>
                             {sourceHealth.error && (
                               <p className="mt-1 max-w-sm text-xs leading-5 text-red-200">{sourceHealth.error}</p>
                             )}
@@ -929,27 +967,27 @@ export default function AdminPanel() {
                                 ? "border-amber-500/30 text-amber-300"
                                 : "border-slate-600 text-slate-400"}>
                               {platform.freshness === "fresh"
-                                ? "Fresh"
+                                ? ac("fresh")
                                 : platform.freshness === "stale"
-                                  ? "Stale"
-                                  : "Awaiting scan"}
+                                  ? ac("stale")
+                                  : ac("outcomeAwaiting")}
                             </Badge>
                           </td>
                           <td className="py-3 pr-4 text-slate-300">
-                            {sourceHealth.jobCount === null ? "No recorded run" : sourceHealth.jobCount}
+                            {sourceHealth.jobCount === null ? ac("noRecordedRun") : sourceHealth.jobCount}
                           </td>
                           <td className="py-3 pr-4 text-slate-300">
-                            {platform.lastScrapeAttemptedAt ? new Date(platform.lastScrapeAttemptedAt).toLocaleString() : "No recorded attempt"}
+                            {platform.lastScrapeAttemptedAt ? dateTimeFormatter.format(new Date(platform.lastScrapeAttemptedAt)) : ac("noRecordedAttempt")}
                           </td>
                           <td className="py-3 text-slate-300">
-                            {platform.lastScraped ? new Date(platform.lastScraped).toLocaleString() : "Awaiting first successful scrape"}
+                            {platform.lastScraped ? dateTimeFormatter.format(new Date(platform.lastScraped)) : ac("awaitingSuccessfulScrape")}
                           </td>
                         </tr>
                       );
                       })}
                       {(!scrapingStatus || scrapingStatus.platforms.length === 0) && (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-500">No active configured scraper sources.</td>
+                          <td colSpan={8} className="py-8 text-center text-slate-500">{ac("noActiveSources")}</td>
                         </tr>
                       )}
                     </tbody>

@@ -42,8 +42,6 @@ export type ScraperAdapterKind = "dedicated" | "generic_rss" | "generic_html";
 
 export interface ScraperAdapterMetadata {
   kind: ScraperAdapterKind;
-  label: string;
-  detail: string;
 }
 
 const dedicatedAdapterPlatforms = new Set([
@@ -64,21 +62,9 @@ const dedicatedAdapterPlatforms = new Set([
 const genericRssAdapterPlatforms = new Set(["NoDesk", "ProBlogger"]);
 
 const scraperAdapterMetadata: Record<ScraperAdapterKind, ScraperAdapterMetadata> = {
-  dedicated: {
-    kind: "dedicated",
-    label: "Source-specific adapter",
-    detail: "Uses a source-specific parser. Current source health still determines availability.",
-  },
-  generic_rss: {
-    kind: "generic_rss",
-    label: "Generic RSS adapter",
-    detail: "Uses generic RSS extraction. Review source health and output before relying on coverage.",
-  },
-  generic_html: {
-    kind: "generic_html",
-    label: "Generic HTML adapter",
-    detail: "Uses generic HTML extraction. Review source health and output before relying on coverage.",
-  },
+  dedicated: { kind: "dedicated" },
+  generic_rss: { kind: "generic_rss" },
+  generic_html: { kind: "generic_html" },
 };
 
 /**

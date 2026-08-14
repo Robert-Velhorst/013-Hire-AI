@@ -10,7 +10,6 @@ export interface ScraperSourceHealthInput {
 
 export interface ScraperSourceHealthSummary {
   outcome: ScraperSourceOutcome;
-  label: string;
   tone: string;
   jobCount: number | null;
   error: string | null;
@@ -65,7 +64,6 @@ export function getScraperSourceHealthSummary(
       if (jobCount === 0) {
         return {
           outcome: "empty",
-          label: "No listings observed",
           tone: "border-amber-500/30 text-amber-300",
           jobCount,
           error: null,
@@ -74,7 +72,6 @@ export function getScraperSourceHealthSummary(
       }
       return {
         outcome: "success",
-        label: "Succeeded",
         tone: "border-emerald-500/30 text-emerald-300",
         jobCount,
         error: null,
@@ -83,7 +80,6 @@ export function getScraperSourceHealthSummary(
     case "partial":
       return {
         outcome: "partial",
-        label: "Partial",
         tone: "border-amber-500/30 text-amber-300",
         jobCount,
         error,
@@ -92,7 +88,6 @@ export function getScraperSourceHealthSummary(
     case "failed":
       return {
         outcome: "failed",
-        label: "Failed",
         tone: "border-red-500/30 text-red-300",
         jobCount,
         error,
@@ -101,7 +96,6 @@ export function getScraperSourceHealthSummary(
     default:
       return {
         outcome: "awaiting",
-        label: "Awaiting scan",
         tone: "border-slate-600 text-slate-400",
         jobCount: null,
         error: null,

@@ -46,9 +46,7 @@ describe("scraper platform catalog", () => {
     expect(adapters.filter(({ adapter }) => adapter.kind === "generic_rss").map(({ name }) => name))
       .toEqual(["NoDesk", "ProBlogger"]);
     expect(adapters.filter(({ adapter }) => adapter.kind === "generic_html")).toHaveLength(36);
-    expect(adapters.every(({ adapter }) => adapter.label.endsWith("adapter"))).toBe(true);
-    expect(adapters.filter(({ adapter }) => adapter.kind !== "dedicated")
-      .every(({ adapter }) => adapter.detail.includes("coverage"))).toBe(true);
+    expect(adapters.every(({ adapter }) => Object.keys(adapter).join(",") === "kind")).toBe(true);
   });
 
   it("only permits unattended discovery for explicit public API or RSS adapters", () => {

@@ -12,7 +12,6 @@ describe("scraper source health", () => {
       lastScrapeError: "HTTP 429 from source",
     })).toMatchObject({
       outcome: "failed",
-      label: "Failed",
       jobCount: 0,
       error: "HTTP 429 from source",
     });
@@ -23,7 +22,6 @@ describe("scraper source health", () => {
       lastScrapeError: "stale error that must not be displayed",
     })).toMatchObject({
       outcome: "success",
-      label: "Succeeded",
       jobCount: 14,
       error: null,
     });
@@ -32,7 +30,6 @@ describe("scraper source health", () => {
   it("keeps unrecorded legacy state awaiting a verified run", () => {
     expect(getScraperSourceHealthSummary({})).toMatchObject({
       outcome: "awaiting",
-      label: "Awaiting scan",
       jobCount: null,
     });
   });
@@ -43,7 +40,6 @@ describe("scraper source health", () => {
       lastScrapeJobCount: 0,
     })).toMatchObject({
       outcome: "empty",
-      label: "No listings observed",
       jobCount: 0,
       error: null,
     });

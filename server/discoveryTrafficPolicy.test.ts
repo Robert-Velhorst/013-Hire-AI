@@ -61,8 +61,9 @@ describe("discovery traffic policy", () => {
     const admin = readFileSync(resolve("client", "src", "pages", "AdminPanel.tsx"), "utf8");
     expect(example).toContain("JOB_SCRAPING_SOURCE_TIMEOUT_MS=90000");
     expect(example).toContain("JOB_SCRAPING_MAX_CONCURRENT_SOURCES=3");
-    expect(admin).toContain("Concurrent source cap");
-    expect(admin).toContain("Source timeout");
+    expect(admin).toContain('admin-discovery-metric-${id}');
+    expect(admin).toContain('ac("concurrentSourceCap")');
+    expect(admin).toContain('ac("sourceTimeout")');
   });
 
   it("fails production diagnostics when the selected scanner is unavailable", () => {

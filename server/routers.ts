@@ -3155,7 +3155,6 @@ export const appRouter = router({
         },
         scheduler: schedulerStatus,
         executionPolicy: manager.getExecutionPolicy(),
-        message: `${readySources.length} configured source${readySources.length === 1 ? " is" : "s are"} ready for discovery. ${configuredDedicatedAdapterSources} use source-specific parsers and ${configuredGenericRssAdapterSources + configuredGenericHtmlAdapterSources} use generic extraction. ${freshSourceIssues} source scan${freshSourceIssues === 1 ? " needs" : "s need"} attention based on evidence from the last 24 hours; ${zeroListingSources} latest recorded source scan${zeroListingSources === 1 ? " returned" : "s returned"} no listings. Inspect source health before relying on coverage. ${unconfiguredSources.length} registered source${unconfiguredSources.length === 1 ? " is" : "s are"} not configured.`,
       };
     }),
 
@@ -3197,7 +3196,7 @@ export const appRouter = router({
         const scheduler = input ? getScheduler(input) : currentScheduler;
         
         scheduler.start();
-        return { success: true, message: "Scheduler started", scheduler: scheduler.getStatus() };
+        return { success: true, outcome: "started" as const, scheduler: scheduler.getStatus() };
       }),
 
     // Stop the scheduler
@@ -3205,7 +3204,7 @@ export const appRouter = router({
       const { getScheduler } = await import("./scrapers/scheduler");
       const scheduler = getScheduler();
       await scheduler.stop();
-      return { success: true, message: "Scheduler stopped", scheduler: scheduler.getStatus() };
+      return { success: true, outcome: "stopped" as const, scheduler: scheduler.getStatus() };
     }),
 
     // Run scraping manually
@@ -3215,13 +3214,7 @@ export const appRouter = router({
       const result = await scheduler.runScraping();
       return {
         success: result !== "skipped" && result !== "failed",
-        message: result === "skipped"
-          ? "Scraping is already running on another server instance"
-          : result === "failed"
-            ? "Scraping run could not complete"
-            : result === "joined"
-              ? "Active scraping run completed"
-              : "Scraping run completed",
+        outcome: result,
         scheduler: scheduler.getStatus(),
       };
     }),

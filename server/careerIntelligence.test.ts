@@ -200,8 +200,6 @@ describe("Scraping API", () => {
       expect(result.platforms[0]).toMatchObject({
         adapter: {
           kind: expect.stringMatching(/^(dedicated|generic_rss|generic_html)$/),
-          label: expect.any(String),
-          detail: expect.any(String),
         },
       });
       expect(result.scheduler).toMatchObject({
@@ -242,7 +240,7 @@ describe("Scraping API", () => {
       expect(indeed).toMatchObject({
         readiness: "unavailable",
         freshness: "awaiting_first_scan",
-        adapter: { kind: "dedicated", label: "Source-specific adapter" },
+        adapter: { kind: "dedicated" },
       });
       expect(indeed?.initializationError).toContain("public API or RSS ingestion contract");
     });
