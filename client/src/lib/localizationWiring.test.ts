@@ -165,6 +165,21 @@ describe("localization wiring", () => {
     expect(reviewQueue).not.toContain("summary.label");
     expect(reviewQueue).not.toContain("summary.detail}</p>");
     expect(reviewQueue).not.toContain("summary.cta");
+    expect(reviewQueue).toContain('t("autonomousEvidenceGates")');
+    expect(reviewQueue).toContain('t("connectorReadiness")');
+    expect(reviewQueue).toContain('t("jobDecisionsHeading")');
+    expect(reviewQueue).toContain('t("interviewSchedulingHeading")');
+    expect(reviewQueue).toContain('t("inboxResponseCandidatesHeading")');
+    expect(reviewQueue).toContain('t("successFeeComplianceHeading")');
+    expect(reviewQueue).toContain('t("profileReadinessHeading")');
+    expect(reviewQueue).toContain('t("recentAuditTrailHeading")');
+    expect(reviewQueue).not.toContain(">Autonomous Evidence Gates<");
+    expect(reviewQueue).not.toContain(">Connector Readiness<");
+    expect(reviewQueue).not.toContain(">Interview Scheduling<");
+    expect(reviewQueue).not.toContain(">Inbox Response Candidates<");
+    expect(reviewQueue).not.toContain(">Success-fee Compliance<");
+    expect(reviewQueue).not.toContain('label="No autonomous evidence gates');
+    expect(reviewQueue).not.toContain('label="No audit events');
     expect(dashboard).toContain("getReviewQueueActionCopy(actionSummary)");
     expect(dashboard).toContain('decision.matchScore != null ? ` - ${decision.matchScore}% match`');
     expect(reviewQueue).not.toContain(">Delivery Verification<");
@@ -188,6 +203,11 @@ describe("localization wiring", () => {
     expect(translate("nl", "confirmExternalDeliveryDescription", { kind: "opvolging" })).toContain("opvolging");
     expect(translate("nl", "controlApprovalHeadline", { count: 2 })).toContain("2");
     expect(translate("nl", "controlApprovalCta")).toBe("Goedkeuringen beoordelen");
+    expect(translate("nl", "autonomousEvidenceGates")).toBe("Autonome bewijspoorten");
+    expect(translate("nl", "interviewSchedulingHeading")).toContain("plannen");
+    expect(translate("nl", "confirmClassification")).toBe("Classificatie bevestigen");
+    expect(translate("nl", "daysRemaining", { count: 3 })).toContain("3");
+    expect(translate("nl", "recentAuditTrailHeading")).toBe("Recent auditspoor");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

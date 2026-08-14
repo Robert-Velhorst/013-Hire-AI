@@ -576,3 +576,10 @@
 - Replaced card-action labels, guidance, and commands with exhaustive structured variants covering approval, delivery, evidence, connectors, job decisions, interviews, inbox responses, employer replies, follow-ups, success fees, profile gaps, and administrative review.
 - Shared the typed action-copy contract between Review Queue and Dashboard, localized known approval and decision classifications, and preserved recorded evidence and connector details as verbatim overrides.
 - Added structured-output, shared-copy, evidence-preservation, and localization wiring regressions; verified seeded Dutch action cards at desktop and the browser-enforced 780-pixel compact width with no horizontal overflow.
+
+## 2026-08-14 - Review Queue section-control localization pass
+
+- Localized every fixed Review Queue section heading, empty state, fallback, badge, instruction, classification choice, and command across evidence, connectors, job decisions, interviews, inbox responses, employer replies, follow-ups, success fees, profile readiness, admin review, and audit history.
+- Reused canonical locale keys where available, localized interview-scheduling controls from stable requirements, and retained provider messages, employer content, saved reasons, profile recommendations, and audit records verbatim.
+- Added wiring and Dutch-copy regressions and verified all 16 populated Dutch sections in the in-app browser without console errors or horizontal document overflow.
+- Passed TypeScript, 236 test files / 1,185 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.

@@ -93,6 +93,33 @@ export default function ReviewQueue() {
     const key = getApplicationDecisionTranslationKey(value);
     return key ? t(key) : formatApplicationDecision(value);
   };
+  const getLocalizedInterviewSchedulingControl = (requirement?: string | null) => {
+    const control = getInterviewSchedulingControl(
+      requirement as Parameters<typeof getInterviewSchedulingControl>[0]
+    );
+    if (requirement === "new_invite") {
+      return {
+        ...control,
+        badgeLabel: t("newInterviewRound"),
+        description: t("interviewNeedsSchedulingDetail"),
+        actionLabel: t("interviewNeedsScheduling"),
+      };
+    }
+    if (requirement === "cancelled_schedule") {
+      return {
+        ...control,
+        badgeLabel: t("scheduleCancelled"),
+        description: t("interviewCancelledScheduleDetail"),
+        actionLabel: t("recordNewInvitation"),
+      };
+    }
+    return {
+      ...control,
+      badgeLabel: t("invitationEvidenceMissing"),
+      description: t("interviewMissingScheduleDetail"),
+      actionLabel: t("recordInvitation"),
+    };
+  };
   const [sendHandoff, setSendHandoff] = useState<{ followUpId: number; label: string } | null>(null);
   const [deliveryConfirmation, setDeliveryConfirmation] = useState("");
   const [inboxResponseTypeOverrides, setInboxResponseTypeOverrides] = useState<Record<number, InboxResponseType>>({});
@@ -476,7 +503,7 @@ export default function ReviewQueue() {
                         <CardContent className="space-y-4 pt-6">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                              <p className="font-medium">{item.job?.title || `Application #${item.applicationId}`}</p>
+                              <p className="font-medium">{item.job?.title || t("applicationNumber", { id: item.applicationId })}</p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.job?.company || t("employerFallback")}
                                 {item.deliveryProvider ? ` - ${item.deliveryProvider}` : ""}
@@ -527,10 +554,10 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.job?.location ? ` - ${item.job.location}` : ""}
                               </p>
                             </div>
@@ -592,7 +619,7 @@ export default function ReviewQueue() {
 
               <section id="review-queue-section-evidence-gates" data-testid="review-queue-section-evidence-gates" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Autonomous Evidence Gates</h2>
+                  <h2 className="text-lg font-semibold">{t("autonomousEvidenceGates")}</h2>
                   <Badge variant="outline">{counts.evidenceGates}</Badge>
                 </div>
                 {operatingLedger?.queues.evidenceGates.length ? (
@@ -604,9 +631,9 @@ export default function ReviewQueue() {
                             <div>
                               <p className="font-medium">{item.label}</p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {(item.blocks || []).map((block) => String(block).replace(/_/g, " ")).join(", ") || "External work"}
+                                {(item.blocks || []).map((block) => String(block).replace(/_/g, " ")).join(", ") || t("externalWork")}
                                 {typeof item.affectedApplications === "number"
-                                  ? ` - ${item.affectedApplications} active application${item.affectedApplications === 1 ? "" : "s"}`
+                                  ? ` - ${t("activeApplicationsCount", { count: item.affectedApplications })}`
                                   : ""}
                               </p>
                             </div>
@@ -625,20 +652,20 @@ export default function ReviewQueue() {
                           />
                           <Button variant="outline" size="sm" onClick={() => setLocation(item.route || "/profile")}>
                             <User className="mr-2 h-4 w-4" />
-                            Resolve Evidence
+                            {t("resolveEvidence")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No autonomous evidence gates are blocking external work." />
+                  <EmptyQueueLine label={t("noAutonomousEvidenceGates")} />
                 )}
               </section>
 
               <section id="review-queue-section-connector-readiness" data-testid="review-queue-section-connector-readiness" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Connector Readiness</h2>
+                  <h2 className="text-lg font-semibold">{t("connectorReadiness")}</h2>
                   <Badge variant="outline">{counts.connectorReadiness}</Badge>
                 </div>
                 {operatingLedger?.queues.connectorReadiness.length ? (
@@ -650,9 +677,9 @@ export default function ReviewQueue() {
                             <div>
                               <p className="font-medium">{item.label}</p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.providerIds?.join(", ") || "Connector setup"}
+                                {item.providerIds?.join(", ") || t("connectorSetup")}
                                 {typeof item.affectedApplications === "number"
-                                  ? ` - ${item.affectedApplications} active application${item.affectedApplications === 1 ? "" : "s"}`
+                                  ? ` - ${t("activeApplicationsCount", { count: item.affectedApplications })}`
                                   : ""}
                               </p>
                             </div>
@@ -671,20 +698,20 @@ export default function ReviewQueue() {
                           />
                           <Button variant="outline" size="sm" onClick={() => setLocation("/profile")}>
                             <User className="mr-2 h-4 w-4" />
-                            Open Profile Evidence
+                            {t("openProfileEvidence")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No connector setup items need attention." />
+                  <EmptyQueueLine label={t("noConnectorSetupItems")} />
                 )}
               </section>
 
               <section id="review-queue-section-job-decisions" data-testid="review-queue-section-job-decisions" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Job Decisions</h2>
+                  <h2 className="text-lg font-semibold">{t("jobDecisionsHeading")}</h2>
                   <Badge variant="outline">{counts.reviewDecisions}</Badge>
                 </div>
                 {operatingLedger?.queues.reviewDecisions.length ? (
@@ -693,18 +720,18 @@ export default function ReviewQueue() {
                       const actionSummary = getQueueAction("job_decision", decision);
                       const actionCopy = getReviewQueueActionCopy(actionSummary);
                       const jobTitle = decision.job?.title || `Job #${decision.jobId}`;
-                      const company = decision.job?.company ? ` at ${decision.job.company}` : "";
+                      const company = decision.job?.company ? ` ${t("atCompany", { company: decision.job.company })}` : "";
 
                       return (
                         <Card key={decision.id} data-testid="review-decision-card">
                           <CardContent className="space-y-4 pt-6">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                               <div>
-                                <p className="font-medium">{jobTitle}{company} needs review</p>
+                                <p className="font-medium">{t("jobNeedsReview", { job: jobTitle, company })}</p>
                                 <p className="mt-1 text-sm text-muted-foreground">
                                   {formatLocalizedDecision(decision.decision)}
-                                  {decision.matchScore != null ? ` - ${decision.matchScore}% match` : ""}
-                                  {decision.applicationId ? ` - Application #${decision.applicationId}` : ""}
+                                  {decision.matchScore != null ? ` - ${t("matchPercent", { score: decision.matchScore })}` : ""}
+                                  {decision.applicationId ? ` - ${t("applicationNumber", { id: decision.applicationId })}` : ""}
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -716,18 +743,18 @@ export default function ReviewQueue() {
                                 </Badge>
                                 {actionSummary.approvalGated && (
                                   <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">
-                                    Review blocks execution
+                                    {t("reviewBlocksExecution")}
                                   </Badge>
                                 )}
                                 {actionSummary.externalAction === "manual_handoff" && (
                                   <Badge variant="outline" className="border-blue-500/40 text-blue-300">
-                                    Manual ATS handoff
+                                    {t("manualAtsHandoff")}
                                   </Badge>
                                 )}
                               </div>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {decision.reviewReason || decision.decisionReason || "Review this decision before application execution."}
+                              {decision.reviewReason || decision.decisionReason || t("reviewDecisionBeforeExecution")}
                             </p>
                             <QueueActionStrip
                               summary={actionSummary}
@@ -742,7 +769,7 @@ export default function ReviewQueue() {
                                 onClick={() => handleResolveDecision(decision, "save")}
                               >
                                 <Briefcase className="mr-2 h-4 w-4" />
-                                Save for Later
+                                {t("saveForLater")}
                               </Button>
                               <Button
                                 variant="outline"
@@ -753,7 +780,7 @@ export default function ReviewQueue() {
                                 onClick={() => handleResolveDecision(decision, "ignore")}
                               >
                                 <XCircle className="mr-2 h-4 w-4" />
-                                Ignore
+                                {t("ignoreAction")}
                               </Button>
                               <Button variant="outline" size="sm" onClick={() => setLocation(actionSummary.route)}>
                                 <Search className="mr-2 h-4 w-4" />
@@ -766,13 +793,13 @@ export default function ReviewQueue() {
                     })}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No saved job decisions need review." />
+                  <EmptyQueueLine label={t("noJobDecisionsReview")} />
                 )}
               </section>
 
               <section id="review-queue-section-interview-scheduling" data-testid="review-queue-section-interview-scheduling" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Interview Scheduling</h2>
+                  <h2 className="text-lg font-semibold">{t("interviewSchedulingHeading")}</h2>
                   <Badge variant="outline">{counts.interviewScheduling}</Badge>
                 </div>
                 {operatingLedger?.queues.interviewScheduling.length ? (
@@ -781,15 +808,15 @@ export default function ReviewQueue() {
                       <Card key={item.applicationId}>
                         <CardContent className="space-y-4 pt-6">
                           {(() => {
-                            const control = getInterviewSchedulingControl(item.schedulingRequirement);
+                            const control = getLocalizedInterviewSchedulingControl(item.schedulingRequirement);
                             return <>
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.job?.location ? ` - ${item.job.location}` : ""}
                               </p>
                             </div>
@@ -820,13 +847,13 @@ export default function ReviewQueue() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No interview invites need scheduling." />
+                  <EmptyQueueLine label={t("noInterviewInvitesScheduling")} />
                 )}
               </section>
 
               <section id="review-queue-section-interview-preparation" data-testid="review-queue-section-interview-preparation" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Interview Preparation</h2>
+                  <h2 className="text-lg font-semibold">{t("interviewPreparationHeading")}</h2>
                   <Badge variant="outline">{counts.interviewPreparationNeeded}</Badge>
                 </div>
                 {operatingLedger?.queues.interviewPreparationNeeded.length ? (
@@ -837,10 +864,10 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.scheduledAt ? ` - ${new Date(item.scheduledAt).toLocaleString(locale)}` : ""}
                               </p>
                             </div>
@@ -849,8 +876,7 @@ export default function ReviewQueue() {
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Generate saved preparation questions, coaching tips, and company context from the job ledger
-                            before this scheduled interview.
+                            {t("interviewPreparationInstruction")}
                           </p>
                           <QueueActionStrip
                             summary={getQueueAction("interview_preparation", item)}
@@ -868,7 +894,7 @@ export default function ReviewQueue() {
                               ) : (
                                 <ClipboardCheck className="mr-2 h-4 w-4" />
                               )}
-                              Generate Prep
+                              {t("generatePrep")}
                             </Button>
                             <Button
                               variant="outline"
@@ -876,7 +902,7 @@ export default function ReviewQueue() {
                               onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "view"))}
                             >
                               <Briefcase className="mr-2 h-4 w-4" />
-                              Open Application
+                              {t("openApplication")}
                             </Button>
                           </div>
                         </CardContent>
@@ -884,13 +910,13 @@ export default function ReviewQueue() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No scheduled interviews need preparation." />
+                  <EmptyQueueLine label={t("noInterviewPreparationNeeded")} />
                 )}
               </section>
 
               <section id="review-queue-section-interview-outcomes" data-testid="review-queue-section-interview-outcomes" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Interview Outcomes</h2>
+                  <h2 className="text-lg font-semibold">{t("interviewOutcomesHeading")}</h2>
                   <Badge variant="outline">{counts.interviewOutcomesNeeded}</Badge>
                 </div>
                 {operatingLedger?.queues.interviewOutcomesNeeded.length ? (
@@ -901,7 +927,7 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.job?.company || t("employerFallback")}
@@ -909,11 +935,11 @@ export default function ReviewQueue() {
                               </p>
                             </div>
                             <Badge variant="outline" className="border-amber-500/40 text-amber-300">
-                              Outcome needed
+                              {t("outcomeNeeded")}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Record whether the completed interview led to another round, an offer, a rejection, no response, or another verified result.
+                            {t("interviewOutcomeInstruction")}
                           </p>
                           <QueueActionStrip
                             summary={getQueueAction("interview_outcome", item)}
@@ -926,20 +952,20 @@ export default function ReviewQueue() {
                             onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "record-interview-outcome", item.interviewId))}
                           >
                             <Briefcase className="mr-2 h-4 w-4" />
-                            Record Outcome
+                            {t("recordOutcome")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No completed interviews need an outcome." />
+                  <EmptyQueueLine label={t("noInterviewOutcomesNeeded")} />
                 )}
               </section>
 
               <section id="review-queue-section-inbox-response-candidates" data-testid="review-queue-section-inbox-response-candidates" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Inbox Response Candidates</h2>
+                  <h2 className="text-lg font-semibold">{t("inboxResponseCandidatesHeading")}</h2>
                   <Badge variant="outline">{counts.inboxResponseCandidates}</Badge>
                 </div>
                 {operatingLedger?.queues.inboxResponseCandidates.length ? (
@@ -949,9 +975,9 @@ export default function ReviewQueue() {
                         <CardContent className="space-y-4 pt-6">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                              <p className="truncate font-medium">{candidate.job?.title || `Application #${candidate.applicationId}`}</p>
+                              <p className="truncate font-medium">{candidate.job?.title || t("applicationNumber", { id: candidate.applicationId })}</p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {candidate.job?.company || "Employer"}
+                                {candidate.job?.company || t("employerFallback")}
                                 {candidate.job?.location ? ` - ${candidate.job.location}` : ""}
                               </p>
                             </div>
@@ -959,7 +985,7 @@ export default function ReviewQueue() {
                               {candidate.suggestedResponseType.replace(/_/g, " ")}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground">{candidate.subject || "Application-linked inbox message"}</p>
+                          <p className="text-sm text-muted-foreground">{candidate.subject || t("applicationInboxMessage")}</p>
                           {candidate.preview ? (
                             <p className="line-clamp-3 text-sm text-muted-foreground">{candidate.preview}</p>
                           ) : null}
@@ -970,7 +996,7 @@ export default function ReviewQueue() {
                           />
                           <div className="max-w-xs space-y-2">
                             <label className="text-sm font-medium" htmlFor={`inbox-response-type-${candidate.id}`}>
-                              Confirm as
+                              {t("confirmAs")}
                             </label>
                             <Select
                               value={inboxResponseTypeOverrides[candidate.id] ?? candidate.suggestedResponseType}
@@ -983,11 +1009,11 @@ export default function ReviewQueue() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="interview_invite">Interview invite</SelectItem>
-                                <SelectItem value="offer">Offer</SelectItem>
-                                <SelectItem value="employer_question">Employer question</SelectItem>
-                                <SelectItem value="rejection">Rejection</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
+                                <SelectItem value="interview_invite">{t("responseTypeInterviewInvite")}</SelectItem>
+                                <SelectItem value="offer">{t("responseTypeOffer")}</SelectItem>
+                                <SelectItem value="employer_question">{t("responseTypeEmployerQuestion")}</SelectItem>
+                                <SelectItem value="rejection">{t("responseTypeRejection")}</SelectItem>
+                                <SelectItem value="other">{t("responseTypeOther")}</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -1001,7 +1027,7 @@ export default function ReviewQueue() {
                               disabled={ingestInboxResponse.isPending || dismissInboxResponseCandidate.isPending}
                             >
                               {ingestInboxResponse.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                              Confirm classification
+                              {t("confirmClassification")}
                             </Button>
                             <Button
                               variant="outline"
@@ -1010,7 +1036,7 @@ export default function ReviewQueue() {
                               disabled={ingestInboxResponse.isPending || dismissInboxResponseCandidate.isPending}
                             >
                               <XCircle className="mr-2 h-4 w-4" />
-                              Dismiss
+                              {t("dismissAction")}
                             </Button>
                             <Button
                               variant="ghost"
@@ -1018,7 +1044,7 @@ export default function ReviewQueue() {
                               onClick={() => setLocation(getApplicationDeepLink(candidate.applicationId, "view"))}
                             >
                               <Briefcase className="mr-2 h-4 w-4" />
-                              Send via Connected Mailbox
+                              {t("sendViaConnectedMailbox")}
                             </Button>
                           </div>
                         </CardContent>
@@ -1026,13 +1052,13 @@ export default function ReviewQueue() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No application-linked inbox messages need confirmation." />
+                  <EmptyQueueLine label={t("noInboxConfirmations")} />
                 )}
               </section>
 
               <section id="review-queue-section-employer-replies" data-testid="review-queue-section-employer-replies" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Employer Replies</h2>
+                  <h2 className="text-lg font-semibold">{t("employerRepliesHeading")}</h2>
                   <Badge variant="outline">{counts.employerResponsesNeedingReply}</Badge>
                 </div>
                 {operatingLedger?.queues.employerResponsesNeedingReply.length ? (
@@ -1043,19 +1069,19 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.job?.location ? ` - ${item.job.location}` : ""}
                               </p>
                             </div>
                             <Badge variant="outline" className="border-blue-500/40 text-blue-300">
-                              {String(item.responseType || "response").replace(/_/g, " ")}
+                              {item.responseType ? String(item.responseType).replace(/_/g, " ") : t("employerResponseFallback")}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {item.summary || "Review this employer response before drafting any follow-up."}
+                            {item.summary || t("employerResponseReviewInstruction")}
                           </p>
                           <QueueActionStrip
                             summary={getQueueAction("employer_reply", item)}
@@ -1068,20 +1094,20 @@ export default function ReviewQueue() {
                             onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "employer-response"))}
                           >
                             <MessageSquare className="mr-2 h-4 w-4" />
-                            Open Employer Response
+                            {t("openEmployerResponse")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No employer questions need replies." />
+                  <EmptyQueueLine label={t("noEmployerRepliesNeeded")} />
                 )}
               </section>
 
               <section id="review-queue-section-follow-ups" data-testid="review-queue-section-follow-ups" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Follow-up Drafting</h2>
+                  <h2 className="text-lg font-semibold">{t("followUpDraftingHeading")}</h2>
                   <Badge variant="outline">{counts.followUpsDue}</Badge>
                 </div>
                 {operatingLedger?.queues.followUpsDue.length ? (
@@ -1092,10 +1118,10 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.job?.title || `Application #${item.applicationId}`}
+                                {item.job?.title || t("applicationNumber", { id: item.applicationId })}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
-                                {item.job?.company || "Employer"}
+                                {item.job?.company || t("employerFallback")}
                                 {item.job?.location ? ` - ${item.job.location}` : ""}
                               </p>
                             </div>
@@ -1104,9 +1130,9 @@ export default function ReviewQueue() {
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {item.reason || "This application has been quiet long enough for a follow-up draft."}
+                            {item.reason || t("followUpReasonFallback")}
                             {typeof item.daysSinceActivity === "number"
-                              ? ` Last activity was ${item.daysSinceActivity} days ago.`
+                              ? ` ${t("lastActivityDaysAgo", { count: item.daysSinceActivity })}`
                               : ""}
                           </p>
                           <QueueActionStrip
@@ -1120,20 +1146,20 @@ export default function ReviewQueue() {
                             onClick={() => setLocation(getApplicationDeepLink(item.applicationId, "follow-up"))}
                           >
                             <Mail className="mr-2 h-4 w-4" />
-                            Open Follow-up
+                            {t("openFollowUp")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No follow-up drafts are due." />
+                  <EmptyQueueLine label={t("noFollowUpsDue")} />
                 )}
               </section>
 
               <section id="review-queue-section-success-fees" data-testid="review-queue-section-success-fees" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Success-fee Compliance</h2>
+                  <h2 className="text-lg font-semibold">{t("successFeeComplianceHeading")}</h2>
                   <Badge variant="outline">{counts.successFeeCompliance}</Badge>
                 </div>
                 {operatingLedger?.queues.successFeeCompliance.length ? (
@@ -1144,7 +1170,7 @@ export default function ReviewQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="font-medium">
-                                {item.employerName || "Success-fee review"}
+                                {item.employerName || t("successFeeReviewFallback")}
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.jobTitle || item.action}
@@ -1164,8 +1190,8 @@ export default function ReviewQueue() {
                             {item.action}
                             {typeof item.daysUntilDue === "number"
                               ? ` ${item.daysUntilDue < 0
-                                  ? `${Math.abs(item.daysUntilDue)} day${Math.abs(item.daysUntilDue) === 1 ? "" : "s"} overdue.`
-                                  : `${item.daysUntilDue} day${item.daysUntilDue === 1 ? "" : "s"} remaining.`}`
+                                  ? t("daysOverdue", { count: Math.abs(item.daysUntilDue) })
+                                  : t("daysRemaining", { count: item.daysUntilDue })}`
                               : ""}
                           </p>
                           {item.responseSummary && (
@@ -1190,14 +1216,14 @@ export default function ReviewQueue() {
                             }}
                           >
                             <DollarSign className="mr-2 h-4 w-4" />
-                            {item.type === "offer_attribution" ? "Open Offer Review" : "Open Billing"}
+                            {t(item.type === "offer_attribution" ? "openOfferReview" : "openBilling")}
                           </Button>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No success-fee compliance work needs review." />
+                  <EmptyQueueLine label={t("noSuccessFeeReview")} />
                 )}
               </section>
             </div>
@@ -1205,14 +1231,14 @@ export default function ReviewQueue() {
             <div className="space-y-6">
               <section id="review-queue-section-profile-readiness" data-testid="review-queue-section-profile-readiness" className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Profile Readiness</h2>
+                  <h2 className="text-lg font-semibold">{t("profileReadinessHeading")}</h2>
                   <Badge variant="outline">
                     {counts.profileBlockers + counts.profileWarnings}
                   </Badge>
                 </div>
                 <div className="rounded-md border bg-card p-4">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Readiness score</span>
+                    <span className="text-muted-foreground">{t("readinessScore")}</span>
                     <span className="font-medium">{operatingLedger?.readiness.score ?? 0}%</span>
                   </div>
                   <Separator className="my-4" />
@@ -1224,7 +1250,7 @@ export default function ReviewQueue() {
                       <ReadinessGap key={gap.key} tone="warning" label={gap.label} text={gap.recommendation} />
                     ))}
                     {!counts.profileBlockers && !counts.profileWarnings && (
-                      <EmptyQueueLine label="Profile readiness has no open blockers or warnings." />
+                      <EmptyQueueLine label={t("noProfileReadinessGaps")} />
                     )}
                   </div>
                   {(counts.profileBlockers > 0 || counts.profileWarnings > 0) && (
@@ -1243,7 +1269,7 @@ export default function ReviewQueue() {
                       onClick={() => setLocation("/profile")}
                     >
                       <User className="mr-2 h-4 w-4" />
-                      Improve Profile
+                      {t("improveProfile")}
                     </Button>
                   )}
                 </div>
@@ -1252,7 +1278,7 @@ export default function ReviewQueue() {
               {canReviewAdminItems && (
                 <section id="review-queue-section-admin-reviews" data-testid="review-queue-section-admin-reviews" className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold">Admin Operating Reviews</h2>
+                    <h2 className="text-lg font-semibold">{t("adminOperatingReviews")}</h2>
                     <Badge variant="outline">{counts.adminReviews}</Badge>
                   </div>
                   {operatingLedger?.queues.adminReviews.length ? (
@@ -1282,14 +1308,14 @@ export default function ReviewQueue() {
                             />
                             <Button variant="outline" size="sm" onClick={() => setLocation("/admin")}>
                               <Shield className="mr-2 h-4 w-4" />
-                              Open Admin Panel
+                              {t("openAdminPanel")}
                             </Button>
                           </CardContent>
                         </Card>
                       ))}
                     </div>
                   ) : (
-                    <EmptyQueueLine label="No admin operating reviews are open for this account." />
+                    <EmptyQueueLine label={t("noAdminOperatingReviews")} />
                   )}
                 </section>
               )}
@@ -1298,7 +1324,7 @@ export default function ReviewQueue() {
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="flex items-center gap-2 text-lg font-semibold">
                     <History className="h-4 w-4" />
-                    Recent Audit Trail
+                    {t("recentAuditTrailHeading")}
                   </h2>
                   <Badge variant="outline">{auditTrail?.length ?? 0}</Badge>
                 </div>
@@ -1330,7 +1356,7 @@ export default function ReviewQueue() {
                     ))}
                   </div>
                 ) : (
-                  <EmptyQueueLine label="No audit events have been recorded for this account yet." />
+                  <EmptyQueueLine label={t("noAuditEvents")} />
                 )}
               </section>
             </div>
