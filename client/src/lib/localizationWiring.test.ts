@@ -95,6 +95,7 @@ describe("localization wiring", () => {
 
   it("localizes primary candidate evidence and resume controls", () => {
     const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
+    const dialog = readFileSync(resolve(process.cwd(), "client/src/components/ui/dialog.tsx"), "utf8");
 
     expect(profile).toContain('const { locale, t } = useLocale()');
     expect(profile).toContain('t("profileEvidenceControl")');
@@ -102,8 +103,25 @@ describe("localization wiring", () => {
     expect(profile).toContain('t("uploadResume")');
     expect(profile).toContain('t("activeResumeVersion"');
     expect(profile).toContain("formatCalendarDate(experience.startDate, locale)");
+    expect(profile).toContain('t("workHistoryDescription"');
+    expect(profile).toContain('t("educationDescription"');
+    expect(profile).toContain('t("skillsDescription"');
+    expect(profile).toContain('t("projectsDescription"');
+    expect(profile).toContain('toast.error(t("workExperienceRequired"))');
+    expect(profile).toContain('toast.error(t("educationRequired"))');
+    expect(profile).toContain('toast.error(t("skillYearsInvalid"))');
+    expect(profile).toContain('toast.error(t("projectUrlInvalid"))');
+    expect(profile).toContain('aria-label={t("editItem"');
+    expect(profile).toContain('aria-label={t("deleteItem"');
     expect(profile).not.toContain("External inbox and cloud access requires explicit consent.");
+    expect(profile).not.toContain('confirm("Are you sure you want to delete this work experience?")');
+    expect(profile).not.toContain('>Add Skill<');
+    expect(dialog).toContain('{t("closeLabel")}');
+    expect(dialog).not.toContain('>Close<');
     expect(translate("nl", "yourProfile")).toBe("Je profiel");
     expect(translate("nl", "activeResumeVersion", { version: 3 })).toContain("3");
+    expect(translate("nl", "workHistoryDescription", { count: 2, limit: 25 })).toContain("2/25");
+    expect(translate("nl", "confirmRemoveSkill", { name: "TypeScript" })).toContain("TypeScript");
+    expect(translate("nl", "closeLabel")).toBe("Sluiten");
   });
 });

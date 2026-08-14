@@ -106,6 +106,8 @@ type LinkedInIdentityCandidate = {
   emailVerified: boolean;
 };
 
+type Translator = (key: TranslationKey, values?: Record<string, string | number>) => string;
+
 export default function Profile() {
   const { locale, t } = useLocale();
   const { loading, isAuthenticated } = useAuth();
@@ -359,31 +361,31 @@ export default function Profile() {
   });
   const deleteWorkExperience = trpc.profile.deleteWorkExperience.useMutation({
     onSuccess: async () => {
-      toast.success("Work experience deleted");
+      toast.success(t("workExperienceDeleted"));
       await Promise.all([workExperiencesQuery.refetch(), evidenceReadinessQuery.refetch()]);
     },
-    onError: (error) => toast.error(error.message || "Unable to delete work experience"),
+    onError: (error) => toast.error(error.message || t("unableDeleteWorkExperience")),
   });
   const deleteEducation = trpc.profile.deleteEducation.useMutation({
     onSuccess: async () => {
-      toast.success("Education entry deleted");
+      toast.success(t("educationDeleted"));
       await Promise.all([educationQuery.refetch(), evidenceReadinessQuery.refetch()]);
     },
-    onError: (error) => toast.error(error.message || "Unable to delete education entry"),
+    onError: (error) => toast.error(error.message || t("unableDeleteEducation")),
   });
   const deleteSkill = trpc.profile.deleteSkill.useMutation({
     onSuccess: async () => {
-      toast.success("Skill removed");
+      toast.success(t("skillRemoved"));
       await Promise.all([skillsQuery.refetch(), evidenceReadinessQuery.refetch()]);
     },
-    onError: (error) => toast.error(error.message || "Unable to remove skill"),
+    onError: (error) => toast.error(error.message || t("unableRemoveSkill")),
   });
   const deleteProject = trpc.profile.deleteProject.useMutation({
     onSuccess: () => {
-      toast.success("Project deleted");
+      toast.success(t("projectDeleted"));
       projectsQuery.refetch();
     },
-    onError: (error) => toast.error(error.message || "Unable to delete project"),
+    onError: (error) => toast.error(error.message || t("unableDeleteProject")),
   });
   const evidenceControl = useMemo(
     () => evidenceReadinessQuery.data ?? getProfileEvidenceControlSummary({
@@ -1263,7 +1265,7 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-cyan-400" />
-                <CardTitle className="text-white">Work Experience</CardTitle>
+                <CardTitle className="text-white">{t("workExperience")}</CardTitle>
               </div>
               <WorkExperienceDialog
                 open={workExpDialogOpen}
@@ -1281,7 +1283,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your professional work history ({workExperiencesQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.workExperiences})
+              {t("workHistoryDescription", { count: workExperiencesQuery.data?.length ?? 0, limit: PROFILE_EVIDENCE_LIMITS.workExperiences })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1302,7 +1304,7 @@ export default function Profile() {
                       setWorkExpDialogOpen(true);
                     }}
                     onDelete={() => {
-                      if (confirm("Are you sure you want to delete this work experience?")) {
+                      if (confirm(t("confirmDeleteWorkExperience"))) {
                         deleteWorkExperience.mutate({ id: exp.id });
                       }
                     }}
@@ -1312,13 +1314,13 @@ export default function Profile() {
             ) : (
               <div className="text-center py-8">
                 <Briefcase className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400 mb-4">No work experience added yet</p>
+                <p className="text-slate-400 mb-4">{t("noWorkExperience")}</p>
                 <Button
                   onClick={() => setWorkExpDialogOpen(true)}
                   className="bg-gradient-to-r from-cyan-500 to-blue-600"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Work Experience
+                  {t("addWorkExperience")}
                 </Button>
               </div>
             )}
@@ -1331,7 +1333,7 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-cyan-400" />
-                <CardTitle className="text-white">Education</CardTitle>
+                <CardTitle className="text-white">{t("educationLabel")}</CardTitle>
               </div>
               <EducationDialog
                 open={educationDialogOpen}
@@ -1349,7 +1351,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your educational background ({educationQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.educationEntries})
+              {t("educationDescription", { count: educationQuery.data?.length ?? 0, limit: PROFILE_EVIDENCE_LIMITS.educationEntries })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1363,12 +1365,13 @@ export default function Profile() {
                   <EducationCard
                     key={edu.id}
                     education={edu}
+                    t={t}
                     onEdit={() => {
                       setEditingEducation(edu);
                       setEducationDialogOpen(true);
                     }}
                     onDelete={() => {
-                      if (confirm("Are you sure you want to delete this education entry?")) {
+                      if (confirm(t("confirmDeleteEducation"))) {
                         deleteEducation.mutate({ id: edu.id });
                       }
                     }}
@@ -1378,8 +1381,8 @@ export default function Profile() {
             ) : (
               <div className="text-center py-8">
                 <GraduationCap className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">No education added yet</p>
-                <p className="text-xs text-slate-500 mt-1">Click "Add Education" above to get started</p>
+                <p className="text-slate-400">{t("noEducation")}</p>
+                <p className="text-xs text-slate-500 mt-1">{t("addEducationHint")}</p>
               </div>
             )}
           </CardContent>
@@ -1391,7 +1394,7 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Code className="w-5 h-5 text-cyan-400" />
-                <CardTitle className="text-white">Skills</CardTitle>
+                <CardTitle className="text-white">{t("skillsLabel")}</CardTitle>
               </div>
               <SkillDialog
                 open={skillDialogOpen}
@@ -1409,7 +1412,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Add your technical and professional skills ({skillsQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.skills})
+              {t("skillsDescription", { count: skillsQuery.data?.length ?? 0, limit: PROFILE_EVIDENCE_LIMITS.skills })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1423,12 +1426,13 @@ export default function Profile() {
                   <SkillBadge
                     key={skill.id}
                     skill={skill}
+                    t={t}
                     onEdit={() => {
                       setEditingSkill(skill);
                       setSkillDialogOpen(true);
                     }}
                     onDelete={() => {
-                      if (confirm(`Remove ${skill.skillName}?`)) {
+                      if (confirm(t("confirmRemoveSkill", { name: skill.skillName }))) {
                         deleteSkill.mutate({ id: skill.id });
                       }
                     }}
@@ -1438,8 +1442,8 @@ export default function Profile() {
             ) : (
               <div className="text-center py-8">
                 <Code className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">No skills added yet</p>
-                <p className="text-xs text-slate-500 mt-1">Click "Add Skill" above to get started</p>
+                <p className="text-slate-400">{t("noSkills")}</p>
+                <p className="text-xs text-slate-500 mt-1">{t("addSkillHint")}</p>
               </div>
             )}
           </CardContent>
@@ -1451,7 +1455,7 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FolderGit2 className="w-5 h-5 text-cyan-400" />
-                <CardTitle className="text-white">Projects</CardTitle>
+                <CardTitle className="text-white">{t("projectsLabel")}</CardTitle>
               </div>
               <ProjectDialog
                 open={projectDialogOpen}
@@ -1469,7 +1473,7 @@ export default function Profile() {
               />
             </div>
             <CardDescription>
-              Showcase your portfolio and side projects ({projectsQuery.data?.length ?? 0}/{PROFILE_EVIDENCE_LIMITS.projects})
+              {t("projectsDescription", { count: projectsQuery.data?.length ?? 0, limit: PROFILE_EVIDENCE_LIMITS.projects })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1483,12 +1487,13 @@ export default function Profile() {
                   <ProjectCard
                     key={project.id}
                     project={project}
+                    t={t}
                     onEdit={() => {
                       setEditingProject(project);
                       setProjectDialogOpen(true);
                     }}
                     onDelete={() => {
-                      if (confirm("Are you sure you want to delete this project?")) {
+                      if (confirm(t("confirmDeleteProject"))) {
                         deleteProject.mutate({ id: project.id });
                       }
                     }}
@@ -1498,8 +1503,8 @@ export default function Profile() {
             ) : (
               <div className="text-center py-8">
                 <FolderGit2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">No projects added yet</p>
-                <p className="text-xs text-slate-500 mt-1">Click "Add Project" above to get started</p>
+                <p className="text-slate-400">{t("noProjects")}</p>
+                <p className="text-xs text-slate-500 mt-1">{t("addProjectHint")}</p>
               </div>
             )}
           </CardContent>
@@ -1666,20 +1671,21 @@ function EvidenceProviderRow({
 }
 
 function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
+  const { t } = useLocale();
   const [form, setForm] = useState(emptyWorkExperience());
   const addExperience = trpc.profile.addWorkExperience.useMutation({
     onSuccess: () => {
-      toast.success("Work experience saved");
+      toast.success(t("workExperienceSaved"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to save work experience"),
+    onError: (error) => toast.error(error.message || t("unableSaveWorkExperience")),
   });
   const updateExperience = trpc.profile.updateWorkExperience.useMutation({
     onSuccess: () => {
-      toast.success("Work experience updated");
+      toast.success(t("workExperienceUpdated"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to update work experience"),
+    onError: (error) => toast.error(error.message || t("unableUpdateWorkExperience")),
   });
 
   useEffect(() => {
@@ -1701,7 +1707,7 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.jobTitle.trim() || !form.company.trim() || !form.startDate) {
-      toast.error("Job title, company, and start date are required.");
+      toast.error(t("workExperienceRequired"));
       return;
     }
     const payload = {
@@ -1724,36 +1730,36 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit 
       <DialogTrigger asChild>
         <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
-          Add Experience
+          {t("addExperience")}
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-white">
-            {editing ? "Edit Work Experience" : "Add Work Experience"}
+            {editing ? t("editWorkExperience") : t("addWorkExperience")}
           </DialogTitle>
           <DialogDescription>
-            Add details about your professional experience
+            {t("workExperienceDialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Job title" required><Input value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} /></FormField>
-            <FormField label="Company" required><Input value={form.company} onChange={(event) => setForm((current) => ({ ...current, company: event.target.value }))} /></FormField>
-            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
-            <FormField label="Start date" required><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
+            <FormField label={t("jobTitleLabel")} required><Input value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} /></FormField>
+            <FormField label={t("companyLabel")} required><Input value={form.company} onChange={(event) => setForm((current) => ({ ...current, company: event.target.value }))} /></FormField>
+            <FormField label={t("locationLabel")}><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
+            <FormField label={t("startDateLabel")} required><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label={t("endDateLabel")}><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
             <div className="flex items-end pb-2">
               <div className="flex items-center gap-2">
                 <Checkbox id="work-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm((current) => ({ ...current, isCurrent: Boolean(checked) }))} />
-                <label htmlFor="work-current" className="text-sm text-slate-300">I currently work here</label>
+                <label htmlFor="work-current" className="text-sm text-slate-300">{t("currentlyWorkHere")}</label>
               </div>
             </div>
           </div>
-          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
-          <FormField label="Key achievements"><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
-          <FormField label="Skills used"><Input value={form.skills} onChange={(event) => setForm((current) => ({ ...current, skills: event.target.value }))} placeholder="React, stakeholder management, SQL" /></FormField>
-          <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add experience"} onCancel={() => onOpenChange(false)} />
+          <FormField label={t("descriptionLabel")}><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
+          <FormField label={t("keyAchievements")}><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
+          <FormField label={t("skillsUsed")}><Input value={form.skills} onChange={(event) => setForm((current) => ({ ...current, skills: event.target.value }))} placeholder="React, stakeholder management, SQL" /></FormField>
+          <DialogActions isSaving={isSaving} label={editing ? t("saveChanges") : t("addExperience")} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
     </Dialog>
@@ -1761,20 +1767,21 @@ function WorkExperienceDialog({ open, onOpenChange, editing, onSuccess, atLimit 
 }
 
 function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
+  const { t } = useLocale();
   const [form, setForm] = useState(emptyEducation());
   const addEducation = trpc.profile.addEducation.useMutation({
     onSuccess: () => {
-      toast.success("Education saved");
+      toast.success(t("educationSaved"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to save education"),
+    onError: (error) => toast.error(error.message || t("unableSaveEducation")),
   });
   const updateEducation = trpc.profile.updateEducation.useMutation({
     onSuccess: () => {
-      toast.success("Education updated");
+      toast.success(t("educationUpdated"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to update education"),
+    onError: (error) => toast.error(error.message || t("unableUpdateEducation")),
   });
 
   useEffect(() => {
@@ -1796,7 +1803,7 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = fal
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.degree.trim() || !form.institution.trim()) {
-      toast.error("Degree and institution are required.");
+      toast.error(t("educationRequired"));
       return;
     }
     const payload = {
@@ -1819,36 +1826,36 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = fal
       <DialogTrigger asChild>
         <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
-          Add Education
+          {t("addEducation")}
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-white">
-            {editing ? "Edit Education" : "Add Education"}
+            {editing ? t("editEducation") : t("addEducation")}
           </DialogTitle>
           <DialogDescription>
-            Add details about your educational background
+            {t("educationDialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Degree" required><Input value={form.degree} onChange={(event) => setForm((current) => ({ ...current, degree: event.target.value }))} /></FormField>
-            <FormField label="Institution" required><Input value={form.institution} onChange={(event) => setForm((current) => ({ ...current, institution: event.target.value }))} /></FormField>
-            <FormField label="Field of study"><Input value={form.fieldOfStudy} onChange={(event) => setForm((current) => ({ ...current, fieldOfStudy: event.target.value }))} /></FormField>
-            <FormField label="Location"><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
-            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
-            <FormField label="GPA"><Input value={form.gpa} onChange={(event) => setForm((current) => ({ ...current, gpa: event.target.value }))} /></FormField>
+            <FormField label={t("degreeLabel")} required><Input value={form.degree} onChange={(event) => setForm((current) => ({ ...current, degree: event.target.value }))} /></FormField>
+            <FormField label={t("institutionLabel")} required><Input value={form.institution} onChange={(event) => setForm((current) => ({ ...current, institution: event.target.value }))} /></FormField>
+            <FormField label={t("fieldOfStudy")}><Input value={form.fieldOfStudy} onChange={(event) => setForm((current) => ({ ...current, fieldOfStudy: event.target.value }))} /></FormField>
+            <FormField label={t("locationLabel")}><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></FormField>
+            <FormField label={t("startDateLabel")}><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label={t("endDateLabel")}><Input type="date" value={form.endDate} disabled={form.isCurrent} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
+            <FormField label={t("gpaLabel")}><Input value={form.gpa} onChange={(event) => setForm((current) => ({ ...current, gpa: event.target.value }))} /></FormField>
             <div className="flex items-end pb-2">
               <div className="flex items-center gap-2">
                 <Checkbox id="education-current" checked={form.isCurrent} onCheckedChange={(checked) => setForm((current) => ({ ...current, isCurrent: Boolean(checked) }))} />
-                <label htmlFor="education-current" className="text-sm text-slate-300">Currently studying</label>
+                <label htmlFor="education-current" className="text-sm text-slate-300">{t("currentlyStudying")}</label>
               </div>
             </div>
           </div>
-          <FormField label="Achievements"><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
-          <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add education"} onCancel={() => onOpenChange(false)} />
+          <FormField label={t("achievementsLabel")}><Textarea value={form.achievements} onChange={(event) => setForm((current) => ({ ...current, achievements: event.target.value }))} /></FormField>
+          <DialogActions isSaving={isSaving} label={editing ? t("saveChanges") : t("addEducation")} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
     </Dialog>
@@ -1856,20 +1863,21 @@ function EducationDialog({ open, onOpenChange, editing, onSuccess, atLimit = fal
 }
 
 function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
+  const { t } = useLocale();
   const [form, setForm] = useState(emptySkill());
   const addSkill = trpc.profile.addSkill.useMutation({
     onSuccess: () => {
-      toast.success("Skill saved");
+      toast.success(t("skillSaved"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to save skill"),
+    onError: (error) => toast.error(error.message || t("unableSaveSkill")),
   });
   const updateSkill = trpc.profile.updateSkill.useMutation({
     onSuccess: () => {
-      toast.success("Skill updated");
+      toast.success(t("skillUpdated"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to update skill"),
+    onError: (error) => toast.error(error.message || t("unableUpdateSkill")),
   });
 
   useEffect(() => {
@@ -1886,12 +1894,12 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.skillName.trim()) {
-      toast.error("Skill name is required.");
+      toast.error(t("skillRequired"));
       return;
     }
     const yearsOfExperience = form.yearsOfExperience.trim() ? Number(form.yearsOfExperience) : undefined;
     if (yearsOfExperience !== undefined && (!Number.isInteger(yearsOfExperience) || yearsOfExperience < 0 || yearsOfExperience > 80)) {
-      toast.error("Years of experience must be a whole number between 0 and 80.");
+      toast.error(t("skillYearsInvalid"));
       return;
     }
     const payload = {
@@ -1909,30 +1917,30 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }
       <DialogTrigger asChild>
         <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
-          Add Skill
+          {t("addSkill")}
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-slate-900 border-slate-700">
         <DialogHeader>
           <DialogTitle className="text-white">
-            {editing ? "Edit Skill" : "Add Skill"}
+            {editing ? t("editSkill") : t("addSkill")}
           </DialogTitle>
           <DialogDescription>
-            Add a technical or professional skill
+            {t("skillDialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <FormField label="Skill" required><Input value={form.skillName} onChange={(event) => setForm((current) => ({ ...current, skillName: event.target.value }))} /></FormField>
+          <FormField label={t("skillLabel")} required><Input value={form.skillName} onChange={(event) => setForm((current) => ({ ...current, skillName: event.target.value }))} /></FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Category"><Input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Technical, leadership, language" /></FormField>
-            <FormField label="Proficiency">
+            <FormField label={t("categoryLabel")}><Input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Technical, leadership, language" /></FormField>
+            <FormField label={t("proficiencyLabel")}>
               <select className="flex h-9 w-full rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={form.proficiency} onChange={(event) => setForm((current) => ({ ...current, proficiency: event.target.value as SkillProficiency }))}>
-                <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option>
+                <option value="beginner">{t("beginnerLabel")}</option><option value="intermediate">{t("intermediateLabel")}</option><option value="advanced">{t("advancedLabel")}</option><option value="expert">{t("expertLabel")}</option>
               </select>
             </FormField>
           </div>
-          <FormField label="Years of experience"><Input type="number" min="0" max="80" value={form.yearsOfExperience} onChange={(event) => setForm((current) => ({ ...current, yearsOfExperience: event.target.value }))} /></FormField>
-          <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add skill"} onCancel={() => onOpenChange(false)} />
+          <FormField label={t("yearsExperience")}><Input type="number" min="0" max="80" value={form.yearsOfExperience} onChange={(event) => setForm((current) => ({ ...current, yearsOfExperience: event.target.value }))} /></FormField>
+          <DialogActions isSaving={isSaving} label={editing ? t("saveChanges") : t("addSkill")} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
     </Dialog>
@@ -1940,20 +1948,21 @@ function SkillDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }
 }
 
 function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false }: any) {
+  const { t } = useLocale();
   const [form, setForm] = useState(emptyProject());
   const addProject = trpc.profile.addProject.useMutation({
     onSuccess: () => {
-      toast.success("Project saved");
+      toast.success(t("projectSaved"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to save project"),
+    onError: (error) => toast.error(error.message || t("unableSaveProject")),
   });
   const updateProject = trpc.profile.updateProject.useMutation({
     onSuccess: () => {
-      toast.success("Project updated");
+      toast.success(t("projectUpdated"));
       onSuccess();
     },
-    onError: (error) => toast.error(error.message || "Unable to update project"),
+    onError: (error) => toast.error(error.message || t("unableUpdateProject")),
   });
 
   useEffect(() => {
@@ -1972,12 +1981,12 @@ function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.title.trim()) {
-      toast.error("Project title is required.");
+      toast.error(t("projectTitleRequired"));
       return;
     }
     const url = optionalText(form.url);
     if (url && !isHttpUrl(url)) {
-      toast.error("Project URL must start with http:// or https://.");
+      toast.error(t("projectUrlInvalid"));
       return;
     }
     const payload = {
@@ -1996,28 +2005,28 @@ function ProjectDialog({ open, onOpenChange, editing, onSuccess, atLimit = false
       <DialogTrigger asChild>
         <Button size="sm" disabled={atLimit && !editing} className="bg-gradient-to-r from-cyan-500 to-blue-600">
           <Plus className="w-4 h-4 mr-2" />
-          Add Project
+          {t("addProject")}
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-white">
-            {editing ? "Edit Project" : "Add Project"}
+            {editing ? t("editProject") : t("addProject")}
           </DialogTitle>
           <DialogDescription>
-            Showcase a portfolio project or side project
+            {t("projectDialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <FormField label="Project title" required><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></FormField>
-          <FormField label="Project URL"><Input type="url" value={form.url} onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))} placeholder="https://..." /></FormField>
-          <FormField label="Description"><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
-          <FormField label="Technologies"><Input value={form.technologies} onChange={(event) => setForm((current) => ({ ...current, technologies: event.target.value }))} placeholder="React, TypeScript, MySQL" /></FormField>
+          <FormField label={t("projectTitleLabel")} required><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></FormField>
+          <FormField label={t("projectUrlLabel")}><Input type="url" value={form.url} onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))} placeholder="https://..." /></FormField>
+          <FormField label={t("descriptionLabel")}><Textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></FormField>
+          <FormField label={t("technologiesField")}><Input value={form.technologies} onChange={(event) => setForm((current) => ({ ...current, technologies: event.target.value }))} placeholder="React, TypeScript, MySQL" /></FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Start date"><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
-            <FormField label="End date"><Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
+            <FormField label={t("startDateLabel")}><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></FormField>
+            <FormField label={t("endDateLabel")}><Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></FormField>
           </div>
-          <DialogActions isSaving={isSaving} label={editing ? "Save changes" : "Add project"} onCancel={() => onOpenChange(false)} />
+          <DialogActions isSaving={isSaving} label={editing ? t("saveChanges") : t("addProject")} onCancel={() => onOpenChange(false)} />
         </form>
       </DialogContent>
     </Dialog>
@@ -2036,9 +2045,10 @@ function FormField({ label, required = false, children }: { label: string; requi
 }
 
 function DialogActions({ isSaving, label, onCancel }: { isSaving: boolean; label: string; onCancel: () => void }) {
+  const { t } = useLocale();
   return (
     <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-      <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>Cancel</Button>
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>{t("cancel")}</Button>
       <Button type="submit" className="bg-gradient-to-r from-cyan-500 to-blue-600" disabled={isSaving}>
         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         {label}
@@ -2112,7 +2122,7 @@ function fileToBase64(file: File): Promise<string> {
 function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
   experience: any;
   locale: string;
-  t: (key: TranslationKey, values?: Record<string, string | number>) => string;
+  t: Translator;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -2124,10 +2134,10 @@ function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
           <p className="text-slate-400">{experience.company}</p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
+          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={t("editItem", { item: experience.jobTitle })}>
             <Pencil className="w-4 h-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-400 hover:text-red-300">
+          <Button size="sm" variant="ghost" onClick={onDelete} aria-label={t("deleteItem", { item: experience.jobTitle })} className="text-red-400 hover:text-red-300">
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -2142,7 +2152,12 @@ function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
   );
 }
 
-function EducationCard({ education, onEdit, onDelete }: any) {
+function EducationCard({ education, t, onEdit, onDelete }: {
+  education: any;
+  t: Translator;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="border border-slate-700 rounded-lg p-4 hover:border-cyan-500/50 transition-colors">
       <div className="flex justify-between items-start mb-2">
@@ -2151,10 +2166,10 @@ function EducationCard({ education, onEdit, onDelete }: any) {
           <p className="text-slate-400">{education.institution}</p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
+          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={t("editItem", { item: education.degree })}>
             <Pencil className="w-4 h-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-400 hover:text-red-300">
+          <Button size="sm" variant="ghost" onClick={onDelete} aria-label={t("deleteItem", { item: education.degree })} className="text-red-400 hover:text-red-300">
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -2163,13 +2178,13 @@ function EducationCard({ education, onEdit, onDelete }: any) {
         <p className="text-slate-400 text-sm mb-1">{education.fieldOfStudy}</p>
       )}
       <p className="text-sm text-slate-500">
-        {calendarYear(education.endDate) || (education.isCurrent ? "In Progress" : "End year not recorded")}
+        {calendarYear(education.endDate) || (education.isCurrent ? t("inProgressLabel") : t("endYearNotRecorded"))}
       </p>
     </div>
   );
 }
 
-function SkillBadge({ skill, onEdit, onDelete }: any) {
+function SkillBadge({ skill, t, onEdit, onDelete }: { skill: any; t: Translator; onEdit: () => void; onDelete: () => void }) {
   const proficiencyColors = {
     beginner: "bg-slate-700 text-slate-300",
     intermediate: "bg-blue-900/30 text-blue-400 border-blue-500/30",
@@ -2181,10 +2196,10 @@ function SkillBadge({ skill, onEdit, onDelete }: any) {
     <div className={`group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${proficiencyColors[skill.proficiency as keyof typeof proficiencyColors] || proficiencyColors.intermediate}`}>
       <span className="text-sm font-medium">{skill.skillName}</span>
       <div className="hidden group-hover:flex absolute -top-8 right-0 gap-1 bg-slate-800 border border-slate-700 rounded-md p-1">
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onEdit}>
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onEdit} aria-label={t("editItem", { item: skill.skillName })}>
           <Pencil className="w-3 h-3" />
         </Button>
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400" onClick={onDelete}>
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400" onClick={onDelete} aria-label={t("deleteItem", { item: skill.skillName })}>
           <Trash2 className="w-3 h-3" />
         </Button>
       </div>
@@ -2192,7 +2207,7 @@ function SkillBadge({ skill, onEdit, onDelete }: any) {
   );
 }
 
-function ProjectCard({ project, onEdit, onDelete }: any) {
+function ProjectCard({ project, t, onEdit, onDelete }: { project: any; t: Translator; onEdit: () => void; onDelete: () => void }) {
   return (
     <div className="border border-slate-700 rounded-lg p-4 hover:border-cyan-500/50 transition-colors">
       <div className="flex justify-between items-start mb-2">
@@ -2200,15 +2215,15 @@ function ProjectCard({ project, onEdit, onDelete }: any) {
           <h3 className="text-white font-semibold">{project.title}</h3>
           {project.url && isHttpUrl(project.url) && (
             <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 text-sm hover:underline">
-              View project
+              {t("viewProject")}
             </a>
           )}
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
+          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={t("editItem", { item: project.title })}>
             <Pencil className="w-4 h-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-400 hover:text-red-300">
+          <Button size="sm" variant="ghost" onClick={onDelete} aria-label={t("deleteItem", { item: project.title })} className="text-red-400 hover:text-red-300">
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -2217,7 +2232,7 @@ function ProjectCard({ project, onEdit, onDelete }: any) {
         <p className="text-slate-400 text-sm mb-2">{project.description}</p>
       )}
       {project.technologies && (
-        <p className="text-slate-500 text-xs">Technologies: {project.technologies}</p>
+        <p className="text-slate-500 text-xs">{t("technologiesLabel")}: {project.technologies}</p>
       )}
     </div>
   );

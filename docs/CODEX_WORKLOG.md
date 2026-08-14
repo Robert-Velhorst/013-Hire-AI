@@ -488,3 +488,10 @@
 - Made work-history start and end dates honor the persisted account locale, with localized present and missing-date fallbacks, while preserving provider-supplied and backend evidence text verbatim.
 - Verified the Dutch Profile flow in the in-app browser at desktop and mobile widths with no console warnings, errors, or horizontal overflow.
 - Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Candidate evidence editor localization pass
+
+- Localized Profile work-experience, education, skill, and project ledgers in English and Dutch, including section summaries, empty states, add/edit dialogs, validation, confirmations, mutation feedback, and display fallbacks.
+- Added accessible localized names to candidate-evidence edit/delete controls and moved the shared dialog close control from a hardcoded English label to the account locale for every dialog in the application.
+- Verified the Dutch Profile evidence workflow, empty-form validation, and shared Sluiten control in the in-app browser at desktop and mobile widths with no warnings, errors, or horizontal overflow.
+- Passed TypeScript, the production build and bundle budget, dependency audit, development doctor, patch-integrity checks, and the complete regression suite with one database-dependent privacy integration skipped.
