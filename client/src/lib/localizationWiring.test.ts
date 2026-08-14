@@ -123,6 +123,12 @@ describe("localization wiring", () => {
     expect(applications).toContain("offerOperatingCopy[selectedOfferSummary.status]");
     expect(applications).toContain('t("offerSuccessFeeControl")');
     expect(applications).toContain('new Intl.NumberFormat(locale');
+    expect(applications).toContain('t("applicationLedger")');
+    expect(applications).toContain('t("applicationLedgerCounts"');
+    expect(applications).toContain('t("recentEmployerResponses")');
+    expect(applications).toContain('t("recentAuditTrail")');
+    expect(applications).toContain('t("followUpsHeading")');
+    expect(applications).toContain('t("submissionApprovalWithStatus"');
     expect(applications).toContain("const renderApplicationCard = (application: any)");
     expect(applications).not.toContain("const ApplicationCard =");
     expect(applications).not.toContain(">Record Employer Response<");
@@ -132,6 +138,10 @@ describe("localization wiring", () => {
     expect(applications).not.toContain(">Operating status<");
     expect(applications).not.toContain(">Interview Control<");
     expect(applications).not.toContain(">Offer & Success-Fee Control<");
+    expect(applications).not.toContain(">Application Ledger<");
+    expect(applications).not.toContain(">Recent employer responses<");
+    expect(applications).not.toContain(">Recent audit trail<");
+    expect(applications).not.toContain(">Record Response<");
     expect(applications).not.toContain('placeholder="Example: Employer portal showed');
     expect(reviewQueue).toContain('t("completedLabel")');
     expect(translate("nl", "listingPosted")).toBe("Geplaatst");
@@ -144,6 +154,8 @@ describe("localization wiring", () => {
     expect(translate("nl", "trackedApplicationsCount", { count: 4 })).toBe("4 gevolgd");
     expect(translate("nl", "nextActionMonitor")).toBe("Bewaken");
     expect(translate("nl", "offerSuccessFeeControl")).toContain("succesvergoeding");
+    expect(translate("nl", "applicationLedgerCounts", { attempts: 1, responses: 2, prep: 0, audit: 3 })).toContain("2 recente reacties");
+    expect(translate("nl", "followUpSentThrough", { provider: "Gmail" })).toContain("Gmail");
   });
 
   it("localizes primary candidate evidence and resume controls", () => {

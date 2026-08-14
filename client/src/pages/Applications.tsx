@@ -383,7 +383,7 @@ export default function Applications() {
   });
   const createFollowUpMutation = trpc.applications.createFollowUp.useMutation({
     onSuccess: () => {
-      toast.success(followUpDraftPurpose === "employer_reply" ? "Employer reply draft saved" : "Follow-up draft saved");
+      toast.success(t(followUpDraftPurpose === "employer_reply" ? "employerReplyDraftSaved" : "followUpDraftSaved"));
       setFollowUpDraft("");
       setFollowUpApplicationId(null);
       setFollowUpDraftPurpose("routine_follow_up");
@@ -393,11 +393,11 @@ export default function Applications() {
       refetchLedgerArtifacts();
       refetchOperatingLedger();
     },
-    onError: (error) => toast.error(error.message || "Failed to save follow-up"),
+    onError: (error) => toast.error(error.message || t("followUpSaveFailed")),
   });
   const markFollowUpSentMutation = trpc.applications.markFollowUpSent.useMutation({
     onSuccess: () => {
-      toast.success("Follow-up marked as sent");
+      toast.success(t("followUpMarkedSent"));
       setConfirmingFollowUpSentId(null);
       setFollowUpDeliveryConfirmation("");
       refetchFollowUps();
@@ -405,11 +405,13 @@ export default function Applications() {
       refetch();
       refetchOperatingLedger();
     },
-    onError: (error) => toast.error(error.message || "Failed to update follow-up"),
+    onError: (error) => toast.error(error.message || t("followUpUpdateFailed")),
   });
   const sendFollowUpMutation = trpc.applications.sendFollowUp.useMutation({
     onSuccess: (result) => {
-      toast.success(result.existing ? "Follow-up was already sent" : `Follow-up sent through ${result.provider === "gmail" ? "Gmail" : "Outlook"}`);
+      toast.success(result.existing
+        ? t("followUpAlreadySent")
+        : t("followUpSentThrough", { provider: result.provider === "gmail" ? "Gmail" : "Outlook" }));
       setConfirmingFollowUpSentId(null);
       setFollowUpDeliveryConfirmation("");
       setFollowUpMailRecipient("");
@@ -418,16 +420,16 @@ export default function Applications() {
       refetch();
       refetchOperatingLedger();
     },
-    onError: (error) => toast.error(error.message || "Unable to send follow-up"),
+    onError: (error) => toast.error(error.message || t("followUpSendFailed")),
   });
   const markFollowUpResponseMutation = trpc.applications.markFollowUpResponse.useMutation({
     onSuccess: () => {
-      toast.success("Response recorded");
+      toast.success(t("responseRecorded"));
       refetchFollowUps();
       refetch();
       refetchOperatingLedger();
     },
-    onError: (error) => toast.error(error.message || "Failed to record response"),
+    onError: (error) => toast.error(error.message || t("responseRecordFailed")),
   });
   const confirmSubmissionMutation = trpc.applications.confirmSubmission.useMutation({
     onSuccess: () => {
@@ -623,6 +625,25 @@ export default function Applications() {
     accepted: t("statusAccepted"),
     withdrawn: t("statusWithdrawn"),
   })[status];
+
+  const getResponseTypeLabel = (responseType: string) => ({
+    viewed: t("applicationViewed"),
+    rejection: t("rejectionLabel"),
+    interview_invite: t("interviewInviteLabel"),
+    offer: t("offerLabel"),
+    employer_question: t("employerQuestionLabel"),
+    other: t("otherLabel"),
+  } as Record<string, string>)[responseType] || responseType.replace(/_/g, " ");
+
+  const getApprovalStatusLabel = (status?: string | null) => ({
+    approved: t("approvedLabel"),
+    pending: t("pendingLabel"),
+    rejected: t("statusRejected"),
+    cancelled: t("cancelledLabel"),
+  } as Record<string, string>)[status || ""] || t("neededLabel");
+
+  const getFollowUpStateLabel = (followUp: any) =>
+    followUp.responseReceived ? t("responseState") : followUp.sentDate ? t("sentState") : t("draftState");
 
   const getApplicationDateLabel = (application: any) => {
     const date = application.appliedDate || application.createdAt;
@@ -1863,7 +1884,7 @@ export default function Applications() {
                       <>
                         <Separator className="bg-slate-700" />
                         <div>
-                          <h4 className="text-sm font-medium text-slate-300 mb-2">Cover Letter</h4>
+                          <h4 className="text-sm font-medium text-slate-300 mb-2">{t("coverLetterLabel")}</h4>
                           <p className="text-sm text-slate-400 whitespace-pre-wrap bg-slate-800/50 p-3 rounded-md">
                             {selectedApplication.coverLetter}
                           </p>
@@ -1876,16 +1897,21 @@ export default function Applications() {
                         <Separator className="bg-slate-700" />
                         <div data-testid="application-ledger-section" className="space-y-3">
                           <div className="flex items-center justify-between gap-3">
-                            <h4 className="text-sm font-medium text-slate-300">Application Ledger</h4>
+                            <h4 className="text-sm font-medium text-slate-300">{t("applicationLedger")}</h4>
                             <Badge variant="outline" className="border-slate-600 text-slate-300">
-                              {(ledgerArtifacts?.attempts?.length || 0)}{ledgerArtifacts?.hasMore.attempts ? "+" : ""} recent attempts / {(ledgerArtifacts?.employerResponses?.length || 0)}{ledgerArtifacts?.hasMore.employerResponses ? "+" : ""} recent responses / {ledgerArtifacts?.interviewPreparation ? 1 : 0} prep / {(ledgerArtifacts?.auditEvents?.length || 0)}{ledgerArtifacts?.hasMore.auditEvents ? "+" : ""} recent audit
+                              {t("applicationLedgerCounts", {
+                                attempts: `${ledgerArtifacts?.attempts?.length || 0}${ledgerArtifacts?.hasMore.attempts ? "+" : ""}`,
+                                responses: `${ledgerArtifacts?.employerResponses?.length || 0}${ledgerArtifacts?.hasMore.employerResponses ? "+" : ""}`,
+                                prep: ledgerArtifacts?.interviewPreparation ? 1 : 0,
+                                audit: `${ledgerArtifacts?.auditEvents?.length || 0}${ledgerArtifacts?.hasMore.auditEvents ? "+" : ""}`,
+                              })}
                             </Badge>
                           </div>
 
                           {ledgerArtifactsLoading ? (
                             <div className="flex items-center gap-2 text-sm text-slate-400">
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              Loading ledger
+                              {t("loadingLedger")}
                             </div>
                           ) : (
                             <>
@@ -1893,15 +1919,15 @@ export default function Applications() {
                                 <div data-testid="application-material-evidence" className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <FileText className="h-4 w-4" />
-                                    Prepared material
+                                    {t("preparedMaterial")}
                                   </div>
                                   <div className="grid gap-2 text-sm text-slate-400">
-                                    <div>Resume: {selectedMaterialEvidence?.resumeLabel}</div>
+                                    <div>{t("resumeLabel")}: {selectedMaterialEvidence?.resumeLabel}</div>
                                     <div>{selectedMaterialEvidence?.coverLetterLabel}</div>
-                                    <div>Source: {selectedMaterialEvidence?.source}</div>
+                                    <div>{t("sourceLabel")}: {selectedMaterialEvidence?.source}</div>
                                     {(selectedMaterialEvidence?.customAnswerCount || 0) > 0 && (
                                       <div>
-                                        Custom answers: {selectedMaterialEvidence?.customAnswerCount} field{selectedMaterialEvidence?.customAnswerCount === 1 ? "" : "s"} captured
+                                        {t("customAnswersCaptured", { count: selectedMaterialEvidence?.customAnswerCount || 0 })}
                                       </div>
                                     )}
                                   </div>
@@ -1910,7 +1936,7 @@ export default function Applications() {
                                     <div className="mt-3 grid gap-3 lg:grid-cols-2">
                                       <div className="rounded-md border border-slate-700/70 bg-slate-900/60 p-3">
                                         <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                          Supported claims
+                                          {t("supportedClaims")}
                                         </div>
                                         {selectedMaterialEvidence.supportSignals.length > 0 ? (
                                           <div className="space-y-2">
@@ -1923,14 +1949,14 @@ export default function Applications() {
                                           </div>
                                         ) : (
                                           <p className="text-sm text-slate-500">
-                                            No explicit claim support signals were stored for this material.
+                                            {t("noClaimSupportSignals")}
                                           </p>
                                         )}
                                       </div>
 
                                       <div className="rounded-md border border-slate-700/70 bg-slate-900/60 p-3">
                                         <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                          Review blockers
+                                          {t("reviewBlockers")}
                                         </div>
                                         {selectedMaterialEvidence.blockers.length > 0 ? (
                                           <div className="space-y-2">
@@ -1943,7 +1969,7 @@ export default function Applications() {
                                           </div>
                                         ) : (
                                           <p className="text-sm text-slate-500">
-                                            No material-specific blockers were stored.
+                                            {t("noMaterialBlockers")}
                                           </p>
                                         )}
                                       </div>
@@ -1953,15 +1979,15 @@ export default function Applications() {
                                   {selectedMaterialEvidence && (
                                     <div className="mt-3 rounded-md border border-slate-700/70 bg-slate-900/60 p-3">
                                       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                        Profile evidence used
+                                        {t("profileEvidenceUsed")}
                                       </div>
                                       <div className="grid gap-2 text-sm text-slate-400 md:grid-cols-2">
-                                        <div>Skills: {selectedMaterialEvidence.profileEvidence.skills || "Not captured"}</div>
-                                        <div>Experience: {selectedMaterialEvidence.profileEvidence.experience || "Not captured"}</div>
-                                        <div>Education: {selectedMaterialEvidence.profileEvidence.education || "Not captured"}</div>
-                                        <div>Target roles: {selectedMaterialEvidence.profileEvidence.targetRoles || "Not captured"}</div>
-                                        <div>Target locations: {selectedMaterialEvidence.profileEvidence.targetLocations || "Not captured"}</div>
-                                        <div>Salary range: {selectedMaterialEvidence.profileEvidence.salaryRange || "Not captured"}</div>
+                                        <div>{t("skillsLabel")}: {selectedMaterialEvidence.profileEvidence.skills || t("notCaptured")}</div>
+                                        <div>{t("experienceLabel")}: {selectedMaterialEvidence.profileEvidence.experience || t("notCaptured")}</div>
+                                        <div>{t("educationLabel")}: {selectedMaterialEvidence.profileEvidence.education || t("notCaptured")}</div>
+                                        <div>{t("targetRolesLabel")}: {selectedMaterialEvidence.profileEvidence.targetRoles || t("notCaptured")}</div>
+                                        <div>{t("targetLocationsLabel")}: {selectedMaterialEvidence.profileEvidence.targetLocations || t("notCaptured")}</div>
+                                        <div>{t("salaryRange")}: {selectedMaterialEvidence.profileEvidence.salaryRange || t("notCaptured")}</div>
                                       </div>
                                       <p className="mt-3 border-t border-slate-700 pt-3 text-sm text-slate-300">
                                         {selectedMaterialEvidence.honestyNote}
@@ -1979,7 +2005,7 @@ export default function Applications() {
                                   )}
                                   {!selectedMaterialEvidence?.profileEvidence.resumeConnected && (
                                     <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                                      Resume evidence is not linked to this material. Keep this item in review until resume proof is attached.
+                                      {t("resumeEvidenceMissing")}
                                     </p>
                                   )}
                                 </div>
@@ -1989,7 +2015,7 @@ export default function Applications() {
                                 <div data-testid="interview-preparation-artifact" className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <Calendar className="h-4 w-4" />
-                                    Interview preparation
+                                    {t("interviewPreparation")}
                                   </div>
                                   {selectedInterviewPreparation.companyInsights && (
                                     <p className="mb-3 whitespace-pre-wrap rounded-md border border-slate-700/70 bg-slate-900/60 p-3 text-sm text-slate-300">
@@ -1999,7 +2025,7 @@ export default function Applications() {
                                   <div className="grid gap-3 lg:grid-cols-2">
                                     <div>
                                       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                        Practice questions
+                                        {t("practiceQuestions")}
                                       </div>
                                       <div className="space-y-2">
                                         {selectedInterviewPreparation.questions.map((question) => (
@@ -2012,7 +2038,7 @@ export default function Applications() {
                                     </div>
                                     <div>
                                       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                                        Coaching tips
+                                        {t("coachingTips")}
                                       </div>
                                       <div className="space-y-2">
                                         {selectedInterviewPreparation.tips.map((tip) => (
@@ -2058,7 +2084,7 @@ export default function Applications() {
                                 <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <MessageSquare className="h-4 w-4" />
-                                    Recent employer responses
+                                    {t("recentEmployerResponses")}
                                   </div>
                                   <div className="space-y-3">
                                     {ledgerArtifacts?.employerResponses?.slice(0, APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses).map((response) => (
@@ -2075,10 +2101,13 @@ export default function Applications() {
                                                     ? "border-red-500/30 text-red-300"
                                                     : "border-blue-500/30 text-blue-300"}
                                             >
-                                              {response.responseType.replace(/_/g, " ")}
+                                              {getResponseTypeLabel(response.responseType)}
                                             </Badge>
                                             <span className="text-sm text-slate-300">
-                                              {response.statusBefore} to {response.statusAfter}
+                                              {t("statusTransition", {
+                                                from: getStatusLabel(response.statusBefore as ApplicationStatus),
+                                                to: getStatusLabel(response.statusAfter as ApplicationStatus),
+                                              })}
                                             </span>
                                           </div>
                                           <span className="text-xs text-slate-500">{formatAttemptDate(response.receivedAt)}</span>
@@ -2086,7 +2115,7 @@ export default function Applications() {
                                         <p className="whitespace-pre-wrap text-sm text-slate-400">{response.summary}</p>
                                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                                           <div className="text-xs text-slate-500">
-                                            Source: {response.source.replace("_", " ")}
+                                            {t("sourceLabel")}: {response.source.replace("_", " ")}
                                           </div>
                                           {(response.responseType === "employer_question" || response.responseType === "other") && (
                                             <Button
@@ -2100,7 +2129,7 @@ export default function Applications() {
                                               ) : (
                                                 <MessageSquare className="mr-1 h-4 w-4" />
                                               )}
-                                              Draft Reply
+                                              {t("draftReply")}
                                             </Button>
                                           )}
                                         </div>
@@ -2114,7 +2143,7 @@ export default function Applications() {
                                 <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
                                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
                                     <Activity className="h-4 w-4" />
-                                    Recent audit trail
+                                    {t("recentAuditTrail")}
                                   </div>
                                   <div className="space-y-3">
                                     {ledgerArtifacts?.auditEvents?.slice(0, APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents).map((event) => (
@@ -2136,7 +2165,7 @@ export default function Applications() {
                                           <span className="text-xs text-slate-500">{formatAttemptDate(event.createdAt)}</span>
                                         </div>
                                         <div className="mt-1 text-xs text-slate-500">
-                                          {event.actor} via {event.source || "system"}
+                                          {t("auditActorVia", { actor: event.actor, source: event.source || t("systemLabel") })}
                                         </div>
                                       </div>
                                     ))}
@@ -2153,7 +2182,7 @@ export default function Applications() {
                       <>
                         <Separator className="bg-slate-700" />
                         <div className="space-y-3">
-                          <h4 className="text-sm font-medium text-slate-300">Follow-ups</h4>
+                          <h4 className="text-sm font-medium text-slate-300">{t("followUpsHeading")}</h4>
                           {followUps.map((followUp) => {
                             const approval = getFollowUpApproval(followUp.id);
                             const approvalStatus = approval?.status;
@@ -2170,7 +2199,7 @@ export default function Applications() {
                                           ? "border-emerald-500/30 text-emerald-300"
                                           : "border-amber-500/30 text-amber-300"}
                                     >
-                                      {followUp.responseReceived ? "Response" : followUp.sentDate ? "Sent" : "Draft"}
+                                      {getFollowUpStateLabel(followUp)}
                                     </Badge>
                                     {followUp.deliveryState && followUp.deliveryState !== "draft" && (
                                       <Badge
@@ -2194,7 +2223,9 @@ export default function Applications() {
                                             ? "border-red-500/30 text-red-300"
                                             : "border-amber-500/30 text-amber-300"}
                                       >
-                                        {approvalStatus ? `Approval ${approvalStatus}` : "Approval needed"}
+                                        {approvalStatus
+                                          ? t("approvalWithStatus", { status: getApprovalStatusLabel(approvalStatus) })
+                                          : t("approvalNeeded")}
                                       </Badge>
                                     )}
                                   </div>
@@ -2212,7 +2243,7 @@ export default function Applications() {
                                           })}
                                         >
                                           <CheckCircle className="mr-1 h-4 w-4" />
-                                          Approve
+                                          {t("approveAction")}
                                         </Button>
                                         <Button
                                           variant="ghost"
@@ -2225,7 +2256,7 @@ export default function Applications() {
                                           })}
                                         >
                                           <XCircle className="mr-1 h-4 w-4" />
-                                          Reject
+                                          {t("rejectAction")}
                                         </Button>
                                       </div>
                                     ) : approvalStatus === "approved" ? (
@@ -2239,7 +2270,7 @@ export default function Applications() {
                                         }}
                                       >
                                         <CheckCircle className="mr-1 h-4 w-4" />
-                                        Mark Sent
+                                        {t("markSent")}
                                       </Button>
                                     ) : null
                                   ) : !followUp.responseReceived ? (
@@ -2250,20 +2281,20 @@ export default function Applications() {
                                       onClick={() => markFollowUpResponseMutation.mutate({ followUpId: followUp.id })}
                                     >
                                       <MessageSquare className="mr-1 h-4 w-4" />
-                                      Mark Response
+                                      {t("markResponse")}
                                     </Button>
                                   ) : null}
                                 </div>
                                 <p className="whitespace-pre-wrap text-sm text-slate-400">{followUp.message}</p>
                                 {followUp.deliveryConfirmation && (
                                   <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2 text-xs text-emerald-100">
-                                    <span className="font-medium">Delivery confirmation: </span>
+                                    <span className="font-medium">{t("deliveryConfirmation")}: </span>
                                     {followUp.deliveryConfirmation}
                                   </div>
                                 )}
                                 {followUp.deliveryFailureMessage && (
                                   <div className="rounded border border-red-500/20 bg-red-500/5 p-2 text-xs text-red-100">
-                                    <span className="font-medium">Delivery needs review: </span>
+                                    <span className="font-medium">{t("deliveryNeedsReview")}: </span>
                                     {followUp.deliveryFailureMessage}
                                   </div>
                                 )}
@@ -2278,7 +2309,7 @@ export default function Applications() {
                               onClick={() => fetchNextFollowUpsPage()}
                             >
                               {followUpsFetchingNextPage && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              Load earlier follow-ups
+                              {t("loadEarlierFollowUps")}
                             </Button>
                           )}
                         </div>
@@ -2310,7 +2341,7 @@ export default function Applications() {
                                   ? "border-amber-500/30 text-amber-300"
                                   : "border-red-500/30 text-red-300"}
                             >
-                              Submission approval {approvalStatus}
+                              {t("submissionApprovalWithStatus", { status: getApprovalStatusLabel(approvalStatus) })}
                             </Badge>
                           )}
                           {evidenceBlocked && (
@@ -2319,7 +2350,7 @@ export default function Applications() {
                               variant="outline"
                               className="border-amber-500/30 text-amber-300"
                             >
-                              Evidence gated
+                              {t("evidenceGated")}
                             </Badge>
                           )}
                           {approvalStatus === "pending" && approval && (
@@ -2328,7 +2359,7 @@ export default function Applications() {
                                 variant="outline"
                                 size="sm"
                                 disabled={resolveApprovalMutation.isPending || evidenceBlocked}
-                                title={evidenceBlocked ? "Resolve profile evidence before approving this external handoff." : undefined}
+                                title={evidenceBlocked ? t("resolveEvidenceBeforeApproval") : undefined}
                                 onClick={() => resolveApprovalMutation.mutate({
                                   approvalId: approval.id,
                                   status: "approved",
@@ -2336,7 +2367,7 @@ export default function Applications() {
                                 })}
                               >
                                 <CheckCircle className="w-4 h-4 mr-1" />
-                                Approve
+                                {t("approveAction")}
                               </Button>
                               <Button
                                 variant="outline"
@@ -2349,7 +2380,7 @@ export default function Applications() {
                                 })}
                               >
                                 <XCircle className="w-4 h-4 mr-1" />
-                                Reject
+                                {t("rejectAction")}
                               </Button>
                             </>
                           )}
@@ -2363,7 +2394,7 @@ export default function Applications() {
                             }}
                           >
                             <CheckCircle className="w-4 h-4 mr-1" />
-                            Confirm Submitted
+                            {t("confirmSubmitted")}
                           </Button>
                         </div>
                       );
@@ -2378,7 +2409,7 @@ export default function Applications() {
                         disabled={updateStatusMutation.isPending || ["withdrawn", "rejected", "accepted"].includes(selectedApplication.status)}
                       >
                         <XCircle className="w-4 h-4 mr-1" />
-                        Withdraw
+                        {t("withdrawAction")}
                       </Button>
                     )}
                   </div>
@@ -2393,7 +2424,7 @@ export default function Applications() {
                       }
                     >
                       <MessageSquare className="w-4 h-4 mr-1" />
-                      Record Response
+                      {t("nextActionRecordResponse")}
                     </Button>
                     {selectedApplication.status === "offer" && (
                       <>
@@ -2404,7 +2435,7 @@ export default function Applications() {
                           onClick={() => openOfferAcceptanceDialog(selectedApplication)}
                         >
                           <CheckCircle className="w-4 h-4 mr-1" />
-                          Confirm Acceptance
+                          {t("confirmOfferAcceptanceTitle")}
                         </Button>
                         <Button
                           data-testid="decline-offer-open"

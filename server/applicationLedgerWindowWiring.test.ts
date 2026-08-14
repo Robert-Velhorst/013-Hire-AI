@@ -36,7 +36,7 @@ describe("application ledger detail windows", () => {
     expect(page).toContain("ledgerArtifacts?.hasMore.attempts");
     expect(page).toContain("ledgerArtifacts?.hasMore.employerResponses");
     expect(page).toContain("ledgerArtifacts?.hasMore.auditEvents");
-    expect(page).toContain("Recent employer responses");
-    expect(page).toContain("Recent audit trail");
+    expect(page).toContain('t("recentEmployerResponses")');
+    expect(page).toContain('t("recentAuditTrail")');
   });
 });

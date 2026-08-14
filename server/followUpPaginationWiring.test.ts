@@ -11,7 +11,7 @@ describe("follow-up pagination wiring", () => {
     expect(router).toContain("getFollowUpPage: protectedProcedure");
     expect(router).not.toContain("getFollowUps: protectedProcedure");
     expect(page).toContain("trpc.applications.getFollowUpPage.useInfiniteQuery");
-    expect(page).toContain("Load earlier follow-ups");
+    expect(page).toContain('t("loadEarlierFollowUps")');
     expect(page).not.toContain("followUps.slice(0, 3)");
     expect(service).toContain("export async function getFollowUps(applicationId: number, userId: number)");
     expect(service).toContain("const followUpsForApplication = await getFollowUps(applicationId, userId)");

@@ -544,3 +544,10 @@
 - Localized detail metrics, risk and approval boundaries, commands, interview timing labels, and success-fee currency display while retaining employer responses, audit reasons, and provider evidence verbatim.
 - Updated wiring regressions to require translation-key usage and verified the seeded Dutch offer workflow in the in-app browser; the browser-enforced compact width was 780 pixels and showed no horizontal overflow.
 - Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Applications ledger and history localization pass
+
+- Localized the Applications ledger/history shell, bounded artifact counts, material-evidence labels, response classifications and state transitions, audit framing, follow-up states and commands, footer controls, and follow-up mutation feedback.
+- Preserved cover-letter text, employer summaries, interview-preparation content, delivery confirmations and failures, provider references, and audit actor/action records verbatim as user/provider evidence.
+- Updated ledger and follow-up pagination wiring contracts to require translation keys and verified the seeded Dutch offer history in the in-app browser; its enforced compact width was 780 pixels with no horizontal overflow.
+- Passed TypeScript, 235 test files / 1,183 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
