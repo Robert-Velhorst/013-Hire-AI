@@ -13,6 +13,7 @@ import { trpc } from "@/lib/trpc";
 import { getApplicationDeepLink } from "@/lib/applicationDeepLinks";
 import { getInterviewSchedulingControl } from "@/lib/interviewSchedulingControl";
 import { formatCalendarDate } from "@/lib/calendarDate";
+import { useLocale } from "@/contexts/LocaleContext";
 import { getApprovalEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
 import {
   formatApplicationDecision,
@@ -50,6 +51,7 @@ type InboxResponseType = "rejection" | "interview_invite" | "offer" | "employer_
 export default function ReviewQueue() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { locale, t } = useLocale();
   const [sendHandoff, setSendHandoff] = useState<{ followUpId: number; label: string } | null>(null);
   const [deliveryConfirmation, setDeliveryConfirmation] = useState("");
   const [inboxResponseTypeOverrides, setInboxResponseTypeOverrides] = useState<Record<number, InboxResponseType>>({});
@@ -794,7 +796,7 @@ export default function ReviewQueue() {
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.job?.company || "Employer"}
-                                {item.scheduledAt ? ` - ${new Date(item.scheduledAt).toLocaleString()}` : ""}
+                                {item.scheduledAt ? ` - ${new Date(item.scheduledAt).toLocaleString(locale)}` : ""}
                               </p>
                             </div>
                             <Badge variant="outline" className="border-violet-500/40 text-violet-300">
@@ -858,7 +860,7 @@ export default function ReviewQueue() {
                               </p>
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.job?.company || "Employer"}
-                                {item.completedAt ? ` - completed ${new Date(item.completedAt).toLocaleDateString()}` : ""}
+                                {item.completedAt ? ` - ${t("completedLabel")} ${new Date(item.completedAt).toLocaleDateString(locale)}` : ""}
                               </p>
                             </div>
                             <Badge variant="outline" className="border-amber-500/40 text-amber-300">
@@ -1102,7 +1104,7 @@ export default function ReviewQueue() {
                               <p className="mt-1 text-sm text-muted-foreground">
                                 {item.jobTitle || item.action}
                                 {item.nextVerificationDue
-                                  ? ` - due ${formatCalendarDate(item.nextVerificationDue)}`
+                                  ? ` - ${t("dueLabel")} ${formatCalendarDate(item.nextVerificationDue, locale)}`
                                   : ""}
                               </p>
                             </div>
@@ -1275,7 +1277,7 @@ export default function ReviewQueue() {
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(event.createdAt).toLocaleString()}
+                            {new Date(event.createdAt).toLocaleString(locale)}
                             {event.source ? ` - ${event.source}` : ""}
                           </p>
                         </CardContent>

@@ -1164,7 +1164,7 @@ export default function Dashboard() {
                 </div>
                 {successFeeCompliance.nextVerificationDue && (
                   <p className="text-xs text-slate-500">
-                    Next verification: {formatCalendarDate(successFeeCompliance.nextVerificationDue)}
+                    Next verification: {formatCalendarDate(successFeeCompliance.nextVerificationDue, locale)}
                     {successFeeCompliance.daysUntilNextVerification !== null
                       ? ` (${successFeeCompliance.daysUntilNextVerification} days)`
                       : ""}

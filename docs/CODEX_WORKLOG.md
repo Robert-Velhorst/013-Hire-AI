@@ -473,3 +473,11 @@
 - Fixed locale switching so its confirmation uses the newly selected language instead of the stale render language.
 - Verified the Dutch settings and dashboard flows in the in-app browser, including mobile layout, with localized employer relationships and performance evidence, no horizontal overflow, and no console warnings or errors.
 - Passed TypeScript, the production build and bundle budget, dependency audit, development doctor, and the full regression suite: 235 files / 1,181 tests passed with one database-dependent privacy integration skipped.
+
+## 2026-08-14 - Core workflow locale presentation pass
+
+- Wired the persisted account locale through Job Search, Applications, and Review Queue date/time presentation, including audit timestamps and timezone-stable verification deadlines.
+- Reused locale-aware salary presentation for listing cards, filters, job details, and application details; localized compact listing-source and application-status labels.
+- Removed the false Dashboard-current state from the Applications account header.
+- Verified Dutch listing dates/salaries, application states/date ordering, review audit timestamps, and the Applications mobile width in the in-app browser with no warnings, errors, or horizontal overflow.
+- Passed TypeScript, production build and bundle budget, dependency audit, development doctor, and the full regression suite with one database-dependent privacy integration skipped.

@@ -70,10 +70,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { assessListingSafety } from "@shared/listingSafety";
+import { useLocale } from "@/contexts/LocaleContext";
 
 export default function JobSearch() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { locale, t } = useLocale();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedJobType, setSelectedJobType] = useState<JobTypeFilter>("all");
@@ -625,13 +627,13 @@ export default function JobSearch() {
               {(job.salaryMin || job.salaryMax) && (
                 <Badge variant="secondary" className="text-xs bg-slate-800 text-slate-300">
                   <DollarSign className="w-3 h-3 mr-1" />
-                  {formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency)}
+                  {formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, locale)}
                 </Badge>
               )}
               {listingDate && (
                 <Badge variant="secondary" className="text-xs bg-slate-800 text-slate-300">
                   <Clock className="w-3 h-3 mr-1" />
-                  {listingDate.source === "posted" ? "Posted" : "Discovered"} {listingDate.date.toLocaleDateString()}
+                  {listingDate.source === "posted" ? t("listingPosted") : t("listingDiscovered")} {listingDate.date.toLocaleDateString(locale)}
                 </Badge>
               )}
               {listingSafetyAssessment.status === "review" && (
@@ -1075,7 +1077,7 @@ export default function JobSearch() {
                   <span className="text-sm text-slate-300">
                     {selectedSalaryCurrency === "all"
                       ? "Choose a currency"
-                      : formatJobSalary(salaryRange[0], salaryRange[1], selectedSalaryCurrency)}
+                      : formatJobSalary(salaryRange[0], salaryRange[1], selectedSalaryCurrency, locale)}
                   </span>
                   {activeFilterCount > 0 && (
                     <Button data-testid="job-filter-clear" type="button" size="sm" variant="ghost" className="h-7 px-2 text-slate-300" onClick={resetFilters}>
@@ -1319,7 +1321,7 @@ export default function JobSearch() {
                                 <p className="mt-1 text-sm text-slate-200">
                                   {selectedJobSummary.ledgerDecisionLabel}
                                   {selectedJobSummary.ledgerUpdatedAt
-                                    ? ` recorded ${selectedJobSummary.ledgerUpdatedAt.toLocaleDateString()}`
+                                    ? ` ${t("recordedLabel")} ${selectedJobSummary.ledgerUpdatedAt.toLocaleDateString(locale)}`
                                     : ""}
                                 </p>
                               </div>
@@ -1461,7 +1463,7 @@ export default function JobSearch() {
                       {(selectedJob.salaryMin || selectedJob.salaryMax) && (
                         <Badge variant="secondary" className="bg-slate-800">
                           <DollarSign className="w-3 h-3 mr-1" />
-                  {formatJobSalary(selectedJob.salaryMin, selectedJob.salaryMax, selectedJob.salaryCurrency)}
+                  {formatJobSalary(selectedJob.salaryMin, selectedJob.salaryMax, selectedJob.salaryCurrency, locale)}
                         </Badge>
                       )}
                     </div>

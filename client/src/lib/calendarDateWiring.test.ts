@@ -23,8 +23,8 @@ describe("calendar date wiring", () => {
     const applications = source("client/src/pages/Applications.tsx");
     const reviewQueue = source("client/src/pages/ReviewQueue.tsx");
 
-    expect(dashboard).toContain("formatCalendarDate(successFeeCompliance.nextVerificationDue)");
-    expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue)");
-    expect(reviewQueue).toContain("formatCalendarDate(item.nextVerificationDue)");
+    expect(dashboard).toContain("formatCalendarDate(successFeeCompliance.nextVerificationDue, locale)");
+    expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)");
+    expect(reviewQueue).toContain("formatCalendarDate(item.nextVerificationDue, locale)");
   });
 });

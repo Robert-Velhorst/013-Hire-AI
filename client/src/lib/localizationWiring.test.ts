@@ -74,4 +74,22 @@ describe("localization wiring", () => {
     expect(translate("nl", "billingFees")).toBe("Facturatie en kosten");
     expect(translate("nl", "welcomeBack", { name: "Sam" })).toBe("Welkom terug, Sam!");
   });
+
+  it("uses the persisted locale for core workflow dates and salaries", () => {
+    const jobSearch = readFileSync(resolve(process.cwd(), "client/src/pages/JobSearch.tsx"), "utf8");
+    const applications = readFileSync(resolve(process.cwd(), "client/src/pages/Applications.tsx"), "utf8");
+    const reviewQueue = readFileSync(resolve(process.cwd(), "client/src/pages/ReviewQueue.tsx"), "utf8");
+
+    for (const source of [jobSearch, applications, reviewQueue]) {
+      expect(source).toContain("useLocale()");
+      expect(source).not.toContain(".toLocaleDateString()");
+      expect(source).not.toContain(".toLocaleString()");
+    }
+    expect(jobSearch).toContain("formatJobSalary(job.salaryMin, job.salaryMax, job.salaryCurrency, locale)");
+    expect(applications).toContain("formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)");
+    expect(applications).toContain("<AppHeader />");
+    expect(reviewQueue).toContain('t("completedLabel")');
+    expect(translate("nl", "listingPosted")).toBe("Geplaatst");
+    expect(translate("nl", "statusWithdrawn")).toBe("Ingetrokken");
+  });
 });

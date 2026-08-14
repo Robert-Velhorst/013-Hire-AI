@@ -16,6 +16,7 @@ import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGate
 import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
 import { formatJobSalary } from "@/lib/jobSalary";
 import { formatCalendarDate } from "@/lib/calendarDate";
+import { useLocale } from "@/contexts/LocaleContext";
 import { APPLICATION_LEDGER_WINDOW_LIMITS } from "@shared/applicationLedgerWindow";
 import { useLocation } from "wouter";
 import AppHeader from "@/components/AppHeader";
@@ -112,6 +113,7 @@ function defaultInterviewDateTimeLocal() {
 export default function Applications() {
   const { user, loading: authLoading } = useAuth();
   const [location, setLocation] = useLocation();
+  const { locale, t } = useLocale();
   const applicationDeepLink = useMemo(() => {
     const source = location.includes("?") ? location : window.location.search;
     return parseApplicationDeepLink(source);
@@ -559,17 +561,25 @@ export default function Applications() {
     }
   };
 
-  const getStatusLabel = (status: ApplicationStatus) =>
-    status === "pending" ? "Queued" : status.charAt(0).toUpperCase() + status.slice(1);
+  const getStatusLabel = (status: ApplicationStatus) => ({
+    pending: t("queuedLabel"),
+    applied: t("appliedLabel"),
+    viewed: t("statusViewed"),
+    interview: t("statusInterview"),
+    offer: t("statusOffer"),
+    rejected: t("statusRejected"),
+    accepted: t("statusAccepted"),
+    withdrawn: t("statusWithdrawn"),
+  })[status];
 
   const getApplicationDateLabel = (application: any) => {
     const date = application.appliedDate || application.createdAt;
-    const prefix = application.status === "pending" ? "Queued" : "Applied";
-    return `${prefix} ${new Date(date).toLocaleDateString()}`;
+    const prefix = application.status === "pending" ? t("queuedLabel") : t("appliedLabel");
+    return `${prefix} ${new Date(date).toLocaleDateString(locale)}`;
   };
 
   const formatAttemptDate = (date?: string | Date | null) =>
-    date ? new Date(date).toLocaleString() : "In progress";
+    date ? new Date(date).toLocaleString(locale) : t("inProgress");
 
   const getFollowUpApproval = (followUpId: number) =>
     approvals?.find((approval) =>
@@ -1051,7 +1061,7 @@ export default function Applications() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <AppHeader currentPage="dashboard" />
+        <AppHeader />
         <div className="flex items-center justify-center h-[calc(100vh-80px)]">
           <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
         </div>
@@ -1061,7 +1071,7 @@ export default function Applications() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <AppHeader currentPage="dashboard" />
+      <AppHeader />
       <div className="container mx-auto px-4 py-8 space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1324,7 +1334,7 @@ export default function Applications() {
                       {selectedApplication.job?.salaryMin && (
                         <Badge variant="secondary" className="bg-slate-800">
                           <DollarSign className="w-3 h-3 mr-1" />
-                          {formatJobSalary(selectedApplication.job.salaryMin, selectedApplication.job.salaryMax, selectedApplication.job.salaryCurrency)}
+                          {formatJobSalary(selectedApplication.job.salaryMin, selectedApplication.job.salaryMax, selectedApplication.job.salaryCurrency, locale)}
                         </Badge>
                       )}
                       {selectedApplication.job?.platformName && (
@@ -1554,7 +1564,7 @@ export default function Applications() {
                             [
                               "Next",
                               selectedInterviewSummary.nextInterviewAt
-                                ? selectedInterviewSummary.nextInterviewAt.toLocaleString()
+                                ? selectedInterviewSummary.nextInterviewAt.toLocaleString(locale)
                                 : "None",
                             ],
                           ].map(([label, value]) => (
@@ -1728,7 +1738,7 @@ export default function Applications() {
                             [
                               "Verification",
                               selectedOfferSummary.nextVerificationDue
-                                ? formatCalendarDate(selectedOfferSummary.nextVerificationDue)
+                                ? formatCalendarDate(selectedOfferSummary.nextVerificationDue, locale)
                                 : "Not due",
                             ],
                           ].map(([label, value]) => (

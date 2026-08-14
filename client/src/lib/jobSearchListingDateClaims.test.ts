@@ -9,7 +9,8 @@ describe("job search listing-date rendering", () => {
     expect(jobSearch).toContain("getJobListingDate(job)");
     expect(jobSearch).not.toContain("job.postedAt");
     expect(jobSearch).toMatch(
-      /listingDate\.source\s*===\s*"posted"\s*\?\s*"Posted"\s*:\s*"Discovered"/
+      /listingDate\.source\s*===\s*"posted"\s*\?\s*t\("listingPosted"\)\s*:\s*t\("listingDiscovered"\)/
     );
+    expect(jobSearch).toContain("listingDate.date.toLocaleDateString(locale)");
   });
 });
