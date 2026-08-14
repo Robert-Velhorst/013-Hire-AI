@@ -9,13 +9,15 @@ describe("cookie-origin middleware wiring", () => {
       "utf8"
     );
     const stripe = entrypoint.indexOf("registerStripeWebhook(app)");
+    const rateLimit = entrypoint.indexOf("registerApiRateLimit(app)");
     const hai = entrypoint.indexOf("registerHaiConnectorRoutes(app)");
     const origin = entrypoint.indexOf("registerCookieOriginProtection(app)");
     const parsers = entrypoint.indexOf("registerApplicationBodyParsers(app)");
     const trpc = entrypoint.indexOf('app.use(\n    "/api/trpc"');
 
     expect(stripe).toBeGreaterThan(-1);
-    expect(hai).toBeGreaterThan(stripe);
+    expect(rateLimit).toBeGreaterThan(stripe);
+    expect(hai).toBeGreaterThan(rateLimit);
     expect(origin).toBeGreaterThan(hai);
     expect(parsers).toBeGreaterThan(origin);
     expect(trpc).toBeGreaterThan(parsers);

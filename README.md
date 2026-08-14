@@ -354,6 +354,8 @@ Forwarded request metadata is trusted only from a loopback peer, matching the lo
 
 Unsafe requests carrying the Hire.AI session cookie must also provide an `Origin` that exactly matches the effective request scheme and host. Missing, opaque, malformed, and cross-site origins receive `403` before body parsing or tRPC execution. Stripe webhooks and the bearer-authenticated HAI connector are registered before this browser-session boundary and retain their own signature/token verification.
 
+All non-Stripe `/api` traffic has a per-client budget of 600 requests per 60 seconds. The limiter uses trusted `req.ip`, returns `RateLimit-*` and `Retry-After` guidance, has no timers or database writes, and holds at most 10,000 client windows before evicting the oldest. Health checks and signed Stripe webhook retries are outside this budget. The policy is deliberately per process; multi-instance public deployments must also configure an upstream distributed limiter or gateway policy.
+
 > **Note for contributors:** All CJS npm packages must be loaded via `createRequire(import.meta.url)` rather than ESM `import ... from` syntax to avoid `ERR_MODULE_NOT_FOUND` in the production ESM build. See `server/resumeParser.ts` for the established pattern.
 
 ---

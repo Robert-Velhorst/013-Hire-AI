@@ -662,3 +662,11 @@
 - Kept Stripe's raw-body signature route and the bounded bearer-authenticated HAI route ahead of the origin middleware so each external boundary retains its correct authentication contract.
 - Compared against the effective direct/trusted-proxy protocol and request host, preserving standalone Windows and local-ngrok operation without accepting unrelated origins.
 - Added real loopback HTTP regressions for unauthenticated, same-origin, missing-origin, cross-site, opaque-origin, and public HTTPS ngrok-style requests plus a route-order contract. Passed 248 test files / 1,220 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact pushed-commit evidence follows at publication.
+
+## 2026-08-14 - Bounded inbound API rate pass
+
+- Added a fixed-window budget of 600 requests per trusted client per minute across non-Stripe `/api` routes, returning deterministic `RateLimit-*`, `Retry-After`, and `429` responses.
+- Kept signed Stripe webhook delivery ahead of the limiter and health checks outside `/api`, preserving provider retry and deployment-probe behavior while bounding tRPC, OAuth, connector, and HAI traffic.
+- Implemented a timer-free, database-free state store capped at 10,000 clients with periodic expired-window pruning and constant-time oldest-entry eviction at capacity.
+- Reused Express's loopback-scoped trusted client identity so separate ngrok callers receive separate budgets without accepting spoofed forwarded addresses from direct network peers.
+- Added real HTTP coverage for limit exhaustion, reset, standard response guidance, proxy identity separation, health exemption, invalid startup policy, and memory-cap eviction plus route-order protection. Passed 249 test files / 1,225 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact pushed-commit evidence follows at publication.

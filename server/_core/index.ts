@@ -31,6 +31,7 @@ import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { registerApplicationBodyParsers } from "./bodyParsers";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
+import { registerApiRateLimit } from "./apiRateLimit";
 
 let startupStage: StartupStage = "configuration validation";
 
@@ -74,6 +75,9 @@ async function startServer() {
   });
   // Stripe webhook MUST be registered before express.json() to preserve raw body for signature verification
   registerStripeWebhook(app);
+  // Stripe owns signature verification and retry semantics. Rate-limit all
+  // remaining API boundaries without throttling provider webhook delivery.
+  registerApiRateLimit(app);
   // The HAI bridge owns its bounded JSON parser and must be registered before
   // the general application parser can accept a larger request body.
   registerHaiConnectorRoutes(app);
