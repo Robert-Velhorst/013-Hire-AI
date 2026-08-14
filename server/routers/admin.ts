@@ -23,7 +23,7 @@ import {
   calculateNextVerificationDue,
   calculateVerificationGraceExpiry,
 } from "../successFeeDates";
-import { eq, desc, and, lt, sql, isNotNull, or } from "drizzle-orm";
+import { eq, desc, and, lt, sql, isNotNull, or, inArray } from "drizzle-orm";
 import { getStripeClient } from "../stripeClient";
 import { buildPrivacyErasurePreview } from "../privacyRetention";
 import { storageGet } from "../storage";
@@ -434,6 +434,15 @@ export const adminRouter = router({
       const conditions =
         input.status !== "all" ? [eq(successFees.status, input.status as any)] : [];
 
+      const feeWindow = await db
+        .select({ id: successFees.id })
+        .from(successFees)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(successFees.createdAt), desc(successFees.id))
+        .limit(input.limit)
+        .offset(input.offset);
+      if (feeWindow.length === 0) return [];
+
       const fees = await db
         .select({
           id: successFees.id,
@@ -457,10 +466,8 @@ export const adminRouter = router({
         })
         .from(successFees)
         .leftJoin(users, eq(successFees.userId, users.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(successFees.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
+        .where(inArray(successFees.id, feeWindow.map((fee) => fee.id)))
+        .orderBy(desc(successFees.createdAt), desc(successFees.id));
 
       return fees;
     }),

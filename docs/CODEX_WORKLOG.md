@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-08-14 - Deterministic admin fee query plans
+
+- Split the admin success-fee page into an indexed, deterministic ID window followed by a bounded user-details join, preventing MySQL from choosing a user-scoped index for the global page.
+- Added global creation/ID and status/creation/ID indexes plus a migration, and made timestamp ties deterministic with descending ID order.
+- Added a rollback-only 5,000-row MySQL 8.4 query-plan audit to container CI. Local acceptance confirmed both windows use their exact indexes with backward index scans and no full scan or filesort.
+
 ## 2026-08-09 - Cursor-paged application follow-ups
 
 - Replaced the selected-application full follow-up history read with deterministic 10-record cursor pages and incremental loading.

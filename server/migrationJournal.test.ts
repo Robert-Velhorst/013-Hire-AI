@@ -435,6 +435,22 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("ADD COLUMN `locale` varchar(10) NOT NULL DEFAULT 'en'");
   });
 
+  it("keeps admin success-fee window indexes aligned with the schema", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0073_success_fee_admin_window_indexes.sql"),
+      "utf8"
+    );
+
+    for (const indexName of [
+      "success_fees_created_id_idx",
+      "success_fees_status_created_id_idx",
+    ]) {
+      expect(schema).toContain(`index("${indexName}")`);
+      expect(migration).toContain(`CREATE INDEX \`${indexName}\``);
+    }
+  });
+
   it("keeps workspace governance constraints and indexes aligned with the schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

@@ -1077,6 +1077,8 @@ export const successFees = mysqlTable("success_fees", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
   uniqueIndex("success_fees_stripe_subscription_unique").on(table.stripeSubscriptionId),
+  index("success_fees_created_id_idx").on(table.createdAt, table.id),
+  index("success_fees_status_created_id_idx").on(table.status, table.createdAt, table.id),
   index("success_fees_user_status_idx").on(table.userId, table.status),
   index("success_fees_user_created_id_idx").on(table.userId, table.createdAt, table.id),
   index("success_fees_user_application_created_idx").on(table.userId, table.applicationId, table.createdAt, table.id),

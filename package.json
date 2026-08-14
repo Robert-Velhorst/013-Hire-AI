@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
-    "build": "vite build && node scripts/check-production-bundle.mjs && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --bundle --format=esm --outdir=dist && esbuild scripts/database-schema-audit.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/database-schema-audit.js",
+    "build": "vite build && node scripts/check-production-bundle.mjs && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --bundle --format=esm --outdir=dist && esbuild scripts/database-schema-audit.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/database-schema-audit.js && esbuild scripts/database-query-plan-audit.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/database-query-plan-audit.js",
     "start": "node dist/index.js",
     "start:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
     "start:ngrok": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ngrok.ps1",
@@ -20,6 +20,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/database-migrate.mjs",
     "db:audit-schema": "node dist/database-schema-audit.js",
+    "db:audit-query-plans": "node dist/database-query-plan-audit.js",
     "db:push": "node scripts/database-migrate.mjs"
   },
   "dependencies": {
