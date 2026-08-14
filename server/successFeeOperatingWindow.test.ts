@@ -59,7 +59,7 @@ describe("success-fee operating window", () => {
     expect(applications).not.toContain("trpc.successFees.getMyFees.useQuery");
     expect(billing).toContain("trpc.successFees.listMyFeePage.useInfiniteQuery");
     expect(billing).toContain("trpc.successFees.getMyFeeSummary.useQuery");
-    expect(billing).toContain("Load older arrangements");
+    expect(billing).toContain('t("loadOlderArrangements")');
   });
 
   it("accepts the pagination direction added by tRPC infinite queries", async () => {

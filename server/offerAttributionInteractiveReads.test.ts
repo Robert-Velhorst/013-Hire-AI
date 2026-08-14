@@ -38,7 +38,7 @@ describe("bounded interactive offer-attribution reads", () => {
     expect(applications).toContain("listOfferAttributionReviewsForApplications.useQuery");
     expect(dialog).toContain("listOfferAttributionReviewsForApplications.useQuery");
     expect(billing).toContain("getOfferAttributionReviewPage.useQuery({ limit: 25 })");
-    expect(billing).toContain("Showing 25 of {offerAttributionReviewPage.total}");
+    expect(billing).toContain('t("showingPendingReviews", { shown: 25, total: offerAttributionReviewPage.total })');
     expect(billing).toContain('setLocation("/applications")');
     expect(applications).not.toContain("getOfferAttributionReviews.useQuery");
     expect(dialog).not.toContain("getOfferAttributionReviews.useQuery");

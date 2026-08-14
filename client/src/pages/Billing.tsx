@@ -87,6 +87,7 @@ interface VerificationUploadDialogProps {
 }
 
 function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess }: VerificationUploadDialogProps) {
+  const { t } = useLocale();
   const [file, setFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string>("");
   const [documentType, setDocumentType] = useState<"paystub" | "employment_letter" | "bank_statement" | "other">("paystub");
@@ -95,7 +96,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
 
   const submitVerification = trpc.successFees.submitVerification.useMutation({
     onSuccess: () => {
-      toast.success("Verification document submitted successfully!");
+      toast.success(t("verificationSubmitted"));
       fileReadIdRef.current += 1;
       setFile(null);
       setFileBase64("");
@@ -103,7 +104,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
       onSuccess();
       onOpenChange(false);
     },
-    onError: (err) => toast.error(err.message || "Failed to submit verification"),
+    onError: (err) => toast.error(err.message || t("verificationSubmitFailed")),
   });
 
   const resetUpload = () => {
@@ -137,7 +138,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
       setFileBase64(base64);
     } catch (error) {
       if (readId === fileReadIdRef.current) {
-        toast.error(error instanceof Error ? error.message : "Unable to read the selected file.");
+        toast.error(error instanceof Error ? error.message : t("fileReadFailed"));
         e.target.value = "";
       }
     }
@@ -147,23 +148,23 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md bg-[#0d1117] border-[#21262d] text-white">
         <DialogHeader>
-          <DialogTitle>Submit Verification Document</DialogTitle>
+          <DialogTitle>{t("submitVerificationDocument")}</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Upload proof of continued employment (paystub, employment letter, or bank statement).
+            {t("verificationDocumentDescription")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-2">
           <div className="space-y-1.5">
-            <Label className="text-gray-300">Document Type</Label>
+            <Label className="text-gray-300">{t("documentType")}</Label>
             <Select value={documentType} onValueChange={(v) => setDocumentType(v as typeof documentType)}>
               <SelectTrigger className="bg-[#161b22] border-[#30363d] text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-[#161b22] border-[#30363d]">
-                <SelectItem value="paystub">Paystub</SelectItem>
-                <SelectItem value="employment_letter">Employment Letter</SelectItem>
-                <SelectItem value="bank_statement">Bank Statement</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                <SelectItem value="paystub">{t("paystub")}</SelectItem>
+                <SelectItem value="employment_letter">{t("employmentLetter")}</SelectItem>
+                <SelectItem value="bank_statement">{t("bankStatement")}</SelectItem>
+                <SelectItem value="other">{t("otherLabel")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -180,7 +181,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
             ) : (
               <div className="text-gray-500">
                 <Upload className="w-6 h-6 mx-auto mb-1" />
-                <p className="text-sm">Click to upload a document or image</p>
+                <p className="text-sm">{t("clickToUploadDocument")}</p>
               </div>
             )}
           </div>
@@ -191,7 +192,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
             disabled={!file || !fileBase64 || submitVerification.isPending}
             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
           >
-            {submitVerification.isPending ? "Uploading..." : "Submit Verification"}
+            {submitVerification.isPending ? t("uploading") : t("submitVerification")}
           </Button>
         </div>
       </DialogContent>
@@ -201,7 +202,7 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
 
 export default function Billing() {
   const { user, loading: authLoading } = useAuth();
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const [, setLocation] = useLocation();
   const [reportHireOpen, setReportHireOpen] = useState(false);
   const [reportHireApplicationId, setReportHireApplicationId] = useState<number | undefined>(undefined);
@@ -242,38 +243,38 @@ export default function Billing() {
   const reportEmploymentEnded = trpc.successFees.reportEmploymentEnded.useMutation({
     onSuccess: (data) => {
       setEmploymentEndResult(data);
-      toast.success("Employment end recorded for admin review.");
+      toast.success(t("employmentEndRecorded"));
       refetchFees();
     },
-    onError: (err) => toast.error(err.message || "Failed to report employment end"),
+    onError: (err) => toast.error(err.message || t("employmentEndReportFailed")),
   });
 
   const retryBillingCheckout = trpc.successFees.retryBillingCheckout.useMutation({
     onSuccess: (data) => {
       if (data.checkoutUrl) {
         if (!openExternalUrl(data.checkoutUrl)) {
-          toast.error("Stripe returned an invalid Checkout URL.");
+          toast.error(t("invalidCheckoutUrl"));
           return;
         }
       }
-      toast.success("Secure Stripe Checkout opened. No new success-fee record or subscription was created by Hire.AI.");
+      toast.success(t("checkoutOpened"));
       refetchFees();
     },
-    onError: (err) => toast.error(err.message || "Could not reopen secure Stripe Checkout"),
+    onError: (err) => toast.error(err.message || t("checkoutOpenFailed")),
   });
 
   const getBillingPortal = trpc.successFees.getBillingPortalUrl.useMutation({
     onSuccess: (data) => {
-      if (!openExternalUrl(data.url)) toast.error("The billing portal returned an invalid URL.");
+      if (!openExternalUrl(data.url)) toast.error(t("invalidBillingPortalUrl"));
     },
-    onError: (err) => toast.error(err.message || "Could not open billing portal"),
+    onError: (err) => toast.error(err.message || t("billingPortalOpenFailed")),
   });
 
   const offerLetterDownload = trpc.successFees.getOfferLetterDownloadUrl.useMutation({
     onSuccess: (data) => {
-      if (!openExternalUrl(data.url)) toast.error("The offer letter download URL is invalid.");
+      if (!openExternalUrl(data.url)) toast.error(t("invalidOfferLetterUrl"));
     },
-    onError: (err) => toast.error(err.message || "Could not open the offer letter"),
+    onError: (err) => toast.error(err.message || t("offerLetterOpenFailed")),
   });
 
   const activeFees = fees.filter(f => ["active", "pending_verification"].includes(f.status));
@@ -294,6 +295,17 @@ export default function Billing() {
     offerAttributionReviews.length
   );
   const complianceAction = getSuccessFeeComplianceAction(complianceSummary);
+  const complianceCopy = {
+    review_offer_attribution: ["offerAttributionReview", "offerAttributionReviewDetail", "openReviewQueue"],
+    resolve_disputed_fee: ["successFeeDisputeReview", "successFeeDisputeReviewDetail", "reviewBilling"],
+    resolve_suspended_payment: ["paymentRecoveryRequired", "paymentRecoveryDetail", "reviewBilling"],
+    review_paused_billing: ["pausedBillingReview", "pausedBillingReviewDetail", "reviewBilling"],
+    submit_verification: ["verificationOverdue", "verificationOverdueDetail", "submitVerification"],
+    prepare_verification: ["verificationPending", "verificationPendingDetail", "reviewFees"],
+    monitor: ["complianceCurrent", "complianceCurrentDetail", "viewFees"],
+    report_hire: ["noActiveSuccessFee", "noActiveSuccessFeeDetail", "reportAcceptedHire"],
+  } satisfies Record<typeof complianceAction.id, [TranslationKey, TranslationKey, TranslationKey]>;
+  const [complianceLabelKey, complianceDetailKey, complianceCtaKey] = complianceCopy[complianceAction.id];
   const employmentEndFee = employmentEndFeeId
     ? fees.find((fee) => fee.id === employmentEndFeeId) ?? null
     : null;
@@ -301,6 +313,19 @@ export default function Billing() {
   const employmentEndCompletion = employmentEndResult
     ? getEmploymentEndCompletionSummary(employmentEndResult)
     : null;
+  const employmentEndHasSubscription = Boolean(employmentEndFee?.stripeSubscriptionId);
+  const employmentEndControlCheckpointKeys: TranslationKey[] = [
+    "employmentEndCheckpointDate",
+    employmentEndHasSubscription ? "employmentEndCheckpointStripe" : "employmentEndCheckpointNoStripe",
+    "employmentEndCheckpointStatus",
+    "employmentEndCheckpointAudit",
+  ];
+  const employmentEndCompletionCheckpointKeys: TranslationKey[] = [
+    "employmentEndCompleteStatus",
+    employmentEndResult?.stripeSubscriptionCancelled ? "employmentEndCompleteStripe" : "employmentEndCompleteNoStripe",
+    "employmentEndCompleteAudit",
+    "employmentEndCompleteReview",
+  ];
 
   const openEmploymentEndDialog = (feeId: number) => {
     setEmploymentEndFeeId(feeId);
@@ -349,7 +374,7 @@ export default function Billing() {
   if (!user) {
     return (
       <div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white">
-        <p>Please sign in to view billing.</p>
+        <p>{t("signInForBilling")}</p>
       </div>
     );
   }
@@ -360,8 +385,8 @@ export default function Billing() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-white">Billing & Success Fees</h1>
-            <p className="text-gray-400 mt-1">Manage your success fee arrangements and payment history</p>
+            <h1 className="text-2xl font-bold text-white">{t("billingSuccessFees")}</h1>
+            <p className="text-gray-400 mt-1">{t("billingDescription")}</p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             {fees.some(f => f.stripeSubscriptionId) && (
@@ -371,7 +396,7 @@ export default function Billing() {
                 disabled={getBillingPortal.isPending}
                 className="flex-1 border-[#30363d] text-gray-300 hover:bg-[#21262d] gap-1.5 sm:flex-none"
               >
-                <ExternalLink className="w-4 h-4" /> Billing Portal
+                <ExternalLink className="w-4 h-4" /> {t("billingPortal")}
               </Button>
             )}
             <Button
@@ -381,7 +406,7 @@ export default function Billing() {
               }}
               className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-black font-semibold gap-1.5 sm:flex-none"
             >
-              <PartyPopper className="h-4 w-4" /> Report a Hire
+              <PartyPopper className="h-4 w-4" /> {t("reportHire")}
             </Button>
           </div>
         </div>
@@ -392,7 +417,7 @@ export default function Billing() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-4 h-4 text-cyan-400" />
-                <span className="text-gray-400 text-sm">Active Fees</span>
+                <span className="text-gray-400 text-sm">{t("activeFees")}</span>
               </div>
               <p className="text-2xl font-bold text-white">{feeSummary?.activeFees ?? 0}</p>
             </CardContent>
@@ -401,7 +426,7 @@ export default function Billing() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="w-4 h-4 text-cyan-400" />
-                <span className="text-gray-400 text-sm">Monthly Fees</span>
+                <span className="text-gray-400 text-sm">{t("monthlyFees")}</span>
               </div>
               <div className="space-y-1">
                 {monthlyByCurrency.length > 0 ? monthlyByCurrency.map((total, index) => (
@@ -418,7 +443,7 @@ export default function Billing() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-green-400" />
-                <span className="text-gray-400 text-sm">Total Paid</span>
+                <span className="text-gray-400 text-sm">{t("totalPaid")}</span>
               </div>
               <div className="space-y-1">
                 {paidByCurrency.length > 0 ? paidByCurrency.map((total, index) => (
@@ -437,7 +462,7 @@ export default function Billing() {
           <CardHeader>
             <CardTitle className="text-white flex flex-wrap items-center gap-2">
               <Shield className="h-4 w-4 text-cyan-300" />
-              Success-fee operating control
+              {t("successFeeOperatingControl")}
               <ComplianceStatusBadge status={complianceSummary.status} />
             </CardTitle>
           </CardHeader>
@@ -445,19 +470,19 @@ export default function Billing() {
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-cyan-200">{complianceAction.label}</p>
+                  <p className="font-medium text-cyan-200">{t(complianceLabelKey)}</p>
                   <ComplianceRiskBadge risk={complianceAction.risk} />
                   <Badge className="border-[#30363d] bg-[#0d1117] text-gray-300">
-                    {complianceAction.approvalGated ? "Approval-gated" : "Internal"}
+                    {complianceAction.approvalGated ? t("billingApprovalGated") : t("internalAction")}
                   </Badge>
                   {complianceAction.proofRequired && (
                     <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-300">
-                      Proof required
+                      {t("proofRequired")}
                     </Badge>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-gray-400">{complianceAction.detail}</p>
-                <p className="mt-2 text-xs text-gray-500">{complianceSummary.nextAction}</p>
+                <p className="mt-2 text-sm text-gray-400">{t(complianceDetailKey)}</p>
+                <p className="mt-2 text-xs text-gray-500">{t(`successFeeNextAction_${complianceAction.id}` as TranslationKey)}</p>
               </div>
               <Button
                 data-testid="billing-compliance-primary"
@@ -466,24 +491,24 @@ export default function Billing() {
                 onClick={handleComplianceAction}
               >
                 <ClipboardCheck className="mr-2 h-4 w-4" />
-                {complianceAction.cta}
+                {t(complianceCtaKey)}
               </Button>
             </div>
 
             <div className="grid gap-2 text-xs text-gray-400 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                ["Offer reviews", complianceSummary.pendingOfferAttributions],
-                ["Suspended", complianceSummary.suspendedFees],
-                ["Paused", complianceSummary.pausedFees],
-                ["Disputed", complianceSummary.disputedFees],
-                ["Pending proof", complianceSummary.pendingVerification],
-                ["Overdue", complianceSummary.overdueVerifications],
-                ["Due soon", complianceSummary.dueSoonVerifications],
+                [t("offerReviews"), complianceSummary.pendingOfferAttributions],
+                [t("suspended"), complianceSummary.suspendedFees],
+                [t("paused"), complianceSummary.pausedFees],
+                [t("disputed"), complianceSummary.disputedFees],
+                [t("pendingProof"), complianceSummary.pendingVerification],
+                [t("overdue"), complianceSummary.overdueVerifications],
+                [t("dueSoon"), complianceSummary.dueSoonVerifications],
                 [
-                  "Next due",
+                  t("nextDue"),
                   complianceSummary.nextVerificationDue
                     ? formatBillingCalendarDate(complianceSummary.nextVerificationDue, locale)
-                    : "None",
+                    : t("noneLabel"),
                 ],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-md border border-[#30363d] bg-[#0d1117] p-3">
@@ -498,19 +523,19 @@ export default function Billing() {
         {/* How It Works */}
         <Card className="bg-[#161b22] border-[#21262d] mb-6">
           <CardContent className="p-4">
-            <p className="text-sm font-semibold text-cyan-400 mb-2">How Hire.AI Success Fees Work</p>
+            <p className="text-sm font-semibold text-cyan-400 mb-2">{t("howSuccessFeesWork")}</p>
             <div className="grid grid-cols-1 gap-4 text-xs text-gray-400 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
-                <span className="text-white font-medium">1. Free to Use</span>
-                <span>Use Hire.AI to automate your job search at no upfront cost.</span>
+                <span className="text-white font-medium">{t("successFeeStepOne")}</span>
+                <span>{t("successFeeStepOneDescription")}</span>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-white font-medium">2. Land a Job</span>
-                <span>Report your hire and upload your offer letter. We verify and set up a 5% monthly fee.</span>
+                <span className="text-white font-medium">{t("successFeeStepTwo")}</span>
+                <span>{t("successFeeStepTwoDescription")}</span>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-white font-medium">3. Ongoing Fee</span>
-                <span>Pay 5% of your monthly salary while employed. Verify every 90 days. Stop when you leave.</span>
+                <span className="text-white font-medium">{t("successFeeStepThree")}</span>
+                <span>{t("successFeeStepThreeDescription")}</span>
               </div>
             </div>
           </CardContent>
@@ -521,7 +546,7 @@ export default function Billing() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Offer Attribution Reviews
+                {t("offerAttributionReviews")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -539,10 +564,10 @@ export default function Billing() {
                           <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-300">
                             {review.approval.riskLevel}
                           </Badge>
-                          <span className="text-sm text-gray-400">Pending success-fee attribution</span>
+                          <span className="text-sm text-gray-400">{t("pendingSuccessFeeAttribution")}</span>
                         </div>
                         <p className="mt-2 font-medium text-white">
-                          {job?.title || "Application"}{job?.company ? ` at ${job.company}` : ""}
+                          {job?.title || t("applicationLabel")}{job?.company ? ` ${t("atCompany", { company: job.company })}` : ""}
                         </p>
                         {response?.summary ? (
                           <p className="mt-1 text-sm text-gray-400">{response.summary}</p>
@@ -550,8 +575,8 @@ export default function Billing() {
                           <p className="mt-1 text-sm text-gray-400">{review.approval.description}</p>
                         ) : null}
                         <p className="mt-2 text-xs text-gray-500">
-                          Approval #{review.approval.id}
-                          {response?.receivedAt ? ` - Response received ${formatBillingDate(response.receivedAt, locale)}` : ""}
+                          {t("approvalNumber", { id: review.approval.id })}
+                          {response?.receivedAt ? ` - ${t("responseReceived", { date: formatBillingDate(response.receivedAt, locale) })}` : ""}
                         </p>
                       </div>
                       <Button
@@ -561,7 +586,7 @@ export default function Billing() {
                           setReportHireOpen(true);
                         }}
                       >
-                        Report Hire
+                        {t("reportHire")}
                       </Button>
                     </div>
                   </div>
@@ -570,7 +595,7 @@ export default function Billing() {
               {offerAttributionReviewPage?.hasMore && (
                 <div className="flex flex-col gap-2 border-t border-amber-500/20 pt-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-amber-200">
-                    Showing 25 of {offerAttributionReviewPage.total} pending reviews.
+                    {t("showingPendingReviews", { shown: 25, total: offerAttributionReviewPage.total })}
                   </p>
                   <Button
                     type="button"
@@ -579,7 +604,7 @@ export default function Billing() {
                     onClick={() => setLocation("/applications")}
                   >
                     <Briefcase className="mr-2 h-4 w-4" />
-                    Open Applications
+                    {t("openApplications")}
                   </Button>
                 </div>
               )}
@@ -589,13 +614,13 @@ export default function Billing() {
 
         {/* Active Success Fees */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-white mb-4">Success Fee Arrangements</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t("successFeeArrangements")}</h2>
           {fees.length === 0 ? (
             <Card className="bg-[#161b22] border-[#21262d]">
               <CardContent className="p-8 text-center">
                 <Briefcase className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-400 font-medium">No success fees yet</p>
-                <p className="text-gray-500 text-sm mt-1">When you land a job through Hire.AI, report it here to set up your success fee arrangement.</p>
+                <p className="text-gray-400 font-medium">{t("noSuccessFees")}</p>
+                <p className="text-gray-500 text-sm mt-1">{t("noSuccessFeesDescription")}</p>
                 <Button
                   onClick={() => {
                     setReportHireApplicationId(undefined);
@@ -604,7 +629,7 @@ export default function Billing() {
                   className="mt-4 bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
                 >
                   <CheckCircle className="mr-2 h-4 w-4" />
-                  I Got Hired!
+                  {t("gotHired")}
                 </Button>
               </CardContent>
             </Card>
@@ -629,8 +654,8 @@ export default function Billing() {
                           <p className="text-gray-400 text-sm">{fee.employerName}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-cyan-400 font-bold">{formatBillingCurrency(fee.monthlyFeeAmount, fee.currency, locale)}<span className="text-gray-500 text-xs font-normal">/mo</span></p>
-                          <p className="text-gray-500 text-xs">{fee.feePercent}% of {formatBillingSalary(fee.monthlySalary, fee.currency, locale)}</p>
+                          <p className="text-cyan-400 font-bold">{formatBillingCurrency(fee.monthlyFeeAmount, fee.currency, locale)}<span className="text-gray-500 text-xs font-normal">{t("perMonth")}</span></p>
+                          <p className="text-gray-500 text-xs">{t("percentOfSalary", { percent: fee.feePercent, salary: formatBillingSalary(fee.monthlySalary, fee.currency, locale) })}</p>
                         </div>
                       </div>
 
@@ -639,25 +664,25 @@ export default function Billing() {
                         <div className={`flex items-center gap-2 text-xs p-2 rounded mb-3 ${isVerificationDue ? "bg-red-500/10 text-red-400 border border-red-500/20" : daysUntilVerification <= 14 ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" : "bg-[#0d1117] text-gray-500"}`}>
                           {isVerificationDue ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                           {isVerificationDue
-                            ? "Verification overdue! Submit proof of employment to avoid suspension."
+                            ? t("verificationOverdueWarning")
                             : daysUntilVerification <= 14
-                            ? `Verification due in ${daysUntilVerification} days`
-                            : `Next verification: ${formatBillingCalendarDate(fee.nextVerificationDue!, locale)}`}
+                            ? t("verificationDueInDays", { count: daysUntilVerification })
+                            : t("nextVerificationDate", { date: formatBillingCalendarDate(fee.nextVerificationDue!, locale) })}
                         </div>
                       )}
 
                       {fee.status === "pending_verification" && (
                         <div className="flex items-center gap-2 text-xs p-2 rounded mb-3 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
                           <Clock className="w-3.5 h-3.5" />
-                          Offer letter is under review. Billing begins only after you confirm in secure Stripe Checkout.
+                          {t("offerLetterUnderReview")}
                         </div>
                       )}
 
                       {needsBillingCheckout && (
                         <div className="mb-3 flex flex-col gap-2 rounded border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0 text-cyan-100">
-                            <p className="font-medium">Secure billing confirmation required</p>
-                            <p className="mt-1 text-cyan-100/70">Hire.AI will reuse an open Checkout session or replace only an expired one.</p>
+                            <p className="font-medium">{t("secureBillingRequired")}</p>
+                            <p className="mt-1 text-cyan-100/70">{t("secureBillingDescription")}</p>
                           </div>
                           <Button
                             size="sm"
@@ -667,24 +692,24 @@ export default function Billing() {
                             className="shrink-0 bg-cyan-500 text-xs font-semibold text-black hover:bg-cyan-600"
                           >
                             <ExternalLink className="mr-1 h-3 w-3" />
-                            {retryBillingCheckout.isPending ? "Opening..." : "Open Stripe Checkout"}
+                            {retryBillingCheckout.isPending ? t("opening") : t("openStripeCheckout")}
                           </Button>
                         </div>
                       )}
 
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                         <Calendar className="w-3.5 h-3.5" />
-                        Started {formatBillingCalendarDate(fee.startDate, locale)}
+                        {t("startedDate", { date: formatBillingCalendarDate(fee.startDate, locale) })}
                         {fee.hasOfferLetter && (
                           <>
-                            <span className="text-gray-600">·</span>
+                            <span className="text-gray-600" aria-hidden="true">&middot;</span>
                             <button
                               type="button"
                               onClick={() => offerLetterDownload.mutate({ successFeeId: fee.id })}
                               disabled={offerLetterDownload.isPending && offerLetterDownload.variables?.successFeeId === fee.id}
                               className="text-cyan-500 hover:underline disabled:opacity-60 flex items-center gap-0.5"
                             >
-                              <FileText className="w-3 h-3" /> Offer Letter
+                              <FileText className="w-3 h-3" /> {t("offerLetter")}
                             </button>
                           </>
                         )}
@@ -698,7 +723,7 @@ export default function Billing() {
                             onClick={() => setVerifyDialogFeeId(fee.id)}
                             className="border-[#30363d] text-gray-300 hover:bg-[#21262d] text-xs gap-1"
                           >
-                            <Upload className="w-3 h-3" /> Submit Verification
+                            <Upload className="w-3 h-3" /> {t("submitVerification")}
                           </Button>
                         )}
                         {["active", "pending_verification"].includes(fee.status) && (
@@ -709,7 +734,7 @@ export default function Billing() {
                             onClick={() => openEmploymentEndDialog(fee.id)}
                             className="border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs gap-1"
                           >
-                            <XCircle className="w-3 h-3" /> Report Employment Ended
+                            <XCircle className="w-3 h-3" /> {t("reportEmploymentEnded")}
                           </Button>
                         )}
                       </div>
@@ -726,7 +751,7 @@ export default function Billing() {
                     disabled={isFetchingNextFeePage}
                     className="border-[#30363d] text-gray-300 hover:bg-[#21262d]"
                   >
-                    {isFetchingNextFeePage ? "Loading..." : "Load older arrangements"}
+                    {isFetchingNextFeePage ? t("loadingShort") : t("loadOlderArrangements")}
                   </Button>
                 </div>
               )}
@@ -736,12 +761,12 @@ export default function Billing() {
 
         {/* Payment History */}
         <div>
-          <h2 className="text-lg font-semibold text-white mb-4">Payment History</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t("paymentHistory")}</h2>
           {payments.length === 0 ? (
             <Card className="bg-[#161b22] border-[#21262d]">
               <CardContent className="p-6 text-center">
                 <DollarSign className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                <p className="text-gray-400 text-sm">No payments yet</p>
+                <p className="text-gray-400 text-sm">{t("noPayments")}</p>
               </CardContent>
             </Card>
           ) : (
@@ -781,7 +806,7 @@ export default function Billing() {
                 disabled={isFetchingNextPaymentPage}
                 className="border-[#30363d] text-gray-300 hover:bg-[#21262d]"
               >
-                {isFetchingNextPaymentPage ? "Loading..." : "Load older payments"}
+                {isFetchingNextPaymentPage ? t("loadingShort") : t("loadOlderPayments")}
               </Button>
             </div>
           )}
@@ -813,9 +838,9 @@ export default function Billing() {
       >
         <DialogContent className="max-w-xl bg-[#0d1117] border-[#21262d] text-white">
           <DialogHeader>
-            <DialogTitle>Report Employment Ended</DialogTitle>
+            <DialogTitle>{t("reportEmploymentEnded")}</DialogTitle>
             <DialogDescription className="text-gray-400">
-              Record the end date and send the final success-fee obligation to admin review.
+              {t("reportEmploymentEndedDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -824,18 +849,18 @@ export default function Billing() {
               <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-200">
-                    {employmentEndCompletion.label}
+                    {t("employmentEndClosureRecorded")}
                   </Badge>
                   <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-200">
-                    Admin review
+                    {t("adminReview")}
                   </Badge>
                 </div>
-                <p className="mt-3 font-medium text-white">{employmentEndCompletion.headline}</p>
-                <p className="mt-1 text-sm text-gray-400">{employmentEndCompletion.detail}</p>
+                <p className="mt-3 font-medium text-white">{t("employmentEndReviewOpen")}</p>
+                <p className="mt-1 text-sm text-gray-400">{t("employmentEndCompletionDetail")}</p>
               </div>
 
               <div className="grid gap-2">
-                {employmentEndCompletion.checkpoints.map((checkpoint) => (
+                {employmentEndCompletion.checkpoints.map((checkpoint, index) => (
                   <div
                     key={checkpoint.label}
                     className="flex items-start gap-2 rounded-md border border-[#30363d] bg-[#161b22] p-3 text-sm text-gray-300"
@@ -847,7 +872,7 @@ export default function Billing() {
                     ) : (
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                     )}
-                    <span>{checkpoint.label}</span>
+                    <span>{t(employmentEndCompletionCheckpointKeys[index])}</span>
                   </div>
                 ))}
               </div>
@@ -858,7 +883,7 @@ export default function Billing() {
                   onClick={closeEmploymentEndDialog}
                   className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
                 >
-                  Done
+                  {t("done")}
                 </Button>
               </DialogFooter>
             </div>
@@ -875,7 +900,7 @@ export default function Billing() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="employment-end-date" className="text-gray-300">Employment End Date</Label>
+                <Label htmlFor="employment-end-date" className="text-gray-300">{t("employmentEndDate")}</Label>
                 <Input
                   id="employment-end-date"
                   type="date"
@@ -888,24 +913,26 @@ export default function Billing() {
               <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-200">
-                    {employmentEndControl.label}
+                    {t(employmentEndControl.canReport ? "employmentEndFinalReview" : "employmentEndNotReportable")}
                   </Badge>
                   <Badge className="border-[#30363d] bg-[#0d1117] text-gray-300">
-                    {employmentEndControl.risk}
+                    {t(employmentEndControl.risk === "high" ? "severityHigh" : "severityMedium")}
                   </Badge>
                 </div>
-                <p className="font-medium text-white">{employmentEndControl.headline}</p>
-                <p className="mt-1 text-sm text-gray-400">{employmentEndControl.detail}</p>
+                <p className="font-medium text-white">{t(employmentEndControl.canReport ? "employmentEndOpenReview" : "employmentEndClosedRecord")}</p>
+                <p className="mt-1 text-sm text-gray-400">
+                  {t(employmentEndHasSubscription ? "employmentEndStripeDetail" : "employmentEndLocalDetail", { date: formatBillingCalendarDate(employmentEndDate, locale) })}
+                </p>
               </div>
 
               <div className="grid gap-2">
-                {employmentEndControl.checkpoints.map((checkpoint) => (
+                {employmentEndControl.checkpoints.map((checkpoint, index) => (
                   <div
                     key={checkpoint}
                     className="flex items-start gap-2 rounded-md border border-[#30363d] bg-[#161b22] p-3 text-sm text-gray-300"
                   >
                     <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
-                    <span>{checkpoint}</span>
+                    <span>{t(employmentEndControlCheckpointKeys[index])}</span>
                   </div>
                 ))}
               </div>
@@ -917,7 +944,7 @@ export default function Billing() {
                   onClick={closeEmploymentEndDialog}
                   className="border-[#30363d] text-gray-300 hover:bg-[#21262d]"
                 >
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -931,13 +958,13 @@ export default function Billing() {
                   }}
                   className="bg-red-500 hover:bg-red-600 text-white"
                 >
-                  {reportEmploymentEnded.isPending ? "Recording..." : "Record Employment End"}
+                  {reportEmploymentEnded.isPending ? t("recording") : t("recordEmploymentEnd")}
                 </Button>
               </DialogFooter>
             </div>
           ) : (
             <div className="rounded-md border border-[#30363d] bg-[#161b22] p-4 text-sm text-gray-400">
-              Select an active success-fee record before reporting employment ended.
+              {t("selectActiveFeeFirst")}
             </div>
           )}
         </DialogContent>

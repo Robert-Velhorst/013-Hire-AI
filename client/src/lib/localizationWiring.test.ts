@@ -51,9 +51,16 @@ describe("localization wiring", () => {
     expect(aiPreferences).toContain('toLocaleTimeString(locale');
     expect(aiPreferences).not.toContain(">Save AI Preferences<");
     expect(aiPreferences).not.toContain(">Scheduled Background Runs<");
-    expect(billing).toContain("const { locale } = useLocale()");
+    expect(billing).toContain("const { locale, t } = useLocale()");
     expect(billing).toContain("formatBillingCurrency(total.totalCents, total.currency, locale)");
     expect(billing).toContain("t(cfg.labelKey)");
+    expect(billing).toContain('t("billingSuccessFees")');
+    expect(billing).toContain('t("submitVerificationDocument")');
+    expect(billing).toContain('t("reportEmploymentEnded")');
+    expect(billing).not.toContain(">Billing & Success Fees<");
+    expect(billing).not.toContain(">Payment History<");
+    expect(billing).not.toContain(">Submit Verification<");
+    expect(billing).not.toContain("Â·");
     expect(billing).not.toContain('new Intl.NumberFormat("en-US"');
     expect(jobAlerts).not.toContain("â€¢");
     expect(translate("en", "daysAgo", { count: 3 })).toBe("3 days ago");
@@ -61,6 +68,8 @@ describe("localization wiring", () => {
     expect(translate("en", "applicationsCount", { count: 10 })).toBe("10 applications");
     expect(translate("nl", "deletionStatusOpen")).toContain("geen gegevens verwijderd");
     expect(translate("nl", "jobTasksCount", { count: 4 })).toBe("4 vacaturtaken");
+    expect(translate("nl", "verificationDueInDays", { count: 4 })).toContain("4");
+    expect(translate("nl", "showingPendingReviews", { shown: 25, total: 31 })).toContain("25 van 31");
   });
 
   it("uses the shared localized header and localized onboarding on the dashboard", () => {

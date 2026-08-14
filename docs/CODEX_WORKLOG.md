@@ -502,3 +502,10 @@
 - Preserved provider names, candidate evidence, connector revocation details, and backend-generated readiness explanations verbatim so localization does not rewrite audit evidence or provider-supplied content.
 - Verified the Dutch social/search-target workflow, localized invalid-salary feedback, connector statuses, and responsive layout in the in-app browser at desktop and mobile widths with no warnings, errors, or horizontal overflow.
 - Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.
+
+## 2026-08-14 - Billing and success-fee localization pass
+
+- Localized the complete Billing workflow in English and Dutch: summaries, compliance actions, offer-attribution reviews, fee records, payment history, verification uploads, Stripe handoff feedback, and employment-end review controls.
+- Preserved employer-provided response evidence and provider error details verbatim, while replacing the corrupted offer-letter separator and keeping Stripe cancellation fail-closed before any local closure mutation.
+- Verified the Dutch Billing page, verification dialog, and employment-end evidence panel in the in-app browser with localized dates, no horizontal overflow, and no console warnings or errors.
+- Passed 235 test files / 1,183 tests with one database-dependent privacy integration skipped, plus TypeScript, production build and bundle budget, dependency audit, development doctor, and patch-integrity checks.

@@ -40,7 +40,7 @@ describe("bounded currency-correct payment history", () => {
 
     expect(billing).toContain("successFees.getPaymentPage.useInfiniteQuery");
     expect(billing).toContain("successFees.getPaymentSummary.useQuery");
-    expect(billing).toContain("Load older payments");
+    expect(billing).toContain('t("loadOlderPayments")');
     expect(billing).toContain("paidByCurrency.map");
     expect(billing).toContain("monthlyByCurrency.map");
     expect(billing).not.toContain("payments.filter(p => p.status === \"paid\").reduce");
