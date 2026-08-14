@@ -26,8 +26,15 @@ export interface AdminPaymentLike {
 
 export interface AdminOperatingSummary {
   status: "clear" | "watch" | "attention" | "critical";
-  label: string;
-  nextAction: string;
+  presentationId:
+    | "critical_legal"
+    | "critical_payments"
+    | "critical_verification"
+    | "attention_offer"
+    | "attention_employment_ended"
+    | "attention_overdue"
+    | "watch"
+    | "clear";
   totalOpenWork: number;
   criticalItems: number;
   highRiskItems: number;
@@ -87,12 +94,11 @@ export function getAdminOperatingSummary(input: {
   if (criticalItems > 0) {
     return {
       status: "critical",
-      label: "Critical review",
-      nextAction: legalEscalations > 0
-        ? "Review legal escalation items manually before any enforcement action."
+      presentationId: legalEscalations > 0
+        ? "critical_legal"
         : failedPayments > 0
-          ? "Review failed payment items and billing status before suspending accounts."
-          : "Review grace-expired verification items before suspension or escalation.",
+          ? "critical_payments"
+          : "critical_verification",
       totalOpenWork,
       criticalItems,
       highRiskItems,
@@ -110,12 +116,11 @@ export function getAdminOperatingSummary(input: {
   if (overdueVerifications > 0 || highRiskItems > 0 || offerAttributionReviews > 0 || employmentEndedReviews > 0) {
     return {
       status: "attention",
-      label: "Needs attention",
-      nextAction: offerAttributionReviews > 0
-        ? "Review offer attribution before success-fee billing is created."
+      presentationId: offerAttributionReviews > 0
+        ? "attention_offer"
         : employmentEndedReviews > 0
-          ? "Review employment-ended reports before closing success-fee obligations."
-        : "Work overdue verification and high-priority review items first.",
+          ? "attention_employment_ended"
+          : "attention_overdue",
       totalOpenWork,
       criticalItems,
       highRiskItems,
@@ -133,8 +138,7 @@ export function getAdminOperatingSummary(input: {
   if (pendingVerifications > 0 || totalOpenWork > 0) {
     return {
       status: "watch",
-      label: "Review queue",
-      nextAction: "Review pending employment verification and operating queue items.",
+      presentationId: "watch",
       totalOpenWork,
       criticalItems,
       highRiskItems,
@@ -151,8 +155,7 @@ export function getAdminOperatingSummary(input: {
 
   return {
     status: "clear",
-    label: "Operationally clear",
-    nextAction: "No admin operating work is currently queued.",
+    presentationId: "clear",
     totalOpenWork,
     criticalItems,
     highRiskItems,

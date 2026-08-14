@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { getAdminOperatingControlAction } from "./adminOperatingControl";
+import { getAdminOperatingActionCopy } from "./adminOperatingCopy";
 import type { AdminOperatingSummary } from "./adminOperatingSummary";
 
 const baseSummary: AdminOperatingSummary = {
   status: "clear",
-  label: "Operationally clear",
-  nextAction: "No admin operating work is currently queued.",
+  presentationId: "clear",
   totalOpenWork: 0,
   criticalItems: 0,
   highRiskItems: 0,
@@ -35,7 +35,9 @@ describe("admin operating control", () => {
     expect(action.tab).toBe("review");
     expect(action.risk).toBe("critical");
     expect(action.approvalGated).toBe(true);
-    expect(action.headline).toContain("1 legal escalation requires");
+    expect(action.count).toBe(1);
+    expect(getAdminOperatingActionCopy("en", action).headline).toContain("1 legal escalation requires");
+    expect(getAdminOperatingActionCopy("nl", action).headline).toContain("1 juridische escalatie vereist");
   });
 
   it("routes failed payments to the payments tab without taking billing action", () => {
@@ -46,7 +48,8 @@ describe("admin operating control", () => {
 
     expect(action.id).toBe("review_failed_payments");
     expect(action.tab).toBe("payments");
-    expect(action.cta).toBe("Open payments");
+    expect(getAdminOperatingActionCopy("en", action).cta).toBe("Open payments");
+    expect(getAdminOperatingActionCopy("nl", action).cta).toBe("Betalingen openen");
     expect(action.approvalGated).toBe(true);
   });
 
@@ -59,7 +62,7 @@ describe("admin operating control", () => {
 
     expect(action.id).toBe("review_grace_expired_verifications");
     expect(action.tab).toBe("overdue");
-    expect(action.detail).toContain("before suspension");
+    expect(getAdminOperatingActionCopy("en", action).detail).toContain("before suspension");
   });
 
   it("routes offer attribution review before billing setup", () => {
@@ -70,7 +73,7 @@ describe("admin operating control", () => {
 
     expect(action.id).toBe("review_offer_attribution");
     expect(action.tab).toBe("review");
-    expect(action.detail).toContain("before any success-fee");
+    expect(getAdminOperatingActionCopy("en", action).detail).toContain("before any success-fee");
   });
 
   it("routes employment-ended reports to final obligation review", () => {
@@ -82,7 +85,7 @@ describe("admin operating control", () => {
     expect(action.id).toBe("review_employment_ended");
     expect(action.tab).toBe("review");
     expect(action.risk).toBe("high");
-    expect(action.detail).toContain("subscription cancellation");
+    expect(getAdminOperatingActionCopy("en", action).detail).toContain("subscription cancellation");
   });
 
   it("uses pending verifications when no higher-risk item exists", () => {
@@ -110,6 +113,6 @@ describe("admin operating control", () => {
     }));
 
     expect(action.id).toBe("open_review_queue");
-    expect(action.headline).toContain("1 admin item is waiting");
+    expect(getAdminOperatingActionCopy("en", action).headline).toContain("1 admin item is waiting");
   });
 });

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getAdminOperatingControlAction } from "@/lib/adminOperatingControl";
+import { getAdminOperatingActionCopy, getAdminOperatingCopy, getAdminOperatingSummaryCopy, type AdminOperatingCopyKey } from "@/lib/adminOperatingCopy";
 import { getAdminOperatingSummary } from "@/lib/adminOperatingSummary";
 import { getAdminReviewEvidenceSummary } from "@/lib/adminReviewEvidence";
 import { openExternalUrl } from "@/lib/externalUrl";
@@ -32,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { useLocale } from "@/contexts/LocaleContext";
 import {
   Activity,
   AlertTriangle,
@@ -122,6 +124,12 @@ function ScraperRunOutcomeBadge({ outcome }: { outcome: "success" | "partial" | 
 
 export default function AdminPanel() {
   const { user, loading } = useAuth();
+  const { locale, t } = useLocale();
+  const ac = (key: AdminOperatingCopyKey) => getAdminOperatingCopy(locale, key);
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat(locale === "nl" ? "nl-NL" : "en-US", { style: "currency", currency: "USD" }),
+    [locale],
+  );
   const isAdmin = user?.role === "admin";
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
@@ -375,7 +383,7 @@ export default function AdminPanel() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-slate-400">{t("loading")}</div>
       </div>
     );
   }
@@ -385,10 +393,10 @@ export default function AdminPanel() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <Card className="bg-slate-900 border-slate-800 p-8 text-center max-w-md">
           <Shield className="h-12 w-12 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-slate-400 mb-4">You do not have permission to access the admin panel.</p>
+          <h2 className="text-xl font-bold text-white mb-2">{ac("accessDenied")}</h2>
+          <p className="text-slate-400 mb-4">{ac("accessDeniedDetail")}</p>
           <Button onClick={() => setLocation("/dashboard")} variant="outline">
-            Back to Dashboard
+            {t("backToDashboard")}
           </Button>
         </Card>
       </div>
@@ -396,16 +404,16 @@ export default function AdminPanel() {
   }
 
   const statCards = [
-    { label: "Active Fees", value: stats?.activeFees ?? 0, icon: Activity, color: "text-green-400" },
-    { label: "Pending Verification", value: stats?.pendingFees ?? 0, icon: FileText, color: "text-yellow-400" },
-    { label: "Overdue Verifications", value: stats?.overdueVerifications ?? 0, icon: AlertTriangle, color: "text-orange-400" },
-    { label: "Review Items", value: operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0, icon: Shield, color: "text-cyan-400" },
-    { label: "Suspended", value: stats?.suspendedFees ?? 0, icon: Ban, color: "text-red-400" },
-    { label: "Paused", value: stats?.pausedFees ?? 0, icon: Pause, color: "text-slate-400" },
-    { label: "Disputed", value: stats?.disputedFees ?? 0, icon: AlertTriangle, color: "text-orange-400" },
-    { label: "Monthly Revenue", value: `$${(stats?.monthlyRevenueUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`, icon: DollarSign, color: "text-cyan-400" },
-    { label: "Total Revenue", value: `$${(stats?.totalRevenueUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`, icon: DollarSign, color: "text-blue-400" },
-    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-purple-400" },
+    { id: "active-fees", label: ac("activeFees"), value: stats?.activeFees ?? 0, icon: Activity, color: "text-green-400" },
+    { id: "pending-verification", label: ac("pendingVerification"), value: stats?.pendingFees ?? 0, icon: FileText, color: "text-yellow-400" },
+    { id: "overdue-verifications", label: ac("overdueVerifications"), value: stats?.overdueVerifications ?? 0, icon: AlertTriangle, color: "text-orange-400" },
+    { id: "review-items", label: ac("reviewItems"), value: operatingCounts?.reviewTotal ?? reviewQueue?.length ?? 0, icon: Shield, color: "text-cyan-400" },
+    { id: "suspended", label: ac("suspended"), value: stats?.suspendedFees ?? 0, icon: Ban, color: "text-red-400" },
+    { id: "paused", label: ac("paused"), value: stats?.pausedFees ?? 0, icon: Pause, color: "text-slate-400" },
+    { id: "disputed", label: ac("disputed"), value: stats?.disputedFees ?? 0, icon: AlertTriangle, color: "text-orange-400" },
+    { id: "monthly-revenue", label: ac("monthlyRevenue"), value: currencyFormatter.format(stats?.monthlyRevenueUsd ?? 0), icon: DollarSign, color: "text-cyan-400" },
+    { id: "total-revenue", label: ac("totalRevenue"), value: currencyFormatter.format(stats?.totalRevenueUsd ?? 0), icon: DollarSign, color: "text-blue-400" },
+    { id: "total-users", label: ac("totalUsers"), value: stats?.totalUsers ?? 0, icon: Users, color: "text-purple-400" },
   ];
   const operatingSummary = getAdminOperatingSummary({
     stats,
@@ -433,6 +441,8 @@ export default function AdminPanel() {
     critical: "border-red-500/30 text-red-300",
   }[operatingSummary.status];
   const operatingAction = getAdminOperatingControlAction(operatingSummary);
+  const operatingSummaryCopy = getAdminOperatingSummaryCopy(locale, operatingSummary);
+  const operatingActionCopy = getAdminOperatingActionCopy(locale, operatingAction);
   const operatingActionClass = {
     low: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
     medium: "border-blue-500/30 bg-blue-500/10 text-blue-300",
@@ -448,8 +458,8 @@ export default function AdminPanel() {
           <div className="flex items-center gap-3">
             <Shield className="h-6 w-6 text-cyan-400" />
             <div>
-              <h1 className="text-lg font-bold text-white">Admin Panel</h1>
-              <p className="text-xs text-slate-500">Hire.AI Operations</p>
+              <h1 className="text-lg font-bold text-white">{t("adminPanel")}</h1>
+              <p className="text-xs text-slate-500">{ac("operations")}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -469,7 +479,7 @@ export default function AdminPanel() {
               className="text-slate-400 hover:text-white"
             >
               <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
+              {ac("refresh")}
             </Button>
             <Button
               variant="outline"
@@ -477,7 +487,7 @@ export default function AdminPanel() {
               onClick={() => setLocation("/dashboard")}
               className="border-slate-700 text-slate-300"
             >
-              Dashboard
+              {t("dashboard")}
             </Button>
           </div>
         </div>
@@ -490,14 +500,14 @@ export default function AdminPanel() {
               <div className="max-w-2xl">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Shield className="h-5 w-5 text-cyan-400" />
-                  <h2 className="text-base font-semibold text-white">Admin Operating Queue</h2>
+                  <h2 className="text-base font-semibold text-white">{ac("operatingQueue")}</h2>
                   <Badge variant="outline" className={operatingSummaryClass}>
-                    {operatingSummary.label}
+                    {operatingSummaryCopy.label}
                   </Badge>
                 </div>
-                <p className="text-sm text-slate-400">{operatingSummary.nextAction}</p>
+                <p className="text-sm text-slate-400">{operatingSummaryCopy.nextAction}</p>
                 <div className="mt-3 text-xs text-slate-500">
-                  Manual admin approval is still required for legal escalation, suspension, billing changes, and verification decisions.
+                  {ac("approvalBoundary")}
                 </div>
                 <div
                   data-testid="admin-operating-control"
@@ -505,16 +515,16 @@ export default function AdminPanel() {
                 >
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className={operatingActionClass}>
-                      {operatingAction.label}
+                      {operatingActionCopy.label}
                     </Badge>
                     {operatingAction.approvalGated && (
                       <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
-                        Approval gated
+                        {ac("approvalGated")}
                       </Badge>
                     )}
                   </div>
-                  <div className="text-sm font-medium text-white">{operatingAction.headline}</div>
-                  <p className="mt-1 text-xs text-slate-400">{operatingAction.detail}</p>
+                  <div className="text-sm font-medium text-white">{operatingActionCopy.headline}</div>
+                  <p className="mt-1 text-xs text-slate-400">{operatingActionCopy.detail}</p>
                   <Button
                     data-testid="admin-operating-primary"
                     type="button"
@@ -522,24 +532,24 @@ export default function AdminPanel() {
                     className="mt-3 bg-cyan-600 hover:bg-cyan-700 text-white"
                     onClick={() => setActiveTab(operatingAction.tab)}
                   >
-                    {operatingAction.cta}
+                    {operatingActionCopy.cta}
                   </Button>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[560px]">
                 {[
-                  ["Open work", operatingSummary.totalOpenWork, "review"],
-                  ["Critical", operatingSummary.criticalItems, "review"],
-                  ["Overdue", operatingSummary.overdueVerifications, "overdue"],
-                  ["Verifications", operatingSummary.pendingVerifications, "verifications"],
-                  ["Failed payments", operatingSummary.failedPayments, "payments"],
-                  ["Legal", operatingSummary.legalEscalations, "review"],
-                  ["Offer reviews", operatingSummary.offerAttributionReviews, "review"],
-                  ["Monthly revenue", `$${operatingSummary.monthlyRevenueUsd.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, "overview"],
-                ].map(([label, value, tab]) => (
+                  ["open-work", ac("openWork"), operatingSummary.totalOpenWork, "review"],
+                  ["critical", ac("critical"), operatingSummary.criticalItems, "review"],
+                  ["overdue", ac("overdue"), operatingSummary.overdueVerifications, "overdue"],
+                  ["verifications", ac("verifications"), operatingSummary.pendingVerifications, "verifications"],
+                  ["failed-payments", ac("failedPayments"), operatingSummary.failedPayments, "payments"],
+                  ["legal", ac("legal"), operatingSummary.legalEscalations, "review"],
+                  ["offer-reviews", ac("offerReviews"), operatingSummary.offerAttributionReviews, "review"],
+                  ["monthly-revenue", ac("monthlyRevenue"), currencyFormatter.format(operatingSummary.monthlyRevenueUsd), "overview"],
+                ].map(([id, label, value, tab]) => (
                   <button
-                    key={label}
-                    data-testid={`admin-operating-metric-${String(label).toLowerCase().replace(/\s+/g, "-")}`}
+                    key={id}
+                    data-testid={`admin-operating-metric-${id}`}
                     type="button"
                     onClick={() => setActiveTab(String(tab))}
                     className="rounded-md border border-slate-700/70 bg-slate-950/60 p-3 text-left transition hover:border-cyan-500/40"
@@ -591,7 +601,7 @@ export default function AdminPanel() {
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5 mb-8">
           {statCards.map((s) => (
-            <Card key={s.label} className="bg-slate-900/60 border-slate-800/50">
+            <Card key={s.id} className="bg-slate-900/60 border-slate-800/50">
               <CardContent className="p-4">
                 <s.icon className={`h-5 w-5 ${s.color} mb-2`} />
                 <div className="text-xl font-bold text-white">{s.value}</div>

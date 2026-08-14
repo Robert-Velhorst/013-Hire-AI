@@ -592,3 +592,11 @@
 - Kept review-first, no-silent-submission, provider-consent, and prototype-readiness claims under regression coverage after moving them into the locale catalog. Terms content itself remains unchanged pending approved localized legal text.
 - Verified Dutch rendering and live switching to English in the in-app browser with no console errors or horizontal document overflow. The browser viewport override did not expose the requested compact width, so no new mobile-render claim is recorded for this pass.
 - Passed TypeScript, 236 test files / 1,186 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.
+
+## 2026-08-14 - Structured admin operating queue localization pass
+
+- Replaced English labels and instructions in the admin operating summary and primary control helpers with stable presentation identifiers and counts while preserving priority, routing, risk, and approval-gate behavior.
+- Added an admin-route-local exhaustive English/Dutch catalog for the operating queue, action states, approval boundary, eight operating metrics, ten overview cards, header controls, and access guard.
+- Replaced US-English string interpolation for operating and overview revenue with locale-aware USD formatting and made metric test identifiers language independent.
+- Verified the seeded Dutch administrator operating queue in the in-app browser with populated review state, document language `nl`, Dutch number formatting, and no horizontal document overflow. Remaining admin tabs and dialogs stay explicitly outside this pass.
+- Passed TypeScript, 237 test files / 1,188 tests with one database-dependent privacy integration skipped, the production build and bundle budget, dependency audit, development doctor, and patch-integrity checks. The shared application chunk remained 577.36 kB because the new catalog stays in the lazy admin route; the doctor still reports eight absent production variables, the intentionally disabled scheduler, and the disabled HAI connector as deployment configuration state.

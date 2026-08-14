@@ -29,21 +29,10 @@ export type AdminOperatingControlActionId =
 export interface AdminOperatingControlAction {
   id: AdminOperatingControlActionId;
   status: AdminOperatingControlStatus;
-  label: string;
-  headline: string;
-  detail: string;
-  cta: string;
+  count: number;
   tab: AdminOperatingControlTab;
   risk: AdminOperatingControlRisk;
   approvalGated: boolean;
-}
-
-function plural(count: number, singular: string, pluralWord = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : pluralWord}`;
-}
-
-function verb(count: number, singular: string, pluralWord: string) {
-  return count === 1 ? singular : pluralWord;
 }
 
 export function getAdminOperatingControlAction(
@@ -53,10 +42,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_legal",
       status: "critical",
-      label: "Legal review",
-      headline: `${plural(summary.legalEscalations, "legal escalation")} ${verb(summary.legalEscalations, "requires", "require")} manual admin review.`,
-      detail: "Open the review queue and inspect evidence, ToS acceptance, billing records, and prior admin decisions before any enforcement step.",
-      cta: "Open legal review",
+      count: summary.legalEscalations,
       tab: "review",
       risk: "critical",
       approvalGated: true,
@@ -67,10 +53,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_failed_payments",
       status: "critical",
-      label: "Failed payments",
-      headline: `${plural(summary.failedPayments, "failed payment")} ${verb(summary.failedPayments, "needs", "need")} billing review.`,
-      detail: "Review payment status and account history before changing access, billing state, or subscription records.",
-      cta: "Open payments",
+      count: summary.failedPayments,
       tab: "payments",
       risk: "high",
       approvalGated: true,
@@ -81,10 +64,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_grace_expired_verifications",
       status: "critical",
-      label: "Grace expired",
-      headline: `${plural(summary.graceExpiredVerifications, "verification")} ${verb(summary.graceExpiredVerifications, "has", "have")} passed the grace window.`,
-      detail: "Review proof, reminders, and account context before suspension, escalation, or billing changes.",
-      cta: "Open overdue",
+      count: summary.graceExpiredVerifications,
       tab: "overdue",
       risk: "high",
       approvalGated: true,
@@ -95,10 +75,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_offer_attribution",
       status: "attention",
-      label: "Offer attribution",
-      headline: `${plural(summary.offerAttributionReviews, "offer")} ${verb(summary.offerAttributionReviews, "needs", "need")} attribution review before billing.`,
-      detail: "Confirm whether each offer came from Hire.AI activity before any success-fee subscription or invoice is created.",
-      cta: "Open offer reviews",
+      count: summary.offerAttributionReviews,
       tab: "review",
       risk: "high",
       approvalGated: true,
@@ -109,10 +86,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_employment_ended",
       status: "attention",
-      label: "Employment ended",
-      headline: `${plural(summary.employmentEndedReviews, "employment-end report")} ${verb(summary.employmentEndedReviews, "needs", "need")} final review.`,
-      detail: "Confirm final billing period, subscription cancellation, verification history, and audit evidence before closing the success-fee obligation.",
-      cta: "Open end reports",
+      count: summary.employmentEndedReviews,
       tab: "review",
       risk: "high",
       approvalGated: true,
@@ -123,10 +97,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_overdue_verifications",
       status: "attention",
-      label: "Overdue verification",
-      headline: `${plural(summary.overdueVerifications, "verification")} ${verb(summary.overdueVerifications, "is", "are")} overdue.`,
-      detail: "Work overdue employment checks first and keep account actions auditable.",
-      cta: "Open overdue",
+      count: summary.overdueVerifications,
       tab: "overdue",
       risk: "high",
       approvalGated: true,
@@ -137,10 +108,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "review_pending_verifications",
       status: "watch",
-      label: "Verification queue",
-      headline: `${plural(summary.pendingVerifications, "verification")} ${verb(summary.pendingVerifications, "awaits", "await")} review.`,
-      detail: "Approve or reject submitted employment proof from the verification queue.",
-      cta: "Open verifications",
+      count: summary.pendingVerifications,
       tab: "verifications",
       risk: "medium",
       approvalGated: true,
@@ -151,10 +119,7 @@ export function getAdminOperatingControlAction(
     return {
       id: "open_review_queue",
       status: "watch",
-      label: "Review queue",
-      headline: `${plural(summary.totalOpenWork, "admin item")} ${verb(summary.totalOpenWork, "is", "are")} waiting.`,
-      detail: "Clear admin-visible operating items before making more consequential changes.",
-      cta: "Open review queue",
+      count: summary.totalOpenWork,
       tab: "review",
       risk: "medium",
       approvalGated: true,
@@ -164,10 +129,7 @@ export function getAdminOperatingControlAction(
   return {
     id: "monitor",
     status: "clear",
-    label: "Monitoring",
-    headline: "No admin intervention is currently queued.",
-    detail: "Keep monitoring success-fee revenue, verification cadence, review items, and failed payments.",
-    cta: "View overview",
+    count: 0,
     tab: "overview",
     risk: "low",
     approvalGated: false,
