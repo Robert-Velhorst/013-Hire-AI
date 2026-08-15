@@ -1,7 +1,9 @@
 import { lookup as dnsLookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { request as httpsRequest } from "node:https";
+import { BlockList, isIP, type LookupFunction } from "node:net";
+import { Readable } from "node:stream";
 
-type LookupAddress = { address: string; family: number };
+export type LookupAddress = { address: string; family: number };
 type AddressLookup = (hostname: string) => Promise<LookupAddress[]>;
 
 const blockedAddresses = new BlockList();
@@ -55,7 +57,7 @@ function isBlockedAddress(address: string) {
 const defaultLookup: AddressLookup = async (hostname) =>
   await dnsLookup(hostname, { all: true, verbatim: true });
 
-export async function requirePublicHttpsUrl(
+export async function resolvePublicHttpsUrl(
   value: string,
   lookup: AddressLookup = defaultLookup
 ) {
@@ -90,5 +92,63 @@ export async function requirePublicHttpsUrl(
   if (addresses.length === 0 || addresses.some(({ address }) => isBlockedAddress(address))) {
     throw new Error("Remote URL must resolve only to public addresses.");
   }
-  return url.toString();
+  return { url, addresses };
+}
+
+export async function requirePublicHttpsUrl(
+  value: string,
+  lookup: AddressLookup = defaultLookup
+) {
+  return (await resolvePublicHttpsUrl(value, lookup)).url.toString();
+}
+
+export function createPinnedLookup(addresses: LookupAddress[]): LookupFunction {
+  return ((_hostname, options, callback) => {
+    const requestedFamily = typeof options === "number" ? options : options.family;
+    const matches = requestedFamily && requestedFamily !== 0
+      ? addresses.filter(({ family }) => family === requestedFamily)
+      : addresses;
+
+    queueMicrotask(() => {
+      if (matches.length === 0) {
+        const error = Object.assign(new Error("No validated address matches the requested family."), {
+          code: "ENOTFOUND",
+        });
+        callback(error, "", 0);
+      } else if (typeof options !== "number" && options.all) {
+        callback(null, matches);
+      } else {
+        callback(null, matches[0].address, matches[0].family);
+      }
+    });
+  }) as LookupFunction;
+}
+
+export async function fetchPublicHttpsUrl(
+  value: string,
+  init: Pick<RequestInit, "headers" | "method" | "signal"> = {},
+  lookup: AddressLookup = defaultLookup
+): Promise<Response> {
+  const { url, addresses } = await resolvePublicHttpsUrl(value, lookup);
+
+  return await new Promise<Response>((resolve, reject) => {
+    const request = httpsRequest(url, {
+      method: init.method ?? "GET",
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      lookup: createPinnedLookup(addresses),
+      signal: init.signal ?? undefined,
+    }, response => {
+      const headers = new Headers();
+      for (let index = 0; index < response.rawHeaders.length; index += 2) {
+        headers.append(response.rawHeaders[index], response.rawHeaders[index + 1]);
+      }
+      resolve(new Response(Readable.toWeb(response) as ReadableStream<Uint8Array>, {
+        status: response.statusCode ?? 500,
+        statusText: response.statusMessage,
+        headers,
+      }));
+    });
+    request.once("error", reject);
+    request.end();
+  });
 }

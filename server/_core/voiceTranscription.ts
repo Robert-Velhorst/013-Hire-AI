@@ -35,7 +35,7 @@ import {
   readBoundedResponseText,
   ResponseSizeLimitError,
 } from "./outboundRequest";
-import { requirePublicHttpsUrl } from "./publicUrl";
+import { fetchPublicHttpsUrl } from "./publicUrl";
 import { buildTrustedServiceUrl } from "./trustedServiceUrl";
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
@@ -93,7 +93,8 @@ export type TranscriptionError = {
  * @returns Transcription result or error
  */
 export async function transcribeAudio(
-  options: TranscribeOptions
+  options: TranscribeOptions,
+  fetchRemoteAudio: typeof fetchPublicHttpsUrl = fetchPublicHttpsUrl
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
     // Step 1: Validate environment configuration
@@ -116,10 +117,8 @@ export async function transcribeAudio(
     let audioBuffer: Buffer;
     let mimeType: string;
     try {
-      const audioUrl = await requirePublicHttpsUrl(options.audioUrl);
-      const response = await fetch(audioUrl, {
+      const response = await fetchRemoteAudio(options.audioUrl, {
         signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
-        redirect: "error",
       });
       if (!response.ok) {
         return {

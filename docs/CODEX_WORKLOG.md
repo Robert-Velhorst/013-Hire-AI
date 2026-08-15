@@ -772,3 +772,10 @@
 - Separated the bounded caller result from ownership of the underlying operation. Readiness still responds within its deadline, but no new database probe starts until the active one settles, and a late success restores the cache immediately.
 - Red/green fake-time coverage proves repeated timeout polling retains exactly one database operation while preserving normal success caching, concurrent coalescing, failure retry, and bounded latency.
 - The full local gate passed 267 test files and 1,321 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Remote audio DNS-binding pass
+
+- Reproduced that remote transcription validated a user-supplied audio hostname and then allowed the HTTP client to resolve it again, leaving a DNS-rebinding path between approval and connection.
+- Added a public-HTTPS resolver that returns the complete validated address set and a pinned connection lookup that cannot perform a second DNS query. The original hostname remains the HTTPS authority for certificate and SNI validation, and redirects remain disabled.
+- Wired transcription downloads to the pinned client while retaining timeout, MIME-type, and 16 MB response limits. Red/green tests cover address-set return and pinned lookup behavior.
+- The full local gate passed 267 test files and 1,323 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

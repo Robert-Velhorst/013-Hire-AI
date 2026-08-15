@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { requirePublicHttpsUrl } from "./publicUrl";
+import { createPinnedLookup, requirePublicHttpsUrl, resolvePublicHttpsUrl } from "./publicUrl";
 
 describe("public outbound URL policy", () => {
   it("accepts a credential-free HTTPS URL resolving only to public addresses", async () => {
@@ -35,5 +35,38 @@ describe("public outbound URL policy", () => {
     const lookup = vi.fn().mockRejectedValue(new Error("internal resolver 10.0.0.53 failed"));
     await expect(requirePublicHttpsUrl("https://media.example/audio.mp3", lookup))
       .rejects.toThrow("Remote URL could not be resolved safely.");
+  });
+
+  it("returns the validated addresses for connection pinning", async () => {
+    const addresses = [
+      { address: "1.1.1.1", family: 4 },
+      { address: "2606:4700:4700::1111", family: 6 },
+    ];
+    const resolved = await resolvePublicHttpsUrl(
+      "https://media.example/audio.mp3",
+      vi.fn().mockResolvedValue(addresses)
+    );
+
+    expect(resolved).toEqual({
+      url: new URL("https://media.example/audio.mp3"),
+      addresses,
+    });
+  });
+
+  it("pins connection lookup to the addresses that passed validation", async () => {
+    const lookup = createPinnedLookup([
+      { address: "1.1.1.1", family: 4 },
+      { address: "2606:4700:4700::1111", family: 6 },
+    ]);
+
+    await expect(new Promise((resolve, reject) => {
+      lookup("media.example", { all: true }, (error, addresses) => {
+        if (error) reject(error);
+        else resolve(addresses);
+      });
+    })).resolves.toEqual([
+      { address: "1.1.1.1", family: 4 },
+      { address: "2606:4700:4700::1111", family: 6 },
+    ]);
   });
 });
