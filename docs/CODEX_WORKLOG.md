@@ -679,3 +679,11 @@
 - Added a real signed-session regression that authenticates the same persisted user twice and proves the historical sign-in timestamp is unchanged, plus a wiring contract for both legitimate sign-in update paths.
 - Red/green verification proved the activity regression fails against the previous per-request upsert and passes after removal. The full gate passed 1,227 tests with one intentional skip, reported no known dependency vulnerabilities, passed TypeScript and the production bundle budget, and produced no patch-integrity errors.
 - In-app browser verification used the local development sign-in route, reached the authenticated dashboard with the seeded operating ledger, and found no browser warnings or errors. Exact pushed-commit CI evidence follows at publication.
+
+## 2026-08-15 - Authentication dependency failure classification
+
+- Replaced the tRPC context's blanket authentication catch with an explicit expected-authentication boundary: only deliberate 4xx `HttpError` results become anonymous contexts.
+- Split first-user identity lookup from local persistence. Provider `401/403` remains an invalid-session result, provider/network failure becomes a fixed `503`, and database exceptions propagate to the operational error path.
+- Added red/green behavioral coverage through both a direct context dependency failure and a real signed session with a simulated provider outage.
+- Red/green verification reproduced both broad exception swallowing and provider-outage misclassification. The full gate passed 1,230 tests with one intentional skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
+- In-app browser verification used the local development sign-in route, reached the authenticated dashboard and operating data, and found no browser warnings or errors. Windows/HAI, container, and exact pushed-commit CI evidence follow at publication.

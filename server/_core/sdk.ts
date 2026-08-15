@@ -1,5 +1,5 @@
 import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { ForbiddenError } from "@shared/_core/errors";
+import { ForbiddenError, ServiceUnavailableError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
@@ -306,20 +306,26 @@ class SDKServer {
     }
 
     if (!user) {
+      let userInfo: GetUserInfoWithJwtResponse;
       try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch {
+        userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
+      } catch (error) {
         logOperationalFailure("Auth", "OAuth user synchronization");
-        throw ForbiddenError("Failed to sync user info");
+        const providerStatus = axios.isAxiosError(error) ? error.response?.status : undefined;
+        if (providerStatus === 401 || providerStatus === 403) {
+          throw ForbiddenError("Failed to sync user info");
+        }
+        throw ServiceUnavailableError("Authentication service unavailable");
       }
+
+      await db.upsertUser({
+        openId: userInfo.openId,
+        name: userInfo.name || null,
+        email: userInfo.email ?? null,
+        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        lastSignedIn: signedInAt,
+      });
+      user = await db.getUserByOpenId(userInfo.openId);
     }
 
     if (!user) {

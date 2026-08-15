@@ -1,5 +1,7 @@
+import { TRPCError } from "@trpc/server";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import { HttpError } from "../../shared/_core/errors";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
@@ -16,8 +18,17 @@ export async function createContext(
   try {
     user = await sdk.authenticateRequest(opts.req);
   } catch (error) {
-    // Authentication is optional for public procedures.
-    user = null;
+    if (error instanceof HttpError && error.statusCode === 503) {
+      throw new TRPCError({
+        code: "SERVICE_UNAVAILABLE",
+        message: error.message,
+        cause: error,
+      });
+    }
+    if (!(error instanceof HttpError) || error.statusCode < 400 || error.statusCode >= 500) {
+      throw error;
+    }
+    // Invalid or unauthorized sessions remain optional for public procedures.
   }
 
   return {

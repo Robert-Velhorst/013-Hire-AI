@@ -358,6 +358,8 @@ All non-Stripe `/api` traffic has a per-client budget of 600 requests per 60 sec
 
 Session authentication verifies the signed cookie and reloads the user record on every request so role, account status, locale, and terms changes take effect immediately. Ordinary API activity does not rewrite `lastSignedIn`; that timestamp is recorded only at OAuth sign-in or first-user synchronization, avoiding one database write for every authenticated request.
 
+Authentication failures are classified at the request boundary. Missing, invalid, or provider-rejected sessions remain anonymous so public procedures stay available; database failures, identity-provider outages, and other operational errors propagate instead of being reported as ordinary sign-outs. Provider outage responses use a fixed `503` message without exposing upstream details.
+
 > **Note for contributors:** All CJS npm packages must be loaded via `createRequire(import.meta.url)` rather than ESM `import ... from` syntax to avoid `ERR_MODULE_NOT_FOUND` in the production ESM build. See `server/resumeParser.ts` for the established pattern.
 
 ---
