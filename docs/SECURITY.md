@@ -16,6 +16,7 @@
 - HTTP responses disable `X-Powered-By`, prohibit framing, constrain browser permissions, and add production CSP/HSTS.
 - Native startup binds to loopback by default and production refuses port fallback. Public ngrok readiness must echo the exact local process's opaque runtime ID before the launcher reports success. The HAI bridge is disabled by default, limited to the exact local/private `/api/hai/a2a` endpoint, scoped to one canonical positive user ID, protected by a separate 32-4096 character non-placeholder bearer token without whitespace/control characters, body-bounded, and read-only.
 - User-supplied remote audio accepts credential-free HTTPS only, rejects any DNS answer set containing a local, private, reserved, or non-IP address, and pins the approved addresses to the TLS connection. Redirects are not followed, preventing DNS rebinding or redirect-based access to internal services.
+- Provider-controlled job fields are normalized against the shared database storage contract before persistence. Oversized content is bounded, oversized source identities retain a collision-resistant digest, and executable, credential-bearing, or overlong application links are discarded.
 
 ## Required before production
 

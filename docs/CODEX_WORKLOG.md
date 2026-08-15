@@ -779,3 +779,11 @@
 - Added a public-HTTPS resolver that returns the complete validated address set and a pinned connection lookup that cannot perform a second DNS query. The original hostname remains the HTTPS authority for certificate and SNI validation, and redirects remain disabled.
 - Wired transcription downloads to the pinned client while retaining timeout, MIME-type, and 16 MB response limits. Red/green tests cover address-set return and pinned lookup behavior.
 - The full local gate passed 267 test files and 1,323 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Job ingestion storage-contract pass
+
+- Reproduced that every source adapter accepted provider-controlled values beyond the Drizzle/MySQL column limits, allowing one oversized listing to fail repeatedly during autonomous persistence.
+- Added one shared job-storage contract consumed by both Drizzle schema declarations and scraper normalization. Titles, companies, locations, descriptions, requirements, responsibilities, benefits, skills, identifiers, and application links are bounded before database work.
+- Oversized external IDs retain a SHA-256 suffix so distinct provider records do not collapse after bounding. Application URLs now reject executable schemes, embedded credentials, and values beyond the database limit.
+- Red/green adapter tests cover every bounded field, Unicode-safe truncation, collision-resistant identities, and credential-bearing links. Generic parsing, manager persistence, migration history, and schema-audit regressions remain green.
+- The full local gate passed 267 test files and 1,327 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

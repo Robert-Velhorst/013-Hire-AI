@@ -1,4 +1,5 @@
 import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { JOB_STORAGE_MAX_CHARS } from "../shared/jobStoragePolicy";
 
 /**
  * Core user table backing auth flow.
@@ -118,24 +119,24 @@ export const jobPlatforms = mysqlTable("job_platforms", {
  */
 export const jobs = mysqlTable("jobs", {
   id: int("id").autoincrement().primaryKey(),
-  externalId: varchar("external_id", { length: 255 }),
-  title: varchar("title", { length: 500 }).notNull(),
-  company: varchar("company", { length: 255 }).notNull(),
+  externalId: varchar("external_id", { length: JOB_STORAGE_MAX_CHARS.externalId }),
+  title: varchar("title", { length: JOB_STORAGE_MAX_CHARS.title }).notNull(),
+  company: varchar("company", { length: JOB_STORAGE_MAX_CHARS.company }).notNull(),
   description: text("description"),
   requirements: text("requirements"),
   responsibilities: text("responsibilities"),
   benefits: text("benefits"),
-  location: varchar("location", { length: 255 }),
+  location: varchar("location", { length: JOB_STORAGE_MAX_CHARS.location }),
   jobType: mysqlEnum("job_type", ["full-time", "part-time", "contract", "temporary"]),
   salaryMin: int("salary_min"),
   salaryMax: int("salary_max"),
-  salaryCurrency: varchar("salary_currency", { length: 10 }),
+  salaryCurrency: varchar("salary_currency", { length: JOB_STORAGE_MAX_CHARS.salaryCurrency }),
   skills: text("skills"),
-  applicationUrl: varchar("application_url", { length: 1000 }),
-  applicationEmail: varchar("application_email", { length: 320 }),
-  applicationProcess: varchar("application_process", { length: 100 }),
+  applicationUrl: varchar("application_url", { length: JOB_STORAGE_MAX_CHARS.applicationUrl }),
+  applicationEmail: varchar("application_email", { length: JOB_STORAGE_MAX_CHARS.applicationEmail }),
+  applicationProcess: varchar("application_process", { length: JOB_STORAGE_MAX_CHARS.applicationProcess }),
   platformId: int("platform_id").notNull(),
-  sourceUrl: varchar("source_url", { length: 1000 }),
+  sourceUrl: varchar("source_url", { length: JOB_STORAGE_MAX_CHARS.sourceUrl }),
   postedDate: timestamp("posted_date"),
   expiryDate: timestamp("expiry_date"),
   isActive: int("is_active").default(1).notNull(),

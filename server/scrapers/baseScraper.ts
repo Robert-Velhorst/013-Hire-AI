@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import type { Job } from "../../drizzle/schema";
+import { JOB_STORAGE_MAX_CHARS } from "../../shared/jobStoragePolicy";
 import { normalizeSalary } from "../jobNormalization";
 import {
   outboundRequestSignal,
@@ -169,19 +171,20 @@ export abstract class BaseScraper {
   protected normalizeJob(rawJob: any): Partial<Job> {
     return {
       platformId: this.config.platformId,
-      title: this.cleanText(rawJob.title),
-      company: this.cleanText(rawJob.company),
-      location: this.cleanText(rawJob.location) || "Remote",
-      description: this.cleanText(rawJob.description),
-      requirements: this.cleanText(rawJob.requirements),
-      responsibilities: this.cleanText(rawJob.responsibilities),
-      skills: this.cleanText(rawJob.skills),
+      title: this.cleanText(rawJob.title, JOB_STORAGE_MAX_CHARS.title),
+      company: this.cleanText(rawJob.company, JOB_STORAGE_MAX_CHARS.company),
+      location: this.cleanText(rawJob.location, JOB_STORAGE_MAX_CHARS.location) || "Remote",
+      description: this.cleanText(rawJob.description, JOB_STORAGE_MAX_CHARS.text),
+      requirements: this.cleanText(rawJob.requirements, JOB_STORAGE_MAX_CHARS.text),
+      responsibilities: this.cleanText(rawJob.responsibilities, JOB_STORAGE_MAX_CHARS.text),
+      benefits: this.cleanText(rawJob.benefits, JOB_STORAGE_MAX_CHARS.text),
+      skills: this.cleanText(rawJob.skills, JOB_STORAGE_MAX_CHARS.text),
       jobType: this.normalizeJobType(rawJob.jobType),
       salaryMin: this.parseSalary(rawJob.salaryMin),
       salaryMax: this.parseSalary(rawJob.salaryMax),
       salaryCurrency: this.normalizeSalaryCurrency(rawJob.salaryCurrency),
       applicationUrl: this.normalizeApplicationUrl(rawJob.applicationUrl),
-      externalId: rawJob.externalId || rawJob.id,
+      externalId: this.normalizeExternalId(rawJob.externalId || rawJob.id),
       postedDate: this.parseDate(rawJob.postedDate),
       expiryDate: this.parseDate(rawJob.expiryDate),
       isActive: 1,
@@ -191,12 +194,19 @@ export abstract class BaseScraper {
   /**
    * Clean and normalize text
    */
-  protected cleanText(text: any): string | undefined {
+  protected cleanText(text: any, maxChars: number): string | undefined {
     if (!text) return undefined;
-    return String(text)
+    const normalized = String(text)
       .trim()
       .replace(/\s+/g, " ")
       .replace(/\n+/g, "\n");
+    if (!normalized) return undefined;
+    if (normalized.length <= maxChars) return normalized;
+
+    const end = /[\uD800-\uDBFF]/.test(normalized[maxChars - 1])
+      ? maxChars - 1
+      : maxChars;
+    return normalized.slice(0, end);
   }
 
   /**
@@ -234,13 +244,28 @@ export abstract class BaseScraper {
     return normalizeSalary(currency).currency;
   }
 
+  private normalizeExternalId(value: unknown): string | undefined {
+    const normalized = this.cleanText(value, SCRAPER_RESPONSE_MAX_BYTES);
+    if (!normalized || normalized.length <= JOB_STORAGE_MAX_CHARS.externalId) return normalized;
+
+    const digest = createHash("sha256").update(normalized).digest("hex");
+    const prefixLength = JOB_STORAGE_MAX_CHARS.externalId - digest.length - 1;
+    return `${this.cleanText(normalized, prefixLength)}:${digest}`;
+  }
+
   /** Resolve provider-relative job links and exclude non-web destinations. */
   protected normalizeApplicationUrl(value: unknown): string | undefined {
     if (typeof value !== "string" || !value.trim()) return undefined;
 
     try {
       const url = new URL(value.trim(), this.config.baseUrl);
-      return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : undefined;
+      const normalized = url.toString();
+      return (url.protocol === "https:" || url.protocol === "http:") &&
+        !url.username &&
+        !url.password &&
+        normalized.length <= JOB_STORAGE_MAX_CHARS.applicationUrl
+        ? normalized
+        : undefined;
     } catch {
       return undefined;
     }

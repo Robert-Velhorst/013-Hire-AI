@@ -66,6 +66,13 @@ describe("base scraper application-link normalization", () => {
       .toMatchObject({ applicationUrl: undefined });
   });
 
+  it("omits application links containing embedded credentials", () => {
+    expect(scraper.normalize({
+      title: "Engineer",
+      applicationUrl: "https://candidate:secret@jobs.example.com/apply",
+    })).toMatchObject({ applicationUrl: undefined });
+  });
+
   it("preserves locale-formatted compensation for downstream match and filter decisions", () => {
     expect(scraper.normalize({
       title: "European Engineer",
@@ -77,6 +84,52 @@ describe("base scraper application-link normalization", () => {
       salaryMax: 75000,
       salaryCurrency: "EUR",
     });
+  });
+
+  it("bounds provider-controlled fields to the database storage contract", () => {
+    const normalized = scraper.normalize({
+      title: "T".repeat(600),
+      company: "C".repeat(300),
+      location: "L".repeat(300),
+      description: "D".repeat(20_000),
+      requirements: "R".repeat(20_000),
+      responsibilities: "P".repeat(20_000),
+      benefits: "B".repeat(20_000),
+      skills: "S".repeat(20_000),
+      externalId: "E".repeat(300),
+      applicationUrl: `https://jobs.example.com/${"a".repeat(1_100)}`,
+    });
+
+    expect(normalized.title).toHaveLength(500);
+    expect(normalized.company).toHaveLength(255);
+    expect(normalized.location).toHaveLength(255);
+    expect(normalized.description).toHaveLength(16_000);
+    expect(normalized.requirements).toHaveLength(16_000);
+    expect(normalized.responsibilities).toHaveLength(16_000);
+    expect(normalized.benefits).toHaveLength(16_000);
+    expect(normalized.skills).toHaveLength(16_000);
+    expect(normalized.externalId).toHaveLength(255);
+    expect(normalized.applicationUrl).toBeUndefined();
+  });
+
+  it("does not split a surrogate pair when truncating provider text", () => {
+    const normalized = scraper.normalize({
+      title: `${"T".repeat(499)}😀overflow`,
+      company: "Example",
+    });
+
+    expect(normalized.title).toBe("T".repeat(499));
+    expect(normalized.title).not.toContain("�");
+  });
+
+  it("keeps oversized provider identities distinct after bounding them", () => {
+    const sharedPrefix = "provider-record-".repeat(20);
+    const first = scraper.normalize({ title: "One", externalId: `${sharedPrefix}first` });
+    const second = scraper.normalize({ title: "Two", externalId: `${sharedPrefix}second` });
+
+    expect(first.externalId).toHaveLength(255);
+    expect(second.externalId).toHaveLength(255);
+    expect(first.externalId).not.toBe(second.externalId);
   });
 
   it("does not retry permanent provider failures", async () => {
