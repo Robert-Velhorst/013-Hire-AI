@@ -45,10 +45,12 @@ Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector for a loca
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
-HAI_CONNECTOR_TOKEN=replace-with-at-least-32-random-characters
+HAI_CONNECTOR_TOKEN=<independently-generated-32-to-4096-character-token>
 HAI_CONNECTOR_USER_ID=123
 HAI_CONNECTOR_URL=http://127.0.0.1:3000/api/hai/a2a
 ```
+
+Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, public endpoints, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
 
 Endpoints:
 

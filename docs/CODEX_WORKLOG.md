@@ -751,3 +751,10 @@
 - Replaced them with one credential-free HTTP(S), hostname-bound classifier shared by the public support API, autonomous planner, disabled browser handoff, and legacy compatibility boundary.
 - Aligned Greenhouse, Lever, Workday, Taleo, iCIMS, SmartRecruiters, BambooHR, and Jobvite reporting while retaining the strict manual/review-only submission boundary.
 - Red/green cross-module and adversarial coverage now proves every caller returns the same classification. The full local gate passed 265 test files and 1,313 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - HAI deployment-identity policy pass
+
+- Reproduced production acceptance of the documented placeholder bearer token, whitespace-bearing tokens that could never authenticate, `parseInt` acceptance of suffixed user IDs, and advertised endpoint paths that the fixed HAI route does not serve.
+- Added bounded non-placeholder token validation, canonical positive safe-integer user IDs, and exact local/private `/api/hai/a2a` endpoint enforcement without trimming unsafe input into validity.
+- Wired the same effective policy into fail-closed production startup and secret-safe `pnpm doctor` diagnostics; corrected token-generation guidance and the application parser budget documentation.
+- Red/green runtime, HTTP-route, aggregate-resource, and standalone production-doctor coverage passes. The full local gate passed 266 test files and 1,319 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

@@ -5,7 +5,7 @@ import {
   HaiConnectorService,
   type HaiJobSearchSnapshot,
 } from "./haiConnector";
-import { validateHaiConnectorConfig } from "./haiConnectorConfig";
+import { parseHaiConnectorUserId, validateHaiConnectorConfig } from "./haiConnectorConfig";
 import { registerHaiConnectorRoutes } from "./haiConnectorRoutes";
 
 const token = "hire-ai-hai-test-token-32-characters-long";
@@ -74,6 +74,20 @@ describe("HAI connector configuration", () => {
     expect(validateHaiConnectorConfig({ enabled: false, token: "", userId: null, endpointUrl: "" })).toBeNull();
     expect(validateHaiConnectorConfig({ enabled: true, token: "short", userId: 1, endpointUrl: "http://127.0.0.1/a" })).toContain("32");
     expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
+  });
+
+  it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {
+    expect(parseHaiConnectorUserId("41")).toBe(41);
+    expect(parseHaiConnectorUserId("41junk")).toBeNull();
+    expect(parseHaiConnectorUserId("01")).toBeNull();
+    expect(parseHaiConnectorUserId("9007199254740992")).toBeNull();
+
+    const config = { enabled: true, token, userId: 41, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a" };
+    expect(validateHaiConnectorConfig({ ...config, token: "replace-with-at-least-32-random-characters" })).toContain("placeholder");
+    expect(validateHaiConnectorConfig({ ...config, token: `${token} with-space` })).toContain("whitespace");
+    expect(validateHaiConnectorConfig({ ...config, token: "x".repeat(4_097) })).toContain("4096");
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://127.0.0.1:3000/api/hai/status" })).toContain("/api/hai/a2a");
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: " http://127.0.0.1:3000/api/hai/a2a" })).toContain("surrounding whitespace");
   });
 
   it("uses constant-time digest comparison semantics and exposes no token in status", () => {

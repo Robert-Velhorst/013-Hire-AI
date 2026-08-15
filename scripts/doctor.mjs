@@ -240,14 +240,17 @@ check(
 );
 
 const haiEnabled = String(process.env.HAI_CONNECTOR_ENABLED || "").trim().toLowerCase() === "true";
-const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "").trim();
-const haiUserId = Number.parseInt(String(process.env.HAI_CONNECTOR_USER_ID || "").trim(), 10);
-const haiUrl = String(process.env.HAI_CONNECTOR_URL || "").trim();
+const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "");
+const haiUserIdValue = String(process.env.HAI_CONNECTOR_USER_ID || "");
+const haiUserId = /^[1-9]\d*$/.test(haiUserIdValue) ? Number(haiUserIdValue) : NaN;
+const haiUrl = String(process.env.HAI_CONNECTOR_URL || "");
 let haiDetail = "disabled";
 let haiStatus = "pass";
 if (haiEnabled) {
   const errors = [];
-  if (haiToken.length < 32 || /[\r\n]/.test(haiToken)) errors.push("32+ character token");
+  if (haiToken.length < 32 || haiToken.length > 4_096) errors.push("32-4096 character token");
+  else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken)) errors.push("token without whitespace or control characters");
+  else if (haiToken === "replace-with-at-least-32-random-characters") errors.push("non-placeholder token");
   if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
   try {
     const parsed = new URL(haiUrl);
@@ -255,9 +258,11 @@ if (haiEnabled) {
     const parsedIp = net.isIP(host) ? host : null;
     const localHost = ["localhost", "host.docker.internal", "gateway"].includes(host)
       || (parsedIp && /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i.test(parsedIp));
-    if (!["http:", "https:"].includes(parsed.protocol) || !localHost || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    if (haiUrl !== haiUrl.trim() || !["http:", "https:"].includes(parsed.protocol) || !localHost
+      || parsed.username || parsed.password || parsed.search || parsed.hash) {
       errors.push("plain local/private connector URL");
     }
+    if (parsed.pathname !== "/api/hai/a2a") errors.push("exact /api/hai/a2a endpoint");
   } catch {
     errors.push("valid connector URL");
   }
