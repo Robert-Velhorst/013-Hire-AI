@@ -356,6 +356,8 @@ Unsafe requests carrying the Hire.AI session cookie must also provide an `Origin
 
 All non-Stripe `/api` traffic has a per-client budget of 600 requests per 60 seconds. The limiter uses trusted `req.ip`, returns `RateLimit-*` and `Retry-After` guidance, has no timers or database writes, and holds at most 10,000 client windows before evicting the oldest. Health checks and signed Stripe webhook retries are outside this budget. The policy is deliberately per process; multi-instance public deployments must also configure an upstream distributed limiter or gateway policy.
 
+Session authentication verifies the signed cookie and reloads the user record on every request so role, account status, locale, and terms changes take effect immediately. Ordinary API activity does not rewrite `lastSignedIn`; that timestamp is recorded only at OAuth sign-in or first-user synchronization, avoiding one database write for every authenticated request.
+
 > **Note for contributors:** All CJS npm packages must be loaded via `createRequire(import.meta.url)` rather than ESM `import ... from` syntax to avoid `ERR_MODULE_NOT_FOUND` in the production ESM build. See `server/resumeParser.ts` for the established pattern.
 
 ---

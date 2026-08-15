@@ -670,3 +670,12 @@
 - Implemented a timer-free, database-free state store capped at 10,000 clients with periodic expired-window pruning and constant-time oldest-entry eviction at capacity.
 - Reused Express's loopback-scoped trusted client identity so separate ngrok callers receive separate budgets without accepting spoofed forwarded addresses from direct network peers.
 - Added real HTTP coverage for limit exhaustion, reset, standard response guidance, proxy identity separation, health exemption, invalid startup policy, and memory-cap eviction plus route-order protection. Passed 249 test files / 1,225 tests with one database-dependent privacy integration skipped, TypeScript, the no-known-vulnerability dependency audit, and the production build with all existing browser-bundle budgets intact. Exact pushed-commit evidence follows at publication.
+
+## 2026-08-15 - Session authentication write-elimination pass
+
+- Removed the unconditional user upsert from successful session authentication, eliminating one database write from every authenticated tRPC/API request and browser refresh.
+- Preserved the ownership/account lookup on every request so role, suspension, locale, terms acceptance, and user deletion remain immediately visible rather than introducing stale authorization caches.
+- Kept `lastSignedIn` updates at the semantically correct boundaries: successful OAuth callback and first-user synchronization from the configured identity provider.
+- Added a real signed-session regression that authenticates the same persisted user twice and proves the historical sign-in timestamp is unchanged, plus a wiring contract for both legitimate sign-in update paths.
+- Red/green verification proved the activity regression fails against the previous per-request upsert and passes after removal. The full gate passed 1,227 tests with one intentional skip, reported no known dependency vulnerabilities, passed TypeScript and the production bundle budget, and produced no patch-integrity errors.
+- In-app browser verification used the local development sign-in route, reached the authenticated dashboard with the seeded operating ledger, and found no browser warnings or errors. Exact pushed-commit CI evidence follows at publication.
