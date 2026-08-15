@@ -74,6 +74,57 @@ describe("scraper manager platform restrictions", () => {
     expect(manager.getInitializedPlatforms()).toEqual(["RemoteOK", "Remotive"]);
   });
 
+  it("enforces one fair job budget across every selected source", async () => {
+    const manager = new ScraperManager({ maxConcurrentScrapes: 3 });
+    const makeFilledScraper = (platformId: number) => ({
+      getPlatformId: () => platformId,
+      scrape: vi.fn().mockImplementation(async (options?: { limit?: number }) => ({
+        jobs: Array.from({ length: (options?.limit ?? 0) + 5 }, (_, index) => ({
+          platformId,
+          title: `Job ${platformId}-${index}`,
+        })),
+        errors: [],
+        scrapedAt: new Date(),
+      })),
+    }) as unknown as BaseScraper;
+    const first = makeFilledScraper(1);
+    const second = makeFilledScraper(2);
+    const third = makeFilledScraper(3);
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    scrapers.set("First", first);
+    scrapers.set("Second", second);
+    scrapers.set("Third", third);
+
+    const result = await manager.scrapeAll({ limit: 10 });
+
+    expect(first.scrape).toHaveBeenCalledWith(expect.objectContaining({ limit: 4 }));
+    expect(second.scrape).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }));
+    expect(third.scrape).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }));
+    expect(result.totalJobs).toBe(10);
+    expect(Object.values(result.platformResults).map(({ jobs }) => jobs.length).sort())
+      .toEqual([3, 3, 4]);
+  });
+
+  it("polls every source when the cycle budget is smaller than the source count", async () => {
+    const manager = new ScraperManager({ maxConcurrentScrapes: 3 });
+    const sources = Array.from({ length: 3 }, (_, index) => ({
+      getPlatformId: () => index + 1,
+      scrape: vi.fn().mockResolvedValue({
+        jobs: [{ platformId: index + 1, title: `Job ${index + 1}` }],
+        errors: [],
+        scrapedAt: new Date(),
+      }),
+    } as unknown as BaseScraper));
+    const scrapers = (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers;
+    sources.forEach((source, index) => scrapers.set(`Source ${index + 1}`, source));
+
+    const result = await manager.scrapeAll({ limit: 1 });
+
+    expect(sources.every((source) => vi.mocked(source.scrape).mock.calls.length === 1)).toBe(true);
+    expect(result.totalJobs).toBe(1);
+    expect(Object.values(result.platformResults).flatMap(({ jobs }) => jobs)).toHaveLength(1);
+  });
+
   it("reports an unavailable configured platform without scraping another source", async () => {
     const manager = new ScraperManager();
     const remoteOk = createScraper(1);

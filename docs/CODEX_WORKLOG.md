@@ -787,3 +787,10 @@
 - Oversized external IDs retain a SHA-256 suffix so distinct provider records do not collapse after bounding. Application URLs now reject executable schemes, embedded credentials, and values beyond the database limit.
 - Red/green adapter tests cover every bounded field, Unicode-safe truncation, collision-resistant identities, and credential-bearing links. Generic parsing, manager persistence, migration history, and schema-audit regressions remain green.
 - The full local gate passed 267 test files and 1,327 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Cycle-wide discovery budget pass
+
+- Reproduced that `maxJobsPerRun` was passed independently to every enabled adapter, allowing seven sources to admit up to seven times the configured autonomous discovery and persistence workload.
+- Added one bounded cycle budget, capped at 1,000 jobs and distributed near-equally across a stable source order. Every selected source is still polled for health and freshness, including when the budget is smaller than the source count.
+- The manager passes each quota to its adapter to avoid excess normalization and truncates nonconforming results before aggregation or database persistence. Returned totals now describe the bounded cycle rather than the sum of per-source maxima.
+- Red/green concurrent-source and adversarial low-budget coverage passes alongside scheduler and API integration tests. The full local gate passed 267 test files and 1,329 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

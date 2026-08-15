@@ -24,6 +24,7 @@ export interface ScraperManagerOptions {
 
 const DEFAULT_SCRAPE_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_CONCURRENT_SCRAPES = 3;
+const DEFAULT_MAX_JOBS_PER_CYCLE = 1_000;
 const SOURCE_IDENTITY_BATCH_SIZE = 200;
 export const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 export const SCRAPER_INITIALIZATION_FAILURE_MESSAGE = "Source initialization could not complete.";
@@ -41,6 +42,18 @@ function sanitizeScrapeError(error: unknown): string {
 function sanitizeScrapeErrors(errors: unknown): string[] {
   if (!Array.isArray(errors)) return [];
   return Array.from(new Set(errors.map((error) => sanitizeScrapeError(error))));
+}
+
+function normalizeCycleJobLimit(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_JOBS_PER_CYCLE;
+  return Math.min(DEFAULT_MAX_JOBS_PER_CYCLE, Math.max(1, Math.floor(value)));
+}
+
+function allocateSourceJobLimits(totalLimit: number, sourceCount: number) {
+  if (sourceCount === 0) return [];
+  const base = Math.floor(totalLimit / sourceCount);
+  const remainder = totalLimit % sourceCount;
+  return Array.from({ length: sourceCount }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
 function cancelledError(message = "Source request was cancelled.") {
@@ -307,6 +320,9 @@ export class ScraperManager {
       ]);
       const sanitizedResult = {
         ...result,
+        jobs: options?.limit === undefined
+          ? result.jobs
+          : result.jobs.slice(0, Math.max(0, Math.floor(options.limit))),
         errors: sanitizeScrapeErrors(result.errors),
       };
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), sanitizedResult);
@@ -395,6 +411,7 @@ export class ScraperManager {
     const selectedScrapers = requestedPlatformNames.length > 0
       ? Array.from(this.scrapers.entries()).filter(([platformName]) => requestedPlatformNames.includes(platformName))
       : Array.from(this.scrapers.entries());
+    selectedScrapers.sort(([left], [right]) => left.localeCompare(right));
 
     console.log(`[ScraperManager] Starting scrape of ${selectedScrapers.length} platforms`);
 
@@ -410,18 +427,33 @@ export class ScraperManager {
       }
     }
 
-    const pendingScrapers = [...selectedScrapers];
+    const sourceLimits = allocateSourceJobLimits(
+      normalizeCycleJobLimit(options?.limit),
+      selectedScrapers.length
+    );
+    const pendingScrapers = selectedScrapers.map((entry, index) => ({
+      entry,
+      limit: sourceLimits[index],
+    }));
     const workers = Array.from(
       { length: Math.min(this.maxConcurrentScrapes, pendingScrapers.length) },
       async () => {
         while (pendingScrapers.length > 0 && !options?.signal?.aborted) {
-          const entry = pendingScrapers.shift();
-          if (!entry) return;
-          const [platformName, scraper] = entry;
+          const pending = pendingScrapers.shift();
+          if (!pending) return;
+          const [platformName, scraper] = pending.entry;
           console.log(`[ScraperManager] Scraping ${platformName}...`);
-          const result = await this.scrapeWithDeadline(platformName, scraper, options);
-          platformResults[platformName] = result;
-          totalJobs += result.jobs.length;
+          const result = await this.scrapeWithDeadline(platformName, scraper, {
+            ...options,
+            // A zero-quota source is still polled for health and freshness, but
+            // its listing is not admitted to this cycle's persistence budget.
+            limit: Math.max(1, pending.limit),
+          });
+          const boundedResult = pending.limit === 0
+            ? { ...result, jobs: [] }
+            : result;
+          platformResults[platformName] = boundedResult;
+          totalJobs += boundedResult.jobs.length;
         }
       }
     );
