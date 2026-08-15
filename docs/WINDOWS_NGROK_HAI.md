@@ -27,6 +27,8 @@ npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3
 
 The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and verifies public `/readyz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
 
+Set `OAUTH_PORTAL_URL` to the trusted login portal at runtime. Sign-in starts at Hire.AI's same-origin `/api/oauth/login` endpoint, which uses the trusted forwarded HTTPS origin to issue signed ten-minute state bound to an HttpOnly browser nonce. Do not link directly to the provider portal or construct OAuth state in the browser.
+
 The application trusts forwarded protocol and client metadata only when the immediate peer is loopback, which matches the local ngrok agent. Do not place another non-loopback reverse proxy between ngrok and Hire.AI without first extending and testing the explicit proxy-trust policy; forwarded headers from direct LAN or public clients are intentionally ignored.
 
 Cookie-authenticated POST requests through the tunnel must retain ngrok's public `Host`, `X-Forwarded-Proto: https`, and the browser's matching `Origin`. The launcher and default ngrok forwarding behavior satisfy that contract. A proxy that rewrites the host inconsistently will receive `403` for session writes and must be corrected rather than bypassing origin enforcement.

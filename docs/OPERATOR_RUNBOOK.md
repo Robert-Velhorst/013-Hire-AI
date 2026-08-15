@@ -17,6 +17,8 @@ For native production startup on Windows 11, use `npm.cmd run start:windows`. It
 
 Generate `JWT_SECRET` with a cryptographically secure secret manager or random-byte generator and inject it at runtime. Production accepts 32-4096 characters with no surrounding whitespace or control characters; checked-in and local-development placeholders are rejected. Rotating this value invalidates every existing session, so schedule rotation and require users to sign in again. `pnpm doctor` reports only whether the policy passes and never prints the value.
 
+Set `OAUTH_PORTAL_URL` at runtime to the trusted Manus login portal base URL. Production accepts HTTPS; loopback HTTP is available only for local operation. Credentials, query parameters, and fragments are rejected. The browser opens `/api/oauth/login`, and the server derives the current direct or trusted-ngrok callback origin, creates signed browser-bound state, and redirects to the portal. The legacy `VITE_OAUTH_PORTAL_URL` name remains a migration alias, but new deployments must not bake portal configuration into the browser bundle.
+
 OAuth sessions default to a seven-day absolute lifetime. Set `SESSION_TTL_MS` only to an integer from 900,000 (15 minutes) through 2,592,000,000 (30 days). The production doctor rejects malformed or out-of-range values, and the same effective value controls both the signed JWT expiry and browser-cookie age. Changing it affects newly issued sessions; use logout/session revocation when existing sessions must end immediately.
 
 ## Database and workers

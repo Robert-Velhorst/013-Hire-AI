@@ -8,6 +8,7 @@ const productionEnv = {
   DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
+  OAUTH_PORTAL_URL: "https://auth.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
   STRIPE_SECRET_KEY: "sk_test_doctor",

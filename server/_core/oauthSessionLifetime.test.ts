@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as db from "../db";
 import { ENV } from "./env";
 import { registerOAuthRoutes } from "./oauth";
+import { createOAuthLoginState } from "./oauthState";
 import { sdk } from "./sdk";
 
 const originalSessionTtlMs = ENV.sessionTtlMs;
@@ -43,14 +44,20 @@ describe("OAuth session lifetime", () => {
     } as unknown as Express;
     registerOAuthRoutes(app);
 
+    const oauthState = createOAuthLoginState(
+      "https://hire.example.test/api/oauth/callback",
+      ENV.cookieSecret
+    );
     const cookie = vi.fn();
     const redirect = vi.fn();
     const req = {
-      query: { code: "authorization-code", state: "signed-state" },
+      query: { code: "authorization-code", state: oauthState.state },
+      headers: { cookie: `hire_ai_oauth_state=${oauthState.nonce}` },
       secure: true,
     } as unknown as Request;
     const res = {
       cookie,
+      clearCookie: vi.fn(),
       redirect,
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),

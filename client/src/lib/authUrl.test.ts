@@ -1,30 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
 import { getLoginUrl } from "../const";
 
 describe("getLoginUrl", () => {
-  beforeEach(() => {
-    vi.stubGlobal("window", {
-      location: { origin: "http://localhost:3100" },
-    });
+  it("always uses the server-owned same-origin initiation route", () => {
+    expect(getLoginUrl()).toBe("/api/oauth/login");
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
+  it("does not embed a callback or provider portal in the browser URL", () => {
+    expect(getLoginUrl()).not.toContain("callback");
+    expect(getLoginUrl()).not.toContain("auth.example.test");
   });
 
-  it("uses the development session when hosted OAuth is not configured", () => {
-    vi.stubEnv("VITE_OAUTH_PORTAL_URL", "");
-    vi.stubEnv("VITE_APP_ID", "");
-
-    expect(getLoginUrl()).toBe("/api/dev/login");
-  });
-
-  it("uses configured hosted OAuth when it is available", () => {
-    vi.stubEnv("VITE_OAUTH_PORTAL_URL", "https://auth.example.test");
-    vi.stubEnv("VITE_APP_ID", "hire-ai-test");
-
-    expect(getLoginUrl()).toContain("https://auth.example.test/app-auth?");
-    expect(getLoginUrl()).toContain("appId=hire-ai-test");
+  it("keeps build-time provider configuration and browser-generated state out of the login helper", () => {
+    const source = readFileSync(resolve("client", "src", "const.ts"), "utf8");
+    expect(source).not.toContain("VITE_OAUTH_PORTAL_URL");
+    expect(source).not.toContain("window.location.origin");
+    expect(source).not.toContain("btoa(");
   });
 });

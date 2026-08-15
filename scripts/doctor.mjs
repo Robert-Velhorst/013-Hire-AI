@@ -79,6 +79,28 @@ const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcu
   || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
 );
 
+const oauthPortalUrl = String(process.env.OAUTH_PORTAL_URL || process.env.VITE_OAUTH_PORTAL_URL || "").trim();
+let oauthPortalValid = false;
+try {
+  const parsed = new URL(oauthPortalUrl);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const loopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
+  oauthPortalValid = (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+    && !parsed.username
+    && !parsed.password
+    && !parsed.search
+    && !parsed.hash;
+} catch { oauthPortalValid = false; }
+check(
+  "OAuth portal",
+  !oauthPortalUrl && !isProduction ? "warn" : oauthPortalValid ? "pass" : "fail",
+  !oauthPortalUrl && !isProduction
+    ? "not configured outside production"
+    : oauthPortalValid
+      ? "trusted runtime URL configured"
+      : "OAUTH_PORTAL_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+);
+
 const jwtSecret = String(process.env.JWT_SECRET || "");
 const jwtSecretPlaceholders = new Set([
   "replace-with-a-long-random-secret",

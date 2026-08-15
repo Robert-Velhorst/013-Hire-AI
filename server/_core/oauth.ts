@@ -1,10 +1,15 @@
 import { COOKIE_NAME } from "@shared/const";
+import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { ENV } from "./env";
+import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
+import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+
+const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -12,6 +17,41 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  app.get("/api/oauth/login", (req: Request, res: Response) => {
+    try {
+      if (!ENV.oAuthPortalUrl.trim()) {
+        if (!ENV.isProduction) {
+          res.redirect(302, "/api/dev/login");
+          return;
+        }
+        res.status(503).json({ error: "OAuth login is not configured" });
+        return;
+      }
+      const host = req.get("host");
+      if (!host) {
+        res.status(400).json({ error: "OAuth callback origin is invalid" });
+        return;
+      }
+      const redirectUri = `${req.protocol}://${host}/api/oauth/callback`;
+      const issued = createOAuthLoginState(redirectUri, ENV.cookieSecret);
+      const portalUrl = requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+      portalUrl.pathname = "/app-auth";
+      portalUrl.searchParams.set("appId", ENV.appId);
+      portalUrl.searchParams.set("redirectUri", redirectUri);
+      portalUrl.searchParams.set("state", issued.state);
+      portalUrl.searchParams.set("type", "signIn");
+      res.cookie(OAUTH_STATE_COOKIE_NAME, issued.nonce, {
+        ...getSessionCookieOptions(req),
+        path: "/api/oauth/callback",
+        maxAge: OAUTH_LOGIN_STATE_TTL_MS,
+      });
+      res.redirect(302, portalUrl.toString());
+    } catch {
+      logOperationalFailure("OAuth", "Login initiation");
+      res.status(400).json({ error: "OAuth login could not be started" });
+    }
+  });
+
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -21,8 +61,19 @@ export function registerOAuthRoutes(app: Express) {
       return;
     }
 
+    const browserNonce = parseCookieHeader(req.headers.cookie || "")[OAUTH_STATE_COOKIE_NAME] || "";
+    res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
+      ...getSessionCookieOptions(req),
+      path: "/api/oauth/callback",
+    });
+    const verifiedState = verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
+    if (!verifiedState) {
+      res.status(400).json({ error: "OAuth state is invalid or expired" });
+      return;
+    }
+
     try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+      const tokenResponse = await sdk.exchangeCodeForToken(code, verifiedState.redirectUri);
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
 
       if (!userInfo.openId) {

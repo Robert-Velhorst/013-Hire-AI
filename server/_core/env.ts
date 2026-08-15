@@ -1,4 +1,5 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
+import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -77,6 +78,7 @@ export const ENV = {
   databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
+  oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),
@@ -126,6 +128,10 @@ export function validateProductionEnv() {
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
   ]);
+  if (!ENV.oAuthPortalUrl.trim()) {
+    throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
+  }
+  requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
   if (!isValidJwtSecret(readEnv("JWT_SECRET"))) {
     throw new Error(
       "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
