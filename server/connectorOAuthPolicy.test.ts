@@ -29,6 +29,17 @@ describe("connector OAuth deployment policy", () => {
     expect(result).toEqual({ enabled: false, configuredProviders: [], issues: [] });
   });
 
+  it("ignores unrelated fields when inspecting the full runtime environment", () => {
+    const empty = Object.fromEntries(Object.keys(configured).map((key) => [key, ""]));
+    const result = inspectConnectorOAuthPolicy({
+      ...empty,
+      appId: "hire-ai-production",
+      databaseUrl: "mysql://configured",
+    } as unknown as ConnectorOAuthPolicyInput);
+
+    expect(result).toEqual({ enabled: false, configuredProviders: [], issues: [] });
+  });
+
   it("accepts complete shared controls and provider credential pairs", () => {
     expect(inspectConnectorOAuthPolicy(configured)).toEqual({
       enabled: true,

@@ -87,7 +87,13 @@ export function inspectConnectorOAuthPolicy(input: ConnectorOAuthPolicyInput): {
   configuredProviders: string[];
   issues: ConnectorOAuthPolicyIssue[];
 } {
-  const enabled = Object.values(input).some((value) => value.length > 0);
+  const sharedValues = [
+    input.connectorOAuthRedirectUri,
+    input.connectorTokenEncryptionKey,
+    input.connectorOAuthStateSecret,
+  ];
+  const providerValues = providerGroups.flatMap((group) => [input[group.id], input[group.secret]]);
+  const enabled = [...sharedValues, ...providerValues].some((value) => value.length > 0);
   if (!enabled) return { enabled: false, configuredProviders: [], issues: [] };
 
   const issues: ConnectorOAuthPolicyIssue[] = [];
