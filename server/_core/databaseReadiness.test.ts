@@ -53,4 +53,39 @@ describe("database readiness probe", () => {
       vi.useRealTimers();
     }
   });
+
+  it("does not accumulate probes after repeated timeouts while the database call is still active", async () => {
+    vi.useFakeTimers();
+    try {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const probe = vi.fn(() => pending);
+      const readiness = createDatabaseReadinessProbe({
+        probe,
+        timeoutMs: 25,
+        failureTtlMs: 10,
+      });
+
+      const first = readiness.check();
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(first).resolves.toBe(false);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(10);
+        const repeated = readiness.check();
+        await vi.advanceTimersByTimeAsync(25);
+        await expect(repeated).resolves.toBe(false);
+      }
+      expect(probe).toHaveBeenCalledTimes(1);
+
+      release();
+      await vi.runAllTimersAsync();
+      await expect(readiness.check()).resolves.toBe(true);
+      expect(probe).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

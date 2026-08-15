@@ -30,15 +30,28 @@ export function createDatabaseReadinessProbe(
   const now = options.now ?? Date.now;
   let cached: { available: boolean; expiresAt: number } | null = null;
   let inFlight: Promise<boolean> | null = null;
+  let activeProbe: Promise<boolean> | null = null;
 
   return {
     async check() {
       if (cached && cached.expiresAt > now()) return cached.available;
       if (inFlight) return inFlight;
+      // A caller deadline must not release ownership of a database operation
+      // that may still be consuming a pool connection.
+      if (activeProbe) return false;
 
       const attemptedProbe = Promise.resolve()
         .then(options.probe)
         .then(() => true, () => false);
+      activeProbe = attemptedProbe;
+      void attemptedProbe.then((available) => {
+        if (activeProbe !== attemptedProbe) return;
+        cached = {
+          available,
+          expiresAt: now() + (available ? successTtlMs : failureTtlMs),
+        };
+        activeProbe = null;
+      });
       const boundedProbe = Promise.race([attemptedProbe, deadline(timeoutMs)]);
       inFlight = boundedProbe
         .then((available) => {

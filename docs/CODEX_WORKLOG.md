@@ -765,3 +765,10 @@
 - Added a 192-bit opaque per-process readiness identity and required an exact local/public match before the Windows ngrok launcher reports success. Invalid local identity and public mismatch fail closed with distinct guidance.
 - Red/green identity and PowerShell wiring tests pass, both launchers parse natively, and a live development runtime returned a correctly shaped instance ID from `/readyz` on port 3045.
 - The full local gate passed 267 test files and 1,320 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Readiness probe ownership pass
+
+- Reproduced that each readiness timeout cleared the coalescing guard even while its database call remained unresolved; five post-cache polls produced five additional concurrent probes.
+- Separated the bounded caller result from ownership of the underlying operation. Readiness still responds within its deadline, but no new database probe starts until the active one settles, and a late success restores the cache immediately.
+- Red/green fake-time coverage proves repeated timeout polling retains exactly one database operation while preserving normal success caching, concurrent coalescing, failure retry, and bounded latency.
+- The full local gate passed 267 test files and 1,321 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
