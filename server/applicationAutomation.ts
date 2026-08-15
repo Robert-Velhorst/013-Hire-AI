@@ -4,8 +4,10 @@
  */
 
 import type { SubmissionEvidenceInput } from "./applicationSubmissionEvidence";
+import { detectATSType, type ATSType } from "./atsClassification";
 
-export type ATSType = "greenhouse" | "lever" | "workday" | "taleo" | "smartrecruiters" | "unknown";
+export { detectATSType } from "./atsClassification";
+export type { ATSType } from "./atsClassification";
 
 export interface ApplicationData {
   firstName: string;
@@ -34,35 +36,6 @@ export interface ApplicationResult {
   confirmationId?: string;
   submissionEvidence?: SubmissionEvidenceInput;
   error?: string;
-}
-
-/**
- * Detect ATS type from application URL
- */
-export function detectATSType(url: string): ATSType {
-  const urlLower = url.toLowerCase();
-
-  if (urlLower.includes("greenhouse.io") || urlLower.includes("boards.greenhouse.io")) {
-    return "greenhouse";
-  }
-
-  if (urlLower.includes("lever.co") || urlLower.includes("jobs.lever.co")) {
-    return "lever";
-  }
-
-  if (urlLower.includes("myworkday") || urlLower.includes("workday.com")) {
-    return "workday";
-  }
-
-  if (urlLower.includes("taleo.net") || urlLower.includes("tbe.taleo.net")) {
-    return "taleo";
-  }
-
-  if (urlLower.includes("smartrecruiters.com") || urlLower.includes("jobs.smartrecruiters.com")) {
-    return "smartrecruiters";
-  }
-
-  return "unknown";
 }
 
 /**

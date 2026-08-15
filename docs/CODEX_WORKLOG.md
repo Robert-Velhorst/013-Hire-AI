@@ -744,3 +744,10 @@
 - Reused strict callback, credential, state-signing, and encryption-key validation in runtime availability, state verification, token encryption, production startup, and secret-safe operator diagnostics.
 - Added red/green policy, runtime, standalone production-doctor, and full-runtime environment coverage. The first exact CI run exposed and reproduced an unrelated-field activation bug at container startup; the narrowed policy now inspects only connector fields. The final full local gate passed 264 test files and 1,299 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
 - Live provider authorization remains an operator acceptance gate because no provider credentials or authorized sandbox accounts are configured in this checkout. Windows/container and exact pushed-commit CI evidence follow at publication.
+
+## 2026-08-15 - Employer handoff classification integrity pass
+
+- Reproduced three divergent ATS classifiers and false recognition from arbitrary path/query substrings, malformed text, JavaScript URLs, and lookalike hostnames.
+- Replaced them with one credential-free HTTP(S), hostname-bound classifier shared by the public support API, autonomous planner, disabled browser handoff, and legacy compatibility boundary.
+- Aligned Greenhouse, Lever, Workday, Taleo, iCIMS, SmartRecruiters, BambooHR, and Jobvite reporting while retaining the strict manual/review-only submission boundary.
+- Red/green cross-module and adversarial coverage now proves every caller returns the same classification. The full local gate passed 265 test files and 1,313 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

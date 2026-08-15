@@ -7,7 +7,10 @@
  * manual submission with deterministic confirmation evidence.
  */
 
-export type ATSType = "greenhouse" | "lever" | "workday" | "taleo" | "icims" | "smartrecruiters" | "bamboohr" | "jobvite" | "unknown";
+import { detectATSType, type ATSType } from "./atsClassification";
+
+export { detectATSType } from "./atsClassification";
+export type { ATSType } from "./atsClassification";
 
 export interface ApplicationData {
   firstName: string;
@@ -50,19 +53,6 @@ export function getResumeUploadBlocker(data: ApplicationData): string | null {
   }
 
   return null;
-}
-
-export function detectATSType(url: string): ATSType {
-  const urlLower = url.toLowerCase();
-  if (urlLower.includes("greenhouse.io") || urlLower.includes("boards.greenhouse")) return "greenhouse";
-  if (urlLower.includes("lever.co") || urlLower.includes("jobs.lever")) return "lever";
-  if (urlLower.includes("workday.com") || urlLower.includes("myworkday")) return "workday";
-  if (urlLower.includes("taleo.net") || urlLower.includes("taleo.com")) return "taleo";
-  if (urlLower.includes("icims.com")) return "icims";
-  if (urlLower.includes("smartrecruiters.com")) return "smartrecruiters";
-  if (urlLower.includes("bamboohr.com")) return "bamboohr";
-  if (urlLower.includes("jobvite.com")) return "jobvite";
-  return "unknown";
 }
 
 /** Browser execution is disabled for every platform until an approval-wired integration exists. */

@@ -3584,7 +3584,16 @@ export const appRouter = router({
         submissionSupported: [],
         preparationSupported: [],
         materialPreparationSupported: true,
-        guarded: ["greenhouse", "lever", "workday", "taleo", "smartrecruiters"],
+        guarded: [
+          "greenhouse",
+          "lever",
+          "workday",
+          "taleo",
+          "icims",
+          "smartrecruiters",
+          "bamboohr",
+          "jobvite",
+        ],
         manualReviewRequired: ["unknown"],
         notes: "Hire.AI can prepare resume-linked application material in its ledger, but it does not open, fill, upload to, or submit any employer portal form. Employer handoff and confirmation remain manual.",
       };

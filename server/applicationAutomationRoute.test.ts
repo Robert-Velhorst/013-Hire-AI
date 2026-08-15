@@ -71,6 +71,16 @@ describe("automation application preparation route", () => {
       submissionSupported: [],
       preparationSupported: [],
       materialPreparationSupported: true,
+      guarded: [
+        "greenhouse",
+        "lever",
+        "workday",
+        "taleo",
+        "icims",
+        "smartrecruiters",
+        "bamboohr",
+        "jobvite",
+      ],
     });
     expect(support.notes).toContain("does not open, fill, upload to, or submit");
     expect(greenhouse).toMatchObject({

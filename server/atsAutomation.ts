@@ -6,6 +6,11 @@
  * that need to classify an ATS and create a reviewable manual handoff.
  */
 
+import { detectATSType, type ATSType } from "./atsClassification";
+
+export { detectATSType } from "./atsClassification";
+export type { ATSType } from "./atsClassification";
+
 export interface ATSCredentials {
   email: string;
   linkedinUrl?: string;
@@ -73,8 +78,6 @@ export interface CAPTCHAResult {
   method: "manual";
   error?: string;
 }
-
-export type ATSType = "workday" | "taleo" | "greenhouse" | "lever" | "icims" | "smartrecruiters" | "unknown";
 
 function finalSubmissionDisabled(atsType: ATSType): ATSResult {
   return {
@@ -146,17 +149,6 @@ export class TaleoAutomation {
   ): Promise<ATSResult> {
     return finalSubmissionDisabled("taleo");
   }
-}
-
-export function detectATSType(url: string): ATSType {
-  const urlLower = url.toLowerCase();
-  if (urlLower.includes("workday") || urlLower.includes("myworkdayjobs")) return "workday";
-  if (urlLower.includes("taleo") || urlLower.includes("oracle.com/careers")) return "taleo";
-  if (urlLower.includes("greenhouse.io") || urlLower.includes("boards.greenhouse")) return "greenhouse";
-  if (urlLower.includes("lever.co") || urlLower.includes("jobs.lever")) return "lever";
-  if (urlLower.includes("icims.com")) return "icims";
-  if (urlLower.includes("smartrecruiters.com")) return "smartrecruiters";
-  return "unknown";
 }
 
 export async function applyWithATS(
