@@ -37,7 +37,7 @@ Cookie-authenticated POST requests through the tunnel must retain ngrok's public
 - Account connectors: `https://hire-ai.example.ngrok.app/api/connectors/oauth/callback`
 - Stripe webhook: `https://hire-ai.example.ngrok.app/api/stripe/webhook`
 
-Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact connector callback. The script rejects a conflicting configured callback. A green public readiness check proves the configured database answered, but does not prove OAuth, Stripe, storage, email, or provider acceptance; test each with an authorized sandbox account.
+Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending in `/api/connectors/oauth/callback`. Configure a canonical base64 32-byte `CONNECTOR_TOKEN_ENCRYPTION_KEY`, a separate 32-4096 character `CONNECTOR_OAUTH_STATE_SECRET`, and complete credential pairs only for providers you enable. Leave all connector variables empty to disable connectors. Production startup and `pnpm doctor` reject partial or unsafe connector configuration. A green public readiness check proves the configured database answered, but does not prove OAuth, Stripe, storage, email, or provider acceptance; test each with an authorized sandbox account.
 
 ## HAI A2A connector
 

@@ -6,6 +6,13 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { ENV } from "./_core/env";
+import {
+  decodeConnectorTokenEncryptionKey,
+  inspectConnectorOAuthPolicy,
+  isValidConnectorCredential,
+  isValidConnectorOAuthRedirectUri,
+  isValidConnectorOAuthStateSecret,
+} from "./_core/connectorOAuthPolicy";
 import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export const OAUTH_CONNECTOR_PROVIDERS = [
@@ -202,15 +209,10 @@ export function getConnectorOAuthConfig(
 ): ConnectorOAuthConfig | null {
   const definition = providerDefinitions[provider];
   const { clientId, clientSecret } = readClientCredential(definition, environment);
-  const redirectUri = environment.connectorOAuthRedirectUri.trim();
-  if (!clientId.trim() || !clientSecret.trim() || !redirectUri) return null;
-
-  try {
-    const parsed = new URL(redirectUri);
-    if (parsed.protocol !== "https:" && parsed.hostname !== "localhost") return null;
-  } catch {
-    return null;
-  }
+  const redirectUri = environment.connectorOAuthRedirectUri;
+  if (!isValidConnectorCredential(clientId)
+    || !isValidConnectorCredential(clientSecret)
+    || !isValidConnectorOAuthRedirectUri(redirectUri)) return null;
 
   return {
     provider,
@@ -226,12 +228,10 @@ export function getConnectorOAuthAvailability(
   provider: OAuthConnectorProvider,
   environment = getDefaultEnvironment()
 ) {
-  const config = getConnectorOAuthConfig(provider, environment);
-  const encryptionKey = getEncryptionKey(environment.connectorTokenEncryptionKey);
-  const stateSecret = environment.connectorOAuthStateSecret.trim();
+  const policy = inspectConnectorOAuthPolicy(environment);
   return {
     provider,
-    available: Boolean(config && encryptionKey && stateSecret),
+    available: policy.issues.length === 0 && policy.configuredProviders.includes(provider),
   };
 }
 
@@ -257,7 +257,9 @@ export function createConnectorOAuthState(
   stateSecret = getDefaultEnvironment().connectorOAuthStateSecret,
   now = Date.now()
 ) {
-  if (!stateSecret.trim()) throw new Error("Connector OAuth state signing is not configured.");
+  if (!isValidConnectorOAuthStateSecret(stateSecret)) {
+    throw new Error("Connector OAuth state signing is not configured.");
+  }
   const payload: ConnectorOAuthState = {
     ...input,
     consentScopes: input.consentScopes?.map((scope) => scope.trim()).filter(Boolean),
@@ -275,7 +277,8 @@ export function verifyConnectorOAuthState(
   now = Date.now()
 ): ConnectorOAuthState | null {
   const [encodedPayload, signature, ...extra] = state.split(".");
-  if (!encodedPayload || !signature || extra.length > 0 || !stateSecret.trim()) return null;
+  if (!encodedPayload || !signature || extra.length > 0 || state.length > 4_096
+    || !isValidConnectorOAuthStateSecret(stateSecret)) return null;
   const expectedSignature = stateSignature(encodedPayload, stateSecret);
   const received = Buffer.from(signature);
   const expected = Buffer.from(expectedSignature);
@@ -307,21 +310,11 @@ export function verifyConnectorOAuthState(
   }
 }
 
-function getEncryptionKey(encodedKey: string) {
-  if (!encodedKey.trim()) return null;
-  try {
-    const key = Buffer.from(encodedKey, "base64");
-    return key.length === 32 ? key : null;
-  } catch {
-    return null;
-  }
-}
-
 export function encryptConnectorToken(
   token: string,
   encodedKey = getDefaultEnvironment().connectorTokenEncryptionKey
 ) {
-  const key = getEncryptionKey(encodedKey);
+  const key = decodeConnectorTokenEncryptionKey(encodedKey);
   if (!key) throw new Error("Connector token encryption is not configured.");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -338,7 +331,7 @@ export function decryptConnectorToken(
   encryptedToken: string,
   encodedKey = getDefaultEnvironment().connectorTokenEncryptionKey
 ) {
-  const key = getEncryptionKey(encodedKey);
+  const key = decodeConnectorTokenEncryptionKey(encodedKey);
   if (!key) throw new Error("Connector token encryption is not configured.");
   const [version, encodedIv, encodedTag, encodedCiphertext, ...extra] = encryptedToken.split(".");
   if (version !== ENCRYPTION_VERSION || !encodedIv || !encodedTag || !encodedCiphertext || extra.length > 0) {

@@ -43,6 +43,10 @@ describe("external connector OAuth boundary", () => {
       ...environment,
       googleOAuthClientSecret: "",
     }).available).toBe(false);
+    expect(getConnectorOAuthAvailability("gmail", {
+      ...environment,
+      connectorOAuthStateSecret: "short",
+    }).available).toBe(false);
   });
 
   it("builds an authorization URL without including client secrets", () => {
@@ -92,6 +96,11 @@ describe("external connector OAuth boundary", () => {
     });
     expect(verifyConnectorOAuthState(`${state}x`, environment.connectorOAuthStateSecret, 1_001)).toBeNull();
     expect(verifyConnectorOAuthState(state, environment.connectorOAuthStateSecret, 1_000 + 10 * 60 * 1000 + 1)).toBeNull();
+    expect(() => createConnectorOAuthState(
+      { provider: "gmail", userId: 73 },
+      "short",
+      1_000
+    )).toThrow("state signing is not configured");
   });
 
   it("encrypts provider tokens with authenticated encryption", () => {

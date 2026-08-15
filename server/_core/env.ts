@@ -1,5 +1,6 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -145,5 +146,11 @@ export function validateProductionEnv() {
   const haiConnectorError = validateHaiConnectorConfig(defaultHaiConnectorConfig());
   if (haiConnectorError) {
     throw new Error(haiConnectorError);
+  }
+  const connectorOAuthPolicy = inspectConnectorOAuthPolicy(ENV);
+  if (connectorOAuthPolicy.issues.length > 0) {
+    throw new Error(
+      `Connector OAuth configuration is incomplete or unsafe: ${connectorOAuthPolicy.issues.join(", ")}`
+    );
   }
 }

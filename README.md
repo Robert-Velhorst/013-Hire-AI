@@ -266,16 +266,16 @@ All secrets are injected at runtime via the platform. Do **not** commit `.env` f
 | `STRIPE_SECRET_KEY` | Stripe secret key (server-side) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (frontend) |
-| `CONNECTOR_OAUTH_REDIRECT_URI` | Exact HTTPS callback URL for `/api/connectors/oauth/callback` (localhost is allowed for development) |
-| `CONNECTOR_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key used only to encrypt external OAuth tokens at rest |
-| `CONNECTOR_OAUTH_STATE_SECRET` | Optional dedicated state-signing secret; defaults to the session secret only outside production |
+| `CONNECTOR_OAUTH_REDIRECT_URI` | Exact HTTPS callback URL ending in `/api/connectors/oauth/callback` (loopback HTTP is allowed for development) |
+| `CONNECTOR_TOKEN_ENCRYPTION_KEY` | Canonical base64-encoded 32-byte key used only to encrypt external OAuth tokens at rest |
+| `CONNECTOR_OAUTH_STATE_SECRET` | Dedicated 32-4096 character state-signing secret; required whenever any connector is configured |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Gmail and Google Drive OAuth credentials |
 | `DROPBOX_OAUTH_CLIENT_ID` / `DROPBOX_OAUTH_CLIENT_SECRET` | Dropbox OAuth credentials |
 | `MICROSOFT_OAUTH_CLIENT_ID` / `MICROSOFT_OAUTH_CLIENT_SECRET` | Outlook OAuth credentials |
 | `LINKEDIN_OAUTH_CLIENT_ID` / `LINKEDIN_OAUTH_CLIENT_SECRET` | LinkedIn OAuth credentials |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth credentials |
 
-External connectors remain unavailable until their provider credentials, shared callback URL, state secret, and token-encryption key are configured. Authorization grants are encrypted before persistence, never exposed through tRPC, and deleted when the user disconnects the provider.
+External connectors remain unavailable until their provider credentials, shared callback URL, state secret, and token-encryption key are configured. Leave every connector variable empty to disable the feature intentionally. Once any connector variable is set, startup and `pnpm doctor` fail closed unless the shared controls and at least one complete provider credential pair are valid. Authorization grants are encrypted before persistence, never exposed through tRPC, and deleted when the user disconnects the provider.
 
 ---
 

@@ -134,6 +134,60 @@ check(
     : "SESSION_TTL_MS must be an integer between 900000 and 2592000000ms"
 );
 
+const connectorValues = {
+  redirectUri: String(process.env.CONNECTOR_OAUTH_REDIRECT_URI || ""),
+  encryptionKey: String(process.env.CONNECTOR_TOKEN_ENCRYPTION_KEY || ""),
+  stateSecret: String(process.env.CONNECTOR_OAUTH_STATE_SECRET || ""),
+};
+const connectorProviderGroups = [
+  ["google", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", 2],
+  ["dropbox", "DROPBOX_OAUTH_CLIENT_ID", "DROPBOX_OAUTH_CLIENT_SECRET", 1],
+  ["microsoft", "MICROSOFT_OAUTH_CLIENT_ID", "MICROSOFT_OAUTH_CLIENT_SECRET", 1],
+  ["linkedin", "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET", 1],
+  ["github", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", 1],
+];
+const connectorAnyConfigured = Object.values(connectorValues).some(value => value.length > 0)
+  || connectorProviderGroups.some(([, id, secret]) => String(process.env[id] || "").length > 0 || String(process.env[secret] || "").length > 0);
+const connectorIssues = [];
+let connectorCount = 0;
+if (connectorAnyConfigured) {
+  try {
+    const parsed = new URL(connectorValues.redirectUri);
+    const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const loopback = ["localhost", "127.0.0.1", "::1"].includes(host);
+    if (!((parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+      && !parsed.username && !parsed.password && !parsed.search && !parsed.hash
+      && parsed.pathname === "/api/connectors/oauth/callback")) connectorIssues.push("redirect_uri");
+  } catch { connectorIssues.push("redirect_uri"); }
+  const keyPatternValid = /^[A-Za-z0-9+/]+={0,2}$/.test(connectorValues.encryptionKey)
+    && connectorValues.encryptionKey === connectorValues.encryptionKey.trim();
+  const decodedKey = keyPatternValid ? Buffer.from(connectorValues.encryptionKey, "base64") : null;
+  const canonicalKey = decodedKey?.toString("base64") || "";
+  if (!decodedKey || decodedKey.length !== 32
+    || ![canonicalKey, canonicalKey.replace(/=+$/, "")].includes(connectorValues.encryptionKey)) connectorIssues.push("token_encryption_key");
+  if (connectorValues.stateSecret.length < 32 || connectorValues.stateSecret.length > 4_096
+    || connectorValues.stateSecret !== connectorValues.stateSecret.trim()
+    || /[\u0000-\u001f\u007f]/.test(connectorValues.stateSecret)
+    || connectorValues.stateSecret === "hire-ai-local-dev-connector-state-secret") connectorIssues.push("state_signing_secret");
+  for (const [name, idName, secretName, count] of connectorProviderGroups) {
+    const id = String(process.env[idName] || "");
+    const secret = String(process.env[secretName] || "");
+    if (!id && !secret) continue;
+    const valid = [id, secret].every(value => value.length > 0 && value.length <= 4_096
+      && value === value.trim() && !/[\u0000-\u001f\u007f]/.test(value));
+    if (!valid) connectorIssues.push(`${name}_credentials`);
+    else connectorCount += count;
+  }
+  if (connectorCount === 0) connectorIssues.push("provider_credentials");
+}
+check(
+  "connector OAuth",
+  connectorIssues.length > 0 ? "fail" : "pass",
+  !connectorAnyConfigured ? "disabled"
+    : connectorIssues.length > 0 ? `incomplete or unsafe configuration: ${connectorIssues.join(", ")}`
+      : `${connectorCount} connector(s) configured`
+);
+
 const databasePoolLimit = Number(process.env.DATABASE_POOL_LIMIT || "10");
 const databasePoolQueueLimit = Number(process.env.DATABASE_POOL_QUEUE_LIMIT || "100");
 const databasePoolIdleTimeoutMs = Number(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS || "60000");
