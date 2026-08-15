@@ -79,6 +79,34 @@ describe("generic scraper structured job extraction", () => {
     })]);
   });
 
+  it("stops traversing structured jobs when the admitted quota is full", async () => {
+    const jobs = Array.from({ length: 50 }, (_, index) => ({
+      "@type": "JobPosting",
+      title: `Engineer ${index}`,
+      description: `<p>Role ${index}</p>`,
+      url: `/jobs/${index}`,
+    }));
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      `<script type="application/ld+json">${JSON.stringify({ "@graph": jobs })}</script>`,
+      { status: 200 }
+    )) as typeof fetch;
+    const scraper = new GenericScraper({
+      platformName: "Bounded Structured Test Source",
+      platformId: 78,
+      baseUrl: "https://jobs.example.com",
+      rateLimit: 0,
+      maxRetries: 0,
+      type: "html",
+    });
+    const internals = scraper as unknown as { cleanHtml: (html: string) => string };
+    const cleanHtml = vi.spyOn(internals, "cleanHtml");
+
+    const result = await scraper.scrape({ limit: 1 });
+
+    expect(result.jobs).toHaveLength(1);
+    expect(cleanHtml).toHaveBeenCalledOnce();
+  });
+
   it("ignores malformed structured data and resolves heuristic HTML links against a nested source URL", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(
       '<script type="application/ld+json">{not-json}</script><article class="job"><h2>Fallback Engineer</h2><a href="/jobs/fallback">Apply</a></article>',
@@ -127,6 +155,31 @@ describe("generic scraper structured job extraction", () => {
       applicationUrl: "https://jobs.example.com/careers/roles/writer",
       externalId: "writer-1",
     })]);
+  });
+
+  it("stops parsing an RSS feed as soon as the admitted job quota is full", async () => {
+    const items = Array.from({ length: 50 }, (_, index) =>
+      `<item><title>Writer ${index} - Example Press</title><link>roles/${index}</link><description>Role ${index}</description></item>`
+    ).join("");
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      `<rss><channel>${items}</channel></rss>`,
+      { status: 200 }
+    )) as typeof fetch;
+    const scraper = new GenericScraper({
+      platformName: "Bounded RSS Test Source",
+      platformId: 77,
+      baseUrl: "https://jobs.example.com/careers/",
+      rateLimit: 0,
+      maxRetries: 0,
+      type: "rss",
+    });
+    const internals = scraper as unknown as { cleanHtml: (html: string) => string };
+    const cleanHtml = vi.spyOn(internals, "cleanHtml");
+
+    const result = await scraper.scrape({ limit: 1 });
+
+    expect(result.jobs).toHaveLength(1);
+    expect(cleanHtml).toHaveBeenCalledOnce();
   });
 
   it("preserves configured API query parameters and excludes known location conflicts", async () => {

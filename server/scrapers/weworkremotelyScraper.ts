@@ -57,8 +57,11 @@ export class WeWorkRemotelyScraper extends BaseScraper {
 
           // Parse RSS XML
           const parsedJobs = this.parseRSS(response);
-          
-          for (const rawJob of parsedJobs) {
+
+          while (true) {
+            const candidate = parsedJobs.next();
+            if (candidate.done) break;
+            const rawJob = candidate.value;
             // Apply keyword filter if provided
             if (options?.keywords) {
               const keywords = options.keywords.toLowerCase();
@@ -112,9 +115,7 @@ export class WeWorkRemotelyScraper extends BaseScraper {
     };
   }
 
-  private parseRSS(xml: string): any[] {
-    const jobs: any[] = [];
-    
+  private *parseRSS(xml: string): Generator<any> {
     // Simple XML parsing for RSS items
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
@@ -137,17 +138,15 @@ export class WeWorkRemotelyScraper extends BaseScraper {
         jobTitle = parts.slice(1).join(":").trim();
       }
 
-      jobs.push({
+      yield {
         title: jobTitle,
         company,
         link,
         description: this.cleanHtml(description),
         pubDate: pubDate ? new Date(pubDate) : undefined,
         guid,
-      });
+      };
     }
-
-    return jobs;
   }
 
   private extractTag(xml: string, tag: string): string {

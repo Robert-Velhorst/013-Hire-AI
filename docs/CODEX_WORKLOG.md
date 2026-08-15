@@ -794,3 +794,10 @@
 - Added one bounded cycle budget, capped at 1,000 jobs and distributed near-equally across a stable source order. Every selected source is still polled for health and freshness, including when the budget is smaller than the source count.
 - The manager passes each quota to its adapter to avoid excess normalization and truncates nonconforming results before aggregation or database persistence. Returned totals now describe the bounded cycle rather than the sum of per-source maxima.
 - Red/green concurrent-source and adversarial low-budget coverage passes alongside scheduler and API integration tests. The full local gate passed 267 test files and 1,329 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Lazy source-parser pass
+
+- Reproduced that generic RSS/HTML feeds and We Work Remotely materialized and cleaned every candidate before applying the newly enforced source quota; nested JSON-LD traversal also removed from the front of an expanding array, creating quadratic work on large documents.
+- Converted RSS, heuristic HTML, and JSON-LD extraction to lazy iterators consumed directly by filtering and normalization. Parsing now stops as soon as the admitted quota is full, while malformed structured data still falls back to heuristic HTML.
+- Replaced JSON-LD front-removal with cursor traversal for linear work and removed eager materialization of all structured-data script matches.
+- Red/green 50-item RSS and JSON-LD regressions prove only the admitted item is cleaned, and the dedicated We Work Remotely regression proves later categories are not fetched after the quota is reached. The full local gate passed 268 test files and 1,332 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.

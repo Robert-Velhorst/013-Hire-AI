@@ -78,8 +78,10 @@ export class GenericScraper extends BaseScraper {
       }, { signal: options?.signal });
 
       const parsedJobs = this.parseRSS(response);
-
-      for (const rawJob of parsedJobs) {
+      while (true) {
+        const candidate = parsedJobs.next();
+        if (candidate.done) break;
+        const rawJob = candidate.value;
         const normalizedJob = this.normalizeJob(rawJob);
         if (!this.matchesRequestedOptions(normalizedJob, options)) continue;
         jobs.push(normalizedJob);
@@ -186,8 +188,10 @@ export class GenericScraper extends BaseScraper {
 
       // Generic HTML parsing - looks for common job listing patterns
       const parsedJobs = this.parseHTML(response);
-
-      for (const rawJob of parsedJobs) {
+      while (true) {
+        const candidate = parsedJobs.next();
+        if (candidate.done) break;
+        const rawJob = candidate.value;
         const normalizedJob = this.normalizeJob(rawJob);
         if (!this.matchesRequestedOptions(normalizedJob, options)) continue;
         jobs.push(normalizedJob);
@@ -207,8 +211,7 @@ export class GenericScraper extends BaseScraper {
     return { jobs, errors, scrapedAt: new Date() };
   }
 
-  private parseRSS(xml: string): any[] {
-    const jobs: any[] = [];
+  private *parseRSS(xml: string): Generator<any> {
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
 
@@ -240,7 +243,7 @@ export class GenericScraper extends BaseScraper {
       const applicationUrl = this.absoluteUrl(link);
       if (!jobTitle || !applicationUrl) continue;
 
-      jobs.push({
+      yield {
         title: jobTitle,
         company,
         location: "Remote",
@@ -248,17 +251,20 @@ export class GenericScraper extends BaseScraper {
         applicationUrl,
         externalId: guid || link,
         postedDate: pubDate ? new Date(pubDate) : undefined,
-      });
+      };
     }
-
-    return jobs;
   }
 
-  private parseHTML(html: string): any[] {
+  private *parseHTML(html: string): Generator<any> {
+    let foundStructuredJob = false;
     const structuredJobs = this.parseJsonLdJobPostings(html);
-    if (structuredJobs.length > 0) return structuredJobs;
-
-    const jobs: any[] = [];
+    while (true) {
+      const candidate = structuredJobs.next();
+      if (candidate.done) break;
+      foundStructuredJob = true;
+      yield candidate.value;
+    }
+    if (foundStructuredJob) return;
 
     // Try common job card patterns
     const patterns = [
@@ -269,6 +275,7 @@ export class GenericScraper extends BaseScraper {
     ];
 
     for (const pattern of patterns) {
+      let foundPatternJob = false;
       let match;
       while ((match = pattern.exec(html)) !== null) {
         const content = match[1] || match[2] || "";
@@ -279,33 +286,29 @@ export class GenericScraper extends BaseScraper {
 
         const applicationUrl = this.absoluteUrl(link);
         if (title && applicationUrl) {
-          jobs.push({
+          foundPatternJob = true;
+          yield {
             title: this.cleanHtml(title),
             company: company ? this.cleanHtml(company) : `Company via ${this.config.platformName}`,
             location: "Remote",
             applicationUrl,
             externalId: link,
-          });
+          };
         }
       }
 
-      if (jobs.length > 0) break;
+      if (foundPatternJob) return;
     }
-
-    return jobs;
   }
 
-  private parseJsonLdJobPostings(html: string): any[] {
-    const scripts = Array.from(html.matchAll(
-      /<script\b[^>]*\btype\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
-    ));
-    const jobs: any[] = [];
-
-    for (const script of scripts) {
+  private *parseJsonLdJobPostings(html: string): Generator<any> {
+    const scriptPattern = /<script\b[^>]*\btype\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let script: RegExpExecArray | null;
+    while ((script = scriptPattern.exec(html)) !== null) {
       try {
         const queue: unknown[] = [JSON.parse(script[1])];
-        while (queue.length > 0) {
-          const current = queue.shift();
+        for (let cursor = 0; cursor < queue.length; cursor++) {
+          const current = queue[cursor];
           if (Array.isArray(current)) {
             queue.push(...current);
             continue;
@@ -318,7 +321,7 @@ export class GenericScraper extends BaseScraper {
             : [record["@type"]];
           if (types.some((type) => type === "JobPosting")) {
             const job = this.toJsonLdJobPosting(record);
-            if (job) jobs.push(job);
+            if (job) yield job;
           }
 
           for (const value of Object.values(record)) {
@@ -329,8 +332,6 @@ export class GenericScraper extends BaseScraper {
         // Ignore malformed structured data and continue with other scripts or HTML heuristics.
       }
     }
-
-    return jobs;
   }
 
   private toJsonLdJobPosting(record: Record<string, unknown>) {
