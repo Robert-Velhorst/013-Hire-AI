@@ -43,6 +43,9 @@ describe("Windows runtime CI contract", () => {
     expect(windowsLauncher).toContain("$response.ready -eq $true");
     expect(ngrokLauncher.match(/\/readyz/g)).toHaveLength(2);
     expect(ngrokLauncher).toContain("$response.ready -eq $true");
+    expect(ngrokLauncher).toContain("$local.instanceId");
+    expect(ngrokLauncher).toContain("$response.instanceId -eq $localInstanceId");
+    expect(ngrokLauncher).toContain("does not match the local Hire.AI runtime");
   });
 
   it("prepares and verifies the database before starting the Windows server", () => {

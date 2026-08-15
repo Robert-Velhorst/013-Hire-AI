@@ -25,7 +25,7 @@ Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Start the Wi
 npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3000
 ```
 
-The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and verifies public `/readyz` before reporting the endpoint. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
+The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and accepts public `/readyz` only when its opaque per-process instance ID exactly matches the local runtime. This prevents a stale or misrouted reserved hostname from being reported as the current Hire.AI process. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
 
 Set `OAUTH_PORTAL_URL` to the trusted login portal at runtime. Sign-in starts at Hire.AI's same-origin `/api/oauth/login` endpoint, which uses the trusted forwarded HTTPS origin to issue signed ten-minute state bound to an HttpOnly browser nonce. Do not link directly to the provider portal or construct OAuth state in the browser.
 

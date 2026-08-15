@@ -32,8 +32,10 @@ import { registerApplicationBodyParsers } from "./bodyParsers";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
 import { registerApiRateLimit } from "./apiRateLimit";
+import { createRuntimeInstanceId } from "./runtimeInstance";
 
 let startupStage: StartupStage = "configuration validation";
+const runtimeInstanceId = createRuntimeInstanceId();
 
 async function startServer() {
   validateProductionEnv();
@@ -66,6 +68,7 @@ async function startServer() {
     res.status(ready ? 200 : 503).json({
       ...readiness,
       ready,
+      instanceId: runtimeInstanceId,
       database: databaseAvailable === null
         ? "not_configured"
         : databaseAvailable

@@ -14,7 +14,7 @@
 - Privacy policy `2026-08-09.v2` classifies every direct and application-linked user-owned table, including workspace membership and invitation relationships, known private-object key, and provider grant. A schema-source regression fails when a new direct user table is not classified; previews remain read-only and fail closed without persistent storage.
 - Workspace invitations are email-bound, expire after seven days, and persist only a SHA-256 token hash. Role changes and ownership transfers are audited. Membership does not authorize candidate-domain data access.
 - HTTP responses disable `X-Powered-By`, prohibit framing, constrain browser permissions, and add production CSP/HSTS.
-- Native startup binds to loopback by default and production refuses port fallback. The HAI bridge is disabled by default, limited to the exact local/private `/api/hai/a2a` endpoint, scoped to one canonical positive user ID, protected by a separate 32-4096 character non-placeholder bearer token without whitespace/control characters, body-bounded, and read-only.
+- Native startup binds to loopback by default and production refuses port fallback. Public ngrok readiness must echo the exact local process's opaque runtime ID before the launcher reports success. The HAI bridge is disabled by default, limited to the exact local/private `/api/hai/a2a` endpoint, scoped to one canonical positive user ID, protected by a separate 32-4096 character non-placeholder bearer token without whitespace/control characters, body-bounded, and read-only.
 
 ## Required before production
 

@@ -20,6 +20,10 @@ try {
     throw "Hire.AI is not ready at $localReadiness. Start the Windows runtime and verify its database first."
 }
 if ($local.ready -ne $true) { throw 'The local Hire.AI runtime is not ready.' }
+$localInstanceId = [string]$local.instanceId
+if ($localInstanceId -notmatch '^[A-Za-z0-9_-]{32,128}$') {
+    throw 'The local Hire.AI runtime did not provide a valid process identity.'
+}
 
 $expectedConnectorCallback = "$($public.GetLeftPart([UriPartial]::Authority))/api/connectors/oauth/callback"
 if ($env:CONNECTOR_OAUTH_REDIRECT_URI -and $env:CONNECTOR_OAUTH_REDIRECT_URI.TrimEnd('/') -ne $expectedConnectorCallback) {
@@ -39,12 +43,14 @@ try {
     $publicReadiness = "$($public.GetLeftPart([UriPartial]::Authority))/readyz"
     $deadline = (Get-Date).AddSeconds(60)
     $healthy = $false
+    $identityMismatch = $false
     do {
         if ($process.HasExited) { break }
         Start-Sleep -Seconds 1
         try {
             $response = Invoke-RestMethod -Uri $publicReadiness -Headers @{ 'ngrok-skip-browser-warning' = 'true' } -TimeoutSec 5
-            $healthy = $response.ready -eq $true
+            $identityMismatch = $response.ready -eq $true -and [string]$response.instanceId -ne $localInstanceId
+            $healthy = $response.ready -eq $true -and $response.instanceId -eq $localInstanceId
         } catch {
             $healthy = $false
         }
@@ -52,6 +58,9 @@ try {
 
     if (-not $healthy) {
         $details = if (Test-Path $stderrPath) { Get-Content $stderrPath -Tail 20 } else { @() }
+        if ($identityMismatch) {
+            throw 'The ngrok endpoint is ready but does not match the local Hire.AI runtime. Verify the reserved hostname and tunnel target.'
+        }
         throw "The ngrok endpoint did not pass public readiness verification. $($details -join [Environment]::NewLine)"
     }
 

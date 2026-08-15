@@ -758,3 +758,10 @@
 - Added bounded non-placeholder token validation, canonical positive safe-integer user IDs, and exact local/private `/api/hai/a2a` endpoint enforcement without trimming unsafe input into validity.
 - Wired the same effective policy into fail-closed production startup and secret-safe `pnpm doctor` diagnostics; corrected token-generation guidance and the application parser budget documentation.
 - Red/green runtime, HTTP-route, aggregate-resource, and standalone production-doctor coverage passes. The full local gate passed 266 test files and 1,319 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
+
+## 2026-08-15 - Ngrok runtime-identity binding pass
+
+- Reproduced that the tunnel launcher accepted any public `/readyz` response containing `ready: true`, without proving the reserved hostname reached the local Hire.AI process it had just checked.
+- Added a 192-bit opaque per-process readiness identity and required an exact local/public match before the Windows ngrok launcher reports success. Invalid local identity and public mismatch fail closed with distinct guidance.
+- Red/green identity and PowerShell wiring tests pass, both launchers parse natively, and a live development runtime returned a correctly shaped instance ID from `/readyz` on port 3045.
+- The full local gate passed 267 test files and 1,320 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the application doctor, production bundle budgets, and patch-integrity checks.
