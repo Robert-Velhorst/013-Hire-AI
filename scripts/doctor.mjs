@@ -79,6 +79,19 @@ const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcu
   || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
 );
 
+const sessionTtlValue = String(process.env.SESSION_TTL_MS || "").trim();
+const sessionTtlMs = Number(sessionTtlValue || "604800000");
+const sessionTtlValid = Number.isSafeInteger(sessionTtlMs)
+  && sessionTtlMs >= 900_000
+  && sessionTtlMs <= 2_592_000_000;
+check(
+  "session lifetime policy",
+  sessionTtlValid ? "pass" : "fail",
+  sessionTtlValid
+    ? `${sessionTtlMs}ms absolute lifetime`
+    : "SESSION_TTL_MS must be an integer between 900000 and 2592000000ms"
+);
+
 const databasePoolLimit = Number(process.env.DATABASE_POOL_LIMIT || "10");
 const databasePoolQueueLimit = Number(process.env.DATABASE_POOL_QUEUE_LIMIT || "100");
 const databasePoolIdleTimeoutMs = Number(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS || "60000");

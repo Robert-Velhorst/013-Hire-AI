@@ -10,7 +10,7 @@ The optional HAI interoperability surface is a separate, bearer-authenticated A2
 
 ## Authentication
 
-All protected endpoints require a valid session cookie. Use the auth endpoints to manage authentication.
+All protected endpoints require a valid session cookie. OAuth sessions use the deployment's bounded absolute lifetime, with the signed-token expiry and browser-cookie age kept equal. Use the auth endpoints to manage authentication.
 
 ---
 

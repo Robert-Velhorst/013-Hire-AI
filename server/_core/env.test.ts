@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readBooleanFeatureFlag, readBoundedIntegerValue, resolveProductionRuntime } from "./env";
+import {
+  isOptionalBoundedIntegerValue,
+  readBooleanFeatureFlag,
+  readBoundedIntegerValue,
+  resolveProductionRuntime,
+} from "./env";
 
 describe("runtime mode resolution", () => {
   it("uses explicit runtime modes when they are present", () => {
@@ -41,5 +46,20 @@ describe("readBoundedIntegerValue", () => {
     expect(readBoundedIntegerValue("0", 10, 1, 50)).toBe(1);
     expect(readBoundedIntegerValue("500", 10, 1, 50)).toBe(50);
     expect(readBoundedIntegerValue("12", 10, 1, 50)).toBe(12);
+  });
+});
+
+describe("isOptionalBoundedIntegerValue", () => {
+  it("accepts an omitted override or an integer inside the supported range", () => {
+    expect(isOptionalBoundedIntegerValue(undefined, 900_000, 2_592_000_000)).toBe(true);
+    expect(isOptionalBoundedIntegerValue("", 900_000, 2_592_000_000)).toBe(true);
+    expect(isOptionalBoundedIntegerValue("604800000", 900_000, 2_592_000_000)).toBe(true);
+  });
+
+  it("rejects malformed, fractional, and out-of-range security overrides", () => {
+    expect(isOptionalBoundedIntegerValue("one week", 900_000, 2_592_000_000)).toBe(false);
+    expect(isOptionalBoundedIntegerValue("900000.5", 900_000, 2_592_000_000)).toBe(false);
+    expect(isOptionalBoundedIntegerValue("899999", 900_000, 2_592_000_000)).toBe(false);
+    expect(isOptionalBoundedIntegerValue("2592000001", 900_000, 2_592_000_000)).toBe(false);
   });
 });

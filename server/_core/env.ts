@@ -9,6 +9,9 @@ export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl:
 
 const isProduction = resolveProductionRuntime(process.env.NODE_ENV, import.meta.url);
 const readEnv = (name: string) => process.env[name] ?? "";
+export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const MIN_SESSION_TTL_MS = 15 * 60 * 1000;
+export const MAX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export function readBooleanFeatureFlag(value: string | undefined, fallback: boolean): boolean {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "true") return true;
@@ -25,6 +28,15 @@ export const readBoundedIntegerValue = (
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) return fallback;
   return Math.min(Math.max(parsed, minimum), maximum);
+};
+export const isOptionalBoundedIntegerValue = (
+  value: string | undefined,
+  minimum: number,
+  maximum: number
+) => {
+  if (!value?.trim()) return true;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum;
 };
 const readBoundedInteger = (name: string, fallback: number, minimum: number, maximum: number) => {
   return readBoundedIntegerValue(readEnv(name), fallback, minimum, maximum);
@@ -45,6 +57,12 @@ const readEnvWithLocalFallback = (name: string, fallback: string) => {
 export const ENV = {
   appId: readEnvWithLocalFallback("VITE_APP_ID", "hire-ai-local-dev"),
   cookieSecret: readEnvWithLocalFallback("JWT_SECRET", "hire-ai-local-dev-cookie-secret"),
+  sessionTtlMs: readBoundedInteger(
+    "SESSION_TTL_MS",
+    DEFAULT_SESSION_TTL_MS,
+    MIN_SESSION_TTL_MS,
+    MAX_SESSION_TTL_MS
+  ),
   databaseUrl: readEnv("DATABASE_URL"),
   databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
   databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
@@ -99,6 +117,11 @@ export function validateProductionEnv() {
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
   ]);
+  if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {
+    throw new Error(
+      `SESSION_TTL_MS must be an integer between ${MIN_SESSION_TTL_MS} and ${MAX_SESSION_TTL_MS}`
+    );
+  }
   const haiConnectorError = validateHaiConnectorConfig(defaultHaiConnectorConfig());
   if (haiConnectorError) {
     throw new Error(haiConnectorError);

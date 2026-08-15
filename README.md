@@ -253,6 +253,7 @@ All secrets are injected at runtime via the platform. Do **not** commit `.env` f
 |---|---|
 | `DATABASE_URL` | MySQL/TiDB connection string |
 | `JWT_SECRET` | Session cookie signing secret |
+| `SESSION_TTL_MS` | Absolute signed-session lifetime in milliseconds; defaults to 7 days and must be 15 minutes to 30 days |
 | `VITE_APP_ID` | Manus OAuth application ID |
 | `OAUTH_SERVER_URL` | Manus OAuth backend base URL |
 | `VITE_OAUTH_PORTAL_URL` | Manus login portal URL (frontend) |
@@ -356,7 +357,7 @@ Unsafe requests carrying the Hire.AI session cookie must also provide an `Origin
 
 All non-Stripe `/api` traffic has a per-client budget of 600 requests per 60 seconds. The limiter uses trusted `req.ip`, returns `RateLimit-*` and `Retry-After` guidance, has no timers or database writes, and holds at most 10,000 client windows before evicting the oldest. Health checks and signed Stripe webhook retries are outside this budget. The policy is deliberately per process; multi-instance public deployments must also configure an upstream distributed limiter or gateway policy.
 
-Session authentication verifies the signed cookie, requires its signed application ID to exactly match the configured Hire.AI application, and requires its per-user session generation to match the current database record. Logout atomically advances that generation, invalidating every copied pre-logout cookie while newly issued sessions continue to work. The user record is reloaded on every request so role, account status, locale, terms, and revocation changes take effect immediately. Ordinary API activity does not rewrite `lastSignedIn`; that timestamp is recorded only at OAuth sign-in or first-user synchronization, avoiding one database write for every authenticated request.
+Session authentication verifies the signed cookie, requires its signed application ID to exactly match the configured Hire.AI application, and requires its per-user session generation to match the current database record. OAuth sessions have one aligned JWT/cookie absolute lifetime configured by `SESSION_TTL_MS`: seven days by default, bounded from 15 minutes through 30 days. Logout atomically advances the generation, invalidating every copied pre-logout cookie while newly issued sessions continue to work. The user record is reloaded on every request so role, account status, locale, terms, and revocation changes take effect immediately. Ordinary API activity does not rewrite `lastSignedIn`; that timestamp is recorded only at OAuth sign-in or first-user synchronization, avoiding one database write for every authenticated request.
 
 Authentication failures are classified at the request boundary. Missing, invalid, or provider-rejected sessions remain anonymous so public procedures stay available; database failures, identity-provider outages, and other operational errors propagate instead of being reported as ordinary sign-outs. Provider outage responses use a fixed `503` message without exposing upstream details.
 

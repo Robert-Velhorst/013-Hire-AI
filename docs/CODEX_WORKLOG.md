@@ -703,3 +703,11 @@
 - Made logout atomically advance the generation before returning success while still clearing the local cookie if persistence fails. This invalidates every pre-logout copy without adding writes to normal authenticated traffic.
 - Added red/green behavioral coverage proving copied-token rejection and successful replacement-session issuance. The full local gate passed 254 test files and 1,233 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
 - In-app browser verification completed local sign-in, reached the authenticated command center and operating ledger, and found no browser warnings or errors. Container migration/schema and exact pushed-commit CI evidence follow at publication.
+
+## 2026-08-15 - Bounded session-lifetime pass
+
+- Reproduced that production OAuth cookies and the SDK default remained valid for one year and were not controlled by a validated deployment policy.
+- Added one `SESSION_TTL_MS` absolute lifetime for OAuth JWT and cookie expiry, defaulting to seven days and constrained to 15 minutes through 30 days; explicit six-hour local QA sessions remain unchanged.
+- Added fail-closed production startup and doctor validation for malformed, fractional, and out-of-range overrides.
+- Added red/green behavioral coverage for OAuth JWT/cookie alignment, SDK default expiry, strict parsing, and standalone production diagnostics. The full local gate passed 256 test files and 1,242 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript, the application doctor, production bundle budgets, and patch-integrity checks.
+- In-app browser verification completed the explicit six-hour local QA sign-in, reached the authenticated command center and operating ledger, and found no browser warnings or errors. Windows/container and exact pushed-commit CI evidence follow at publication.
