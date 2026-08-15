@@ -711,3 +711,12 @@
 - Added fail-closed production startup and doctor validation for malformed, fractional, and out-of-range overrides.
 - Added red/green behavioral coverage for OAuth JWT/cookie alignment, SDK default expiry, strict parsing, and standalone production diagnostics. The full local gate passed 256 test files and 1,242 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript, the application doctor, production bundle budgets, and patch-integrity checks.
 - In-app browser verification completed the explicit six-hour local QA sign-in, reached the authenticated command center and operating ledger, and found no browser warnings or errors. Windows/container and exact pushed-commit CI evidence follow at publication.
+
+## 2026-08-15 - Active-account authorization pass
+
+- Reproduced that shared protected/admin middleware checked identity and role but ignored the database-backed account state, leaving suspended users authorized outside selected job-search mutations.
+- Added one fail-closed active-account invariant before every protected and admin route, while retaining public account-state and logout access for restriction handling.
+- Added a localized EN/NL routed-shell gate that prevents operational pages and queries from mounting for suspended, pending, or unknown authenticated states, plus a self-suspension guard that prevents an administrator from locking out their own session.
+- Browser logout exposed and closed an Express deprecation warning caused by passing `maxAge` to `clearCookie`; logout now retains only the matching cookie path/security attributes.
+- Added red/green authorization, real auth-route, UI-state, and admin self-lockout regressions. The full local gate passed 258 test files and 1,252 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
+- In-app browser verification used the development-only suspended-account fixture, rendered only the restriction status and logout control, returned to the public landing page after logout without the prior Express warning, then signed in an active account and reached the command center with no browser warnings or errors. Windows/container and exact pushed-commit CI evidence follow at publication.

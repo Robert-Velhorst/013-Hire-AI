@@ -10,7 +10,7 @@ The optional HAI interoperability surface is a separate, bearer-authenticated A2
 
 ## Authentication
 
-All protected endpoints require a valid session cookie. OAuth sessions use the deployment's bounded absolute lifetime, with the signed-token expiry and browser-cookie age kept equal. Use the auth endpoints to manage authentication.
+All protected endpoints require a valid session cookie and an active account. OAuth sessions use the deployment's bounded absolute lifetime, with the signed-token expiry and browser-cookie age kept equal. Suspended or pending users can still call `auth.me` to render their status and `auth.logout` to end the session; all protected and admin procedures return `FORBIDDEN` before route logic. Use the auth endpoints to manage authentication.
 
 ---
 

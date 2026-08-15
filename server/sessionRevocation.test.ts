@@ -44,7 +44,7 @@ describe("session revocation", () => {
     await expect(caller.auth.logout()).resolves.toEqual({ success: true });
     expect(clearCookie).toHaveBeenCalledWith(
       COOKIE_NAME,
-      expect.objectContaining({ maxAge: -1 })
+      expect.not.objectContaining({ maxAge: expect.anything() })
     );
     await expect(sdk.authenticateRequest(req)).rejects.toMatchObject({
       statusCode: 403,

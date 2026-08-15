@@ -17,6 +17,7 @@ describe("development authentication routes", () => {
     registerDevAuthRoutes(app as any);
 
     expect(routes.has("/api/dev/login")).toBe(true);
+    expect(routes.has("/api/dev/login-suspended")).toBe(true);
     expect(routes.has("/api/dev/login-review-queue")).toBe(true);
     expect(routes.has("/api/dev/login-admin")).toBe(true);
   });

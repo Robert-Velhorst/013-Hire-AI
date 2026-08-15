@@ -12,3 +12,5 @@ The authenticated routes are Dashboard, Jobs, Applications, Review Queue, Alerts
 | Admin | source health, privacy/operating reviews, read-only erasure inventory, billing/compliance operations | Admin authorization is server-enforced; privileged queries stay disabled for non-admin users and erasure preview never implies execution. |
 
 Manual browser verification is still required for deployment-specific OAuth and payment paths. A button must be removed or disabled if its backing procedure cannot be authorized in the target environment.
+
+The application-level account gate runs before routed operational pages. Suspended, pending, or unknown authenticated states render localized status and logout controls without mounting job-search, connector, billing, workspace, or admin queries; the server independently enforces the same active-account invariant.

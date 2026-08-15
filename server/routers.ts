@@ -288,7 +288,7 @@ export const appRouter = router({
           await revokeUserSessions(ctx.user.id);
         }
       } finally {
-        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        ctx.res.clearCookie(COOKIE_NAME, cookieOptions);
       }
       return {
         success: true,

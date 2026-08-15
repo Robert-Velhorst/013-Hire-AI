@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AccountStatusGate from "./components/AccountStatusGate";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./contexts/LocaleContext";
 
@@ -74,7 +75,9 @@ function App() {
         <LocaleProvider>
           <TooltipProvider>
             <Toaster />
-            <Router />
+            <AccountStatusGate>
+              <Router />
+            </AccountStatusGate>
           </TooltipProvider>
         </LocaleProvider>
       </ThemeProvider>

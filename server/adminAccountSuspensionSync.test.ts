@@ -130,4 +130,20 @@ describe("admin account suspension Stripe synchronization", () => {
       priority: "critical",
     }));
   });
+
+  it("prevents an administrator from suspending their own active session", async () => {
+    const caller = adminRouter.createCaller(createAdminContext(17));
+
+    await expect(caller.suspendUser({
+      userId: 17,
+      reason: "Self suspension should require another administrator.",
+    })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "An administrator cannot suspend their own account.",
+    });
+
+    expect(mocks.mockDb.select).not.toHaveBeenCalled();
+    expect(mocks.mockDb.update).not.toHaveBeenCalled();
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
+  });
 });

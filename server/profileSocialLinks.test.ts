@@ -12,6 +12,7 @@ function createAuthContext(userId: number): TrpcContext {
       name: "Profile Social Links Test",
       loginMethod: "test",
       role: "user",
+      accountStatus: "active",
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
