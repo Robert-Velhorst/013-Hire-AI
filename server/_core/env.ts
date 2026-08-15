@@ -12,6 +12,15 @@ const readEnv = (name: string) => process.env[name] ?? "";
 export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_SESSION_TTL_MS = 15 * 60 * 1000;
 export const MAX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const JWT_SECRET_PLACEHOLDERS = new Set([
+  "replace-with-a-long-random-secret",
+  "hire-ai-local-dev-cookie-secret",
+]);
+export function isValidJwtSecret(value: string | undefined): boolean {
+  if (!value || value.length < 32 || value.length > 4_096) return false;
+  if (value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  return !JWT_SECRET_PLACEHOLDERS.has(value);
+}
 export function readBooleanFeatureFlag(value: string | undefined, fallback: boolean): boolean {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "true") return true;
@@ -117,6 +126,11 @@ export function validateProductionEnv() {
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
   ]);
+  if (!isValidJwtSecret(readEnv("JWT_SECRET"))) {
+    throw new Error(
+      "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
+    );
+  }
   if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {
     throw new Error(
       `SESSION_TTL_MS must be an integer between ${MIN_SESSION_TTL_MS} and ${MAX_SESSION_TTL_MS}`

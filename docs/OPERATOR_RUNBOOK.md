@@ -15,6 +15,8 @@ The server exposes `/healthz` and `/readyz`. Development can use in-memory persi
 
 For native production startup on Windows 11, use `npm.cmd run start:windows`. It builds, runs the production doctor, binds to loopback by default, and waits for local health. For a reserved ngrok origin and the local/private HAI A2A connector, follow `docs/WINDOWS_NGROK_HAI.md`; public health and Agent Card availability are necessary checks, not provider acceptance evidence.
 
+Generate `JWT_SECRET` with a cryptographically secure secret manager or random-byte generator and inject it at runtime. Production accepts 32-4096 characters with no surrounding whitespace or control characters; checked-in and local-development placeholders are rejected. Rotating this value invalidates every existing session, so schedule rotation and require users to sign in again. `pnpm doctor` reports only whether the policy passes and never prints the value.
+
 OAuth sessions default to a seven-day absolute lifetime. Set `SESSION_TTL_MS` only to an integer from 900,000 (15 minutes) through 2,592,000,000 (30 days). The production doctor rejects malformed or out-of-range values, and the same effective value controls both the signed JWT expiry and browser-cookie age. Changing it affects newly issued sessions; use logout/session revocation when existing sessions must end immediately.
 
 ## Database and workers

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isOptionalBoundedIntegerValue,
+  isValidJwtSecret,
   readBooleanFeatureFlag,
   readBoundedIntegerValue,
   resolveProductionRuntime,
@@ -61,5 +62,22 @@ describe("isOptionalBoundedIntegerValue", () => {
     expect(isOptionalBoundedIntegerValue("900000.5", 900_000, 2_592_000_000)).toBe(false);
     expect(isOptionalBoundedIntegerValue("899999", 900_000, 2_592_000_000)).toBe(false);
     expect(isOptionalBoundedIntegerValue("2592000001", 900_000, 2_592_000_000)).toBe(false);
+  });
+});
+
+describe("isValidJwtSecret", () => {
+  it("accepts a bounded non-placeholder signing secret", () => {
+    expect(isValidJwtSecret("f4wR9x2Qm7Kp3Vn8Yt6Hs1Lc5Jd0ZaEu")).toBe(true);
+  });
+
+  it.each([
+    "short-secret",
+    "replace-with-a-long-random-secret",
+    "hire-ai-local-dev-cookie-secret",
+    ` ${"a".repeat(32)}`,
+    `${"a".repeat(32)}\n`,
+    "a".repeat(4_097),
+  ])("rejects unsafe signing secret configuration", (value) => {
+    expect(isValidJwtSecret(value)).toBe(false);
   });
 });

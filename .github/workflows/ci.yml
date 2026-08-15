@@ -13,7 +13,7 @@ jobs:
       NODE_ENV: test
       STRIPE_SECRET_KEY: sk_test_ci_placeholder
       STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
-      JWT_SECRET: ci-placeholder-secret
+      JWT_SECRET: ci-session-signing-secret-at-least-32-characters
       VITE_APP_ID: ci-placeholder-app
       OAUTH_SERVER_URL: http://localhost:3000
       OWNER_OPEN_ID: test-user-1
@@ -61,7 +61,7 @@ jobs:
       NODE_ENV: test
       STRIPE_SECRET_KEY: sk_test_ci_placeholder
       STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
-      JWT_SECRET: ci-placeholder-secret
+      JWT_SECRET: ci-session-signing-secret-at-least-32-characters
       VITE_APP_ID: ci-placeholder-app
       OAUTH_SERVER_URL: http://localhost:3000
       OWNER_OPEN_ID: test-user-1

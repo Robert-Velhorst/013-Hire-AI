@@ -720,3 +720,11 @@
 - Browser logout exposed and closed an Express deprecation warning caused by passing `maxAge` to `clearCookie`; logout now retains only the matching cookie path/security attributes.
 - Added red/green authorization, real auth-route, UI-state, and admin self-lockout regressions. The full local gate passed 258 test files and 1,252 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
 - In-app browser verification used the development-only suspended-account fixture, rendered only the restriction status and logout control, returned to the public landing page after logout without the prior Express warning, then signed in an active account and reached the command center with no browser warnings or errors. Windows/container and exact pushed-commit CI evidence follow at publication.
+
+## 2026-08-15 - Session signing-secret policy pass
+
+- Reproduced that production startup and diagnostics accepted any non-empty `JWT_SECRET`, including short values and the checked-in example placeholder.
+- Added one shared runtime policy requiring 32-4096 characters while rejecting surrounding whitespace, control characters, and known placeholders; local development retains its explicit fallback.
+- Wired the same fail-closed contract into the production doctor without printing the configured secret, updated CI credentials, and documented generation, rotation, and forced reauthentication behavior.
+- Added red/green helper and standalone-doctor coverage. The focused gate passed 5 test files and 37 tests; the full local gate passed 259 test files and 1,266 tests with one intentional database-dependent skip, TypeScript, the no-known-vulnerability dependency audit, the production doctor, production bundle budgets, and patch-integrity checks.
+- In-app browser verification completed local sign-in, reached the authenticated command center and operating ledger, and found no browser warnings or errors. Windows/container and exact pushed-commit CI evidence follow at publication.

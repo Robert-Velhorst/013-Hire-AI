@@ -252,7 +252,7 @@ All secrets are injected at runtime via the platform. Do **not** commit `.env` f
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | MySQL/TiDB connection string |
-| `JWT_SECRET` | Session cookie signing secret |
+| `JWT_SECRET` | Unique 32-4096 character session signing secret; surrounding whitespace, control characters, and known placeholders are rejected in production |
 | `SESSION_TTL_MS` | Absolute signed-session lifetime in milliseconds; defaults to 7 days and must be 15 minutes to 30 days |
 | `VITE_APP_ID` | Manus OAuth application ID |
 | `OAUTH_SERVER_URL` | Manus OAuth backend base URL |

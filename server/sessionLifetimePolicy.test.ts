@@ -6,7 +6,7 @@ const productionEnv = {
   ...process.env,
   NODE_ENV: "production",
   DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-  JWT_SECRET: "doctor-test-cookie-secret",
+  JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
   OWNER_OPEN_ID: "doctor-owner",
