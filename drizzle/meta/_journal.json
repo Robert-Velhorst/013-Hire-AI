@@ -519,6 +519,13 @@
       "when": 1786498440000,
       "tag": "0073_success_fee_admin_window_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "5",
+      "when": 1786498500000,
+      "tag": "0074_user_session_version",
+      "breakpoints": true
     }
   ]
 }

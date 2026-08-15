@@ -18,6 +18,7 @@ describe("session application binding", () => {
       openId: "cross-application-user",
       appId: "another-application",
       name: "Cross Application User",
+      sessionVersion: 0,
     });
 
     await expect(sdk.verifySession(token)).resolves.toBeNull();
@@ -34,6 +35,7 @@ describe("session application binding", () => {
       openId: "hire-ai-user",
       appId: "hire-ai-application",
       name: "Hire AI User",
+      sessionVersion: 0,
     });
   });
 });

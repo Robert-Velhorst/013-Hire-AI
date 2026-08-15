@@ -481,6 +481,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       locale: user.locale ?? "en",
       stripeCustomerId: user.stripeCustomerId ?? null,
       accountStatus: user.accountStatus ?? "active",
+      sessionVersion: user.sessionVersion ?? 0,
       tosAcceptedAt: user.tosAcceptedAt ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -568,6 +569,23 @@ export async function getUserById(userId: number) {
   const db = await getDb();
   if (!db) return memoryUsers.find((user) => user.id === userId) as User | undefined;
   return (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+}
+
+export async function revokeUserSessions(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    const user = memoryUsers.find((item) => item.id === userId);
+    if (user) {
+      user.sessionVersion = (user.sessionVersion ?? 0) + 1;
+      user.updatedAt = new Date();
+    }
+    return;
+  }
+
+  await db
+    .update(users)
+    .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, userId));
 }
 
 export async function getUserByEmail(email: string) {

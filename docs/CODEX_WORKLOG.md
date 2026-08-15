@@ -695,3 +695,11 @@
 - Added red/green coverage proving the previous cross-application acceptance and preserving valid same-application sessions.
 - Red/green verification proved that the old verifier accepted a correctly signed foreign-application token and that the bound verifier rejects it while retaining valid Hire.AI sessions. The full gate passed 1,232 tests with one intentional skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
 - In-app browser verification used the application-bound local development session, reached the authenticated dashboard and operating data, and found no browser warnings or errors. Windows/HAI, container, and exact pushed-commit CI evidence follow at publication.
+
+## 2026-08-15 - Durable session-revocation pass
+
+- Reproduced that logout cleared only the browser cookie and left a copied signed token usable for the remainder of its lifetime.
+- Added a persisted per-user session generation, embedded it in signed cookies, and required an exact current-generation match during every authenticated request.
+- Made logout atomically advance the generation before returning success while still clearing the local cookie if persistence fails. This invalidates every pre-logout copy without adding writes to normal authenticated traffic.
+- Added red/green behavioral coverage proving copied-token rejection and successful replacement-session issuance. The full local gate passed 254 test files and 1,233 tests with one intentional database-dependent skip, reported no known dependency vulnerabilities, passed TypeScript and production bundle budgets, and produced no patch-integrity errors.
+- In-app browser verification completed local sign-in, reached the authenticated command center and operating ledger, and found no browser warnings or errors. Container migration/schema and exact pushed-commit CI evidence follow at publication.

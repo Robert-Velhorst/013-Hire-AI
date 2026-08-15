@@ -36,7 +36,8 @@ Get the current authenticated user.
 ```
 
 ### `auth.logout`
-Log out the current user.
+Log out the current user. The mutation clears the browser cookie and revokes all
+previously issued Hire.AI sessions for that user, including copied cookies.
 
 **Type:** Mutation (Public)
 

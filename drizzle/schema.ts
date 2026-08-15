@@ -20,6 +20,7 @@ export const users = mysqlTable("users", {
   locale: varchar("locale", { length: 10 }).default("en").notNull(),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   accountStatus: mysqlEnum("account_status", ["active", "suspended", "pending"]).default("active").notNull(),
+  sessionVersion: int("session_version", { unsigned: true }).default(0).notNull(),
   tosAcceptedAt: timestamp("tos_accepted_at"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

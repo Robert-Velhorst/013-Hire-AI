@@ -2,7 +2,7 @@
 
 ## Enforced controls
 
-- Session cookies are `httpOnly`; secure requests use `SameSite=None; Secure` and local requests use `SameSite=Lax`.
+- Session cookies are `HttpOnly` and `SameSite=Lax`; trusted HTTPS requests also use `Secure`. Signed sessions are bound to the configured Hire.AI application and a per-user session generation. Logout advances that generation so copied pre-logout cookies cannot be replayed.
 - Protected and admin tRPC middleware enforce authentication and role authorization.
 - User-owned mutations pass the current user ID into storage operations; cross-user access tests cover critical records.
 - Sensitive storage namespaces enforce malware scanning centrally before upload. Windows standalone uses Microsoft Defender by default; cloud/container deployments use the bounded HTTP scanner with optional bearer authentication. Production fails closed when neither is available.
