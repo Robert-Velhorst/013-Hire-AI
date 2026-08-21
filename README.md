@@ -4,6 +4,33 @@ Hire.AI is an AI-assisted, review-first job-search operating platform. It helps 
 
 The current repository is a hardened prototype / MVP foundation. It contains real application code, database schema, tests, operational scripts, source-ingestion adapters, and safety gates. It is not yet a production-ready fully autonomous job-application service because live provider credentials, legal/privacy approval, production infrastructure acceptance, and provider-specific submission agreements are still required.
 
+## Table Of Contents
+
+- [Plain-English Summary](#plain-english-summary)
+- [Current Truth](#current-truth)
+- [Who This Repository Is For](#who-this-repository-is-for)
+- [Product Scope](#product-scope)
+- [Business Model](#business-model)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Main Workflows](#main-workflows)
+- [Source Coverage](#source-coverage)
+- [Autonomy Model](#autonomy-model)
+- [Connector And Provider Status](#connector-and-provider-status)
+- [Safety And Security Model](#safety-and-security-model)
+- [Data Model Overview](#data-model-overview)
+- [Project Layout](#project-layout)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Scripts](#scripts)
+- [API Surface](#api-surface)
+- [Testing And Verification](#testing-and-verification)
+- [Operational Evidence](#operational-evidence)
+- [Deployment Notes](#deployment-notes)
+- [Documentation Map](#documentation-map)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Plain-English Summary
 
 For job seekers, Hire.AI is intended to become the control center for a remote job search:
@@ -26,6 +53,20 @@ Hire.AI is intentionally review-first.
 It does not currently open employer portals, fill third-party forms, upload resumes to employers, or submit applications externally without the user. The active automation flow prepares application material and records a pending review/handoff. The user remains responsible for completing the employer-side handoff unless a future official provider integration is approved, tested, and evidence-backed.
 
 It also does not claim that every job platform on the internet is live. The codebase has a 62-platform catalog for provenance, source policy, and future expansion. Of those, 7 sources are approved for unattended automated discovery in the current policy: RemoteOK, Remotive, Jobicy, Arbeitnow, We Work Remotely, NoDesk, and ProBlogger. Other cataloged platforms are manual, unavailable, account-mediated, generic-parser candidates, or future integrations until their provider terms, adapters, tests, and acceptance evidence exist.
+
+## Who This Repository Is For
+
+This README is written for several audiences:
+
+| Reader                      | What to look at first                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| Job seekers                 | Plain-English Summary, Main Workflows, Current Truth                  |
+| Founders/operators          | Business Model, Deployment Notes, Operational Evidence                |
+| Software developers         | Architecture, Technology Stack, Project Layout, API Surface           |
+| Security/privacy reviewers  | Safety And Security Model, Data Model Overview, Documentation Map     |
+| Provider-integration owners | Source Coverage, Connector And Provider Status, Environment Variables |
+
+The short version: this is a real TypeScript application with many wired workflows, but production use still depends on external approvals, credentials, infrastructure, and legal/privacy decisions.
 
 ## Product Scope
 
@@ -195,6 +236,51 @@ These sources are allowed by current code policy for unattended discovery:
 The platform catalog currently tracks 62 sources for provenance and expansion. Many are manual or account-mediated by design, including LinkedIn Jobs, Wellfound, Glassdoor, marketplace/freelance platforms, and discontinued or unsupported sources. Catalog inclusion means Hire.AI can represent the source and policy; it does not mean the source may be scraped or submitted to in production.
 
 See `server/scrapers/platformCatalog.ts` for policy decisions and `server/scrapers/index.ts` for registered parser adapters.
+
+## Autonomy Model
+
+Hire.AI uses automation to reduce repeated clerical work, not to bypass user consent or provider rules.
+
+### What The Autonomous Logic Can Do
+
+- scan approved job sources within configured rate, timeout, concurrency, and cycle-wide job budgets;
+- normalize, bound, and deduplicate job records before persistence;
+- evaluate profile readiness and job freshness;
+- prepare application materials and internal ledger records;
+- queue review items and approval records;
+- generate follow-up drafts and next-action summaries;
+- monitor connected inbox evidence where the user has authorized a provider;
+- update autonomous run state, skipped reasons, and failure counters.
+
+### What The Autonomous Logic Cannot Claim
+
+- it cannot claim a job was submitted unless deterministic submission evidence is recorded;
+- it cannot send follow-up mail merely because a draft exists;
+- it cannot use disconnected or stale provider grants;
+- it cannot apply to stale or inactive job listings;
+- it cannot invent resume evidence, qualifications, salary facts, interview invitations, or offer evidence;
+- it cannot scan providers marked manual, unavailable, marketplace, account-mediated, or unapproved.
+
+The key engineering rule is that resource and safety limits are enforced at multiple boundaries: source policy, source request, parsing, aggregation, persistence, application preparation, review, and evidence recording.
+
+## Connector And Provider Status
+
+Hire.AI has connector policy and account records for several external systems, but live access is deployment-specific.
+
+| Provider or system    | Current repository support                                                     | Production condition                                               |
+| --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Gmail                 | OAuth policy, encrypted grants, inbox-response discovery, disconnect cleanup   | Google OAuth app, approved redirect URI, scopes, test accounts     |
+| Google Drive          | OAuth policy, resume-candidate discovery, encrypted grants, disconnect cleanup | Google OAuth app, Drive scopes, storage/privacy acceptance         |
+| Dropbox               | OAuth policy, resume-candidate discovery, encrypted grants, disconnect cleanup | Dropbox OAuth app, approved scopes, provider acceptance            |
+| Outlook / Microsoft   | OAuth policy and manual cleanup guidance                                       | Microsoft OAuth app, approved scopes, account-side cleanup process |
+| LinkedIn              | OAuth/social-profile policy and manual cleanup guidance                        | Approved LinkedIn integration; no unattended scraping              |
+| GitHub                | OAuth/profile-evidence policy and disconnect cleanup                           | GitHub OAuth app and user authorization                            |
+| Stripe                | Checkout/session support, webhook ledger, fee/payment records                  | Stripe keys, webhook endpoint, legal/billing review                |
+| S3-compatible storage | Private document storage helpers and upload validation                         | Bucket, credentials, malware scanner, retention approval           |
+| HAI A2A               | Optional read-only status endpoint                                             | Private endpoint, strong bearer token, peer acceptance             |
+| ngrok                 | Windows tunnel launcher and runtime identity readiness check                   | Reserved hostname, callback configuration, operator evidence       |
+
+Every connector is disabled when credentials are absent. Partial or unsafe connector configuration fails closed.
 
 ## Safety And Security Model
 
@@ -469,6 +555,24 @@ The repository also contains tests for:
 - database migrations, schema audits, query-plan audits, backups, restores, container packaging, Windows runtime, and CI workflow expectations.
 
 See `docs/FINAL_VERIFICATION_REPORT.md`, `docs/GOAL_COMPLETION_MATRIX.md`, and `docs/CODEX_WORKLOG.md` for historical verification evidence. Rerun the commands above in the target environment before claiming a release.
+
+## Operational Evidence
+
+The repository keeps operational evidence in source control instead of relying on README claims alone.
+
+| Evidence area                              | Where to inspect it                                        |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| Current implementation status              | `CURRENT_STATUS.md`                                        |
+| Requirement completion and remaining gates | `docs/GOAL_COMPLETION_MATRIX.md`                           |
+| Security controls and required reviews     | `docs/SECURITY.md`                                         |
+| Operator procedures                        | `docs/OPERATOR_RUNBOOK.md`                                 |
+| Acceptance tests and QA notes              | `docs/ACCEPTANCE_TESTS.md`, `END_USER_TESTING_FINDINGS.md` |
+| API-level documentation                    | `docs/API_REFERENCE.md`                                    |
+| Technical audit and debt                   | `docs/TECHNICAL_AUDIT.md`, `docs/TECHNICAL_DEBT.md`        |
+| Windows/ngrok/HAI operation                | `docs/WINDOWS_NGROK_HAI.md`                                |
+| Work history                               | `docs/CODEX_WORKLOG.md`, `docs/CODEX_CHECKPOINTS.md`       |
+
+GitHub Actions is the source of truth for current CI status. Local verification and older CI run identifiers in the docs are evidence for those exact commits only; rerun verification after changes.
 
 ## Deployment Notes
 
