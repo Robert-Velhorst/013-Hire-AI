@@ -5,6 +5,9 @@ allowBuilds:
   esbuild: true
 
 overrides:
+  "browserslist@<=4.28.6": "4.28.7"
+  "qs@<6.16.0": "6.16.0"
+  "@xmldom/xmldom@>=0.7.0 <=0.8.14": "0.8.15"
   "nanoid@<3.3.18": "3.3.18"
   "postcss@<=8.5.22": "8.5.23"
   "mermaid@<11.16.1": "11.16.1"

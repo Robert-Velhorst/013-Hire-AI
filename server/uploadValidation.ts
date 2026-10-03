@@ -1,4 +1,5 @@
 import { ENV } from "./_core/env";
+import { readBoundedResponseJson } from "./_core/outboundRequest";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -192,20 +193,14 @@ async function scanWithHttp(input: {
       signal: AbortSignal.timeout(scannerTimeoutMs()),
       redirect: "error",
     });
-    if (!response.ok) throw new Error("scanner_status");
-    const declaredLength = Number.parseInt(
-      response.headers.get("content-length") ?? "0",
-      10
-    );
-    if (declaredLength > MAX_SCANNER_RESPONSE_BYTES)
-      throw new Error("scanner_response_too_large");
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_SCANNER_RESPONSE_BYTES)
-      throw new Error("scanner_response_too_large");
-    const result = JSON.parse(bytes.toString("utf8")) as {
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error("scanner_status");
+    }
+    const result = await readBoundedResponseJson<{
       clean?: boolean;
       provider?: string;
-    };
+    }>(response, MAX_SCANNER_RESPONSE_BYTES);
     if (result.clean !== true) {
       throw new Error("Sensitive upload was rejected by the malware scanner.");
     }

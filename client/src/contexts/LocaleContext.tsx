@@ -6,6 +6,7 @@ const STORAGE_KEY = "hire-ai-locale";
 
 const translations = {
   en: {
+    sourceRegister: "Sources",
     loading: "Loading Hire.AI...", dashboard: "Dashboard", findJobs: "Find Jobs",
     applications: "Applications", reviewQueue: "Review Queue", savedJobs: "Saved Jobs",
     alerts: "Alerts", profile: "Profile", aiPreferences: "AI Preferences", menu: "Menu",
@@ -313,6 +314,7 @@ const translations = {
     pipelineEmptyLabel: "No ledger yet", pipelineEmptyHeadline: "No applications are being tracked.", pipelineEmptyAction: "Complete your profile and run discovery so Hire.AI can prepare controlled application work.", pipelineAllApplications: "All applications", pipelineApprovalBlockedLabel: "Approval blocked", pipelineApprovalBlockedHeadline: "{count} prepared submission(s) need a decision before any external action.", pipelineApprovalBlockedAction: "Open prepared applications and approve or reject submission gates before recording evidence.", pipelineReviewApprovals: "Review approvals", pipelineEvidenceNeededLabel: "Evidence needed", pipelineEvidenceNeededHeadline: "{count} prepared application(s) still need submission proof.", pipelineEvidenceNeededAction: "Confirm submission only after employer portal, ATS, email, or manual evidence is available.", pipelineReviewPrepared: "Review prepared", pipelineOfferActionLabel: "Offer action", pipelineOfferActionHeadline: "{count} offer(s) need attribution and hire-reporting review.", pipelineOfferActionAction: "Review the offer source before reporting a hire or starting success-fee billing.", pipelineReviewOffers: "Review offers", pipelineResponsesActiveLabel: "Responses active", pipelineResponsesActiveHeadline: "{count} application(s) have employer response history.", pipelineResponsesActiveAction: "Keep responses, interviews, rejections, and offers classified so the ledger stays current.", pipelineOpenInterviews: "Open interviews", pipelineOpenActive: "Open active", pipelineFollowUpLabel: "Follow-up candidates", pipelineFollowUpHeadline: "{count} active application(s) may need timed follow-up.", pipelineFollowUpAction: "Draft follow-ups only after reviewing the application context and message approval gate.", pipelineReviewActive: "Review active", pipelineCurrentLabel: "Ledger current", pipelineCurrentHeadline: "No application needs immediate action.", pipelineCurrentAction: "Keep scouting, preparing applications, and recording employer responses as they arrive.",
   },
   nl: {
+    sourceRegister: "Bronnen",
     loading: "Hire.AI laden...", dashboard: "Overzicht", findJobs: "Vacatures zoeken",
     applications: "Sollicitaties", reviewQueue: "Beoordelingswachtrij", savedJobs: "Opgeslagen vacatures",
     alerts: "Meldingen", profile: "Profiel", aiPreferences: "AI-voorkeuren", menu: "Menu",

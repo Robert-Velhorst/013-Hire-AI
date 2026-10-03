@@ -331,6 +331,9 @@ function parseAutonomousRunSummary(value: string | null | undefined): Autonomous
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
+  if (!_db && !ENV.databaseUrl && ENV.isProduction) {
+    throw new Error("Production database is not configured");
+  }
   if (!_db && ENV.databaseUrl) {
     try {
       _pool = createPool({
@@ -347,6 +350,7 @@ export async function getDb() {
       logOperationalFailure("Database", "Connection initialization");
       _pool = null;
       _db = null;
+      throw new Error("Database connection initialization failed");
     }
   }
   return _db;

@@ -1,3 +1,5 @@
+import { regionalPlatformSeeds } from "./regionalPlatforms";
+
 export type ScraperPlatformSeed = {
   name: string;
   url: string;
@@ -83,9 +85,20 @@ export const scraperPlatformCatalog = [
   { name: "Monster", url: "https://www.monster.com/jobs/", tier: "tier4", category: "General" },
   { name: "CareerBuilder", url: "https://www.careerbuilder.com/jobs", tier: "tier4", category: "General" },
   { name: "ZipRecruiter", url: "https://www.ziprecruiter.com/Jobs", tier: "tier4", category: "General" },
+  ...regionalPlatformSeeds,
 ] satisfies readonly ScraperPlatformSeed[];
 
 const automatedFeedPolicies: Record<string, PlatformDiscoveryPolicy> = {
+  Himalayas: {
+    mode: "automated", sourceType: "job_board",
+    reason: "Documented public API. Preserve Himalayas attribution and backlinks; no syndication to other job sites. Bounded cursor pagination.",
+    minimumPollIntervalMs: 24 * 60 * 60 * 1000,
+  },
+  "Arbeitnow UK": {
+    mode: "automated", sourceType: "aggregator",
+    reason: "Documented public UK API. Only explicitly remote records; preserve provider backlinks. One bounded page per run.",
+    minimumPollIntervalMs: 60 * 60 * 1000,
+  },
   RemoteOK: {
     mode: "automated",
     sourceType: "aggregator",

@@ -41,7 +41,12 @@ describe("production container packaging", () => {
       "node scripts/doctor.mjs && exec node dist/index.js"
     );
     expect(dockerfile).toContain("HEALTHCHECK");
+    expect(dockerfile).toContain("/readyz");
+    expect(dockerfile).toContain("AbortSignal.timeout(4000)");
     expect(dockerfile).toContain("USER node");
+    const ignored = readFileSync(resolve(process.cwd(), ".dockerignore"), "utf8");
+    expect(ignored).toContain(".playwright-cli");
+    expect(ignored).toContain("backups");
 
     const migrator = readFileSync(
       resolve(process.cwd(), "scripts", "database-migrate.mjs"),

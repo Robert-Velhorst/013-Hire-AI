@@ -7,6 +7,17 @@ on:
       - main
 
 jobs:
+  hetzner-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Validate private deployment bootstrap
+        run: |
+          bash -n deploy/hetzner/initialize-secrets.sh
+          sudo bash deploy/hetzner/initialize-secrets-paths.test.sh
+          sudo bash deploy/hetzner/initialize-secrets.test.sh
+
   build-and-test:
     runs-on: ubuntu-latest
     env:
@@ -99,10 +110,52 @@ jobs:
         run: ./scripts/check-windows-runtime.ps1
 
       - name: Test Windows and HAI runtime contracts
-        run: pnpm exec vitest run server/_core/network.test.ts server/haiConnector.test.ts server/windowsCiWorkflow.test.ts
+        run: pnpm exec vitest run server/_core/network.test.ts server/haiConnector.test.ts server/windowsCiWorkflow.test.ts server/windowsLauncher.test.ts server/_core/runtimeInstance.test.ts server/_core/runtimeLaunchIdentity.test.ts
 
       - name: Build
         run: pnpm build
+
+  database-acceptance:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+          MYSQL_DATABASE: hire_ai_acceptance
+          MYSQL_USER: hire_ai_acceptance
+          MYSQL_PASSWORD: isolated-acceptance-not-production
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://hire_ai_acceptance:isolated-acceptance-not-production@127.0.0.1:3306/hire_ai_acceptance
+      HIRE_AI_DATABASE_ACCEPTANCE: "true"
+      PRIVACY_ERASURE_INTEGRATION: "true"
+      AUTONOMOUS_SCHEDULER_ENABLED: "false"
+      JOB_SCRAPING_SCHEDULER_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Enable pnpm with Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.16.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply migrations to isolated acceptance database
+        run: pnpm db:migrate
+      - name: Verify persistence, isolation and privacy cleanup on MySQL
+        run: pnpm test:database
 
   container-runtime:
     runs-on: ubuntu-latest

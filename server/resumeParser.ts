@@ -1,13 +1,8 @@
 import { invokeLLM } from "./_core/llm";
-import { createRequire } from "module";
+import { MAX_RESUME_TEXT_CHARS } from "@shared/documentUploads";
 import mammoth from "mammoth";
 import { validateGitHubUrl, validateLinkedInUrl, validatePortfolioUrl } from "./socialConnections";
 import { logOperationalFailure } from "./operationalFailureLog";
-
-// pdf-parse is a CJS module; use createRequire to avoid ESM default-export error in production
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdf = require("pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
 
 /**
  * AI-powered resume parsing service
@@ -46,8 +41,15 @@ export interface ParsedResume {
  */
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
-    const data = await pdf(buffer);
-    return data.text;
+    // Load the PDF engine only for PDF uploads, not for every resume operation.
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const data = await parser.getText({ pageJoiner: "" });
+      return data.text;
+    } finally {
+      await parser.destroy();
+    }
   } catch {
     logOperationalFailure("ResumeParser", "PDF extraction");
     throw new Error("Failed to extract text from PDF");
@@ -125,11 +127,18 @@ export async function parseResumeFromFile(
  * Parse resume text and extract structured information
  */
 export async function parseResumeText(resumeText: string): Promise<ParsedResume> {
+  const text = resumeText.trim();
+  if (!text) {
+    throw new Error("Resume contains no readable text. Upload a text-based document or paste the resume text.");
+  }
+  if (text.length > MAX_RESUME_TEXT_CHARS) {
+    throw new Error(`Resume text exceeds the ${MAX_RESUME_TEXT_CHARS} character limit.`);
+  }
   try {
     const prompt = `You are an expert resume parser. Extract all relevant information from the following resume text and structure it in a standardized format.
 
 Resume Text:
-${resumeText}
+${text}
 
 Extract the following information:
 1. Personal information (name, email, phone, location)
@@ -279,6 +288,8 @@ export function resumeToProfileData(parsed: ParsedResume) {
   if (skills) profileData.skills = skills;
 
   const experience = parsed.experience
+    .filter((exp) => [exp.title, exp.company, exp.startDate, exp.endDate, exp.description]
+      .some((value) => value.trim()))
     .map(
       (exp) =>
         `${exp.title} at ${exp.company} (${exp.startDate} - ${exp.endDate})\n${exp.description}`
@@ -288,6 +299,8 @@ export function resumeToProfileData(parsed: ParsedResume) {
   if (experience) profileData.experience = experience;
 
   const education = parsed.education
+    .filter((edu) => [edu.degree, edu.field, edu.institution, edu.graduationDate]
+      .some((value) => value.trim()))
     .map((edu) => `${edu.degree} in ${edu.field} from ${edu.institution} (${edu.graduationDate})`)
     .filter((entry) => entry.trim())
     .join("\n");

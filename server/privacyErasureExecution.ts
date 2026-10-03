@@ -10,7 +10,7 @@ import {
 import { disconnectConnectorAccess } from "./connectorDisconnect";
 import { getDb } from "./db";
 import { PRIVACY_RETENTION_POLICY_VERSION } from "./privacyRetention";
-import { storageDelete } from "./storage";
+import { normalizeOwnedStorageKey, storageDelete } from "./storage";
 
 const LEASE_MS = 5 * 60 * 1000;
 
@@ -36,7 +36,7 @@ async function loadObjectKey(
   task: typeof privacyErasureTasks.$inferSelect
 ) {
   const id = task.sourceRecordId;
-  if (!id) return null;
+  if (!id || !Number.isSafeInteger(id) || id < 0) throw new Error("missing_private_object_source");
   if (
     task.sourceTable === "user_profiles" &&
     task.sourceColumn === "resume_file_key"
@@ -230,6 +230,7 @@ export async function executePrivacyErasureCleanup(
       })
       .where(eq(privacyErasureTasks.id, task.id));
     try {
+      if (task.userId !== run.userId) throw new Error("privacy_task_owner_mismatch");
       if (task.kind === "provider_revoke") {
         if (!task.provider) throw new Error("missing_provider");
         const result = await dependencies.disconnect(run.userId, task.provider);
@@ -254,7 +255,15 @@ export async function executePrivacyErasureCleanup(
           .where(eq(privacyErasureTasks.id, task.id));
       } else {
         const key = await loadObjectKey(db, task);
-        if (key) await dependencies.deleteObject(key);
+        if (key !== null) {
+          // Row ownership alone cannot authorize a legacy user-supplied object key.
+          const ownedKey = normalizeOwnedStorageKey(
+            key,
+            run.userId,
+            task.sourceTable === "application_attempts" ? "attempts" : "resumes"
+          );
+          await dependencies.deleteObject(ownedKey);
+        }
         await db
           .update(privacyErasureTasks)
           .set({

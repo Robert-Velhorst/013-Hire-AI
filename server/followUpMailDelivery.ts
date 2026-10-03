@@ -403,7 +403,9 @@ export async function sendApprovedFollowUp(
     providerResult = await sendFollowUpProviderMessage(input.provider, access.accessToken, recipient, reservation.subject, reservation.message, fetcher);
   } catch (error) {
     const reason = failureMessage(error);
-    if (/rejected the follow-up delivery|accepted the request without/i.test(reason)) {
+    // An accepted message without an identifier may already have been sent.
+    // Only an explicit rejection is safe to classify as a known failure.
+    if (/rejected the follow-up delivery/i.test(reason)) {
       if (/\((401|403)\)/.test(reason)) {
         await markMailAccessNeedsReauth(input.userId, access.account, dependencies);
       }

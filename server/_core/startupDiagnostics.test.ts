@@ -11,6 +11,7 @@ describe("startup diagnostics", () => {
 
     expect(error.mock.calls.map(([message]) => message)).toEqual([
       "[Server] Startup stage failed: configuration validation.",
+      "[Server] Startup stage failed: database schema validation.",
       "[Server] Startup stage failed: platform catalog initialization.",
       "[Server] Startup stage failed: application assembly.",
       "[Server] Startup stage failed: listener binding.",

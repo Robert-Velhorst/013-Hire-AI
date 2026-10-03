@@ -1,6 +1,22 @@
 # Hire.AI Current Status
 
-Last updated: 2026-08-09
+Last updated: 2026-10-03
+
+## Progress Publication Check (2026-10-03)
+
+The accumulated source, regression tests, product documentation and private Hetzner deployment preparation are being submitted for review, not released to production. Type checking and the production build passed. The regular suite passed 281 files / 1,573 tests; two opt-in database suites / 14 tests were skipped and were not rerun against MySQL in this publication check. The current dependency audit reports 16 advisories (7 high, 8 moderate, 1 low), including Axios, Vitest / its mocker, fast-uri and DOMPurify. The moderate-or-higher CI audit remains a merge blocker; earlier zero-advisory results are historical, not current.
+
+The requested hostname and dated DNS evidence are recorded in [Hostname Setup](deploy/hetzner/DOMAIN_SETUP.md). HTTPS, authenticated inspection of the current shared host and live provider acceptance remain open. Local database recovery files, browser exports and generated test evidence are excluded from Git. See [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) for current checks and remaining release gates.
+
+## Online Multi-User Production Work (2026-09-04)
+
+Robert confirmed online multi-user hosting as the target. This increment patches six dependency advisories, prevents silent example-data fallback after database configuration failures, validates the schema before production startup, uses database-aware container health, and adds opt-in MySQL acceptance tests to CI. All 75 migrations and five database acceptance tests were exercised on a dedicated local MySQL instance. Live deployment, provider credentials, employer submission, and full product acceptance remain open. See [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) for the evidence boundary and release gates.
+
+## Source Intelligence Increment (2026-09-04)
+
+The source directory now contains 90 platforms, with 9 adapters enabled by collection policy. Himalayas and Arbeitnow UK join the existing bounded discovery pipeline. The `/sources` page exposes geographic and language filters, collection and recorded scan states, stored listing and duplicate counts, and cursor-paginated comparisons of linked records. Sample counts are labelled when no database is connected. See [Source Intelligence](docs/SOURCE_INTELLIGENCE.md) for provider references and limitations.
+
+This is not complete global coverage or proof of production ingestion. Regional directory additions remain manual unless a dedicated policy-enabled adapter exists. Scheduling and preparation belong to the intended automated application journey; the job seeker conducts the actual interview. The submission limitations below still apply.
 
 ## Plain-English status
 

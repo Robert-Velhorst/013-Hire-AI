@@ -1,8 +1,12 @@
 # Hire.AI
 
-Hire.AI is an AI-assisted, review-first job-search operating platform. It helps a job seeker discover remote roles, organize evidence, prepare application materials, track follow-ups, monitor employer responses, and manage success-fee billing after a hire. It is designed to reduce repetitive job-search work without pretending that unsafe or unapproved external automation has happened.
+Hire.AI is being built as a platform-independent remote-job assistant: it should find suitable roles across global and local job boards and employer websites, remove duplicates, prepare and submit applications, follow up, and arrange and prepare interviews. **The candidate conducts the interview and handles everything afterwards.** The goal is minimal user effort and carefully targeted applications, not maximum application volume.
+
+The confirmed direction serves all professions and experience levels, exclusively for fully remote roles that fit the candidate's geographic, time-zone and other hard requirements. Hybrid roles are outside that direction. **The implementation is currently review-first; the destination is consent-bounded autonomy.** These are different stages, not interchangeable claims. [Confirmed Product Direction](docs/PRODUCT_DIRECTION.md) is the authoritative record of the user-approved decisions from 2026-09-06.
 
 The current repository is a hardened prototype / MVP foundation. It contains real application code, database schema, tests, operational scripts, source-ingestion adapters, and safety gates. It is not yet a production-ready fully autonomous job-application service because live provider credentials, legal/privacy approval, production infrastructure acceptance, and provider-specific submission agreements are still required.
+
+The selected deployment target is **online, multi-user operation at Hetzner**. Historical hosting evidence records a CPX12 application image build, private MySQL, 75 applied migrations and schema audits around a reboot. That is not verification of today's server or a public release. The last documented deployment remained blocked by domain/TLS, identity/provider and scanner configuration. [Hetzner Hosting](docs/HETZNER_HOSTING.md), [private deployment instructions](deploy/hetzner/README.md) and [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) describe evidence and remaining gates. Production startup rejects incompatible database schemas; configured database failures cannot silently switch users to sample data. Employer submission remains an implementation gap, not only a credential requirement.
 
 ## Table Of Contents
 
@@ -10,6 +14,7 @@ The current repository is a hardened prototype / MVP foundation. It contains rea
 - [Current Truth](#current-truth)
 - [Who This Repository Is For](#who-this-repository-is-for)
 - [Product Scope](#product-scope)
+- [Confirmed Operating Rules](#confirmed-operating-rules)
 - [Business Model](#business-model)
 - [Architecture](#architecture)
 - [Technology Stack](#technology-stack)
@@ -41,18 +46,20 @@ For job seekers, Hire.AI is intended to become the control center for a remote j
 - it prepares reviewable application material, including cover-letter and answer drafts;
 - it tracks whether an application was actually submitted only after the user records deterministic confirmation evidence;
 - it monitors connected inbox sources for employer responses when OAuth is configured;
-- it notifies users only from recorded interview-invite evidence;
-- it supports a success-fee business model where payment starts only after the user reports a hire.
+- interview notifications require recorded invitation evidence; the target also allows necessary decision, safety and service-impact notifications;
+- it contains billing workflows, but these must be reconciled with the newly approved commercial direction before use.
 
 For developers and operators, this repo is a TypeScript full-stack web application with React, Express, tRPC, Drizzle ORM, MySQL/TiDB, Stripe, S3-compatible private document storage, OAuth connector policy, source-scraper orchestration, privacy-erasure workflows, CI, Docker packaging, Windows/ngrok launch scripts, and extensive Vitest coverage.
 
 ## Current Truth
 
-Hire.AI is intentionally review-first.
+Hire.AI currently operates review-first. This is the present implementation boundary, not the final product ambition.
 
 It does not currently open employer portals, fill third-party forms, upload resumes to employers, or submit applications externally without the user. The active automation flow prepares application material and records a pending review/handoff. The user remains responsible for completing the employer-side handoff unless a future official provider integration is approved, tested, and evidence-backed.
 
-It also does not claim that every job platform on the internet is live. The codebase has a 62-platform catalog for provenance, source policy, and future expansion. Of those, 7 sources are approved for unattended automated discovery in the current policy: RemoteOK, Remotive, Jobicy, Arbeitnow, We Work Remotely, NoDesk, and ProBlogger. Other cataloged platforms are manual, unavailable, account-mediated, generic-parser candidates, or future integrations until their provider terms, adapters, tests, and acceptance evidence exist.
+It also does not claim that every job platform on the internet is live. The codebase has a 90-platform catalog for provenance, source policy, and future expansion. Of those, 9 sources are enabled for unattended automated discovery in the current code policy: RemoteOK, Remotive, Jobicy, Arbeitnow, Arbeitnow UK, Himalayas, We Work Remotely, NoDesk, and ProBlogger. Other cataloged platforms are manual, unavailable, account-mediated, generic-parser candidates, or future integrations until their provider terms, adapters, tests, and acceptance evidence exist. Policy enablement is not proof of a successful production scan.
+
+The product destination is to handle discovery, applications, follow-up, interview scheduling, and preparation. **Authority ends at the interview:** the user handles negotiations, offers, acceptance, signatures and resignation. Minimal outcome/employment/pay reporting remains necessary for search status and any permitted billing. Existing offer-recording features do not authorize autonomous post-interview action. Employer submission remains a controlled handoff today.
 
 ## Who This Repository Is For
 
@@ -97,16 +104,49 @@ The short version: this is a real TypeScript application with many wired workflo
 - No broad workspace sharing of candidate profiles, resumes, applications, or provider credentials.
 - No real production payment, storage, OAuth, malware-scanner, or provider-live acceptance without configured secrets and operator approval.
 
+## Confirmed Operating Rules
+
+These are approved requirements, **not a checklist of already implemented guarantees**. See [Product Direction](docs/PRODUCT_DIRECTION.md) for the full specification.
+
+| Area | Target behavior |
+| --- | --- |
+| Onboarding | Consent-scoped documents and account access, followed by one compact confirmation of facts and hard preferences; reading and sending have separate permissions. |
+| Daily discovery | Check new/changed jobs daily, share source discovery across users, skip unchanged processing and reassess relevant job/profile changes. Never confuse failed scans with no new jobs. |
+| Deduplication | Track source provenance and conflicts; reposting alone does not permit reapplication. Resolve decisive inconsistencies before applying. |
+| Missing conditions | Ask the vacancy holder first; park that application if unresolved and let the user approve a specific exception. Other suitable searches continue. |
+| Personal requirements | Never invent experience or impersonate personal assessment completion. Request an alternative, otherwise let the candidate complete it or skip. |
+| Follow-up | At most two follow-ups per unanswered sequence; respect response dates, rejection, objections and closure. Reconcile uncertain sends before retrying. |
+| Interviews | Book within approved availability and limits. Other suitable applications continue until employment or pause is reported. |
+| Transparency | Trace sources, reasoning, documents, sends, replies and costs. Allow future-action pause, employer exclusions and consent revocation. |
+| Incidents | Pause affected operations, notify when necessary and do not bill our errors or recovery. A sent message cannot be represented as undone. |
+| Restart and abuse | Stop applying on employment. Restart requires a reason and current criteria. Dismissal alone is not exclusion; permanent exclusion requires deliberate system abuse, human review by Robert and an opportunity to respond. |
+| Retention | Proposed deletion of personal content within 30 days of account termination, with narrowly separated necessary exceptions and legal review before release. |
+
+The proposed 20-person/country-limited introduction was rejected; no replacement launch format has been approved. Before real autonomous submissions, prove consent, correct facts/files, duplicate prevention, traceability, pause behavior and uncertain-send handling. Review actual trial outcomes after four weeks using user effort, suitable applications, interviews, incidents and costs; Robert decides expansion. No job or uninterrupted-employment guarantee is made.
+
 ## Business Model
 
-The intended business model is success-based:
+### Approved Commercial Direction
 
-| Event                                              | User cost                                    |
-| -------------------------------------------------- | -------------------------------------------- |
-| Searching, preparing, and tracking through Hire.AI | Free                                         |
-| Landing a job through Hire.AI                      | 5% of monthly salary, ongoing while employed |
+**These are proposed commercial rules subject to implementation and market-specific legal review, not an active price offer.**
 
-The implemented flow supports:
+| Model | Approved target |
+| --- | --- |
+| Success-based | Employer and employee each contribute 1% of gross monthly salary actually received from an attributable Hire.AI placement, for the duration of that job. Continuous same-employer renewals count; unrelated independently found jobs do not automatically count. |
+| Employer agreement | Payment requires proven agreement with Hire.AI. An employment contract alone is not that agreement. Non-paying employer placements remain possible. |
+| Prepaid alternative | Non-expiring credits cover attributable resource costs multiplied by 2.5, with transparent shared-cost allocation, bounded reservations and release of unused reservations. No automatic purchases or debt. |
+| Returning users | Success-model users can return for an eligible search without advance payment. Credit-model users use remaining/new credits unless sponsored. |
+| Assistance fund | Proposed eligible balance transfers on termination support users unable to pay, with small grants and transparent queues rather than expected-salary ranking. Inactivity and temporary blocks preserve balances; disputed funds remain reserved. Transfer legality and refund rights remain unresolved. |
+
+The overall operating ceiling is **EUR 100 per month**, including hosting, AI, storage and external services. No automatic increase is authorized. New costly work should pause at the ceiling while existing data remains accessible. Cross-provider enforcement is still a requirement to implement and verify, not a proven control.
+
+Neither employee fees nor a credit-based alternative are presumed lawful merely because of their name or a foreign company location. The prepaid model is not universally free without sponsorship. Profitability and funding have not been demonstrated.
+
+### Existing Billing Implementation
+
+The repository still contains **legacy 5% assumptions**, success-fee calculations and Stripe subscription infrastructure. They are not the newly approved 1%/1% model. This README change does not migrate billing, change existing obligations or enable charging. The prepaid ledger, assistance fund and revised fee lifecycle must be implemented and verified before being advertised as available.
+
+The existing flow supports:
 
 1. The user reports a hire from an accepted offer flow.
 2. The user uploads offer or employment evidence.
@@ -115,7 +155,7 @@ The implemented flow supports:
 5. Quarterly employment verification can be requested and reviewed.
 6. Employment-ended reports can stop the obligation after review.
 
-This model requires legal, privacy, tax, billing, and consumer-protection review before production use.
+Both the existing flow and its replacement require legal, privacy, tax, billing and consumer-protection review before production use.
 
 ## Architecture
 
@@ -196,11 +236,14 @@ Express 4 server on Node.js 22 ESM
 
 - Follow-up drafts can be created and tracked.
 - Mail delivery confirmation is separated from draft creation.
+- A Gmail acceptance without a deterministic message identifier is recorded as an unknown delivery outcome, blocking blind retries until reconciliation.
 - Connected inbox providers can produce response candidates when OAuth is configured.
 - Interview notifications require recorded interview-invite evidence.
 - Responses, interviews, outcomes, and offers remain linked to the application ledger.
 
 ### 6. Success Fees And Compliance
+
+This describes legacy implementation, not activation of the commercial targets above. Offer and hire records are user/admin reporting, not authority to negotiate or accept a job for the candidate.
 
 - Accepted offers can become reported hires.
 - Offer evidence and salary are recorded.
@@ -227,13 +270,23 @@ These sources are allowed by current code policy for unattended discovery:
 | Remotive         | Automated | Public job API adapter                                                        |
 | Jobicy           | Automated | Documented public remote-jobs API; hourly minimum polling                     |
 | Arbeitnow        | Automated | No-key API; only explicit remote records are accepted; hourly minimum polling |
+| Arbeitnow UK     | Automated | UK no-key API; one bounded page, explicit remote records only, provider backlinks |
+| Himalayas        | Automated | Public cursor API; daily polling; at most 5 pages / 100 records per call, subject to the cycle budget; attribution retained |
 | We Work Remotely | Automated | Public RSS category feeds                                                     |
 | NoDesk           | Automated | Public RSS feed                                                               |
 | ProBlogger       | Automated | Public RSS feed                                                               |
 
 ### Cataloged Or Future Sources
 
-The platform catalog currently tracks 62 sources for provenance and expansion. Many are manual or account-mediated by design, including LinkedIn Jobs, Wellfound, Glassdoor, marketplace/freelance platforms, and discontinued or unsupported sources. Catalog inclusion means Hire.AI can represent the source and policy; it does not mean the source may be scraped or submitted to in production.
+The platform catalog currently tracks 90 sources for provenance and expansion, including local and regional entries across Europe, Africa, Asia, the Middle East, North America, Latin America, and Oceania. Many are manual or account-mediated by design, including LinkedIn Jobs, Wellfound, Glassdoor, marketplace/freelance platforms, and discontinued or unsupported sources. Catalog inclusion means Hire.AI can represent the source and policy; it does not mean the source may be scraped or submitted to in production.
+
+### Source Register And Comparisons
+
+The **Sources / Bronnen** page at `/sources` brings the directory, collection policy, recorded scan status, stored listing counts, and linked duplicate counts together. Filter by platform name, region, country, language, collection method, and status; paginate results or export the current filtered page as JSON. Country and language labels describe directory coverage, not candidate eligibility. Unclassified metadata stays explicitly unknown.
+
+The second tab compares existing linked duplicates for title, company, location, contract type, currency, and salary bounds. Missing data is separate from conflicting values; salary amounts are compared only within the same known currency. These are comparisons of the latest stored records, not immutable original snapshots or verified factual inconsistencies. Canonical listings can include updates from linked sources.
+
+Without a connected database, the page explicitly identifies example vacancy counts and comparisons. A directory reference marked checked means the referenced site or documentation was reviewed, not that its scraper passed live acceptance. The directory is deliberately incomplete and does not claim to enumerate every platform worldwide. See [Source Intelligence](docs/SOURCE_INTELLIGENCE.md) for evidence, endpoints, collection limits, and remaining work.
 
 See `server/scrapers/platformCatalog.ts` for policy decisions and `server/scrapers/index.ts` for registered parser adapters.
 
@@ -461,7 +514,7 @@ Secrets must be injected through the deployment environment. Do not commit `.env
 | `LINKEDIN_OAUTH_CLIENT_ID` / `LINKEDIN_OAUTH_CLIENT_SECRET`   | LinkedIn                                                  |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`       | GitHub                                                    |
 
-If all connector variables are empty, connectors are intentionally disabled. If any connector value is configured, startup and `pnpm doctor` fail closed unless shared OAuth controls and at least one complete provider credential pair are valid.
+If all connector variables are empty, connectors are intentionally disabled. If any connector value is configured, startup and `pnpm run doctor` fail closed unless shared OAuth controls and at least one complete provider credential pair are valid.
 
 ### Discovery And Automation
 
@@ -486,7 +539,7 @@ If all connector variables are empty, connectors are intentionally disabled. If 
 | `pnpm start:ngrok`                                      | Windows/ngrok tunnel startup and readiness check                         |
 | `pnpm check`                                            | TypeScript check                                                         |
 | `pnpm test`                                             | Run Vitest suite                                                         |
-| `pnpm doctor`                                           | Validate runtime configuration and fail-closed policies                  |
+| `pnpm run doctor`                                           | Validate runtime configuration and fail-closed policies                  |
 | `pnpm security:audit`                                   | Run moderate-or-higher dependency audit                                  |
 | `pnpm db:generate`                                      | Generate Drizzle migration after schema changes                          |
 | `pnpm db:migrate`                                       | Apply committed migrations                                               |
@@ -536,7 +589,7 @@ Use these checks before publishing a change:
 ```bash
 pnpm check
 pnpm test
-pnpm doctor
+pnpm run doctor
 pnpm security:audit
 pnpm build
 ```
@@ -555,6 +608,10 @@ The repository also contains tests for:
 - database migrations, schema audits, query-plan audits, backups, restores, container packaging, Windows runtime, and CI workflow expectations.
 
 See `docs/FINAL_VERIFICATION_REPORT.md`, `docs/GOAL_COMPLETION_MATRIX.md`, and `docs/CODEX_WORKLOG.md` for historical verification evidence. Rerun the commands above in the target environment before claiming a release.
+
+The progress-publication check on **2026-10-03** passed TypeScript checking, the production build and 1,573 regular tests across 281 files. Two opt-in MySQL suites / 14 tests were skipped, not accepted in this run. The current dependency audit found **16 advisories (7 high, 8 moderate, 1 low)** and remains a merge blocker. Publication is not deployment or public-release acceptance. [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) records these checks and the outstanding gates.
+
+The first post-interview-specification increment was checked locally on 2026-09-06: ten focused follow-up tests and TypeScript checking passed. The tests used mocked storage/provider responses and covered retry blocking after an accepted Gmail response without an identifier. This is not live-mail acceptance, a full-suite rerun or deployment proof.
 
 ## Operational Evidence
 
@@ -597,6 +654,7 @@ The Dockerfile builds a Node.js-only runtime. Windows scripts support local/nati
 | File                             | Purpose                                                            |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `CURRENT_STATUS.md`              | Plain-English implementation status and known limits               |
+| [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_DIRECTION.md) | Confirmed product decisions, commercial targets and unresolved gates |
 | `docs/GOAL_COMPLETION_MATRIX.md` | Requirement-by-requirement completion evidence                     |
 | `docs/CRITICAL_PATH.md`          | Critical product and deployment path                               |
 | `docs/SECURITY.md`               | Security model and remaining production security work              |
@@ -615,7 +673,7 @@ The Dockerfile builds a Node.js-only runtime. Windows scripts support local/nati
 1. Create a branch for the change.
 2. Keep changes scoped to the feature or fix.
 3. Add or update tests for behavioral changes.
-4. Run `pnpm check`, `pnpm test`, `pnpm doctor`, `pnpm security:audit`, and `pnpm build` where relevant.
+4. Run `pnpm check`, `pnpm test`, `pnpm run doctor`, `pnpm security:audit`, and `pnpm build` where relevant.
 5. Keep provider-live, payment-live, and external-submission claims separate from local/CI verification.
 6. Do not commit secrets, private documents, generated local output, or provider tokens.
 
