@@ -10,7 +10,7 @@ Verification on this checkout: TypeScript passed; 282 test files / 1,581 tests p
 
 Follow-up resource hardening bounds the autonomous scheduler's per-user in-memory status cache to 2,048 least-recently-used entries and error samples to 100 per cycle, counting omitted errors separately. The focused scheduler test file passes all 9 tests and TypeScript passes; the full suite was not rerun after these narrow changes.
 
-Inbound API rate limiting now preserves active client windows when its bounded identity map is full; new identities receive a retryable `503` instead of evicting another client's budget. Focused limiter and middleware-wiring tests pass, and TypeScript passes.
+Inbound API rate limiting now preserves active client windows when its bounded identity map is full; new identities receive a retryable `503` instead of evicting another client's budget. It uses monotonic time and ordered expiry pruning to avoid a full-map scan on every capacity rejection. Focused limiter tests and TypeScript pass.
 
 ## Historical Publication Check (2026-10-03)
 

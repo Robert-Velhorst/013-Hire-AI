@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { Express, NextFunction, Request, Response } from "express";
 
 export const API_RATE_LIMIT_POLICY = Object.freeze({
@@ -40,7 +41,7 @@ export function createRateLimitMiddleware(
     throw new Error("Rate-limit client capacity must be positive.");
   }
 
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => performance.now());
   const clientKey =
     options.clientKey ??
     ((req: Request) => req.ip || req.socket.remoteAddress || "unknown");
@@ -64,15 +65,15 @@ export function createRateLimitMiddleware(
     if (!window || window.resetAt <= timestamp) {
       if (window) clients.delete(key);
       if (clients.size >= options.maxClients) {
-        let earliestResetAt = Number.POSITIVE_INFINITY;
-        clients.forEach((activeWindow, activeKey) => {
-          if (activeWindow.resetAt <= timestamp) {
-            clients.delete(activeKey);
-          } else {
-            earliestResetAt = Math.min(earliestResetAt, activeWindow.resetAt);
-          }
-        });
+        // Fixed windows created by a monotonic clock remain ordered by expiry.
+        let oldestEntry = clients.entries().next();
+        while (oldestEntry.value && oldestEntry.value[1].resetAt <= timestamp) {
+          clients.delete(oldestEntry.value[0]);
+          oldestEntry = clients.entries().next();
+        }
         if (clients.size >= options.maxClients) {
+          const earliestResetAt =
+            oldestEntry.value?.[1].resetAt ?? timestamp + options.windowMs;
           const retrySeconds = Math.max(
             1,
             Math.ceil((earliestResetAt - timestamp) / 1_000)

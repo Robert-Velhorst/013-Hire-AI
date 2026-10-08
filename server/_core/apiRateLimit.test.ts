@@ -100,19 +100,38 @@ describe("bounded API rate limiting", () => {
       const clientB = { "x-forwarded-for": "198.51.100.5" };
       const clientC = { "x-forwarded-for": "198.51.100.6" };
 
-      expect((await fetch(`${baseUrl}/api/value`, { headers: clientA })).status).toBe(200);
-      expect((await fetch(`${baseUrl}/api/value`, { headers: clientB })).status).toBe(200);
-      const capacityResponse = await fetch(`${baseUrl}/api/value`, { headers: clientC });
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(200);
+      advance(3_000);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(200);
+      const capacityResponse = await fetch(`${baseUrl}/api/value`, {
+        headers: clientC,
+      });
       expect(capacityResponse.status).toBe(503);
-      expect(capacityResponse.headers.get("retry-after")).toBe("10");
+      expect(capacityResponse.headers.get("retry-after")).toBe("7");
       expect(limiter.activeClientCount()).toBe(2);
 
-      expect((await fetch(`${baseUrl}/api/value`, { headers: clientA })).status).toBe(200);
-      expect((await fetch(`${baseUrl}/api/value`, { headers: clientA })).status).toBe(429);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(200);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(429);
 
-      advance(10_000);
-      expect((await fetch(`${baseUrl}/api/value`, { headers: clientC })).status).toBe(200);
-      expect(limiter.activeClientCount()).toBe(1);
+      advance(7_000);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientC })).status
+      ).toBe(200);
+      expect(limiter.activeClientCount()).toBe(2);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(200);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(429);
     });
   });
 
