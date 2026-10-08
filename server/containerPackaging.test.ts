@@ -20,7 +20,7 @@ describe("production container packaging", () => {
       `corepack prepare ${packageManager} --activate`
     );
     expect(dockerfile).toContain(
-      "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./"
+      "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./"
     );
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
   });

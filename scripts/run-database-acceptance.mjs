@@ -30,7 +30,6 @@ if (!allowed) {
       "server/productionData.integration.test.ts",
       "server/privacyErasurePlanning.integration.test.ts",
       "--maxWorkers=1",
-      "--minWorkers=1",
     ],
     {
       cwd: root,
