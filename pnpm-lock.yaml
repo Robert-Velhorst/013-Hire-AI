@@ -20,7 +20,7 @@ overrides:
   tinypool@<2.1.2: 2.1.2
   '@esbuild-kit/core-utils>esbuild': 0.25.12
 
-pnpmfileChecksum: sha256-I1wT9MYnszy544V/RA/ITvbM4iD9WJSNWOrMjF/Bw1E=
+pnpmfileChecksum: sha256-ZxXdFfzRGe61wJqQs56+tzigdgOiPTv7SE2Jg1D5QQ4=
 
 importers:
 
