@@ -22,6 +22,31 @@ function remoteOkListingUrl(value: unknown): string | null {
   }
 }
 
+function explicitRemoteOkJobType(rawJob: Record<string, unknown>) {
+  const structuredType = typeof rawJob.job_type === "string" ? rawJob.job_type : "";
+  const structuredMatches = recognizedJobTypes(structuredType);
+  const tags = Array.isArray(rawJob.tags)
+    ? rawJob.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+  const matches = Array.from(new Set(tags.flatMap(recognizedJobTypes)));
+  if (structuredMatches.length > 1 || matches.length > 1) return undefined;
+  if (structuredMatches.length === 1) {
+    if (matches.length === 1 && matches[0] !== structuredMatches[0]) return undefined;
+    return structuredMatches[0];
+  }
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function recognizedJobTypes(value: string): Array<"full-time" | "part-time" | "contract" | "temporary"> {
+  const normalized = value.toLowerCase();
+  const types: Array<"full-time" | "part-time" | "contract" | "temporary"> = [];
+  if (/\bfull[\s-]?time\b/.test(normalized)) types.push("full-time");
+  if (/\bpart[\s-]?time\b/.test(normalized)) types.push("part-time");
+  if (/\bcontract(?:or)?\b/.test(normalized)) types.push("contract");
+  if (/\btemporary\b/.test(normalized)) types.push("temporary");
+  return types;
+}
+
 /**
  * RemoteOK scraper
  * Scrapes jobs from remoteok.com using their public API
@@ -105,7 +130,7 @@ export class RemoteOKScraper extends BaseScraper {
             skills: Array.isArray(rawJob.tags)
               ? rawJob.tags.filter((tag): tag is string => typeof tag === "string").join(", ")
               : undefined,
-            jobType: "full-time",
+            jobType: explicitRemoteOkJobType(rawJob),
             applicationUrl: sourceUrl,
             externalId,
             postedDate: date,

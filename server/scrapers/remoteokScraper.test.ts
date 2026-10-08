@@ -34,7 +34,7 @@ describe("Remote OK feed adapter", () => {
             location: "Remote - Europe",
             epoch: 1_800_000_000,
             url: "https://remoteok.com/remote-jobs/epoch-job",
-            tags: ["operations"],
+            tags: ["operations", "fullstack"],
           },
           {
             id: "fallback-epoch-job",
@@ -44,6 +44,7 @@ describe("Remote OK feed adapter", () => {
             date: "invalid-date",
             epoch: 1_800_000_001,
             url: "https://remoteok.com/remote-jobs/fallback-epoch-job",
+            tags: ["part time"],
           },
           {
             id: "external-link",
@@ -72,9 +73,11 @@ describe("Remote OK feed adapter", () => {
       externalId: "epoch-job",
       postedDate: new Date(1_800_000_000_000),
     });
+    expect(result.jobs[1].jobType).toBeUndefined();
     expect(result.jobs[2]).toMatchObject({
       externalId: "fallback-epoch-job",
       postedDate: new Date(1_800_000_001_000),
+      jobType: "part-time",
     });
     expect(result.jobs.map(job => job.externalId)).not.toContain(
       "external-link"
@@ -123,5 +126,45 @@ describe("Remote OK feed adapter", () => {
 
     expect(result.jobs).toHaveLength(1);
     expect(result.jobs[0].externalId).toBe("match");
+  });
+
+  it("leaves missing and conflicting job-type evidence unclassified", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {},
+            {
+              id: "unclassified",
+              position: "Remote engineer",
+              company: "A",
+              tags: ["fullstack"],
+              url: "https://remoteok.com/remote-jobs/unclassified",
+            },
+            {
+              id: "conflicting-tags",
+              position: "Remote coordinator",
+              company: "B",
+              tags: ["part time", "contract"],
+              url: "https://remoteok.com/remote-jobs/conflicting-tags",
+            },
+            {
+              id: "conflicting-structured-and-tag",
+              position: "Remote analyst",
+              company: "C",
+              job_type: "full-time",
+              tags: ["part time"],
+              url: "https://remoteok.com/remote-jobs/conflicting-structured-and-tag",
+            },
+          ])
+        )
+      )
+    );
+
+    const result = await new RemoteOKScraper(27).scrape();
+
+    expect(result.jobs).toHaveLength(3);
+    expect(result.jobs.every((job) => job.jobType === undefined)).toBe(true);
   });
 });
