@@ -6,6 +6,7 @@ const AUTONOMOUS_SCHEDULER_FAILURE = "Autonomous scheduler cycle could not compl
 const AUTONOMOUS_PROFILE_PAGE_SIZE = 100;
 const AUTONOMOUS_MAX_CONCURRENT_USERS = 3;
 export const MAX_RETAINED_AUTONOMOUS_USER_STATUSES = 2_048;
+export const MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS = 100;
 
 async function processWithConcurrency<T>(
   items: T[],
@@ -52,6 +53,7 @@ interface AutonomousSchedulerStatus {
   inboxMonitoringFailures: number;
   failedActions: number;
   errors: string[];
+  omittedErrorCount: number;
 }
 
 interface AutonomousUserRunStatus {
@@ -99,6 +101,7 @@ export class AutonomousScheduler {
     inboxMonitoringFailures: 0,
     failedActions: 0,
     errors: [],
+    omittedErrorCount: 0,
   };
 
   start() {
@@ -141,6 +144,7 @@ export class AutonomousScheduler {
 
     this.status.isRunning = true;
     this.status.errors = [];
+    this.status.omittedErrorCount = 0;
     this.status.usersRun = 0;
     this.status.jobsQueued = 0;
     this.status.followUpDraftsQueued = 0;
@@ -209,7 +213,7 @@ export class AutonomousScheduler {
                 errorCount: result.failedActions,
               });
               if (result.failedActions > 0) {
-                this.status.errors.push(
+                this.recordError(
                   `User ${profile.userId}: ${result.failedActions} autonomous action${result.failedActions === 1 ? "" : "s"} failed`
                 );
               }
@@ -233,7 +237,7 @@ export class AutonomousScheduler {
               failedActions: 0,
               errorCount: 1,
             });
-            this.status.errors.push(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
+            this.recordError(`User ${profile.userId}: ${AUTONOMOUS_RUN_FAILURE}`);
           }
         }, signal);
         if (signal?.aborted) break;
@@ -243,7 +247,7 @@ export class AutonomousScheduler {
         afterUserId = nextUserId;
       }
     } catch {
-      this.status.errors.push(AUTONOMOUS_SCHEDULER_FAILURE);
+      this.recordError(AUTONOMOUS_SCHEDULER_FAILURE);
     } finally {
       this.status.isRunning = false;
       this.status.lastCycleAt = new Date();
@@ -270,6 +274,14 @@ export class AutonomousScheduler {
       const oldestUserId = this.userRunStatuses.keys().next().value;
       if (oldestUserId === undefined) break;
       this.userRunStatuses.delete(oldestUserId);
+    }
+  }
+
+  private recordError(message: string) {
+    if (this.status.errors.length < MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS) {
+      this.status.errors.push(message);
+    } else {
+      this.status.omittedErrorCount += 1;
     }
   }
 }

@@ -16,6 +16,7 @@ vi.mock("./autonomousService", () => ({
 
 import {
   AutonomousScheduler,
+  MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS,
   MAX_RETAINED_AUTONOMOUS_USER_STATUSES,
 } from "./autonomousScheduler";
 
@@ -256,6 +257,25 @@ describe("AutonomousScheduler", () => {
       "User 22: Autonomous work could not complete. Review the operating ledger before retrying.",
     ]);
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("provider-secret");
+  });
+
+  it("bounds error samples and counts every omitted scheduler error", async () => {
+    const failedUsers = MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS + 17;
+    const profile = (index: number) => ({
+        userId: index + 1,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+    });
+    mocks.getProfilesWithAutonomousPreferences
+      .mockResolvedValueOnce(Array.from({ length: 100 }, (_, index) => profile(index)))
+      .mockResolvedValueOnce(Array.from({ length: failedUsers - 100 }, (_, index) => profile(index + 100)));
+    mocks.runScheduledAutonomousForUser.mockRejectedValue(new Error("private provider detail"));
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    expect(scheduler.getStatus().errors).toHaveLength(MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS);
+    expect(scheduler.getStatus().omittedErrorCount).toBe(17);
+    expect(JSON.stringify(scheduler.getStatus())).not.toContain("private provider detail");
   });
 
   it("aborts active users and does not dequeue more work during shutdown", async () => {
