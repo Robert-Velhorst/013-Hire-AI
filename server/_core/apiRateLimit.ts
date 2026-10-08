@@ -48,11 +48,18 @@ export function createRateLimitMiddleware(
   const clients = new Map<string, ClientWindow>();
   let nextSweepAt = now() + options.windowMs;
 
+  const pruneExpiredClients = (timestamp: number) => {
+    // Monotonic fixed windows expire in the same order that clients enter the map.
+    let oldestEntry = clients.entries().next();
+    while (oldestEntry.value && oldestEntry.value[1].resetAt <= timestamp) {
+      clients.delete(oldestEntry.value[0]);
+      oldestEntry = clients.entries().next();
+    }
+  };
+
   const sweep = (timestamp: number) => {
     if (timestamp < nextSweepAt) return;
-    clients.forEach((window, key) => {
-      if (window.resetAt <= timestamp) clients.delete(key);
-    });
+    pruneExpiredClients(timestamp);
     nextSweepAt = timestamp + options.windowMs;
   };
 
@@ -65,15 +72,10 @@ export function createRateLimitMiddleware(
     if (!window || window.resetAt <= timestamp) {
       if (window) clients.delete(key);
       if (clients.size >= options.maxClients) {
-        // Fixed windows created by a monotonic clock remain ordered by expiry.
-        let oldestEntry = clients.entries().next();
-        while (oldestEntry.value && oldestEntry.value[1].resetAt <= timestamp) {
-          clients.delete(oldestEntry.value[0]);
-          oldestEntry = clients.entries().next();
-        }
+        pruneExpiredClients(timestamp);
         if (clients.size >= options.maxClients) {
-          const earliestResetAt =
-            oldestEntry.value?.[1].resetAt ?? timestamp + options.windowMs;
+          const earliestResetAt = clients.entries().next().value?.[1].resetAt
+            ?? timestamp + options.windowMs;
           const retrySeconds = Math.max(
             1,
             Math.ceil((earliestResetAt - timestamp) / 1_000)

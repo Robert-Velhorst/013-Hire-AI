@@ -135,6 +135,27 @@ describe("bounded API rate limiting", () => {
     });
   });
 
+  it("prunes only the expired map prefix and preserves later client windows", async () => {
+    await withLimitedServer(async (baseUrl, limiter, advance) => {
+      const clientA = { "x-forwarded-for": "198.51.100.14" };
+      const clientB = { "x-forwarded-for": "198.51.100.15" };
+      const clientC = { "x-forwarded-for": "198.51.100.16" };
+      const get = (headers: Record<string, string>) =>
+        fetch(`${baseUrl}/api/value`, { headers });
+
+      expect((await get(clientA)).status).toBe(200);
+      advance(3_000);
+      expect((await get(clientB)).status).toBe(200);
+      advance(7_000);
+
+      expect((await get(clientC)).status).toBe(200);
+      expect(limiter.activeClientCount()).toBe(2);
+      expect((await get(clientB)).status).toBe(200);
+      expect((await get(clientB)).status).toBe(429);
+      expect((await get(clientC)).status).toBe(200);
+    });
+  });
+
   it("rejects invalid policies at startup", () => {
     expect(() =>
       createRateLimitMiddleware({
