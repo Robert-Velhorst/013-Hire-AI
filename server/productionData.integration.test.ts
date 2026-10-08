@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
+import express from "express";
+import { createServer } from "node:http";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createHireTrpcClient } from "@/lib/trpcClient";
 import { applications, jobDuplicates, jobs, userProfiles, userResumes, users } from "../drizzle/schema";
+import { appRouter } from "./routers";
 import {
   closeDatabaseConnection,
   ensureScraperPlatformCatalog,
@@ -285,6 +290,53 @@ describe
       expect(
         await getUserApplicationById(userIds[1], applicationId)
       ).toBeNull();
+    });
+
+    it("serves a protected profile through the frontend client, Express, tRPC, and MySQL", async () => {
+      const userId = userIds[0];
+      const skills = `${marker} profile delivered over HTTP`;
+      await upsertUserProfile({ userId, skills });
+      const [account] = await database
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (!account) throw new Error("Acceptance account is missing from MySQL.");
+
+      const app = express();
+      app.use("/api/trpc", createExpressMiddleware({
+        router: appRouter,
+        createContext: ({ req, res }) => ({ req, res, user: account }),
+      }));
+      const server = createServer(app);
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", () => {
+          server.off("error", reject);
+          resolve();
+        });
+      });
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.closeAllConnections();
+        throw new Error("Acceptance HTTP server did not bind to TCP.");
+      }
+
+      try {
+        const client = createHireTrpcClient(
+          `http://127.0.0.1:${address.port}/api/trpc`
+        );
+        await expect(client.profile.get.query()).resolves.toMatchObject({
+          userId,
+          skills,
+        });
+      } finally {
+        const closed = new Promise<void>((resolve, reject) => {
+          server.close(error => error ? reject(error) : resolve());
+        });
+        server.closeAllConnections();
+        await closed;
+      }
     });
 
     it("does not delete a replacement resume when a delayed deletion resumes", async () => {
