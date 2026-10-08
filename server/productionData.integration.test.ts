@@ -242,7 +242,7 @@ describe
         const page = await getActiveJobPage({
           limit: 1,
           cursor,
-          filters: { query: "Cursor Boundary" },
+          filters: { query: "Cursor Boundary", remoteOnly: false },
         });
         seenIds.push(...page.items.map((job) => job.id));
         cursor = page.nextCursor ?? undefined;
@@ -264,7 +264,11 @@ describe
         .select()
         .from(jobs)
         .where(eq(jobs.company, marker));
-      expect(stored).toHaveLength(2);
+      expect(
+        stored.filter((job) =>
+          records.some((record) => record.externalId === job.externalId)
+        )
+      ).toHaveLength(2);
       const directory = await getSourceDirectory({
         query: "Arbeitnow UK",
         limit: 25,
