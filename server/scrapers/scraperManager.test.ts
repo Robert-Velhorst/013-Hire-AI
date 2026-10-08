@@ -56,6 +56,8 @@ describe("scraper manager platform restrictions", () => {
 
     expect(manager.getInitializedPlatforms()).not.toContain("LinkedIn Jobs");
     expect(manager.getInitializationError("LinkedIn Jobs")).toContain("approved integration");
+    expect(manager.getInitializedPlatforms()).not.toContain("Working Nomads");
+    expect(manager.getInitializationError("Working Nomads")).toContain("competitive product");
   });
 
   it("runs only the explicitly enabled platform sources", async () => {

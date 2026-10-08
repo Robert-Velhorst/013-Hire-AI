@@ -50,6 +50,8 @@ describe("scraper platform catalog", () => {
   });
 
   it("only permits unattended discovery for explicit public API or RSS adapters", () => {
+    expect(scraperPlatformCatalog.filter((platform) => isAutomatedDiscoveryPlatform(platform.name)))
+      .toHaveLength(9);
     expect(isAutomatedDiscoveryPlatform("RemoteOK")).toBe(true);
     expect(isAutomatedDiscoveryPlatform("Remotive")).toBe(true);
     expect(isAutomatedDiscoveryPlatform("We Work Remotely")).toBe(true);
@@ -57,6 +59,9 @@ describe("scraper platform catalog", () => {
     expect(getPlatformMinimumPollIntervalMs("Jobicy")).toBe(60 * 60 * 1000);
     expect(isAutomatedDiscoveryPlatform("Arbeitnow")).toBe(true);
     expect(getPlatformMinimumPollIntervalMs("Arbeitnow")).toBe(60 * 60 * 1000);
+    expect(isAutomatedDiscoveryPlatform("Working Nomads")).toBe(false);
+    expect(getPlatformDiscoveryPolicy("Working Nomads").reason)
+      .toContain("written authorization is obtained");
     expect(isAutomatedDiscoveryPlatform("LinkedIn Jobs")).toBe(false);
     expect(isAutomatedDiscoveryPlatform("Upwork")).toBe(false);
     expect(getPlatformDiscoveryPolicy("Stack Overflow Jobs")).toMatchObject({ mode: "unavailable" });

@@ -143,6 +143,11 @@ export function getPlatformMinimumPollIntervalMs(platformName: string) {
 }
 
 const explicitPolicies: Record<string, PlatformDiscoveryPolicy> = {
+  "Working Nomads": {
+    mode: "manual",
+    sourceType: "job_board",
+    reason: "Its Terms of Service section 3.1(d) prohibits using the service to build a competitive product. Do not ingest its public feed unless written authorization is obtained: https://www.workingnomads.com/terms-and-conditions",
+  },
   "Stack Overflow Jobs": {
     mode: "unavailable",
     sourceType: "job_board",
