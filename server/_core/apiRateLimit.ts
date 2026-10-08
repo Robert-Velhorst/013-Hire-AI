@@ -64,8 +64,25 @@ export function createRateLimitMiddleware(
     if (!window || window.resetAt <= timestamp) {
       if (window) clients.delete(key);
       if (clients.size >= options.maxClients) {
-        const oldestKey = clients.keys().next().value as string | undefined;
-        if (oldestKey !== undefined) clients.delete(oldestKey);
+        let earliestResetAt = Number.POSITIVE_INFINITY;
+        clients.forEach((activeWindow, activeKey) => {
+          if (activeWindow.resetAt <= timestamp) {
+            clients.delete(activeKey);
+          } else {
+            earliestResetAt = Math.min(earliestResetAt, activeWindow.resetAt);
+          }
+        });
+        if (clients.size >= options.maxClients) {
+          const retrySeconds = Math.max(
+            1,
+            Math.ceil((earliestResetAt - timestamp) / 1_000)
+          );
+          res.setHeader("Retry-After", String(retrySeconds));
+          res
+            .status(503)
+            .json({ error: "Rate-limit capacity is temporarily exhausted." });
+          return;
+        }
       }
       window = { count: 0, resetAt: timestamp + options.windowMs };
       clients.set(key, window);

@@ -12,6 +12,7 @@ Updated: 2026-10-09. Target confirmed by Robert: online, multi-user Hire.AI host
 - `pnpm audit --audit-level moderate` reports no known vulnerabilities. A local pnpm install still cannot update generated `node_modules` metadata (`EPERM`); the pinned frozen-lockfile installation passed in Docker and GitHub CI.
 - Resume parsing now limits input to 10 MiB, PDF files to 60 pages, extracted text to 500,000 characters, and DOCX ZIP files to 2,048 entries and 20 MiB of actual expanded content. Regression fixtures cover both declared and understated ZIP expansion sizes. These parser bounds do not replace malware scanning or establish the safety of uploaded files.
 - Subsequent autonomous-scheduler changes cap retained per-user status summaries at 2,048 LRU entries and per-cycle error samples at 100, with omitted errors counted separately. The focused scheduler test file passes 9 tests and TypeScript passes. The full suite was not rerun after these narrow changes.
+- Inbound API limiter capacity no longer evicts active client windows; over-capacity new identities receive a retryable `503`. The 5 limiter tests and 6 combined limiter/middleware-wiring tests pass, along with TypeScript.
 - These checks do not accept public hosting, HTTPS, live providers/scanner, billing or employer application submission. Keep the release decision above unchanged until the remaining gates pass.
 
 ## Historical Publication Verification (2026-10-03)
