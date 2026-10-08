@@ -3,6 +3,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 
 OUTPUT = Path("server/testFixtures/resume.docx")
+OVERSIZED_OUTPUT = Path("server/testFixtures/oversized-resume.docx")
+MISREPORTED_OUTPUT = Path("server/testFixtures/misreported-resume.docx")
 
 CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -31,3 +33,23 @@ with ZipFile(OUTPUT, "w", ZIP_DEFLATED) as docx:
     docx.writestr("[Content_Types].xml", CONTENT_TYPES)
     docx.writestr("_rels/.rels", PACKAGE_RELS)
     docx.writestr("word/document.xml", DOCUMENT)
+
+with ZipFile(OVERSIZED_OUTPUT, "w", ZIP_DEFLATED) as docx:
+    docx.writestr("[Content_Types].xml", CONTENT_TYPES)
+    docx.writestr("_rels/.rels", PACKAGE_RELS)
+    docx.writestr("word/document.xml", "x" * (20 * 1024 * 1024 + 1))
+
+with ZipFile(MISREPORTED_OUTPUT, "w", ZIP_DEFLATED) as docx:
+    docx.writestr("[Content_Types].xml", CONTENT_TYPES)
+    docx.writestr("_rels/.rels", PACKAGE_RELS)
+    docx.writestr("word/document.xml", "x" * (20 * 1024 * 1024 + 1))
+
+archive = bytearray(MISREPORTED_OUTPUT.read_bytes())
+document_name = b"word/document.xml"
+local_name_offset = archive.find(document_name)
+central_name_offset = archive.find(document_name, local_name_offset + len(document_name))
+if local_name_offset < 30 or central_name_offset < 46:
+    raise ValueError("Unable to locate the synthetic DOCX document entry")
+archive[local_name_offset - 30 + 22:local_name_offset - 30 + 26] = b"\x00" * 4
+archive[central_name_offset - 46 + 24:central_name_offset - 46 + 28] = b"\x00" * 4
+MISREPORTED_OUTPUT.write_bytes(archive)

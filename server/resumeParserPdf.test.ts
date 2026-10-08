@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PDFParse } from "pdf-parse";
-import { extractTextFromPDF } from "./resumeParser";
+import { MAX_DOCUMENT_UPLOAD_BYTES } from "@shared/documentUploads";
+import { PDFParse, type TextResult } from "pdf-parse";
+import { extractTextFromPDF, MAX_RESUME_PDF_PAGES, ResumeInputLimitError } from "./resumeParser";
 
 const fixture = readFileSync(new URL("./testFixtures/resume.pdf", import.meta.url));
 
@@ -28,6 +29,37 @@ describe("PDF resume extraction", () => {
   it("returns no synthetic page labels for an empty PDF page", async () => {
     const blank = readFileSync(new URL("./testFixtures/blank-resume.pdf", import.meta.url));
     expect((await extractTextFromPDF(blank)).trim()).toBe("");
+  });
+
+  it("limits PDF text extraction to the maximum resume page count plus one", async () => {
+    const getText = vi.spyOn(PDFParse.prototype, "getText").mockResolvedValue({
+      pages: [],
+      text: "",
+      total: MAX_RESUME_PDF_PAGES + 1,
+    } as TextResult);
+    const destroy = vi.spyOn(PDFParse.prototype, "destroy");
+
+    await expect(extractTextFromPDF(fixture)).rejects.toBeInstanceOf(ResumeInputLimitError);
+    expect(getText).toHaveBeenCalledWith({ first: MAX_RESUME_PDF_PAGES + 1, pageJoiner: "" });
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects extracted text above the shared resume limit", async () => {
+    vi.spyOn(PDFParse.prototype, "getText").mockResolvedValue({
+      pages: [],
+      text: "x".repeat(500_001),
+      total: 1,
+    } as TextResult);
+
+    await expect(extractTextFromPDF(fixture)).rejects.toBeInstanceOf(ResumeInputLimitError);
+  });
+
+  it("rejects oversized PDF buffers before initializing the parser", async () => {
+    const getText = vi.spyOn(PDFParse.prototype, "getText");
+
+    await expect(extractTextFromPDF(Buffer.alloc(MAX_DOCUMENT_UPLOAD_BYTES + 1)))
+      .rejects.toBeInstanceOf(ResumeInputLimitError);
+    expect(getText).not.toHaveBeenCalled();
   });
 
   it("destroys the parser and returns a safe error for malformed documents", async () => {

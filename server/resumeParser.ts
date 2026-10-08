@@ -1,6 +1,7 @@
 import { invokeLLM } from "./_core/llm";
-import { MAX_RESUME_TEXT_CHARS } from "@shared/documentUploads";
+import { MAX_DOCUMENT_UPLOAD_BYTES, MAX_RESUME_TEXT_CHARS } from "@shared/documentUploads";
 import mammoth from "mammoth";
+import yauzl from "yauzl";
 import { validateGitHubUrl, validateLinkedInUrl, validatePortfolioUrl } from "./socialConnections";
 import { logOperationalFailure } from "./operationalFailureLog";
 
@@ -8,6 +9,82 @@ import { logOperationalFailure } from "./operationalFailureLog";
  * AI-powered resume parsing service
  * Extracts structured data from resume text, PDF, and DOCX files using LLM
  */
+
+export const MAX_RESUME_PDF_PAGES = 60;
+const MAX_DOCX_ARCHIVE_ENTRIES = 2_048;
+const MAX_DOCX_EXPANDED_BYTES = 20 * 1024 * 1024;
+
+export class ResumeInputLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResumeInputLimitError";
+  }
+}
+
+function assertResumeFileSize(buffer: Buffer): void {
+  if (buffer.byteLength > MAX_DOCUMENT_UPLOAD_BYTES) {
+    throw new ResumeInputLimitError("Resume files must be 10 MB or smaller.");
+  }
+}
+
+async function validateDocxArchive(buffer: Buffer): Promise<void> {
+  const archive = await yauzl.fromBufferPromise(buffer, {
+    lazyEntries: true,
+    decodeStrings: true,
+    validateEntrySizes: true,
+    strictFileNames: true,
+  });
+
+  try {
+    if (archive.entryCount > MAX_DOCX_ARCHIVE_ENTRIES) {
+      throw new ResumeInputLimitError("DOCX contains too many archive entries.");
+    }
+
+    let declaredExpandedBytes = 0;
+    let actualExpandedBytes = 0;
+    let hasDocument = false;
+    let hasContentTypes = false;
+    const names = new Set<string>();
+
+    for await (const entry of archive.eachEntry()) {
+      if (names.has(entry.fileName)) {
+        throw new Error("DOCX contains duplicate archive entries.");
+      }
+      names.add(entry.fileName);
+
+      if (entry.isEncrypted() || !entry.canDecodeFileData()) {
+        throw new Error("DOCX uses an unsupported archive encoding.");
+      }
+      if (!Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0) {
+        throw new Error("DOCX contains invalid archive sizes.");
+      }
+
+      declaredExpandedBytes += entry.uncompressedSize;
+      if (declaredExpandedBytes > MAX_DOCX_EXPANDED_BYTES) {
+        throw new ResumeInputLimitError("DOCX expands beyond the supported size limit.");
+      }
+
+      hasDocument ||= entry.fileName === "word/document.xml";
+      hasContentTypes ||= entry.fileName === "[Content_Types].xml";
+
+      // ZIP size headers are untrusted; count inflated bytes before Mammoth sees the archive.
+      const stream = await archive.openReadStreamPromise(entry);
+      for await (const chunk of stream) {
+        actualExpandedBytes += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+        if (actualExpandedBytes > MAX_DOCX_EXPANDED_BYTES) {
+          stream.destroy();
+          throw new ResumeInputLimitError("DOCX expands beyond the supported size limit.");
+        }
+      }
+    }
+
+    if (!hasDocument || !hasContentTypes) {
+      throw new Error("DOCX is missing required document parts.");
+    }
+  } finally {
+    archive.close();
+  }
+}
 
 export interface ParsedResume {
   name?: string;
@@ -40,17 +117,25 @@ export interface ParsedResume {
  * Extract text from PDF buffer
  */
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  assertResumeFileSize(buffer);
   try {
     // Load the PDF engine only for PDF uploads, not for every resume operation.
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     try {
-      const data = await parser.getText({ pageJoiner: "" });
+      const data = await parser.getText({ first: MAX_RESUME_PDF_PAGES + 1, pageJoiner: "" });
+      if (data.total > MAX_RESUME_PDF_PAGES) {
+        throw new ResumeInputLimitError(`PDFs may contain at most ${MAX_RESUME_PDF_PAGES} pages.`);
+      }
+      if (data.text.length > MAX_RESUME_TEXT_CHARS) {
+        throw new ResumeInputLimitError(`Resume text exceeds the ${MAX_RESUME_TEXT_CHARS} character limit.`);
+      }
       return data.text;
     } finally {
       await parser.destroy();
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ResumeInputLimitError) throw error;
     logOperationalFailure("ResumeParser", "PDF extraction");
     throw new Error("Failed to extract text from PDF");
   }
@@ -60,10 +145,16 @@ export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
  * Extract text from DOCX buffer
  */
 export async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
+  assertResumeFileSize(buffer);
   try {
+    await validateDocxArchive(buffer);
     const result = await mammoth.extractRawText({ buffer });
+    if (result.value.length > MAX_RESUME_TEXT_CHARS) {
+      throw new ResumeInputLimitError(`Resume text exceeds the ${MAX_RESUME_TEXT_CHARS} character limit.`);
+    }
     return result.value;
-  } catch {
+  } catch (error) {
+    if (error instanceof ResumeInputLimitError) throw error;
     logOperationalFailure("ResumeParser", "DOCX extraction");
     throw new Error("Failed to extract text from DOCX");
   }
@@ -103,6 +194,7 @@ export async function parseResumeFromFile(
   buffer: Buffer,
   mimeType: string
 ): Promise<ParsedResume> {
+  assertResumeFileSize(buffer);
   let text: string;
   
   if (mimeType === "application/pdf" || mimeType.includes("pdf")) {
