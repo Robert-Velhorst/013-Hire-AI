@@ -13,5 +13,12 @@ To regenerate both files, install ReportLab in a Python environment and run
 generator uses invariant metadata so its output is reproducible. Python and
 ReportLab are only needed for regeneration, not for the application or test run.
 
-The PDFs are marked binary in `.gitattributes` to preserve PDF byte offsets across
-Windows and Linux checkouts.
+`resume.docx` is a minimal Open XML package with invented candidate text. Tests
+extract it through Mammoth's library API; the separate Mammoth command-line tool
+is intentionally excluded from dependency installation because Hire.AI does not
+use it.
+
+To regenerate it with Python's standard library, run
+`python scripts/fixtures/create-resume-docx.py` from the repository root. PDFs and
+DOCX fixtures are marked binary in `.gitattributes` for consistent Windows and
+Linux checkouts.

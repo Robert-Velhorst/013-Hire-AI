@@ -1,8 +1,16 @@
 # Production Acceptance
 
-Updated: 2026-10-03. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
+Updated: 2026-10-08. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
 
 **Release decision: not ready for public production use.** This document separates verified technical work from the remaining product and operator requirements. Passing tests or a successful image build is not acceptance of live providers or autonomous employer submission.
+
+## Dependency Security Follow-up (2026-10-08)
+
+- `pnpm audit --audit-level moderate` reports no known vulnerabilities after upgrading Axios to 1.20.0 and Vitest to 4.1.11, overriding vulnerable transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved graph. The app's DOCX extraction API remains in use and has a synthetic regression test.
+- TypeScript checking passed. The full regular suite passed 282 files / 1,574 tests; two opt-in MySQL suites / 14 tests were skipped in this local run.
+- The production Vite build, bundle-budget check, application server bundle and two DB audit bundles passed. The repository's configured server output path `dist/index.js` was locked by the running local app, so the server/audit bundles were emitted to an ignored temporary directory for verification.
+- Local `pnpm install --frozen-lockfile` reached all package links but could not update generated `node_modules` metadata (`EPERM`). Direct Node invocations ran the local typecheck and tests against the installed versions. A successful clean frozen-lockfile install on GitHub CI is still required for this revision.
+- These checks do not accept public hosting, HTTPS, live providers/scanner, billing or employer application submission. Keep the release decision above unchanged until the remaining gates pass.
 
 ## Publication Verification (2026-10-03)
 

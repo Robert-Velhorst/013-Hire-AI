@@ -1,6 +1,12 @@
 # Hire.AI Current Status
 
-Last updated: 2026-10-03
+Last updated: 2026-10-08
+
+## Dependency Security Follow-up (2026-10-08)
+
+The current moderate-or-higher dependency audit is clear after upgrading Axios to 1.20.0 and Vitest to 4.1.11, applying patched transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved package graph. Hire.AI continues to use Mammoth's DOCX extraction library API; a synthetic DOCX regression covers it. The security audit must remain enabled.
+
+Verification on this checkout: TypeScript passed; 282 test files / 1,574 regular tests passed, with 14 opt-in MySQL tests skipped. The Vite production build, bundle-budget check and three server/operator bundles passed. The standard server bundle could not overwrite the existing locked `dist/index.js`, so the same build was verified to an ignored temporary output directory. pnpm's local install could not rewrite a generated `node_modules` metadata file (`EPERM`); direct local test/typecheck commands used the installed packages, and clean frozen-lockfile installation is pending GitHub CI for this revision. The existing Hetzner, HTTPS, identity, live-scanner/provider and employer-submission release gates remain open.
 
 ## Progress Publication Check (2026-10-03)
 
