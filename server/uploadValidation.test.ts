@@ -195,4 +195,50 @@ describe("sensitive upload validation", () => {
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("cancels oversized chunked scanner responses before reading the full body", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_MAX_CONCURRENCY", "1");
+    const cancel = vi.fn();
+    let chunks = 0;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks += 1;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(32));
+        if (chunks === 16) controller.close();
+      },
+      cancel,
+    }));
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(Response.json({ clean: true })) as typeof fetch;
+
+    await expect(scanSensitiveUpload({
+      data: Buffer.from("synthetic resume"), fileName: "resume.txt", mimeType: "text/plain",
+    })).rejects.toThrow("could not verify this upload");
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(chunks).toBeLessThan(16);
+    expect(response.body!.locked).toBe(false);
+    await expect(scanSensitiveUpload({
+      data: Buffer.from("next resume"), fileName: "next.txt", mimeType: "text/plain",
+    })).resolves.toMatchObject({ scanned: true });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["oversized-header", "http-error"])("cancels unused scanner bodies on %s", async (failure) => {
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }), {
+      status: failure === "http-error" ? 503 : 200,
+      headers: failure === "oversized-header" ? { "content-length": String(65 * 1024) } : {},
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(response) as typeof fetch;
+
+    await expect(scanSensitiveUpload({
+      data: Buffer.from("synthetic resume"), fileName: "resume.txt", mimeType: "text/plain",
+    })).rejects.toThrow("could not verify this upload");
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body!.locked).toBe(false);
+  });
 });

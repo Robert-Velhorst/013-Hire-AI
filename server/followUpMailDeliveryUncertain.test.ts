@@ -49,7 +49,10 @@ function createSelectQuery(rows: unknown[][]) {
 }
 
 describe("uncertain follow-up mailbox delivery", () => {
-  it("records an explicit unknown delivery state and blocks retries after a transport failure", async () => {
+  it.each([
+    { name: "transport failure", missingId: false, reason: "Mailbox delivery could not be completed." },
+    { name: "accepted message without an identifier", missingId: true, reason: "Gmail accepted the request without a deterministic message identifier." },
+  ])("records unknown delivery and blocks retries after $name", async ({ missingId, reason }) => {
     const selectedRows: unknown[][] = [
       [{
         followUpId: 41,
@@ -80,7 +83,9 @@ describe("uncertain follow-up mailbox delivery", () => {
       provider: "gmail",
       recipient: "recruiter@example.com",
     }, {
-      fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("network timeout: Bearer provider-secret")),
+      fetcher: missingId
+        ? vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status: 200 }))
+        : vi.fn<typeof fetch>().mockRejectedValue(new TypeError("network timeout: Bearer provider-secret")),
       dependencies: {
         decryptConnectorToken: mocks.decryptConnectorToken,
         encryptConnectorToken: mocks.encryptConnectorToken,
@@ -104,7 +109,7 @@ describe("uncertain follow-up mailbox delivery", () => {
 
     expect(set).toHaveBeenLastCalledWith(expect.objectContaining({
       deliveryState: "unknown",
-      deliveryFailureMessage: "Mailbox delivery could not be completed.",
+      deliveryFailureMessage: reason,
     }));
     expect(values).toHaveBeenCalledWith(expect.objectContaining({
       action: "follow_up_mail_delivery_uncertain",
@@ -113,10 +118,16 @@ describe("uncertain follow-up mailbox delivery", () => {
     }));
     expect(JSON.parse(values.mock.calls[0][0].afterState)).toMatchObject({
       followUpId: 41,
-      reason: "Mailbox delivery could not be completed.",
+      reason,
       externalMessageSent: "unknown",
       retryBlocked: true,
     });
     expect(JSON.stringify(values.mock.calls[0][0])).not.toContain("provider-secret");
+    selectedRows.push([{ followUpId: 41, applicationId: 73, sentDate: null, deliveryState: "unknown" }]);
+    const retryFetcher = vi.fn<typeof fetch>();
+    await expect(sendApprovedFollowUp({
+      followUpId: 41, userId: 11, provider: "gmail", recipient: "recruiter@example.com",
+    }, { fetcher: retryFetcher })).rejects.toThrow(/do not retry/i);
+    expect(retryFetcher).not.toHaveBeenCalled();
   });
 });

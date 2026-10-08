@@ -17,6 +17,7 @@ import { WorkingNomadsScraper } from "./workingnomadsScraper";
 import { GenericScraper } from "./genericScraper";
 import { JobicyScraper } from "./jobicyScraper";
 import { ArbeitnowScraper } from "./arbeitnowScraper";
+import { HimalayasScraper } from "./himalayasScraper";
 
 // Export all scrapers
 export {
@@ -45,6 +46,8 @@ export interface ScraperAdapterMetadata {
 }
 
 const dedicatedAdapterPlatforms = new Set([
+  "Himalayas",
+  "Arbeitnow UK",
   "RemoteOK",
   "We Work Remotely",
   "FlexJobs",
@@ -72,6 +75,8 @@ const scraperAdapterMetadata: Record<ScraperAdapterKind, ScraperAdapterMetadata>
  * Maps platform names to their scraper factory functions
  */
 export const scraperRegistry: Record<string, ScraperFactory> = {
+  "Himalayas": (id) => new HimalayasScraper(id),
+  "Arbeitnow UK": (id) => new ArbeitnowScraper(id, "GB"),
   // Tier 1 - Major Platforms
   "RemoteOK": (id) => new RemoteOKScraper(id),
   "We Work Remotely": (id) => new WeWorkRemotelyScraper(id),

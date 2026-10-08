@@ -33,12 +33,17 @@ import { applyTrustedProxyPolicy } from "./proxyPolicy";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
 import { registerApiRateLimit } from "./apiRateLimit";
 import { createRuntimeInstanceId } from "./runtimeInstance";
+import { assertProductionDatabaseSchema } from "../databaseSchemaValidation";
 
 let startupStage: StartupStage = "configuration validation";
-const runtimeInstanceId = createRuntimeInstanceId();
 
 async function startServer() {
+  const runtimeInstanceId = createRuntimeInstanceId();
   validateProductionEnv();
+  if (ENV.isProduction) {
+    startupStage = "database schema validation";
+    await assertProductionDatabaseSchema(ENV.databaseUrl);
+  }
   startupStage = "platform catalog initialization";
   await ensureScraperPlatformCatalog();
   configureOperationalFailurePersistence(persistOperationalFailureSignals);

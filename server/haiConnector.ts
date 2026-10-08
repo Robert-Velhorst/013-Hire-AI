@@ -4,6 +4,7 @@ import {
   getAutonomousRunState,
   getOperationalFailureAggregateSnapshot,
   getUserHaiStatusCounts,
+  getUserById,
 } from "./db";
 import {
   defaultHaiConnectorConfig,
@@ -106,8 +107,12 @@ export class HaiConnectorService {
     return this.config.enabled && !this.configError && Boolean(this.config.userId);
   }
 
-  authorize(token: string) {
-    return this.configured && constantTimeTokenMatch(this.config.token, token);
+  async authorize(token: string) {
+    const userId = this.config.userId;
+    if (!this.configured || !userId || !constantTimeTokenMatch(this.config.token, token)) return false;
+    // A configured bearer does not override account suspension or erasure.
+    const user = await getUserById(userId);
+    return user?.id === userId && user.accountStatus === "active";
   }
 
   status() {

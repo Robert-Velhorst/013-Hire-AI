@@ -5,8 +5,17 @@ allowBuilds:
   esbuild: true
 
 overrides:
+  "browserslist@<=4.28.6": "4.28.7"
+  "qs@<6.16.0": "6.16.0"
+  "@xmldom/xmldom@>=0.7.0 <=0.8.14": "0.8.15"
   "nanoid@<3.3.18": "3.3.18"
   "postcss@<=8.5.22": "8.5.23"
   "mermaid@<11.16.1": "11.16.1"
-  "dompurify@<=3.4.12": "3.4.13"
+  "dompurify@<=3.4.15": "3.4.16"
+  "fast-uri@<3.1.8": "3.1.8"
+  "katex@<0.18.2": "0.18.2"
+  "postcss-selector-parser@<7.1.6": "7.1.6"
+  "proxy-addr@<2.0.8": "2.0.8"
+  "source-map-js@<1.2.2": "1.2.2"
+  "tinypool@<2.1.2": "2.1.2"
   "@esbuild-kit/core-utils>esbuild": "0.25.12"

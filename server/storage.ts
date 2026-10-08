@@ -113,6 +113,18 @@ function normalizeKey(relKey: string): string {
   return key;
 }
 
+export function normalizeOwnedStorageKey(
+  relKey: string,
+  userId: number,
+  namespace: "resumes" | "attempts"
+): string {
+  const key = normalizeKey(relKey);
+  if (!Number.isSafeInteger(userId) || userId <= 0 || !key.startsWith(`${namespace}/${userId}/`)) {
+    throw new Error("private_object_owner_mismatch");
+  }
+  return key;
+}
+
 function toFormData(
   data: Buffer | Uint8Array | string,
   contentType: string,

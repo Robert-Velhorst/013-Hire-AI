@@ -1,5 +1,6 @@
 export const startupStages = [
   "configuration validation",
+  "database schema validation",
   "platform catalog initialization",
   "application assembly",
   "listener binding",

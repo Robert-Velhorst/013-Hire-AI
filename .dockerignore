@@ -3,6 +3,8 @@ node_modules
 dist
 output
 test-results
+.playwright-cli
+backups
 tmp
 .env
 .env.*

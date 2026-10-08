@@ -175,6 +175,21 @@ describe("autonomous orchestrator", () => {
     expect(plan.nextActions).toContain("Excluded 1 hybrid or on-site role under the remote-only campaign policy.");
   });
 
+  it("blocks a generic remote listing when it requires recurring in-person work", () => {
+    const plan = buildAutonomousPlan([{
+      ...baseJob,
+      location: "Neuruppin, Germany",
+      description: "Mostly remote within Germany, with monthly in-person collaboration at our Berlin office.",
+    }], profile, [], {
+      mode: "auto_apply",
+      requireHumanReview: false,
+      minMatchScore: 0,
+    });
+
+    expect(plan.decisions[0].action).toBe("skip");
+    expect(plan.decisions[0].blockers).toContain("Remote-only policy excludes hybrid and on-site roles");
+  });
+
   it("keeps an unclassified location review-required under the remote-only campaign policy", () => {
     const locationUnknownJob: Job = {
       ...baseJob,

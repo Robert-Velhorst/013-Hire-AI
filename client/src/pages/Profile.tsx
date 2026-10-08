@@ -331,9 +331,9 @@ export default function Profile() {
     onSuccess: async ({ success }) => {
       if (!success) {
         toast.error(t("unableActivateResume"));
-        return;
+      } else {
+        toast.success(t("activeResumeUpdated"));
       }
-      toast.success(t("activeResumeUpdated"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -347,9 +347,9 @@ export default function Profile() {
     onSuccess: async ({ success }) => {
       if (!success) {
         toast.error(t("unableDeleteResume"));
-        return;
+      } else {
+        toast.success(t("resumeVersionDeleted"));
       }
-      toast.success(t("resumeVersionDeleted"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -1006,7 +1006,7 @@ export default function Profile() {
                         <div className="flex items-center gap-2">
                           {resume.isActive ? <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">{t("activeLabel")}</Badge> : null}
                           {!resume.isActive ? (
-                            <Button size="sm" variant="outline" onClick={() => setActiveResume.mutate({ version: resume.version })} disabled={setActiveResume.isPending}>
+                            <Button size="sm" variant="outline" onClick={() => setActiveResume.mutate({ version: resume.version, resumeId: resume.id })} disabled={setActiveResume.isPending}>
                               {t("useThisVersion")}
                             </Button>
                           ) : null}
@@ -1015,7 +1015,7 @@ export default function Profile() {
                             variant="ghost"
                             className="text-red-300 hover:text-red-200"
                             onClick={() => {
-                              if (confirm(t("confirmDeleteResumeVersion", { version: resume.version }))) deleteResumeVersion.mutate({ version: resume.version });
+                              if (confirm(t("confirmDeleteResumeVersion", { version: resume.version }))) deleteResumeVersion.mutate({ version: resume.version, resumeId: resume.id });
                             }}
                             disabled={deleteResumeVersion.isPending}
                             aria-label={t("deleteResumeVersionLabel", { version: resume.version })}

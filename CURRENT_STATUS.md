@@ -1,6 +1,44 @@
 # Hire.AI Current Status
 
-Last updated: 2026-08-09
+Last updated: 2026-10-09
+
+## Remote-Only Eligibility And Remote OK Feed
+
+The Remote OK adapter now parses the feed's ISO-8601 posting dates (with its numeric epoch field as fallback), applies keyword matching to tags, honors location filters, and preserves explicitly tagged job types without treating unknown or conflicting data as full-time. Original listing links are retained as both source and application URLs, consistent with the provider's current attribution instructions. The shared remote-only filter and autonomous planner reject explicit hybrid/mostly-remote wording and recurring in-person attendance rather than allowing a generic remote mention to override it. A 2026-10-09 provider feed entry was reviewed as the regression case. The full local regular suite and TypeScript check pass; the matching MySQL filter acceptance test passed in GitHub CI on the preceding PR commit. This does not certify that every provider's remote-status language is captured, and deployment/source terms still require operator review.
+
+Source policy follow-up: Working Nomads remains in the coverage catalog, but automatic ingestion is disabled because its published Terms of Service section 3.1(d) prohibits use of its service to build a competitive product. The catalog records the reason and requires written authorization before ingestion. Regression tests cover policy classification and scheduler exclusion; this is an operator/compliance gate, not an inference that its public API permits aggregation. The canonical inventory has 90 names, 52 adapter factories, and 9 explicit API/RSS policies for unattended discovery; the scheduler itself is disabled by default. These counts are not proof of live source availability or global coverage.
+
+## Shared LLM Untrusted-Content Boundary
+
+The central LLM request boundary now appends a fixed system policy after application-authored system prompts, treating resumes, profiles, job listings, employer/provider messages, attachments, quoted text, and tool output as evidence rather than authority. Focused contract tests verify prompt ordering and input immutability. The full regular suite passed after this change (284 files / 1,592 tests; two opt-in database suites / 17 tests skipped) and TypeScript passed. This reduces prompt-injection risk but does not enforce output truth or authorize external actions; schema validation, evidence checks, and application consent gates remain necessary.
+
+An adjacent mock-interview prompt audit found that the external job title was interpolated into a trusted system message. The title and candidate answer are now JSON-quoted in the user-data message instead. The synthetic injection regression and interview-preparation policy tests pass; the full regular suite passes 285 files / 1,593 tests (two opt-in database suites / 17 tests skipped), and TypeScript passes. GitHub Actions run `37861291561` passed all five jobs on code commit `7f179841b5d3a11a61f5964556c6740a23340592`.
+
+## Dependency Security Follow-up (2026-10-08)
+
+The current moderate-or-higher dependency audit is clear after upgrading Axios to 1.20.0 and Vitest to 4.1.11, applying patched transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved package graph. Hire.AI continues to use Mammoth's DOCX extraction library API; a synthetic DOCX regression covers it. The security audit must remain enabled.
+
+Verification on this checkout: TypeScript passed; the regular suite passed 284 test files / 1,592 tests, with two opt-in MySQL suites / 17 tests skipped. GitHub Actions run `37858489254` passed all five jobs on PR commit `0f1e97665449e72436f4ac11758c52f272530e98`, including isolated MySQL acceptance, Windows runtime, container runtime, and Hetzner bootstrap validation. The production Vite build and bundle-budget check passed on that PR commit; the current local changes include a shared LLM prompt-safety policy and the previously verified Remote OK adapter/tests. The current pnpm audit reported no known vulnerabilities. A local pnpm install still cannot rewrite generated `node_modules` metadata (`EPERM`); pinned frozen-lockfile installation passed in Docker and GitHub CI. Resume parsing now enforces a 10 MiB input limit, a 60-page PDF limit, a 500,000-character extracted-text limit, and DOCX entry/actual-expansion limits. These checks do not close the Hetzner, HTTPS, identity, live-scanner/provider or employer-submission release gates.
+
+Follow-up resource hardening bounds the autonomous scheduler's per-user in-memory status cache to 2,048 least-recently-used entries and error samples to 100 per cycle, counting omitted errors separately. The focused scheduler test file passes all 9 tests and TypeScript passes; the full suite was not rerun after these narrow changes.
+
+Inbound API rate limiting now preserves active client windows when its bounded identity map is full; new identities receive a retryable `503` instead of evicting another client's budget. It uses monotonic time and ordered expiry pruning to avoid a full-map scan on every capacity rejection. Focused limiter tests and TypeScript pass.
+
+## Historical Publication Check (2026-10-03)
+
+At that historical revision, the dependency audit reported 16 advisories (7 high, 8 moderate, 1 low). Those findings were subsequently addressed; the current audit is clear as recorded above. The historical suite passed 281 files / 1,573 tests, with opt-in MySQL tests skipped at that time.
+
+The requested hostname and dated DNS evidence are recorded in [Hostname Setup](deploy/hetzner/DOMAIN_SETUP.md). HTTPS, authenticated inspection of the current shared host and live provider acceptance remain open. Local database recovery files, browser exports and generated test evidence are excluded from Git. See [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) for current checks and remaining release gates.
+
+## Online Multi-User Production Work (2026-09-04)
+
+Robert confirmed online multi-user hosting as the target. This increment patches six dependency advisories, prevents silent example-data fallback after database configuration failures, validates the schema before production startup, uses database-aware container health, and adds opt-in MySQL acceptance tests to CI. All 75 migrations and five database acceptance tests were exercised on a dedicated local MySQL instance. Live deployment, provider credentials, employer submission, and full product acceptance remain open. See [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) for the evidence boundary and release gates.
+
+## Source Intelligence Increment (2026-09-04)
+
+The source directory now contains 90 platforms, with 9 adapters enabled by collection policy. Himalayas and Arbeitnow UK join the existing bounded discovery pipeline. The `/sources` page exposes geographic and language filters, collection and recorded scan states, stored listing and duplicate counts, and cursor-paginated comparisons of linked records. Sample counts are labelled when no database is connected. See [Source Intelligence](docs/SOURCE_INTELLIGENCE.md) for provider references and limitations.
+
+This is not complete global coverage or proof of production ingestion. Regional directory additions remain manual unless a dedicated policy-enabled adapter exists. Scheduling and preparation belong to the intended automated application journey; the job seeker conducts the actual interview. The submission limitations below still apply.
 
 ## Plain-English status
 

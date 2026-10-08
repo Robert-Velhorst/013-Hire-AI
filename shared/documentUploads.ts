@@ -1,4 +1,5 @@
 export const MAX_DOCUMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_RESUME_TEXT_CHARS = 500_000;
 
 export const VERIFICATION_UPLOAD_MIME_TYPES = [
   "application/pdf",

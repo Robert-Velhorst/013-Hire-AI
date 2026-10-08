@@ -1,6 +1,7 @@
 import type { Application, Job, UserProfile } from "../drizzle/schema";
 import { detectATSType, isAutomationSupported } from "./applicationAutomation";
 import { normalizeExperienceLevel, normalizeLocation } from "./jobNormalization";
+import { hasExplicitRemoteWorkSignal, hasNonRemoteWorkSignal } from "../shared/remoteEligibility";
 import { getLocationPreferenceFit } from "../shared/locationEligibility";
 import { isJobListingCurrent } from "../shared/jobListingFreshness";
 import { assessListingSafety } from "../shared/listingSafety";
@@ -372,7 +373,11 @@ export function buildAutonomousPlan(
       const { score, reasons, blockers } = scoreJobForProfile(job, profile);
       const listingSafety = assessListingSafety(job, now);
       const normalizedLocation = normalizeLocation(job.location);
-      const remoteEligibilityUnknown = remoteOnly && normalizedLocation.remoteType === "unknown";
+      const listingText = [job.location, job.title, job.description, job.requirements, job.responsibilities].filter(Boolean);
+      const explicitlyNonRemote = hasNonRemoteWorkSignal(...listingText);
+      const hasRemoteEligibility = hasExplicitRemoteWorkSignal(...listingText);
+      const remoteEligibilityUnknown = remoteOnly && !explicitlyNonRemote && !hasRemoteEligibility
+        && normalizedLocation.remoteType === "unknown";
       const support = job.applicationUrl
         ? isAutomationSupported(job.applicationUrl)
         : {
@@ -394,7 +399,7 @@ export function buildAutonomousPlan(
         blockers.push("Already applied to this job");
       }
 
-      if (remoteOnly && ["hybrid", "onsite"].includes(normalizedLocation.remoteType)) {
+      if (remoteOnly && (explicitlyNonRemote || ["hybrid", "onsite"].includes(normalizedLocation.remoteType))) {
         blockers.push("Remote-only policy excludes hybrid and on-site roles");
       }
 

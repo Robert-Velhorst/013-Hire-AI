@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { Express, NextFunction, Request, Response } from "express";
 
 export const API_RATE_LIMIT_POLICY = Object.freeze({
@@ -40,18 +41,25 @@ export function createRateLimitMiddleware(
     throw new Error("Rate-limit client capacity must be positive.");
   }
 
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => performance.now());
   const clientKey =
     options.clientKey ??
     ((req: Request) => req.ip || req.socket.remoteAddress || "unknown");
   const clients = new Map<string, ClientWindow>();
   let nextSweepAt = now() + options.windowMs;
 
+  const pruneExpiredClients = (timestamp: number) => {
+    // Monotonic fixed windows expire in the same order that clients enter the map.
+    let oldestEntry = clients.entries().next();
+    while (oldestEntry.value && oldestEntry.value[1].resetAt <= timestamp) {
+      clients.delete(oldestEntry.value[0]);
+      oldestEntry = clients.entries().next();
+    }
+  };
+
   const sweep = (timestamp: number) => {
     if (timestamp < nextSweepAt) return;
-    clients.forEach((window, key) => {
-      if (window.resetAt <= timestamp) clients.delete(key);
-    });
+    pruneExpiredClients(timestamp);
     nextSweepAt = timestamp + options.windowMs;
   };
 
@@ -64,8 +72,20 @@ export function createRateLimitMiddleware(
     if (!window || window.resetAt <= timestamp) {
       if (window) clients.delete(key);
       if (clients.size >= options.maxClients) {
-        const oldestKey = clients.keys().next().value as string | undefined;
-        if (oldestKey !== undefined) clients.delete(oldestKey);
+        pruneExpiredClients(timestamp);
+        if (clients.size >= options.maxClients) {
+          const earliestResetAt = clients.entries().next().value?.[1].resetAt
+            ?? timestamp + options.windowMs;
+          const retrySeconds = Math.max(
+            1,
+            Math.ceil((earliestResetAt - timestamp) / 1_000)
+          );
+          res.setHeader("Retry-After", String(retrySeconds));
+          res
+            .status(503)
+            .json({ error: "Rate-limit capacity is temporarily exhausted." });
+          return;
+        }
       }
       window = { count: 0, resetAt: timestamp + options.windowMs };
       clients.set(key, window);

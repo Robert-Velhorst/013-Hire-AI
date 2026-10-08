@@ -40,15 +40,23 @@ try {
         throw 'Database schema audit failed. Apply the required migrations before startup.'
     }
 
-    $stdoutPath = Join-Path $env:TEMP "hire-ai-windows-$Port.out.log"
-    $stderrPath = Join-Path $env:TEMP "hire-ai-windows-$Port.err.log"
-    $process = Start-Process -FilePath $node.Source `
-        -ArgumentList @('dist/index.js') `
-        -WorkingDirectory $repoRoot `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
-        -WindowStyle Hidden `
-        -PassThru
+    $launchId = 'windows-' + [Guid]::NewGuid().ToString('N')
+    $stdoutPath = Join-Path $env:TEMP "hire-ai-$launchId.out.log"
+    $stderrPath = Join-Path $env:TEMP "hire-ai-$launchId.err.log"
+    $previousLaunchId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
+    try {
+        # Bind readiness to this child, not an older service already using the port.
+        $env:HIRE_AI_RUNTIME_INSTANCE_ID = $launchId
+        $process = Start-Process -FilePath $node.Source `
+            -ArgumentList @('dist/index.js') `
+            -WorkingDirectory $repoRoot `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -WindowStyle Hidden `
+            -PassThru
+    } finally {
+        $env:HIRE_AI_RUNTIME_INSTANCE_ID = $previousLaunchId
+    }
 
     try {
         $healthHost = if ($HostAddress -in @('0.0.0.0', '::')) { '127.0.0.1' } elseif ($HostAddress -eq '::1') { '[::1]' } else { $HostAddress }
@@ -60,7 +68,9 @@ try {
             Start-Sleep -Milliseconds 500
             try {
                 $response = Invoke-RestMethod -Uri $readinessUrl -TimeoutSec 3
-                $healthy = $response.ready -eq $true
+                $healthy = $response.ready -is [bool] -and $response.ready -eq $true `
+                    -and $response.instanceId -is [string] -and $response.instanceId -ceq $launchId `
+                    -and -not $process.HasExited
             } catch {
                 $healthy = $false
             }

@@ -13,7 +13,9 @@ Hire.AI runs as a native Node.js process; Docker is not required. Production ope
 npm.cmd run start:windows -- -Port 3000
 ```
 
-The script builds the app, runs the production doctor, applies lock-protected database migrations, audits the resulting schema, starts a hidden child process, and reports success only after `/readyz` confirms the configured database is reachable. Every preparation step fails closed before server startup. Use `-SkipDatabaseMigration` only when migrations were applied separately from the same checkout; the schema audit still runs and rejects an outdated database.
+The script builds the app, runs the production doctor, applies lock-protected database migrations, audits the resulting schema, starts a hidden child process, and reports success only after that child's `/readyz` confirms the configured database is reachable. It requires a boolean ready status, an exact case-sensitive match to the fresh launch identity, and a child that has not exited during the probe. An older server on the same port cannot satisfy this check. Every preparation step fails closed before server startup. Use `-SkipDatabaseMigration` only when migrations were applied separately from the same checkout; the schema audit still runs and rejects an outdated database.
+
+`HIRE_AI_RUNTIME_INSTANCE_ID` is an internal, temporary launcher value, not an authentication token or a setting to put in `.env`. The launcher supplies it only while creating its child and restores the parent value even if process creation fails. Direct Node starts generate an independent random identity when the variable is absent. The runtime rejects malformed supplied identities. Windows child logs use separate `%TEMP%\hire-ai-<runtime-instance-id>.out.log` and `.err.log` files, so concurrent attempts do not overwrite each other's startup evidence.
 
 The service binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
 
@@ -25,7 +27,7 @@ Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Start the Wi
 npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3000
 ```
 
-The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and accepts public `/readyz` only when its opaque per-process instance ID exactly matches the local runtime. This prevents a stale or misrouted reserved hostname from being reported as the current Hire.AI process. It stops and reports ngrok's error when verification fails. Configure provider applications with these exact callback URLs before testing:
+The tunnel script requires an installed and authenticated ngrok CLI, verifies local readiness before launch, and accepts public `/readyz` only when its opaque per-process instance ID exactly matches the local runtime, including letter case. Both probes require an actual boolean ready status; the local identity must have the expected bounded format. A tunnel that exits during the public check cannot be reported as successfully started. This prevents a stale or misrouted reserved hostname from being reported as the current Hire.AI process. It stops its own child and reports an error when verification fails. Configure provider applications with these exact callback URLs before testing:
 
 Set `OAUTH_PORTAL_URL` to the trusted login portal at runtime. Sign-in starts at Hire.AI's same-origin `/api/oauth/login` endpoint, which uses the trusted forwarded HTTPS origin to issue signed ten-minute state bound to an HttpOnly browser nonce. Do not link directly to the provider portal or construct OAuth state in the browser.
 
