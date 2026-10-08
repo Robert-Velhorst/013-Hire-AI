@@ -6,6 +6,7 @@ import {
   closeDatabaseConnection,
   ensureScraperPlatformCatalog,
   getAllJobPlatforms,
+  getActiveJobPage,
   getDb,
   getUserApplicationById,
   getUserProfile,
@@ -168,6 +169,88 @@ describe
       expect(
         next.items.some(pair => pair.duplicate.id === links[0].duplicateJobId)
       ).toBe(false);
+    });
+
+    it("paginates MySQL job results across tied and null posting dates without gaps", async () => {
+      const createdAt = new Date();
+      const postedDate = new Date(createdAt.getTime() - 86_400_000);
+      await database.insert(jobs).values([
+        {
+          externalId: `${marker}-cursor-dated-a`,
+          title: "Cursor Boundary Dated Alpha",
+          company: marker,
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/cursor-dated-a`,
+          postedDate,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          externalId: `${marker}-cursor-dated-b`,
+          title: "Cursor Boundary Dated Beta",
+          company: marker,
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/cursor-dated-b`,
+          postedDate,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          externalId: `${marker}-cursor-undated-a`,
+          title: "Cursor Boundary Undated Alpha",
+          company: marker,
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/cursor-undated-a`,
+          postedDate: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          externalId: `${marker}-cursor-undated-b`,
+          title: "Cursor Boundary Undated Beta",
+          company: marker,
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/cursor-undated-b`,
+          postedDate: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ]);
+
+      const storedRows = await database
+        .select({ id: jobs.id, title: jobs.title })
+        .from(jobs)
+        .where(eq(jobs.company, marker));
+      const datedIds = storedRows
+        .filter((job) => job.title.startsWith("Cursor Boundary Dated"))
+        .map((job) => job.id)
+        .sort((left, right) => right - left);
+      const undatedIds = storedRows
+        .filter((job) => job.title.startsWith("Cursor Boundary Undated"))
+        .map((job) => job.id)
+        .sort((left, right) => right - left);
+      const expectedIds = [...datedIds, ...undatedIds];
+      expect(expectedIds).toHaveLength(4);
+
+      const seenIds: number[] = [];
+      let cursor: {
+        postedDate: Date | null;
+        createdAt: Date;
+        id: number;
+      } | undefined;
+      for (let pageNumber = 0; pageNumber <= expectedIds.length; pageNumber += 1) {
+        const page = await getActiveJobPage({
+          limit: 1,
+          cursor,
+          filters: { query: "Cursor Boundary" },
+        });
+        seenIds.push(...page.items.map((job) => job.id));
+        cursor = page.nextCursor ?? undefined;
+        if (!cursor) break;
+      }
+
+      expect(seenIds).toEqual(expectedIds);
+      expect(cursor).toBeUndefined();
     });
 
     it("refreshes repeated provider identities without multiplying stored jobs", async () => {
