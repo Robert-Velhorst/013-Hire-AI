@@ -8,6 +8,8 @@ The current moderate-or-higher dependency audit is clear after upgrading Axios t
 
 Verification on this checkout: TypeScript passed; 282 test files / 1,581 tests passed, with 14 opt-in MySQL tests skipped in the full local run. Those 14 database acceptance tests also passed against an isolated MySQL instance. The current pnpm audit reported no known vulnerabilities. The complete production Docker image built successfully with the production bundle-budget check. GitHub Actions run `37851267047` passed all five jobs, including Windows runtime, database acceptance, container runtime, and Hetzner bootstrap validation. A local pnpm install still cannot rewrite generated `node_modules` metadata (`EPERM`); pinned frozen-lockfile installation passed in Docker and GitHub CI. Resume parsing now enforces a 10 MiB input limit, a 60-page PDF limit, a 500,000-character extracted-text limit, and DOCX entry/actual-expansion limits. These checks do not close the Hetzner, HTTPS, identity, live-scanner/provider or employer-submission release gates.
 
+Follow-up resource hardening bounds the autonomous scheduler's per-user in-memory status cache to 2,048 least-recently-used entries. Its focused test file passes all 8 tests; the full suite was not rerun after this narrow change.
+
 ## Historical Publication Check (2026-10-03)
 
 At that historical revision, the dependency audit reported 16 advisories (7 high, 8 moderate, 1 low). Those findings were subsequently addressed; the current audit is clear as recorded above. The historical suite passed 281 files / 1,573 tests, with opt-in MySQL tests skipped at that time.

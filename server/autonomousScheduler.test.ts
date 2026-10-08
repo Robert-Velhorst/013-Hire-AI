@@ -14,7 +14,10 @@ vi.mock("./autonomousService", () => ({
   runScheduledAutonomousForUser: mocks.runScheduledAutonomousForUser,
 }));
 
-import { AutonomousScheduler } from "./autonomousScheduler";
+import {
+  AutonomousScheduler,
+  MAX_RETAINED_AUTONOMOUS_USER_STATUSES,
+} from "./autonomousScheduler";
 
 describe("AutonomousScheduler", () => {
   beforeEach(() => {
@@ -152,6 +155,53 @@ describe("AutonomousScheduler", () => {
     expect(mocks.getProfilesWithAutonomousPreferences).toHaveBeenNthCalledWith(2, 100, 100);
     expect(mocks.runScheduledAutonomousForUser).toHaveBeenCalledTimes(101);
     expect(scheduler.getStatus().enrolledUsers).toBe(101);
+  });
+
+  it("bounds retained per-user status and keeps the most recently processed users", async () => {
+    mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
+      Array.from(
+        { length: MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1 },
+        (_, index) => ({
+          userId: index + 1,
+          preferences: JSON.stringify({
+            autonomousEnabled: true,
+            scanFrequency: "daily",
+          }),
+        })
+      )
+    );
+    mocks.runScheduledAutonomousForUser.mockResolvedValue({
+      queuedApplicationRecords: 0,
+      queuedReviewRecords: 0,
+      queuedManualRecords: 0,
+      queuedFollowUps: 0,
+      skippedDuplicateFollowUps: 0,
+      skippedResumeEvidenceActions: 0,
+      skippedProfileReadinessActions: 0,
+      skippedEvidenceGatedActions: 0,
+      skippedEmptySourceActions: 0,
+      failedActions: 0,
+    });
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    let retainedStatuses = 0;
+    for (
+      let userId = 1;
+      userId <= MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1;
+      userId++
+    ) {
+      if (scheduler.getUserStatus(userId)) retainedStatuses++;
+    }
+    expect(retainedStatuses).toBe(MAX_RETAINED_AUTONOMOUS_USER_STATUSES);
+    expect(scheduler.getUserStatus(1)).toBeNull();
+    expect(
+      scheduler.getUserStatus(MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1)
+    ).toMatchObject({
+      jobsQueued: 0,
+      failedActions: 0,
+    });
   });
 
   it("runs at most three enrolled users concurrently", async () => {

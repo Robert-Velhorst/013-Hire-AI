@@ -5,6 +5,7 @@ import { AUTONOMOUS_RUN_FAILURE, runScheduledAutonomousForUser } from "./autonom
 const AUTONOMOUS_SCHEDULER_FAILURE = "Autonomous scheduler cycle could not complete.";
 const AUTONOMOUS_PROFILE_PAGE_SIZE = 100;
 const AUTONOMOUS_MAX_CONCURRENT_USERS = 3;
+export const MAX_RETAINED_AUTONOMOUS_USER_STATUSES = 2_048;
 
 async function processWithConcurrency<T>(
   items: T[],
@@ -190,7 +191,7 @@ export class AutonomousScheduler {
               this.status.inboxCandidatesDiscovered += result.inboxCandidatesDiscovered || 0;
               this.status.inboxMonitoringFailures += result.inboxMonitoringFailures || 0;
               this.status.failedActions += result.failedActions;
-              this.userRunStatuses.set(profile.userId, {
+              this.rememberUserStatus(profile.userId, {
                 lastRunAt: new Date(),
                 jobsQueued,
                 followUpDraftsQueued: result.queuedFollowUps,
@@ -215,7 +216,7 @@ export class AutonomousScheduler {
             }
           } catch {
             if (signal?.aborted) return;
-            this.userRunStatuses.set(profile.userId, {
+            this.rememberUserStatus(profile.userId, {
               lastRunAt: new Date(),
               jobsQueued: 0,
               followUpDraftsQueued: 0,
@@ -256,7 +257,20 @@ export class AutonomousScheduler {
 
   getUserStatus(userId: number): AutonomousUserRunStatus | null {
     const status = this.userRunStatuses.get(userId);
-    return status ? { ...status } : null;
+    if (!status) return null;
+    this.userRunStatuses.delete(userId);
+    this.userRunStatuses.set(userId, status);
+    return { ...status };
+  }
+
+  private rememberUserStatus(userId: number, status: AutonomousUserRunStatus) {
+    this.userRunStatuses.delete(userId);
+    this.userRunStatuses.set(userId, status);
+    while (this.userRunStatuses.size > MAX_RETAINED_AUTONOMOUS_USER_STATUSES) {
+      const oldestUserId = this.userRunStatuses.keys().next().value;
+      if (oldestUserId === undefined) break;
+      this.userRunStatuses.delete(oldestUserId);
+    }
   }
 }
 
