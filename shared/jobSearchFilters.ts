@@ -1,5 +1,6 @@
 import { normalizeSalaryCurrency } from "./salaryCurrency";
 import { assessListingSafety, type ListingSafetyStatus } from "./listingSafety";
+import { hasExplicitRemoteWorkSignal, hasNonRemoteWorkSignal } from "./remoteEligibility";
 
 export type JobExperienceLevel = "all" | "entry" | "junior" | "mid" | "senior" | "lead" | "executive";
 export type JobApplicationProcessFilter = "all" | "greenhouse" | "lever" | "workday" | "email" | "other";
@@ -77,10 +78,6 @@ function text(job: JobSearchFilterJob) {
     .toLowerCase();
 }
 
-function hasRemoteSignal(value?: string | null) {
-  return /\b(remote|worldwide|anywhere|distributed|work from home|wfh)\b/i.test(value || "");
-}
-
 function locationTerms(value: string) {
   return value
     .split(/[,\n]/)
@@ -94,10 +91,6 @@ function hasActiveSalaryRange(filters: JobSearchFilterState) {
     filters.salaryRange[1] !== defaultJobSearchFilters.salaryRange[1];
 }
 
-function hasNonRemoteSignal(value?: string | null) {
-  return /\b(hybrid|onsite|on-site|in office|in-office)\b/i.test(value || "");
-}
-
 function isRemote(job: JobSearchFilterJob) {
   const listingText = [
     job.location,
@@ -109,12 +102,12 @@ function isRemote(job: JobSearchFilterJob) {
 
   // A hybrid or office-bound statement is stronger than a generic "remote"
   // mention elsewhere in the listing when the user asks for remote-only work.
-  if (hasNonRemoteSignal(listingText)) return false;
-  if (hasRemoteSignal(job.location)) return true;
+  if (hasNonRemoteWorkSignal(listingText)) return false;
+  if (hasExplicitRemoteWorkSignal(job.location)) return true;
 
   // Some sources retain a geographic location while placing the remote
   // eligibility in the role title or posting body.
-  return hasRemoteSignal(listingText);
+  return hasExplicitRemoteWorkSignal(listingText);
 }
 
 function experienceLevel(job: JobSearchFilterJob): Exclude<JobExperienceLevel, "all"> | "unknown" {

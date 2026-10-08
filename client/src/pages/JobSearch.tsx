@@ -13,7 +13,7 @@ import {
   type JobDecisionLifecycleAction,
 } from "@/lib/jobDecisionActions";
 import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
-import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
+import { getSafeExternalUrl } from "@/lib/externalUrl";
 import { getJobMatchDecisionSummary } from "@/lib/jobMatchDecisionSummary";
 import { getJobSourcingControlSummary } from "@/lib/jobSourcingControl";
 import { getJobDiscoveryStatusSummary } from "@/lib/jobDiscoveryStatus";
@@ -1564,14 +1564,21 @@ export default function JobSearch() {
                        {t("saveForLater")}
                     </Button>
                     {getSafeExternalUrl(selectedJob.applicationUrl) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openExternalUrl(selectedJob.applicationUrl)}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-1" />
-                         {t("viewOriginal")}
-                      </Button>
+                      <>
+                        <span className="self-center text-xs text-slate-400">
+                          {t("sourceLabel")}: {platformNameById.get(selectedJob.platformId) || t("platformNumber", { id: selectedJob.platformId })}
+                        </span>
+                        <Button asChild variant="outline" size="sm">
+                          <a
+                            href={getSafeExternalUrl(selectedJob.applicationUrl)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            {t("viewOriginal")}
+                          </a>
+                        </Button>
+                      </>
                     )}
                   </div>
                   <Button

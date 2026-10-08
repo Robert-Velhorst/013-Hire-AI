@@ -258,6 +258,42 @@ describe
       expect(cursor).toBeUndefined();
     });
 
+    it("excludes roles requiring recurring in-person attendance from MySQL remote-only results", async () => {
+      const createdAt = new Date();
+      await database.insert(jobs).values([
+        {
+          externalId: `${marker}-remote-only`,
+          title: "Remote Eligibility Acceptance Remote Specialist",
+          company: marker,
+          location: "Remote - Worldwide",
+          description: "Fully remote work; no office attendance required.",
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/remote-only`,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          externalId: `${marker}-mostly-remote`,
+          title: "Remote Eligibility Acceptance Mostly Remote Specialist",
+          company: marker,
+          location: "Neuruppin, Germany",
+          description: "Mostly remote within Germany, with monthly in-person collaboration at our Berlin office.",
+          platformId: records[0].platformId,
+          sourceUrl: `https://jobs.example.test/${marker}/mostly-remote`,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ]);
+
+      const page = await getActiveJobPage({
+        limit: 10,
+        filters: { query: "Remote Eligibility Acceptance", remoteOnly: true },
+      });
+
+      expect(page.items.map((job) => job.externalId)).toContain(`${marker}-remote-only`);
+      expect(page.items.map((job) => job.externalId)).not.toContain(`${marker}-mostly-remote`);
+    });
+
     it("refreshes repeated provider identities without multiplying stored jobs", async () => {
       expect(await new ScraperManager().saveJobs(records)).toEqual({
         saved: 0,

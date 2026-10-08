@@ -1,6 +1,6 @@
 # Source Intelligence
 
-Updated: 2026-09-04.
+Updated: 2026-10-09.
 
 ## Purpose And Product Boundary
 
@@ -42,6 +42,12 @@ Missing location restrictions remain unspecified, not globally eligible. Numeric
 ### Arbeitnow UK
 
 The [official Arbeitnow API announcement](https://www.arbeitnow.com/blog/job-board-api) documents the UK endpoint at `https://www.arbeitnow.co.uk/api/job-board-api`. Hire.AI reuses its Arbeitnow adapter with an explicit UK market selection. Only records with `remote: true` qualify. It retains the provider listing link and does not infer candidate country eligibility when location is absent. One feed page is read per call with the existing hourly policy and bounded output; deeper pagination/backfill is not implemented.
+
+### Remote OK feed handling
+
+Remote OK's [official FAQ](https://remoteok.com/faq) documents its unauthenticated JSON feed and requires aggregators to name Remote OK as the source and link to each original listing. The adapter preserves that listing URL as both the source and application destination. Its ISO-8601 `date` is parsed directly, with the numeric `epoch` as fallback. Search keyword matching includes tags, and source location filters are applied before the result limit.
+
+Remote OK's [live feed](https://remoteok.com/api) includes listings described as “mostly remote” with recurring office collaboration. These may remain in the source inventory for comparison, but the shared remote-only search and autonomous-planning rules now exclude explicit hybrid/mostly-remote and recurring in-person attendance signals. Unknown eligibility still requires review. This is a conservative text rule, not a substitute for source-specific structured remote-work verification; the wording can evolve, so acceptance fixtures and feed review remain necessary.
 
 ## Comparisons And Counts
 

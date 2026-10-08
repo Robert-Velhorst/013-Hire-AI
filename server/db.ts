@@ -73,6 +73,7 @@ import {
   filterJobListings,
   type JobSearchFilterState,
 } from "@shared/jobSearchFilters";
+import { REMOTE_ONLY_EXCLUSION_PATTERN } from "@shared/remoteEligibility";
 import { isOfferEligibleApplicationStatus } from "@shared/offerEligibility";
 import { getListingObservationCutoff, isJobListingCurrent } from "@shared/jobListingFreshness";
 import { PROFILE_EVIDENCE_LIMITS, profileEvidenceLimitMessage } from "@shared/profileEvidenceLimits";
@@ -919,15 +920,8 @@ function addJobSearchFilterConditions(conditions: SQL[], filters: JobSearchFilte
       like(jobs.responsibilities, "%wfh%")
     );
     if (remoteCondition) conditions.push(remoteCondition);
-    const remoteOnlyExclusions = [jobs.location, jobs.title, jobs.description, jobs.requirements, jobs.responsibilities]
-      .flatMap((column) => [
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%hybrid%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%onsite%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%on-site%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%in office%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%in-office%'`,
-      ]);
-    conditions.push(...remoteOnlyExclusions);
+    const remoteOnlyText = sql`CONCAT_WS(' ', ${jobs.location}, ${jobs.title}, ${jobs.description}, ${jobs.requirements}, ${jobs.responsibilities})`;
+    conditions.push(sql`LOWER(${remoteOnlyText}) NOT REGEXP ${REMOTE_ONLY_EXCLUSION_PATTERN}`);
   }
   if (filters.visaSponsorshipOnly) conditions.push(eq(jobs.visaSponsorshipAvailable, 1));
   if (filters.openHiringSupportOnly) conditions.push(eq(jobs.openHiringSupport, 1));

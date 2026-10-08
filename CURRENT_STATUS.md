@@ -2,6 +2,10 @@
 
 Last updated: 2026-10-09
 
+## Remote-Only Eligibility And Remote OK Feed
+
+The Remote OK adapter now parses the feed's ISO-8601 posting dates (with its numeric epoch field as fallback), applies keyword matching to tags and honors location filters. Original listing links are retained as both source and application URLs, consistent with the provider's current attribution instructions. The shared remote-only filter and autonomous planner reject explicit hybrid/mostly-remote wording and recurring in-person attendance rather than allowing a generic remote mention to override it. A 2026-10-09 provider feed entry was reviewed as the regression case. Focused tests pass locally; the matching MySQL filter acceptance test is added to CI. This does not certify that every provider's remote-status language is captured, and deployment/source terms still require operator review.
+
 ## Dependency Security Follow-up (2026-10-08)
 
 The current moderate-or-higher dependency audit is clear after upgrading Axios to 1.20.0 and Vitest to 4.1.11, applying patched transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved package graph. Hire.AI continues to use Mammoth's DOCX extraction library API; a synthetic DOCX regression covers it. The security audit must remain enabled.
