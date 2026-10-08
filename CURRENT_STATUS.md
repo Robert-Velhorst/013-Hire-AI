@@ -1,16 +1,16 @@
 # Hire.AI Current Status
 
-Last updated: 2026-10-08
+Last updated: 2026-10-09
 
 ## Dependency Security Follow-up (2026-10-08)
 
 The current moderate-or-higher dependency audit is clear after upgrading Axios to 1.20.0 and Vitest to 4.1.11, applying patched transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved package graph. Hire.AI continues to use Mammoth's DOCX extraction library API; a synthetic DOCX regression covers it. The security audit must remain enabled.
 
-Verification on this checkout: TypeScript passed; 282 test files / 1,574 regular tests passed, with 14 opt-in MySQL tests skipped. The Vite production build, bundle-budget check and three server/operator bundles passed. The standard server bundle could not overwrite the existing locked `dist/index.js`, so the same build was verified to an ignored temporary output directory. pnpm's local install could not rewrite a generated `node_modules` metadata file (`EPERM`); direct local test/typecheck commands used the installed packages, and clean frozen-lockfile installation is pending GitHub CI for this revision. The existing Hetzner, HTTPS, identity, live-scanner/provider and employer-submission release gates remain open.
+Verification on this checkout: TypeScript passed; 282 test files / 1,581 tests passed, with 14 opt-in MySQL tests skipped in the full local run. Those 14 database acceptance tests also passed against an isolated MySQL instance. The current pnpm audit reported no known vulnerabilities. The complete production Docker image built successfully with the production bundle-budget check. GitHub Actions run `37851267047` passed all five jobs, including Windows runtime, database acceptance, container runtime, and Hetzner bootstrap validation. A local pnpm install still cannot rewrite generated `node_modules` metadata (`EPERM`); pinned frozen-lockfile installation passed in Docker and GitHub CI. Resume parsing now enforces a 10 MiB input limit, a 60-page PDF limit, a 500,000-character extracted-text limit, and DOCX entry/actual-expansion limits. These checks do not close the Hetzner, HTTPS, identity, live-scanner/provider or employer-submission release gates.
 
-## Progress Publication Check (2026-10-03)
+## Historical Publication Check (2026-10-03)
 
-The accumulated source, regression tests, product documentation and private Hetzner deployment preparation are being submitted for review, not released to production. Type checking and the production build passed. The regular suite passed 281 files / 1,573 tests; two opt-in database suites / 14 tests were skipped and were not rerun against MySQL in this publication check. The current dependency audit reports 16 advisories (7 high, 8 moderate, 1 low), including Axios, Vitest / its mocker, fast-uri and DOMPurify. The moderate-or-higher CI audit remains a merge blocker; earlier zero-advisory results are historical, not current.
+At that historical revision, the dependency audit reported 16 advisories (7 high, 8 moderate, 1 low). Those findings were subsequently addressed; the current audit is clear as recorded above. The historical suite passed 281 files / 1,573 tests, with opt-in MySQL tests skipped at that time.
 
 The requested hostname and dated DNS evidence are recorded in [Hostname Setup](deploy/hetzner/DOMAIN_SETUP.md). HTTPS, authenticated inspection of the current shared host and live provider acceptance remain open. Local database recovery files, browser exports and generated test evidence are excluded from Git. See [Production Acceptance](docs/PRODUCTION_ACCEPTANCE.md) for current checks and remaining release gates.
 
