@@ -18,6 +18,7 @@
 - User-supplied remote audio accepts credential-free HTTPS only, rejects any DNS answer set containing a local, private, reserved, or non-IP address, and pins the approved addresses to the TLS connection. Redirects are not followed, preventing DNS rebinding or redirect-based access to internal services.
 - Provider-controlled job fields are normalized against the shared database storage contract before persistence. Oversized content is bounded, oversized source identities retain a collision-resistant digest, and executable, credential-bearing, or overlong application links are discarded.
 - Every request through the shared LLM boundary appends a stable system policy after application-authored system prompts. Resume/profile/listing/employer/provider/attachment/tool content is treated as evidence, not authority; embedded requests to override policy, manipulate decisions, reveal secrets, or authorize actions are rejected by instruction. This is defense in depth only: structured output validation, source checks, human-consent controls, and server-side authorization remain the actual enforcement boundaries.
+- Listing-controlled job titles must remain in untrusted user/data messages, not be interpolated into trusted system instructions. The mock-interview path has a regression test with an instruction-like title. This does not eliminate prompt injection; provider content and model output remain untrusted and must not authorize an action.
 
 ## Required before production
 

@@ -10,6 +10,8 @@ The Remote OK adapter now parses the feed's ISO-8601 posting dates (with its num
 
 The central LLM request boundary now appends a fixed system policy after application-authored system prompts, treating resumes, profiles, job listings, employer/provider messages, attachments, quoted text, and tool output as evidence rather than authority. Focused contract tests verify prompt ordering and input immutability. The full regular suite passed after this change (284 files / 1,592 tests; two opt-in database suites / 17 tests skipped) and TypeScript passed. This reduces prompt-injection risk but does not enforce output truth or authorize external actions; schema validation, evidence checks, and application consent gates remain necessary.
 
+An adjacent mock-interview prompt audit found that the external job title was interpolated into a trusted system message. The title and candidate answer are now JSON-quoted in the user-data message instead. The synthetic injection regression and interview-preparation policy tests pass; the full regular suite passes 285 files / 1,593 tests (two opt-in database suites / 17 tests skipped), and TypeScript passes. CI has not yet been rerun on this follow-up change.
+
 ## Dependency Security Follow-up (2026-10-08)
 
 The current moderate-or-higher dependency audit is clear after upgrading Axios to 1.20.0 and Vitest to 4.1.11, applying patched transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved package graph. Hire.AI continues to use Mammoth's DOCX extraction library API; a synthetic DOCX regression covers it. The security audit must remain enabled.
