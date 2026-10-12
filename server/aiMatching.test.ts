@@ -18,6 +18,7 @@ const profile = {
   desiredLocations: "remote, worldwide",
   salaryExpectationMin: 100000,
   salaryExpectationMax: 150000,
+  salaryExpectationCurrency: "USD",
 } as UserProfile;
 
 const job = {
@@ -29,6 +30,7 @@ const job = {
   jobType: "full-time",
   salaryMin: 120000,
   salaryMax: 145000,
+  salaryCurrency: "USD",
   skills: "React, TypeScript, Node.js",
   applicationUrl: "https://boards.example.com/jobs/42",
   applicationEmail: null,

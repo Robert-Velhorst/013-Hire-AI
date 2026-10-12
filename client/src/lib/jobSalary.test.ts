@@ -9,9 +9,9 @@ describe("job salary formatting", () => {
     expect(formatted).toContain("75K");
   });
 
-  it("uses USD only when the source did not provide a valid currency", () => {
-    expect(formatJobSalary(120000, null, null)).toContain("USD");
-    expect(formatJobSalary(null, 90000, "not-a-currency")).toContain("USD");
+  it("keeps missing and invalid source currencies explicitly unknown", () => {
+    expect(formatJobSalary(120000, null, null)).toContain("currency not specified");
+    expect(formatJobSalary(null, 90000, "not-a-currency")).toContain("currency not specified");
   });
 
   it("does not render compensation when neither bound exists", () => {

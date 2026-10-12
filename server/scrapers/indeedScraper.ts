@@ -53,7 +53,7 @@ export class IndeedScraper extends BaseScraper {
           const normalizedJob = this.normalizeJob({
             title: rawJob.title,
             company: rawJob.company,
-            location: rawJob.location || "Remote",
+            location: rawJob.location,
             description: rawJob.description,
             applicationUrl: rawJob.link,
             externalId: this.extractJobId(rawJob.link),
@@ -118,7 +118,7 @@ export class IndeedScraper extends BaseScraper {
 
   private parseJobMeta(description: string, source: string): { company: string; location: string } {
     let company = source || "Company via Indeed";
-    let location = "Remote";
+    let location = "";
 
     // Try to extract company and location from description
     // Indeed descriptions often start with "Company - Location - ..."

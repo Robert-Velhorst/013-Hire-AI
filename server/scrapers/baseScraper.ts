@@ -173,7 +173,7 @@ export abstract class BaseScraper {
       platformId: this.config.platformId,
       title: this.cleanText(rawJob.title, JOB_STORAGE_MAX_CHARS.title),
       company: this.cleanText(rawJob.company, JOB_STORAGE_MAX_CHARS.company),
-      location: this.cleanText(rawJob.location, JOB_STORAGE_MAX_CHARS.location) || "Remote",
+      location: this.cleanText(rawJob.location, JOB_STORAGE_MAX_CHARS.location),
       description: this.cleanText(rawJob.description, JOB_STORAGE_MAX_CHARS.text),
       requirements: this.cleanText(rawJob.requirements, JOB_STORAGE_MAX_CHARS.text),
       responsibilities: this.cleanText(rawJob.responsibilities, JOB_STORAGE_MAX_CHARS.text),
@@ -182,7 +182,9 @@ export abstract class BaseScraper {
       jobType: this.normalizeJobType(rawJob.jobType),
       salaryMin: this.parseSalary(rawJob.salaryMin),
       salaryMax: this.parseSalary(rawJob.salaryMax),
-      salaryCurrency: this.normalizeSalaryCurrency(rawJob.salaryCurrency),
+      salaryCurrency: this.normalizeSalaryCurrency(rawJob.salaryCurrency) ??
+        normalizeSalary(String(rawJob.salaryMin ?? rawJob.salaryMax ?? "")).currency ??
+        undefined,
       applicationUrl: this.normalizeApplicationUrl(rawJob.applicationUrl),
       externalId: this.normalizeExternalId(rawJob.externalId || rawJob.id),
       postedDate: this.parseDate(rawJob.postedDate),
@@ -235,13 +237,9 @@ export abstract class BaseScraper {
     return normalizeSalary(String(salary)).min ?? undefined;
   }
 
-  protected normalizeSalaryCurrency(currency: unknown): string {
-    if (typeof currency !== "string" || !currency.trim()) return "USD";
-
-    const code = currency.trim().toUpperCase();
-    if (/^[A-Z]{3}$/.test(code)) return code;
-
-    return normalizeSalary(currency).currency;
+  protected normalizeSalaryCurrency(currency: unknown): string | undefined {
+    if (typeof currency !== "string" || !currency.trim()) return undefined;
+    return normalizeSalary(currency).currency ?? undefined;
   }
 
   private normalizeExternalId(value: unknown): string | undefined {

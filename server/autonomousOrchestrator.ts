@@ -239,7 +239,7 @@ export function scoreJobForProfile(job: Job, profile?: Partial<UserProfile> | nu
   );
   if (hasSalaryExpectation && hasJobSalary && !salaryCurrenciesComparable) {
     blockers.push(
-      `Salary is listed in ${normalizeSalaryCurrency(job.salaryCurrency)} and needs review against the ${normalizeSalaryCurrency(profile?.salaryExpectationCurrency)} expectation`
+      `Salary is listed in ${normalizeSalaryCurrency(job.salaryCurrency) ?? "an unknown currency"} and needs review against the ${normalizeSalaryCurrency(profile?.salaryExpectationCurrency) ?? "unspecified"} expectation`
     );
   } else if (profile?.salaryExpectationMin && job.salaryMax && job.salaryMax < profile.salaryExpectationMin) {
     blockers.push("Salary range is below the user's minimum expectation");

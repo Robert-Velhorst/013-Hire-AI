@@ -9,6 +9,7 @@ describe("job match decision summary", () => {
         location: "Remote - Worldwide",
         salaryMin: 120000,
         salaryMax: 150000,
+        salaryCurrency: "USD",
         applicationUrl: "https://example.com/apply",
         matchScore: 88,
       },
@@ -16,6 +17,7 @@ describe("job match decision summary", () => {
         skills: "React, TypeScript, SQL",
         desiredLocations: "Remote",
         salaryExpectationMin: 100000,
+        salaryExpectationCurrency: "USD",
         resumeFileKey: "resume.pdf",
       }
     );
@@ -45,6 +47,20 @@ describe("job match decision summary", () => {
     expect(summary.blockers).toContain("Resume is required before submission");
     expect(summary.riskLevel).toBe("high");
     expect(summary.nextAction).toContain("Review blockers");
+  });
+
+  it("requires review when a disclosed salary has no supported currency", () => {
+    const summary = getJobMatchDecisionSummary(
+      {
+        location: "Remote - Worldwide",
+        salaryMin: 90000,
+        salaryMax: 110000,
+      },
+      { salaryExpectationMin: 80000, salaryExpectationCurrency: "USD" }
+    );
+
+    expect(summary.salaryFit).toBe("unknown");
+    expect(summary.blockers.join(" ")).toContain("unknown currency");
   });
 
   it("uses autonomous decisions when available", () => {

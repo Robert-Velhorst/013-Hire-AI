@@ -51,6 +51,7 @@ import {
 } from "./applicationFeatures";
 import { MAX_FOLLOW_UP_MESSAGE_CHARS } from "./messageSanitization";
 import { SUPPORTED_LOCALES } from "@shared/localization";
+import { isKnownSalaryCurrency } from "@shared/salaryCurrency";
 
 const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
@@ -75,7 +76,12 @@ const jobSearchFiltersInput = z.object({
   jobType: z.enum(["all", "full-time", "part-time", "contract", "temporary"]).optional(),
   platformId: z.string().trim().max(20).optional(),
   salaryRange: z.tuple([z.number().min(0).max(10_000_000), z.number().min(0).max(10_000_000)]).optional(),
-  salaryCurrency: z.union([z.literal("all"), z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase())]).optional(),
+  salaryCurrency: z.union([
+    z.literal("all"),
+    z.string().trim().regex(/^[A-Za-z]{3}$/)
+      .transform((value) => value.toUpperCase())
+      .refine(isKnownSalaryCurrency, "Use a supported ISO 4217 currency code."),
+  ]).optional(),
   remoteOnly: z.boolean().optional(),
   experienceLevel: z.enum(["all", "entry", "junior", "mid", "senior", "lead", "executive"]).optional(),
   applicationProcess: z.enum(["all", "greenhouse", "lever", "workday", "email", "other"]).optional(),

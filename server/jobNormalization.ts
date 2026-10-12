@@ -3,6 +3,8 @@
  * Handles salary normalization, location standardization, and TF-IDF similarity detection
  */
 
+import { isKnownSalaryCurrency } from "../shared/salaryCurrency";
+
 // ============================================================================
 // SALARY NORMALIZATION
 // ============================================================================
@@ -10,7 +12,7 @@
 export interface NormalizedSalary {
   min: number | null;
   max: number | null;
-  currency: string;
+  currency: string | null;
   period: "yearly" | "monthly" | "hourly" | "weekly";
   normalizedYearly: { min: number | null; max: number | null };
 }
@@ -69,23 +71,20 @@ function extractSalaryValues(text: string): number[] {
 }
 
 function detectCurrency(text: string) {
-  const codes = Array.from(new Set(Object.values(CURRENCY_SYMBOLS)));
-  const explicitCode = codes.find((code) =>
-    new RegExp(`\\b${code.toLowerCase()}\\b`, "i").test(text)
-  );
-  if (explicitCode) return explicitCode;
+  const explicitCode = text.match(/\b([a-z]{3})\b/i)?.[1]?.toUpperCase();
+  if (explicitCode && isKnownSalaryCurrency(explicitCode)) return explicitCode;
 
   const symbol = Object.entries(CURRENCY_SYMBOLS)
     .sort(([left], [right]) => right.length - left.length)
     .find(([candidate]) => text.includes(candidate.toLowerCase()));
-  return symbol?.[1] || "USD";
+  return symbol?.[1] || null;
 }
 
 export function normalizeSalary(salaryString: string | null | undefined): NormalizedSalary {
   const result: NormalizedSalary = {
     min: null,
     max: null,
-    currency: "USD",
+    currency: null,
     period: "yearly",
     normalizedYearly: { min: null, max: null },
   };
@@ -264,9 +263,9 @@ export function normalizeLocation(locationString: string | null | undefined): No
   const result: NormalizedLocation = {
     city: null,
     state: null,
-    country: "Worldwide",
-    region: "Global",
-    isRemote: true,
+    country: "Unknown",
+    region: "Unknown",
+    isRemote: false,
     remoteType: "unknown",
     timezone: null,
   };

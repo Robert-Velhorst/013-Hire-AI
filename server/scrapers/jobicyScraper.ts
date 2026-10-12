@@ -69,7 +69,7 @@ export class JobicyScraper extends BaseScraper {
           jobs.push(this.normalizeJob({
             title: rawJob.jobTitle,
             company: rawJob.companyName,
-            location: rawJob.jobGeo || "Remote",
+            location: rawJob.jobGeo,
             description: rawJob.jobDescription,
             skills: Array.isArray(rawJob.jobIndustry) ? rawJob.jobIndustry.join(", ") : rawJob.jobIndustry,
             jobType: rawJob.jobType,

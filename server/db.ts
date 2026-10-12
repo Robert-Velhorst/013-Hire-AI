@@ -964,9 +964,7 @@ function addJobSearchFilterConditions(conditions: SQL[], filters: JobSearchFilte
     ? null
     : filters.salaryCurrency.toUpperCase();
   const salaryCurrencyMatches = selectedSalaryCurrency
-    ? selectedSalaryCurrency === "USD"
-      ? or(eq(jobs.salaryCurrency, selectedSalaryCurrency), isNull(jobs.salaryCurrency))
-      : eq(jobs.salaryCurrency, selectedSalaryCurrency)
+    ? eq(jobs.salaryCurrency, selectedSalaryCurrency)
     : null;
   const salaryOverlap = and(
     or(isNull(jobs.salaryMin), lte(jobs.salaryMin, filters.salaryRange[1])),

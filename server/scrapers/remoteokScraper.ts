@@ -125,7 +125,7 @@ export class RemoteOKScraper extends BaseScraper {
           const normalizedJob = this.normalizeJob({
             title: rawJob.position,
             company: rawJob.company,
-            location: rawJob.location || "Remote",
+            location: rawJob.location,
             description: rawJob.description,
             skills: Array.isArray(rawJob.tags)
               ? rawJob.tags.filter((tag): tag is string => typeof tag === "string").join(", ")

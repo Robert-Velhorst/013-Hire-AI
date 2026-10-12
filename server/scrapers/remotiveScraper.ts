@@ -52,7 +52,7 @@ export class RemotiveScraper extends BaseScraper {
           const normalizedJob = this.normalizeJob({
             title: rawJob.title,
             company: rawJob.company_name,
-            location: rawJob.candidate_required_location || "Remote",
+            location: rawJob.candidate_required_location,
             description: rawJob.description,
             skills: rawJob.tags?.join(", "),
             jobType: rawJob.job_type,

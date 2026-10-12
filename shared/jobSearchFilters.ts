@@ -171,8 +171,10 @@ export function filterJobListings<T extends JobSearchFilterJob>(jobs: T[], filte
     }
 
     const hasSelectedSalaryCurrency = filters.salaryCurrency !== "all";
+    const selectedCurrency = normalizeSalaryCurrency(filters.salaryCurrency);
+    const jobCurrency = normalizeSalaryCurrency(job.salaryCurrency);
     const salaryCurrencyMatches = !hasSelectedSalaryCurrency ||
-      normalizeSalaryCurrency(job.salaryCurrency) === normalizeSalaryCurrency(filters.salaryCurrency);
+      Boolean(selectedCurrency && jobCurrency && selectedCurrency === jobCurrency);
     if (!salaryCurrencyMatches) return false;
 
     // Preserve the established range-only API behavior when no currency is

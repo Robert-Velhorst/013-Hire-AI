@@ -132,7 +132,7 @@ export class GenericScraper extends BaseScraper {
         const normalizedJob = this.normalizeJob({
           title: rawJob.title || rawJob.name,
           company: rawJob.company || rawJob.company_name || rawJob.employer,
-          location: rawJob.location || "Remote",
+          location: rawJob.location,
           description: rawJob.description || rawJob.content,
           requirements: rawJob.requirements || rawJob.qualifications,
           responsibilities: rawJob.responsibilities || rawJob.duties,
@@ -246,7 +246,7 @@ export class GenericScraper extends BaseScraper {
       yield {
         title: jobTitle,
         company,
-        location: "Remote",
+        location: undefined,
         description: this.cleanHtml(description),
         applicationUrl,
         externalId: guid || link,
@@ -290,7 +290,7 @@ export class GenericScraper extends BaseScraper {
           yield {
             title: this.cleanHtml(title),
             company: company ? this.cleanHtml(company) : `Company via ${this.config.platformName}`,
-            location: "Remote",
+            location: undefined,
             applicationUrl,
             externalId: link,
           };
@@ -375,7 +375,7 @@ export class GenericScraper extends BaseScraper {
     });
     if (parts.length > 0) return Array.from(new Set(parts)).join(", ");
 
-    return "Remote";
+    return undefined;
   }
 
   private jsonLdEmploymentType(value: unknown) {

@@ -57,7 +57,7 @@ export class WorkingNomadsScraper extends BaseScraper {
           const normalizedJob = this.normalizeJob({
             title: rawJob.title,
             company: rawJob.company_name,
-            location: rawJob.location || "Remote",
+            location: rawJob.location,
             description: rawJob.description,
             skills: rawJob.tags?.join(", "),
             jobType: this.mapJobType(rawJob.category_name),

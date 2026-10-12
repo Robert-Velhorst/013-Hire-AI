@@ -135,18 +135,18 @@ User Profile:
 - Education: ${userProfile.education || "Not specified"}
 - Desired Job Types: ${userProfile.desiredJobTypes || "Any"}
 - Desired Locations: ${userProfile.desiredLocations || "Any"}
-- Salary Expectation: ${normalizeSalaryCurrency(userProfile.salaryExpectationCurrency)} ${userProfile.salaryExpectationMin || 0} - ${userProfile.salaryExpectationMax || 0}
+- Salary Expectation: ${normalizeSalaryCurrency(userProfile.salaryExpectationCurrency) ?? "Not specified"} ${userProfile.salaryExpectationMin || 0} - ${userProfile.salaryExpectationMax || 0}
 - Needs Visa Sponsorship: ${userProfile.needsVisaSponsorship ? "Yes" : "No"}
 - Diversity Group: ${userProfile.diversityGroup || "Not specified"}
 
 Job Posting:
 - Title: ${job.title}
 - Company: ${job.company}
-- Location: ${job.location || "Remote"}
+- Location: ${job.location || "Not provided; remote eligibility unknown"}
 - Job Type: ${job.jobType || "Not specified"}
 - Skills Required: ${job.skills || "Not specified"}
 - Requirements: ${job.requirements || "Not specified"}
-- Salary Range: ${normalizeSalaryCurrency(job.salaryCurrency)} ${job.salaryMin || 0} - ${job.salaryMax || 0}
+- Salary Range: ${normalizeSalaryCurrency(job.salaryCurrency) ?? "Currency unknown"} ${job.salaryMin || 0} - ${job.salaryMax || 0}
 - Visa Sponsorship: ${job.visaSponsorshipAvailable ? "Available" : "Not available"}
 - Diversity Friendly: ${job.diversityFriendly ? "Yes" : "No"}
 
@@ -234,7 +234,7 @@ Return the analysis in JSON format.`;
       jobId: job.id,
       matchScore: clampScore(analysis.matchScore),
       matchReasons: salaryCurrencyRequiresReview
-        ? `${analysis.matchReasons.trim()} Salary uses ${normalizeSalaryCurrency(job.salaryCurrency)} and requires review against the ${normalizeSalaryCurrency(userProfile.salaryExpectationCurrency)} expectation.`
+        ? `${analysis.matchReasons.trim()} Salary uses ${normalizeSalaryCurrency(job.salaryCurrency) ?? "an unknown currency"} and requires review against the ${normalizeSalaryCurrency(userProfile.salaryExpectationCurrency) ?? "unspecified"} expectation.`
         : analysis.matchReasons.trim(),
       skillsMatch: clampScore(analysis.skillsMatch),
       experienceMatch: clampScore(analysis.experienceMatch),

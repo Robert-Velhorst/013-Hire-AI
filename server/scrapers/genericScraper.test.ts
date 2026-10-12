@@ -52,6 +52,8 @@ describe("generic scraper structured job extraction", () => {
       salaryCurrency: "USD",
       expiryDate: new Date("2026-08-13T10:00:00.000Z"),
     })]);
+    expect(result.jobs[0].location).toBe("Remote");
+    expect(result.jobs[0].salaryCurrency).toBe("USD");
   });
 
   it("annualizes locale-formatted JSON-LD compensation before source jobs are persisted", async () => {
@@ -127,6 +129,7 @@ describe("generic scraper structured job extraction", () => {
     expect(result.jobs[0]).toMatchObject({
       title: "Fallback Engineer",
       applicationUrl: "https://jobs.example.com/jobs/fallback",
+      location: undefined,
     });
   });
 
@@ -238,5 +241,38 @@ describe("generic scraper structured job extraction", () => {
     expect(requestedUrl.searchParams.get("source")).toBe("hire-ai");
     expect(requestedUrl.searchParams.get("q")).toBe("Platform Engineer");
     expect(requestedUrl.searchParams.get("location")).toBe("Europe");
+  });
+
+  it("leaves absent location and unsupported salary currency unknown in API records", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      jobs: [{
+        id: "unknown-facts",
+        title: "Platform Engineer",
+        company: "Example Systems",
+        salary_min: 80_000,
+        salary_max: 100_000,
+        salary_currency: "ZZZ",
+        url: "https://jobs.example.com/unknown-facts",
+      }],
+    }), { status: 200 })) as typeof fetch;
+    const scraper = new GenericScraper({
+      platformName: "API Unknown Data Source",
+      platformId: 79,
+      baseUrl: "https://jobs.example.com",
+      apiUrl: "https://api.example.com/jobs",
+      rateLimit: 0,
+      maxRetries: 0,
+      type: "api",
+    });
+
+    const result = await scraper.scrape();
+
+    expect(result.errors).toEqual([]);
+    expect(result.jobs[0]).toMatchObject({
+      location: undefined,
+      salaryMin: 80_000,
+      salaryMax: 100_000,
+      salaryCurrency: undefined,
+    });
   });
 });
