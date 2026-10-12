@@ -448,17 +448,21 @@ describe("response and interview memory fallback", () => {
       interviewerName: "Hiring Manager",
     }, userId);
 
-    const outcome = await recordInterviewOutcome({
+    const outcomeInput = {
       interviewId: scheduled.id,
       outcome: "rejection",
       source: "email",
       summary: "Recruiter emailed after the interview that the team chose another candidate.",
-    }, userId);
+    } as const;
+    const outcome = await recordInterviewOutcome(outcomeInput, userId);
+    const duplicateOutcome = await recordInterviewOutcome(outcomeInput, userId);
 
     expect(outcome.success).toBe(true);
     expect(outcome.interviewStatus).toBe("completed");
     expect(outcome.responseType).toBe("rejection");
     expect(outcome.status).toBe("rejected");
+    expect(duplicateOutcome.existing).toBe(true);
+    expect(duplicateOutcome.responseId).toBe(outcome.responseId);
 
     const interviews = await getInterviewSchedules(applicationId, userId);
     expect(interviews[0].status).toBe("completed");
@@ -478,6 +482,7 @@ describe("response and interview memory fallback", () => {
       event.action === "interview_outcome_recorded" &&
       event.afterState?.includes(`"responseId":${outcome.responseId}`)
     )).toBe(true);
+    expect(artifacts.auditEvents.filter((event) => event.action === "interview_outcome_recorded")).toHaveLength(1);
   });
 
   it("records no-response outcomes as internal checks without retiring a follow-up handoff", async () => {
