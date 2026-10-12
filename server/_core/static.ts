@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -9,6 +9,43 @@ export function productionAssetCacheControl(filePath: string) {
   return normalizedPath.includes("/assets/")
     ? "public, max-age=31536000, immutable"
     : "no-cache";
+}
+
+export function registerApiNotFound(app: Express) {
+  app.use("/api", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(404).json({
+      error: { code: "not_found", message: "Not found" },
+    });
+  });
+}
+
+function explicitlyAcceptsHtml(acceptHeader: string | undefined) {
+  return (acceptHeader ?? "").split(",").some(entry => {
+    const [mediaType, ...parameters] = entry.split(";");
+    if (!/^(text\/html|application\/xhtml\+xml)$/i.test(mediaType.trim())) {
+      return false;
+    }
+
+    const quality = parameters.find(parameter => /^\s*q\s*=/i.test(parameter));
+    if (!quality) return true;
+    const value = Number(quality.split("=")[1]);
+    return Number.isFinite(value) && value > 0 && value <= 1;
+  });
+}
+
+export function registerSpaNavigationFallback(
+  app: Express,
+  renderNavigation: RequestHandler
+) {
+  app.get("*", (req, res, next) => {
+    if (!explicitlyAcceptsHtml(req.get("accept"))) {
+      next();
+      return;
+    }
+
+    renderNavigation(req, res, next);
+  });
 }
 
 export function serveStatic(
@@ -29,8 +66,10 @@ export function serveStatic(
       },
     })
   );
-  app.use("*", (_req, res) => {
+  registerSpaNavigationFallback(app, (_req, res, next) => {
     res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.sendFile(path.resolve(distPath, "index.html"), error => {
+      if (error) next(error);
+    });
   });
 }

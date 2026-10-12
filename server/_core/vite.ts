@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { createViteConfig } from "../../vite.config";
+import { registerSpaNavigationFallback } from "./static";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -21,7 +22,7 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
+  registerSpaNavigationFallback(app, async (req, res, next) => {
     const url = req.originalUrl;
 
     try {

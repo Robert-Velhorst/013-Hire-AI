@@ -7,7 +7,10 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerConnectorOAuthRoutes } from "../connectorOAuthRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic } from "./static";
+import {
+  registerApiNotFound,
+  serveStatic,
+} from "./static";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
@@ -109,6 +112,7 @@ async function startServer() {
       createContext,
     })
   );
+  registerApiNotFound(app);
   // development mode uses Vite, production mode uses static files
   if (!ENV.isProduction) {
     const { setupVite } = await import("./vite");
@@ -120,7 +124,11 @@ async function startServer() {
   startupStage = "listener binding";
   const bindHost = resolveBindHost(process.env.HOST);
   const preferredPort = resolvePreferredPort(process.env.PORT);
-  const port = await resolveAvailablePort(preferredPort, bindHost, !ENV.isProduction);
+  const port = await resolveAvailablePort(
+    preferredPort,
+    bindHost,
+    !ENV.isProduction
+  );
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
