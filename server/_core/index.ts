@@ -117,6 +117,7 @@ async function startServer() {
     serveStatic(app);
   }
 
+  startupStage = "listener binding";
   const bindHost = resolveBindHost(process.env.HOST);
   const preferredPort = resolvePreferredPort(process.env.PORT);
   const port = await resolveAvailablePort(preferredPort, bindHost, !ENV.isProduction);
@@ -140,7 +141,6 @@ async function startServer() {
     });
   }
 
-  startupStage = "listener binding";
   await new Promise<void>((resolve, reject) => {
     const handleError = (error: Error) => reject(error);
     server.once("error", handleError);
@@ -199,9 +199,9 @@ async function closeOperationalResources() {
   if (failed) throw new Error("Operational resources could not close cleanly.");
 }
 
-startServer().catch(async () => {
+startServer().catch(async error => {
   logOperationalFailure("Server", "Startup");
-  writeStartupFailureStage(startupStage);
+  writeStartupFailureStage(startupStage, error);
   try {
     await closeOperationalResources();
   } catch {
