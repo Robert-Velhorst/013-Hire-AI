@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-10-13 - Gmail metadata-scope inbox discovery
+
+- Removed Gmail's `q=newer_than:30d` list parameter because Google rejects search queries under the `gmail.metadata` scope. Inbox discovery now asks for the `INBOX` label, keeps the existing 50-message scan bound, requests only sender and subject headers, and uses Gmail `internalDate` for the lookback and displayed received timestamp. Missing or malformed provider timestamps fail closed. It does not use the `snippet` field as body data under metadata-only consent; Gmail matches/classifies from allowed headers, so body-dependent response classification remains limited until a broader verified scope is justified and approved.
+- Added regressions for the metadata-scope-safe list request, omitted `Date` header request, stale/fresh disagreement between `internalDate` and the sender-controlled `Date` header, and ignoring body snippets under metadata-only consent.
+- Verification: 17 focused inbox-discovery/data-minimization tests passed; `pnpm check` passed; full suite passed 298 files / 1,708 tests (7 opt-in suites / 26 tests skipped); `pnpm build` passed with 87 JavaScript chunks and 582,227 startup JavaScript bytes inside the configured budget. Live Google OAuth/API acceptance remains open.
+- Contract checked against [Gmail `users.messages.list` documentation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list), [Gmail Message resource documentation](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages), and [Google Gmail OAuth scope guidance](https://developers.google.com/workspace/gmail/api/auth/scopes).
+
 ## 2026-10-13 - Connector token lifetime and authorization rejection handling
 
 - Reproduced that provider responses without `expires_in` were stored as null expiry and immediately rejected, including GitHub OAuth's documented long-lived default token mode.

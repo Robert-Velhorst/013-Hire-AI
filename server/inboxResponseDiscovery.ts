@@ -247,12 +247,19 @@ function gmailHeaders(payload: Record<string, unknown>) {
   const value = (name: string) => headers.find((header) => String(header.name).toLowerCase() === name.toLowerCase())?.value;
   const sender = value("From");
   const subject = value("Subject");
-  const receivedAt = value("Date");
   return {
     sender: typeof sender === "string" ? sender : null,
     subject: typeof subject === "string" ? subject : "",
-    receivedAt: typeof receivedAt === "string" ? receivedAt : null,
   };
+}
+
+function gmailInternalDate(payload: Record<string, unknown>): Date | null {
+  const value = payload.internalDate;
+  if (typeof value !== "string" || !/^\d{1,16}$/.test(value)) return null;
+  const timestamp = Number(value);
+  if (!Number.isSafeInteger(timestamp)) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function inboxRequest(init: RequestInit = {}, signal?: AbortSignal): RequestInit {
@@ -277,7 +284,7 @@ export async function discoverInboxResponseCandidates(
   if (provider === "gmail") {
     const list = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages?" + new URLSearchParams({
       maxResults: String(MAX_MESSAGES),
-      q: "newer_than:30d",
+      "labelIds": "INBOX",
     }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }, options.signal));
     if (!list.ok) await throwInboxApiError(userId, account, "gmail", list, dependencies);
     const payload = await readBoundedResponseJson<{ messages?: Array<{ id?: unknown }> }>(
@@ -292,7 +299,7 @@ export async function discoverInboxResponseCandidates(
     for (let offset = 0; offset < messages.length; offset += GMAIL_DETAIL_CONCURRENCY) {
       const batch = messages.slice(offset, offset + GMAIL_DETAIL_CONCURRENCY);
       const batchCandidates = await Promise.all(batch.map(async (messageId): Promise<InboxResponseCandidate | null> => {
-        const detail = await fetcher(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, inboxRequest({
+        const detail = await fetcher(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`, inboxRequest({
           headers: { Authorization: `Bearer ${accessToken}` },
         }, options.signal));
         if (!detail.ok) {
@@ -306,19 +313,19 @@ export async function discoverInboxResponseCandidates(
           MAX_INBOX_MESSAGE_BYTES
         );
         const headers = gmailHeaders(metadata);
-        const preview = typeof metadata.snippet === "string" ? metadata.snippet.slice(0, 600) : "";
-        const match = findApplicationMatch(`${headers.sender || ""} ${headers.subject} ${preview}`, applications);
-        const received = headers.receivedAt ? new Date(headers.receivedAt) : now;
-        if (!match || Number.isNaN(received.getTime()) || !isWithinInboxResponseLookback(received, now)) return null;
+        const received = gmailInternalDate(metadata);
+        if (!received || !isWithinInboxResponseLookback(received, now)) return null;
+        const match = findApplicationMatch(`${headers.sender || ""} ${headers.subject}`, applications);
+        if (!match) return null;
         return {
           provider,
           messageId,
           ...match,
           sender: headers.sender,
           subject: headers.subject.slice(0, 500),
-          preview,
+          preview: "",
           receivedAt: received.toISOString(),
-          suggestedResponseType: classifyResponse(`${headers.subject} ${preview}`),
+          suggestedResponseType: classifyResponse(headers.subject),
         };
       }));
       candidates.push(...batchCandidates.filter((candidate): candidate is InboxResponseCandidate => candidate !== null));

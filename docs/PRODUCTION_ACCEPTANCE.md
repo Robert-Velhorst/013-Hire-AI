@@ -7,10 +7,11 @@ Updated: 2026-10-13. Target confirmed by Robert: online, multi-user Hire.AI host
 ## Current Verification (2026-10-13)
 
 - `pnpm check` passed.
-- `pnpm test` passed 298 files / 1,705 tests; 7 opt-in suites / 26 tests were skipped by the regular test command.
+- `pnpm test` passed 298 files / 1,708 tests; 7 opt-in suites / 26 tests were skipped by the regular test command.
 - `pnpm build` passed. The production shell is 653 bytes, 87 JavaScript chunks remain within the 350 KiB per-chunk budget, and startup JavaScript totals 582,227 bytes within the 614,400-byte budget.
 - Isolated MySQL 8.4 acceptance applied the complete migration history through `0080_connector_token_lifetime.sql`; all 8 approved suites and 29 tests passed. The connector-lifetime suite executes the migration's actual legacy backfill SQL against synthetic rows.
 - Connector OAuth and delivery regression tests passed 85 tests across 11 files. Token lifetimes are persisted as expiring, non-expiring, or unknown; ambiguous legacy grants remain unknown except GitHub grants with the recorded current `read:user` scope and no expiry/refresh token. 403 responses only require reauthorization when the bearer challenge explicitly says `invalid_token`; ordinary insufficient-scope responses do not revoke the local account state.
+- Gmail inbox discovery no longer sends the unsupported `q` search parameter with `gmail.metadata`; it uses the `INBOX` label and the provider's `internalDate` field within its bounded 50-message scan. It does not use message snippets/body data under metadata-only consent, so body-dependent response classifications remain limited. Seventeen focused discovery/data-minimization tests pass. Google OAuth and live account/API acceptance are not claimed.
 - These are local and isolated-database checks, not live OAuth-provider acceptance. Public deployment, HTTPS, real connector credentials and provider responses, legal/privacy approval, billing, and employer submission remain unverified.
 
 ## Historical Verification (2026-10-09)
