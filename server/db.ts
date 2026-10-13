@@ -1284,7 +1284,8 @@ export async function getJobById(jobId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-const searchTerm = (value: string) => `%${value.trim().replace(/[%_]/g, "\\$&")}%`;
+export const searchTerm = (value: string) =>
+  `%${value.trim().replace(/[\\%_]/g, "\\$&")}%`;
 
 export async function searchJobs(filters: {
   title?: string;

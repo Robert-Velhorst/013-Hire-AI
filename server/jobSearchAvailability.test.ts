@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { searchJobs } from "./db";
+import { searchJobs, searchTerm } from "./db";
 import { sampleJobs } from "./sampleData";
 
 const injectedJobIds: number[] = [];
@@ -12,6 +12,12 @@ afterEach(() => {
 });
 
 describe("job search availability", () => {
+  it("escapes SQL LIKE metacharacters including the escape character", () => {
+    expect(searchTerm(String.raw`50%_off\role`)).toBe(
+      String.raw`%50\%\_off\\role%`
+    );
+  });
+
   it("does not return an expired listing that otherwise matches the query", async () => {
     const expiredJob = {
       ...sampleJobs[0],
