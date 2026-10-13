@@ -234,6 +234,7 @@ jobs:
             -e VITE_APP_ID='hire-ai-container-ci' \
             -e OAUTH_SERVER_URL='https://oauth.example.test' \
             -e OAUTH_PORTAL_URL='https://auth.example.test' \
+            -e PUBLIC_APP_ORIGIN='https://hire-ai.example.test' \
             -e OWNER_OPEN_ID='container-ci-owner' \
             -e BUILT_IN_FORGE_API_KEY='container-ci-forge-key' \
             -e STRIPE_SECRET_KEY='sk_test_container_ci' \

@@ -57,6 +57,14 @@ describe("production container packaging", () => {
     );
     expect(migrator).toContain("SELECT GET_LOCK(?, ?) AS acquired");
     expect(migrator).toContain("SELECT RELEASE_LOCK(?)");
+
+    const ciWorkflow = readFileSync(
+      resolve(process.cwd(), ".github", "workflows", "ci.yml"),
+      "utf8"
+    );
+    expect(ciWorkflow).toContain(
+      "-e PUBLIC_APP_ORIGIN='https://hire-ai.example.test'"
+    );
   });
 
   it("excludes the development-only Vite server from the production server bundle", () => {
