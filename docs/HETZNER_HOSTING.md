@@ -24,6 +24,25 @@ Verified on 2026-09-05 in the authenticated Console and through bounded TCP conn
 - Following Robert's password reset, root login succeeded in the provider browser console and over SSH. The SSH host fingerprint was compared against the trusted provider console before accepting it locally. No SSH key was installed. Rotate the chat-shared password privately; never put it in repository files.
 - Robert declined paid Hetzner backups and explicitly deferred backup work until later. Leave them disabled; do not purchase a replacement backup service. This does not block installation preparation, but recovery acceptance remains unverified. The server/IP quote remains EUR 14.51/month including VAT, excluding other services and excess usage.
 
+## Current Public Reachability Probe
+
+On 2026-10-14 (Europe/Amsterdam), from the administrator workstation:
+
+- `013-hire.ai.noodzakelijkonline.de` resolved to `159.69.55.178`.
+- TCP connections to ports 80 and 443 succeeded. An unauthenticated HTTP `GET
+  /healthz` returned `308` to the HTTPS URL.
+- A Node.js HTTPS request to that URL failed during TLS negotiation with
+  `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR`. No HTTP response from the application
+  was received over TLS.
+- This was a single-network, read-only probe. It does not identify the active
+  proxy, prove certificate issuance, establish application health, or substitute
+  for authenticated inspection of the shared host. No host or firewall changes
+  were made.
+
+This supersedes only the 2026-09-05 observation that administrator-side TCP
+connections to ports 80 and 443 timed out. The earlier result is retained as a
+dated historical observation.
+
 ## Verified OS Preparation
 
 On 2026-09-05 (Europe/Amsterdam; the server reports UTC), authenticated administration confirmed Ubuntu 24.04.4, approximately 1.9 GiB RAM, no swap and approximately 35 GiB available on the root filesystem. The initial `/opt` directory was empty and only SSH and the system resolver were listening on TCP. These are host observations, not an application capacity test.
