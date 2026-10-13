@@ -65,6 +65,7 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
     rejected: "bg-red-500/20 text-red-400 border-red-500/30",
     paid: "bg-green-500/20 text-green-400 border-green-500/30",
     failed: "bg-red-500/20 text-red-400 border-red-500/30",
+    quarantined: "bg-orange-500/20 text-orange-300 border-orange-500/30",
     open: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
     in_progress: "bg-blue-500/20 text-blue-400 border-blue-500/30",
     resolved: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -184,6 +185,10 @@ export default function AdminPanel() {
     enabled: isAdmin,
     refetchInterval: 30_000,
   });
+  const { data: stripeWebhookIssues, refetch: refetchStripeWebhookIssues } = trpc.admin.getStripeWebhookIssues.useQuery(
+    { limit: 50 },
+    { enabled: isAdmin, refetchInterval: 30_000 }
+  );
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
     { limit: 8 },
     { enabled: isAdmin, refetchInterval: 30_000 }
@@ -271,6 +276,14 @@ export default function AdminPanel() {
       setStatusDialog({ open: false, feeId: null, currentStatus: "" });
       setNewStatus("");
       setStatusNote("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const reopenStripeWebhook = trpc.admin.reopenQuarantinedStripeWebhook.useMutation({
+    onSuccess: async () => {
+      toast.success(fc("stripeWebhookReopened"));
+      await refetchStripeWebhookIssues();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -752,6 +765,62 @@ export default function AdminPanel() {
                 </div>
               </CardContent>
             </Card>
+            <section aria-labelledby="stripe-webhook-issues-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 id="stripe-webhook-issues-heading" className="text-sm font-semibold text-white">{fc("stripeWebhookIssues")}</h2>
+                  <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("stripeWebhookIssuesDetail")}</p>
+                </div>
+                <Badge variant="outline" className="w-fit border-orange-500/30 text-orange-300">
+                  {stripeWebhookIssues?.length ?? 0}
+                </Badge>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400">
+                      <th className="py-2 pr-4">Event</th>
+                      <th className="py-2 pr-4">Type</th>
+                      <th className="py-2 pr-4">{fc("status")}</th>
+                      <th className="py-2 pr-4">{fc("stripeWebhookReason")}</th>
+                      <th className="py-2 pr-4">Updated</th>
+                      <th className="py-2">{fc("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeWebhookIssues?.map(event => (
+                      <tr key={event.id} className="border-b border-slate-800/50">
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-300">{event.stripeEventId}</td>
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-400">{event.eventType}</td>
+                        <td className="py-3 pr-4"><StatusBadge status={event.status} label={getAdminFinancialStatusCopy(locale, event.status)} /></td>
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-400">{event.errorMessage ?? "-"}</td>
+                        <td className="py-3 pr-4 text-xs text-slate-400">{dateTimeFormatter.format(new Date(event.updatedAt))}</td>
+                        <td className="py-3">
+                          {event.status === "quarantined" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={reopenStripeWebhook.isPending}
+                              onClick={() => {
+                                if (!window.confirm(fc("stripeWebhookReopenConfirm"))) return;
+                                reopenStripeWebhook.mutate({ eventRowId: event.id, confirmation: "REOPEN" });
+                              }}
+                            >
+                              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                              {fc("stripeWebhookReopen")}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {stripeWebhookIssues?.length === 0 && (
+                      <tr><td colSpan={6} className="py-6 text-center text-xs text-slate-500">{fc("stripeWebhookEmpty")}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </TabsContent>
 
           <TabsContent value="discovery" data-testid="admin-job-discovery-panel">

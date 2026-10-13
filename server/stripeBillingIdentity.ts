@@ -50,22 +50,35 @@ export function validateStripePriceLine(
   fee: StripeFeeIdentity,
   lines: { data?: StripeLine[]; has_more?: boolean } | null | undefined
 ): string | null {
-  if (!fee.stripePriceId || !Number.isSafeInteger(fee.monthlyFeeAmount) || fee.monthlyFeeAmount <= 0) {
+  if (
+    !fee.stripePriceId ||
+    !Number.isSafeInteger(fee.monthlyFeeAmount) ||
+    fee.monthlyFeeAmount <= 0
+  ) {
     return "incomplete_fee_price_mapping";
   }
-  if (!lines || !Array.isArray(lines.data) || lines.has_more) return "incomplete_invoice_lines";
+  if (!lines || !Array.isArray(lines.data) || lines.has_more)
+    return "incomplete_invoice_lines";
 
-  const matches = lines.data.filter(line => linePriceId(line) === fee.stripePriceId);
+  const matches = lines.data.filter(
+    line => linePriceId(line) === fee.stripePriceId
+  );
   if (matches.length !== 1) return "invoice_price_mismatch";
 
   const line = matches[0];
   const price = linePrice(line);
   if (linePriceId(line) !== fee.stripePriceId) return "invoice_price_mismatch";
-  if ((line.currency ?? price?.currency ?? "").toUpperCase() !== fee.currency.toUpperCase()) {
+  if (
+    (line.currency ?? price?.currency ?? "").toUpperCase() !==
+    fee.currency.toUpperCase()
+  ) {
     return "currency_mismatch";
   }
-  if (line.quantity !== 1 || line.amount !== fee.monthlyFeeAmount ||
-    (price?.unit_amount != null && price.unit_amount !== fee.monthlyFeeAmount)) {
+  if (
+    line.quantity !== 1 ||
+    line.amount !== fee.monthlyFeeAmount ||
+    (price?.unit_amount != null && price.unit_amount !== fee.monthlyFeeAmount)
+  ) {
     return "amount_mismatch";
   }
   return null;
@@ -80,9 +93,13 @@ export function validateStripeInvoiceIdentity(
     lines?: { data?: StripeLine[]; has_more?: boolean } | null;
   }
 ): string | null {
-  const customerError = validateStripeCustomerIdentity(fee.stripeCustomerId, input.customer);
+  const customerError = validateStripeCustomerIdentity(
+    fee.stripeCustomerId,
+    input.customer
+  );
   if (customerError) return customerError;
-  if ((input.currency ?? "").toUpperCase() !== fee.currency.toUpperCase()) return "currency_mismatch";
+  if ((input.currency ?? "").toUpperCase() !== fee.currency.toUpperCase())
+    return "currency_mismatch";
   if (input.amount !== fee.monthlyFeeAmount) return "amount_mismatch";
   return validateStripePriceLine(fee, input.lines);
 }
@@ -91,20 +108,36 @@ export function validateStripeSubscriptionIdentity(
   fee: StripeFeeIdentity,
   input: {
     customer?: unknown;
-    items?: { data?: Array<{ price?: StripePrice | string | null; quantity?: number | null }> } | null;
+    items?: {
+      data?: Array<{
+        price?: StripePrice | string | null;
+        quantity?: number | null;
+      }>;
+    } | null;
   }
 ): string | null {
-  const customerError = validateStripeCustomerIdentity(fee.stripeCustomerId, input.customer);
+  const customerError = validateStripeCustomerIdentity(
+    fee.stripeCustomerId,
+    input.customer
+  );
   if (customerError) return customerError;
-  if (!fee.stripePriceId || !Number.isSafeInteger(fee.monthlyFeeAmount) || fee.monthlyFeeAmount <= 0) {
+  if (
+    !fee.stripePriceId ||
+    !Number.isSafeInteger(fee.monthlyFeeAmount) ||
+    fee.monthlyFeeAmount <= 0
+  ) {
     return "incomplete_fee_price_mapping";
   }
   const items = input.items?.data;
-  if (!Array.isArray(items) || items.length !== 1) return "subscription_items_mismatch";
+  if (!Array.isArray(items) || items.length !== 1)
+    return "subscription_items_mismatch";
   const [item] = items;
-  const price = item.price && typeof item.price === "object" ? item.price : null;
-  if (!price || price.id !== fee.stripePriceId || item.quantity !== 1) return "subscription_items_mismatch";
-  if ((price.currency ?? "").toUpperCase() !== fee.currency.toUpperCase()) return "currency_mismatch";
+  const price =
+    item.price && typeof item.price === "object" ? item.price : null;
+  if (!price || price.id !== fee.stripePriceId || item.quantity !== 1)
+    return "subscription_items_mismatch";
+  if ((price.currency ?? "").toUpperCase() !== fee.currency.toUpperCase())
+    return "currency_mismatch";
   if (price.unit_amount !== fee.monthlyFeeAmount) return "amount_mismatch";
   return null;
 }

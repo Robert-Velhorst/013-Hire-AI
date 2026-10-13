@@ -1178,7 +1178,7 @@ export const stripeWebhookEvents = mysqlTable("stripe_webhook_events", {
   id: int("id").autoincrement().primaryKey(),
   stripeEventId: varchar("stripe_event_id", { length: 255 }).notNull(),
   eventType: varchar("event_type", { length: 120 }).notNull(),
-  status: mysqlEnum("status", ["processing", "processed", "failed"]).default("processing").notNull(),
+  status: mysqlEnum("status", ["processing", "processed", "failed", "quarantined"]).default("processing").notNull(),
   errorMessage: text("error_message"),
   receivedAt: timestamp("received_at").defaultNow().notNull(),
   processedAt: timestamp("processed_at"),

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { stripeWebhookEvents } from "../drizzle/schema";
 
-type WebhookStatus = "processing" | "processed" | "failed";
+type WebhookStatus = "processing" | "processed" | "failed" | "quarantined";
 export const STRIPE_WEBHOOK_FAILURE_MESSAGE = "Webhook processing failed.";
 const STALE_PROCESSING_MS = 10 * 60 * 1000;
 
@@ -26,7 +26,7 @@ export async function claimStripeWebhookEvent(eventId: string, eventType: string
     if (existing?.eventType !== undefined && existing.eventType !== eventType) {
       throw new Error("Stripe event ID was received with conflicting event types.");
     }
-    if (existing?.status === "processed" || (existing?.status === "processing" &&
+    if (existing?.status === "processed" || existing?.status === "quarantined" || (existing?.status === "processing" &&
       Date.now() - existing.updatedAt <= STALE_PROCESSING_MS)) {
       return { claimed: false, duplicate: true };
     }
@@ -100,6 +100,23 @@ export async function failStripeWebhookEvent(eventId: string, _error: unknown) {
   }
   await db.update(stripeWebhookEvents)
     .set({ status: "failed", errorMessage })
+    .where(eq(stripeWebhookEvents.stripeEventId, eventId));
+}
+
+export async function quarantineStripeWebhookEvent(eventId: string, reasonCode: string) {
+  const safeReasonCode = /^[a-z][a-z0-9_]{0,79}$/.test(reasonCode) ? reasonCode : "billing_identity_mismatch";
+  const db = await getDb();
+  if (!db) {
+    const event = memoryEvents.get(eventId);
+    if (event) {
+      event.status = "quarantined";
+      event.errorMessage = safeReasonCode;
+      event.updatedAt = Date.now();
+    }
+    return;
+  }
+  await db.update(stripeWebhookEvents)
+    .set({ status: "quarantined", errorMessage: safeReasonCode })
     .where(eq(stripeWebhookEvents.stripeEventId, eventId));
 }
 

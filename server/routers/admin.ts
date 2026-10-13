@@ -20,6 +20,7 @@ import {
   adminReviewItems,
   auditEvents,
   stripeReconciliationCommands,
+  stripeWebhookEvents,
   users,
 } from "../../drizzle/schema";
 import {
@@ -149,6 +150,57 @@ export const adminRouter = router({
       commands,
     };
   }),
+
+  getStripeWebhookIssues: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return await db.select({
+        id: stripeWebhookEvents.id,
+        stripeEventId: stripeWebhookEvents.stripeEventId,
+        eventType: stripeWebhookEvents.eventType,
+        status: stripeWebhookEvents.status,
+        errorMessage: stripeWebhookEvents.errorMessage,
+        receivedAt: stripeWebhookEvents.receivedAt,
+        updatedAt: stripeWebhookEvents.updatedAt,
+      }).from(stripeWebhookEvents)
+        .where(inArray(stripeWebhookEvents.status, ["failed", "quarantined"]))
+        .orderBy(desc(stripeWebhookEvents.updatedAt), desc(stripeWebhookEvents.id))
+        .limit(input?.limit ?? 50);
+    }),
+
+  reopenQuarantinedStripeWebhook: adminProcedure
+    .input(z.object({ eventRowId: z.number().int().positive(), confirmation: z.literal("REOPEN") }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return await db.transaction(async tx => {
+        const [event] = await tx.select().from(stripeWebhookEvents)
+          .where(eq(stripeWebhookEvents.id, input.eventRowId))
+          .limit(1)
+          .for("update");
+        if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Stripe event not found" });
+        if (event.status !== "quarantined") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Only quarantined Stripe events can be reopened" });
+        }
+        await tx.update(stripeWebhookEvents)
+          .set({ status: "failed", processedAt: null })
+          .where(eq(stripeWebhookEvents.id, event.id));
+        await tx.insert(auditEvents).values({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "stripe_webhook_quarantine_reopened",
+          actor: "admin",
+          source: "admin.reopenQuarantinedStripeWebhook",
+          beforeState: JSON.stringify({ eventId: event.stripeEventId, status: event.status, reasonCode: event.errorMessage }),
+          afterState: JSON.stringify({ eventId: event.stripeEventId, status: "failed", resendRequired: true }),
+          riskLevel: "high",
+        });
+        return { eventId: event.stripeEventId, eventType: event.eventType };
+      });
+    }),
 
   getReviewEvidence: adminProcedure
     .input(z.object({
