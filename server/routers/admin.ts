@@ -10,7 +10,6 @@ import {
   getAdminReviewEvidenceSnapshot,
   getOperationalFailureMonitoringSnapshot,
   listActiveAdminReviewItemsForEntity,
-  listAdminReviewItems,
   resolveAdminReviewItem,
 } from "../db";
 import {
@@ -57,10 +56,47 @@ export const adminRouter = router({
   getReviewQueue: adminProcedure
     .input(z.object({
       status: z.enum(["all", "open", "in_progress", "resolved", "dismissed"]).default("open"),
-      limit: z.number().int().min(1).max(100).default(100),
-    }).optional())
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }))
     .query(async ({ input }) => {
-      return await listAdminReviewItems(input?.status ?? "open", input?.limit ?? 100);
+      const memoryFallback = await getAdminMemoryFallback();
+      if (memoryFallback) {
+        const rows = memoryFallback.reviewItems
+          .filter((item) => input.status === "all" || item.status === input.status)
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id);
+        const afterCursor = rows.filter((item) => isAfterDescendingTimestampIdCursor(
+          item,
+          input.cursor,
+          (row) => row.createdAt,
+          (row) => row.id
+        ));
+        return createAdminCursorPage(afterCursor.slice(0, input.limit + 1), input.limit, rows.length, (item) => ({
+          timestamp: item.createdAt,
+          id: item.id,
+        }));
+      }
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const filter = input.status === "all" ? undefined : eq(adminReviewItems.status, input.status);
+      const conditions = [
+        ...(filter ? [filter] : []),
+        ...(input.cursor ? [or(
+          lt(adminReviewItems.createdAt, input.cursor.timestamp),
+          and(eq(adminReviewItems.createdAt, input.cursor.timestamp), lt(adminReviewItems.id, input.cursor.id))
+        )!] : []),
+      ];
+      const [rows, totalRows] = await Promise.all([
+        db.select().from(adminReviewItems)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(adminReviewItems.createdAt), desc(adminReviewItems.id))
+          .limit(input.limit + 1),
+        db.select({ count: sql<number>`COUNT(*)` }).from(adminReviewItems).where(filter),
+      ]);
+      return createAdminCursorPage(rows, input.limit, Number(totalRows[0]?.count ?? 0), (item) => ({
+        timestamp: item.createdAt,
+        id: item.id,
+      }));
     }),
 
   getSuccessFeeHolds: adminProcedure
@@ -543,14 +579,45 @@ export const adminRouter = router({
     }),
 
   // ─── Overdue Verifications ───────────────────────────────────────────────────
-  listOverdueVerifications: adminProcedure.query(async () => {
+  listOverdueVerifications: adminProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }))
+    .query(async ({ input }) => {
     const memoryFallback = await getAdminMemoryFallback();
-    if (memoryFallback) return memoryFallback.overdue.slice(0, 100);
+    if (memoryFallback) {
+      const rows = memoryFallback.overdue
+        .slice()
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id);
+      const afterCursor = rows.filter((fee) => isAfterDescendingTimestampIdCursor(
+        fee,
+        input.cursor,
+        (item) => item.createdAt,
+        (item) => item.id
+      ));
+      return createAdminCursorPage(afterCursor.slice(0, input.limit + 1), input.limit, rows.length, (fee) => ({
+        timestamp: fee.createdAt,
+        id: fee.id,
+      }));
+    }
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
     const now = new Date();
-    const fees = await db
+    const overdueCondition = and(
+      or(eq(successFees.status, "active"), eq(successFees.status, "suspended")),
+      isNotNull(successFees.nextVerificationDue),
+      lt(successFees.nextVerificationDue, now)
+    );
+    const conditions = [
+      overdueCondition!,
+      ...(input.cursor ? [or(
+        lt(successFees.createdAt, input.cursor.timestamp),
+        and(eq(successFees.createdAt, input.cursor.timestamp), lt(successFees.id, input.cursor.id))
+      )!] : []),
+    ];
+    const [fees, totalRows] = await Promise.all([db
       .select({
         id: successFees.id,
         userId: successFees.userId,
@@ -559,6 +626,7 @@ export const adminRouter = router({
         monthlySalary: successFees.monthlySalary,
         monthlyFeeAmount: successFees.monthlyFeeAmount,
         status: successFees.status,
+        createdAt: successFees.createdAt,
         nextVerificationDue: successFees.nextVerificationDue,
         verificationGraceExpiry: successFees.verificationGraceExpiry,
         notes: successFees.notes,
@@ -568,16 +636,13 @@ export const adminRouter = router({
       .from(successFees)
       .leftJoin(users, eq(successFees.userId, users.id))
       .where(
-        and(
-          or(eq(successFees.status, "active"), eq(successFees.status, "suspended")),
-          isNotNull(successFees.nextVerificationDue),
-          lt(successFees.nextVerificationDue, now)
-        )
+        and(...conditions)
       )
-      .orderBy(successFees.nextVerificationDue, successFees.id)
-      .limit(100);
+      .orderBy(desc(successFees.createdAt), desc(successFees.id))
+      .limit(input.limit + 1),
+    db.select({ count: sql<number>`COUNT(*)` }).from(successFees).where(overdueCondition)]);
 
-    return fees.map((fee) => ({
+    const page = createAdminCursorPage(fees.map((fee) => ({
       ...fee,
       daysOverdue: fee.nextVerificationDue
         ? Math.floor((now.getTime() - fee.nextVerificationDue.getTime()) / (1000 * 60 * 60 * 24))
@@ -585,7 +650,11 @@ export const adminRouter = router({
       graceExpired: fee.verificationGraceExpiry
         ? fee.verificationGraceExpiry < now
         : false,
+    })), input.limit, Number(totalRows[0]?.count ?? 0), (fee) => ({
+      timestamp: fee.createdAt,
+      id: fee.id,
     }));
+    return page;
   }),
 
   // ─── Update Fee Status ───────────────────────────────────────────────────────
@@ -1194,13 +1263,25 @@ export const adminRouter = router({
     }),
 
   // ─── List Pending Verifications ──────────────────────────────────────────────
-  listPendingVerifications: adminProcedure.query(async () => {
+  listPendingVerifications: adminProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }))
+    .query(async ({ input }) => {
     const memoryFallback = await getAdminMemoryFallback();
-    if (memoryFallback) return memoryFallback.pendingVerifications.slice(0, 100);
+    if (memoryFallback) return createAdminCursorPage([], input.limit, memoryFallback.pendingVerifications.length, () => ({ timestamp: new Date(0), id: 1 }));
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-    const verifications = await db
+    const conditions = [
+      eq(employmentVerifications.status, "pending"),
+      ...(input.cursor ? [or(
+        lt(employmentVerifications.submittedAt, input.cursor.timestamp),
+        and(eq(employmentVerifications.submittedAt, input.cursor.timestamp), lt(employmentVerifications.id, input.cursor.id))
+      )!] : []),
+    ];
+    const [verifications, totalRows] = await Promise.all([db
       .select({
         id: employmentVerifications.id,
         successFeeId: employmentVerifications.successFeeId,
@@ -1219,11 +1300,15 @@ export const adminRouter = router({
       .from(employmentVerifications)
       .leftJoin(users, eq(employmentVerifications.userId, users.id))
       .leftJoin(successFees, eq(employmentVerifications.successFeeId, successFees.id))
-      .where(eq(employmentVerifications.status, "pending"))
+      .where(and(...conditions))
       .orderBy(desc(employmentVerifications.submittedAt), desc(employmentVerifications.id))
-      .limit(100);
+      .limit(input.limit + 1),
+    db.select({ count: sql<number>`COUNT(*)` }).from(employmentVerifications).where(eq(employmentVerifications.status, "pending"))]);
 
-    return verifications;
+    return createAdminCursorPage(verifications, input.limit, Number(totalRows[0]?.count ?? 0), (verification) => ({
+      timestamp: verification.submittedAt,
+      id: verification.id,
+    }));
   }),
 
   getVerificationDocumentDownloadUrl: adminProcedure

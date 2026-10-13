@@ -49,7 +49,10 @@ describe("admin fee query contract", () => {
     expect(panel).toContain("status: paymentStatusFilter");
     expect(panel).toContain("setFeeCursorHistory([undefined])");
     expect(panel).toContain("setPaymentCursorHistory([undefined])");
-    expect(panel).toContain('data-testid="admin-fees-next-page"');
-    expect(panel).toContain('data-testid="admin-payments-next-page"');
+    expect(panel).toContain("setReviewCursorHistory([undefined])");
+    expect(panel).toContain('testId="admin-fees"');
+    expect(panel).toContain('testId="admin-payments"');
+    expect(panel).toContain('testId="admin-reviews"');
+    expect(panel).toContain('data-testid={`${testId}-next-page`}');
   });
 });

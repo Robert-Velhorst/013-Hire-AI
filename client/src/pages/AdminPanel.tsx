@@ -108,6 +108,36 @@ function ScraperRunOutcomeBadge({ outcome, label }: { outcome: "success" | "part
   return <Badge variant="outline" className={details.tone}>{label}</Badge>;
 }
 
+function AdminCursorPaginator({
+  page,
+  pageNumber,
+  testId,
+  locale,
+  onPrevious,
+  onNext,
+}: {
+  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: { timestamp: Date; id: number } | null } | undefined;
+  pageNumber: number;
+  testId: string;
+  locale: string;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+      <Button data-testid={`${testId}-previous-page`} variant="outline" size="sm" disabled={pageNumber <= 1} onClick={onPrevious}>
+        {locale === "nl" ? "Vorige" : "Previous"}
+      </Button>
+      <span className="text-xs text-slate-400">
+        {locale === "nl" ? "Pagina" : "Page"} {pageNumber} · {page?.items.length ?? 0} / {page?.total ?? 0}
+      </span>
+      <Button data-testid={`${testId}-next-page`} variant="outline" size="sm" disabled={!page?.hasMore || !page.nextCursor} onClick={onNext}>
+        {locale === "nl" ? "Volgende" : "Next"}
+      </Button>
+    </div>
+  );
+}
+
 const RUN_OUTCOME_COPY_KEYS = {
   success: "lastCycleClean",
   partial: "lastCyclePartial",
@@ -179,8 +209,12 @@ export default function AdminPanel() {
   const [selectedScrapingSources, setSelectedScrapingSources] = useState<string[]>([]);
   const [feeStatusFilter, setFeeStatusFilter] = useState<"all" | "pending_verification" | "active" | "paused" | "ended" | "suspended" | "disputed">("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "pending" | "paid" | "failed" | "refunded">("all");
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<"all" | "open" | "in_progress" | "resolved" | "dismissed">("open");
   const [feeCursorHistory, setFeeCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const [paymentCursorHistory, setPaymentCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [overdueCursorHistory, setOverdueCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [verificationCursorHistory, setVerificationCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [reviewCursorHistory, setReviewCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
@@ -199,7 +233,7 @@ export default function AdminPanel() {
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
-    { limit: 8 },
+    { limit: 100 },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
   const feeCursor = feeCursorHistory[feeCursorHistory.length - 1];
@@ -208,12 +242,24 @@ export default function AdminPanel() {
     { enabled: isAdmin }
   );
   const fees = feesPage?.items;
-  const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(undefined, { enabled: isAdmin });
-  const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(undefined, { enabled: isAdmin });
-  const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
-    { status: "open", limit: 100 },
+  const overdueCursor = overdueCursorHistory[overdueCursorHistory.length - 1];
+  const { data: overduePage, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(
+    { limit: 50, ...(overdueCursor ? { cursor: overdueCursor } : {}) },
+    { enabled: isAdmin },
+  );
+  const overdue = overduePage?.items;
+  const verificationCursor = verificationCursorHistory[verificationCursorHistory.length - 1];
+  const { data: pendingVerificationsPage, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(
+    { limit: 50, ...(verificationCursor ? { cursor: verificationCursor } : {}) },
+    { enabled: isAdmin },
+  );
+  const pendingVerifications = pendingVerificationsPage?.items;
+  const reviewCursor = reviewCursorHistory[reviewCursorHistory.length - 1];
+  const { data: reviewQueuePage, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
+    { status: reviewStatusFilter, limit: 50, ...(reviewCursor ? { cursor: reviewCursor } : {}) },
     { enabled: isAdmin }
   );
+  const reviewQueue = reviewQueuePage?.items;
   const reviewDialogItem = reviewQueue?.find((item) => item.id === reviewDialog.itemId);
   const isPrivacyDeletionDialog = reviewDialogItem?.category === "privacy_deletion";
   const {
@@ -671,7 +717,7 @@ export default function AdminPanel() {
               </p>
             </div>
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
-              {operationalFailures?.signals.length ? operationalFailures.signals.slice(0, 4).map((signal) => (
+              {operationalFailures?.signals.length ? operationalFailures.signals.map((signal) => (
                 <div key={`${signal.scope}:${signal.operation}`} className="min-w-0 border-l border-slate-700 pl-3 text-xs">
                   <div className="truncate font-medium text-slate-200" title={`${signal.scope}: ${signal.operation}`}>
                     {signal.scope}: {signal.operation}
@@ -1324,29 +1370,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-                  <Button
-                    data-testid="admin-fees-previous-page"
-                    variant="outline"
-                    size="sm"
-                    disabled={feeCursorHistory.length <= 1}
-                    onClick={() => setFeeCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
-                  >
-                    {locale === "nl" ? "Vorige" : "Previous"}
-                  </Button>
-                  <span className="text-xs text-slate-400">
-                    {locale === "nl" ? "Pagina" : "Page"} {feeCursorHistory.length} · {fees?.length ?? 0} / {feesPage?.total ?? 0}
-                  </span>
-                  <Button
-                    data-testid="admin-fees-next-page"
-                    variant="outline"
-                    size="sm"
-                    disabled={!feesPage?.hasMore || !feesPage.nextCursor}
-                    onClick={() => feesPage?.nextCursor && setFeeCursorHistory((history) => [...history, feesPage.nextCursor!])}
-                  >
-                    {locale === "nl" ? "Volgende" : "Next"}
-                  </Button>
-                </div>
+                <AdminCursorPaginator
+                  page={feesPage}
+                  pageNumber={feeCursorHistory.length}
+                  testId="admin-fees"
+                  locale={locale}
+                  onPrevious={() => setFeeCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => feesPage?.nextCursor && setFeeCursorHistory((history) => [...history, feesPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1359,9 +1390,7 @@ export default function AdminPanel() {
                   <AlertTriangle className="h-5 w-5 text-orange-400" />
                   {fc("overdueVerifications")}
                 </CardTitle>
-                {(operatingCounts?.overdueVerifications ?? 0) > (overdue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingOldestOverdue", { count: operatingCounts?.overdueVerifications ?? 0 })}</p>
-                )}
+                <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {overduePage?.total ?? 0}</p>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1438,6 +1467,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                <AdminCursorPaginator
+                  page={overduePage}
+                  pageNumber={overdueCursorHistory.length}
+                  testId="admin-overdue"
+                  locale={locale}
+                  onPrevious={() => setOverdueCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => overduePage?.nextCursor && setOverdueCursorHistory((history) => [...history, overduePage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1450,9 +1487,7 @@ export default function AdminPanel() {
                   <FileText className="h-5 w-5 text-yellow-400" />
                   {fc("pendingVerificationReviews")}
                 </CardTitle>
-                {(operatingCounts?.pendingVerifications ?? 0) > (pendingVerifications?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestVerifications", { count: operatingCounts?.pendingVerifications ?? 0 })}</p>
-                )}
+                <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {pendingVerificationsPage?.total ?? 0}</p>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1514,6 +1549,14 @@ export default function AdminPanel() {
                     </div>
                   )}
                 </div>
+                <AdminCursorPaginator
+                  page={pendingVerificationsPage}
+                  pageNumber={verificationCursorHistory.length}
+                  testId="admin-verifications"
+                  locale={locale}
+                  onPrevious={() => setVerificationCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => pendingVerificationsPage?.nextCursor && setVerificationCursorHistory((history) => [...history, pendingVerificationsPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1526,9 +1569,25 @@ export default function AdminPanel() {
                   <Shield className="h-5 w-5 text-cyan-400" />
                   {fc("operatingReviewQueue")}
                 </CardTitle>
-                {(operatingCounts?.reviewTotal ?? 0) > (reviewQueue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestReviews", { count: operatingCounts?.reviewTotal ?? 0 })}</p>
-                )}
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {reviewQueuePage?.total ?? 0}</p>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-reviews-status-filter"
+                      value={reviewStatusFilter}
+                      onChange={(event) => {
+                        setReviewStatusFilter(event.target.value as typeof reviewStatusFilter);
+                        setReviewCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      {["open", "in_progress", "resolved", "dismissed", "all"].map((status) => (
+                        <option key={status} value={status}>{status === "all" ? (locale === "nl" ? "Alle statussen" : "All statuses") : statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1605,28 +1664,32 @@ export default function AdminPanel() {
                                 <FileText className="h-3.5 w-3.5 mr-1" />
                                 {fc("evidence")}
                               </Button>
-                              <Button
-                                size="sm"
-                                className="h-8 bg-cyan-600 hover:bg-cyan-700 text-white"
-                                onClick={() => {
-                                  setReviewDialog({ open: true, itemId: item.id, status: "resolved" });
-                                  setReviewResolution("");
-                                }}
-                              >
-                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                {fc(item.category === "privacy_deletion" ? "recordReview" : "resolve")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 border-slate-700 text-slate-300"
-                                onClick={() => {
-                                  setReviewDialog({ open: true, itemId: item.id, status: "dismissed" });
-                                  setReviewResolution("");
-                                }}
-                              >
-                                {fc(item.category === "privacy_deletion" ? "closeRequest" : "dismiss")}
-                              </Button>
+                              {(item.status === "open" || item.status === "in_progress") && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 bg-cyan-600 hover:bg-cyan-700 text-white"
+                                    onClick={() => {
+                                      setReviewDialog({ open: true, itemId: item.id, status: "resolved" });
+                                      setReviewResolution("");
+                                    }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                    {fc(item.category === "privacy_deletion" ? "recordReview" : "resolve")}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 border-slate-700 text-slate-300"
+                                    onClick={() => {
+                                      setReviewDialog({ open: true, itemId: item.id, status: "dismissed" });
+                                      setReviewResolution("");
+                                    }}
+                                  >
+                                    {fc(item.category === "privacy_deletion" ? "closeRequest" : "dismiss")}
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1639,6 +1702,14 @@ export default function AdminPanel() {
                     </div>
                   )}
                 </div>
+                <AdminCursorPaginator
+                  page={reviewQueuePage}
+                  pageNumber={reviewCursorHistory.length}
+                  testId="admin-reviews"
+                  locale={locale}
+                  onPrevious={() => setReviewCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => reviewQueuePage?.nextCursor && setReviewCursorHistory((history) => [...history, reviewQueuePage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1717,29 +1788,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-                  <Button
-                    data-testid="admin-payments-previous-page"
-                    variant="outline"
-                    size="sm"
-                    disabled={paymentCursorHistory.length <= 1}
-                    onClick={() => setPaymentCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
-                  >
-                    {locale === "nl" ? "Vorige" : "Previous"}
-                  </Button>
-                  <span className="text-xs text-slate-400">
-                    {locale === "nl" ? "Pagina" : "Page"} {paymentCursorHistory.length} · {payments?.length ?? 0} / {paymentsPage?.total ?? 0}
-                  </span>
-                  <Button
-                    data-testid="admin-payments-next-page"
-                    variant="outline"
-                    size="sm"
-                    disabled={!paymentsPage?.hasMore || !paymentsPage.nextCursor}
-                    onClick={() => paymentsPage?.nextCursor && setPaymentCursorHistory((history) => [...history, paymentsPage.nextCursor!])}
-                  >
-                    {locale === "nl" ? "Volgende" : "Next"}
-                  </Button>
-                </div>
+                <AdminCursorPaginator
+                  page={paymentsPage}
+                  pageNumber={paymentCursorHistory.length}
+                  testId="admin-payments"
+                  locale={locale}
+                  onPrevious={() => setPaymentCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => paymentsPage?.nextCursor && setPaymentCursorHistory((history) => [...history, paymentsPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>

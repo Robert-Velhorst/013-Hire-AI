@@ -29,6 +29,40 @@ describe("admin timestamp/id cursor pagination", () => {
     expect(first).toMatchObject({ items: rows.slice(0, 2), total: 3, limit: 2, hasMore: true, nextCursor: { id: 8 } });
     const last = createAdminCursorPage([rows[2]!], 2, 3, row => ({ timestamp: row.createdAt, id: row.id }));
     expect(last).toMatchObject({ items: [rows[2]], hasMore: false, nextCursor: null });
+    const empty = createAdminCursorPage([], 2, 0, row => ({ timestamp: row.createdAt, id: row.id }));
+    expect(empty).toMatchObject({ items: [], total: 0, hasMore: false, nextCursor: null });
+  });
+
+  it("walks datasets beyond the page cap without duplicates or skips when newer rows arrive", () => {
+    const dataset = Array.from({ length: 237 }, (_, index) => ({
+      id: 500 - index,
+      createdAt: new Date(Date.UTC(2026, 0, 1) - index * 60_000),
+    }));
+    const collected: number[] = [];
+    let cursor: { timestamp: Date; id: number } | undefined;
+
+    while (true) {
+      const pageRows = dataset.filter(row => isAfterDescendingTimestampIdCursor(
+        row,
+        cursor,
+        item => item.createdAt,
+        item => item.id
+      ));
+      const page = createAdminCursorPage(pageRows.slice(0, 101), 100, dataset.length, row => ({
+        timestamp: row.createdAt,
+        id: row.id,
+      }));
+      collected.push(...page.items.map(row => row.id));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+      if (collected.length === 100) {
+        dataset.unshift({ id: 900, createdAt: new Date(Date.UTC(2027, 0, 1)) });
+      }
+    }
+
+    expect(collected).toHaveLength(237);
+    expect(new Set(collected).size).toBe(237);
+    expect(collected).not.toContain(900);
   });
 
   it("rejects malformed and extra cursor fields", () => {

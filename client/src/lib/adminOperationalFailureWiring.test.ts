@@ -16,6 +16,8 @@ describe("admin operational failure wiring", () => {
     expect(adminRouter).toContain("getOperationalFailures: adminProcedure");
     expect(adminRouter).toContain("getOperationalFailureMonitoringSnapshot(input?.limit ?? 20)");
     expect(adminPage).toContain("trpc.admin.getOperationalFailures.useQuery");
+    expect(adminPage).toContain("{ limit: 100 }");
+    expect(adminPage).toContain("operationalFailures.signals.map((signal)");
     expect(adminPage).toContain('data-testid="admin-runtime-failure-signals"');
     expect(adminPage).toContain("refetchInterval: 30_000");
     expect(adminPage).toContain('ac("runtimeFailureSignals")');
