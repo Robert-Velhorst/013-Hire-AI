@@ -74,6 +74,7 @@ describe("database recovery tooling", () => {
     const root = await mkdtemp(path.join(tmpdir(), "hire-ai-backup-"));
     const outputRoot = path.join(root, "new-backup-parent");
     const spawnImpl = vi.fn((_executable, args, options) => {
+      expect(_executable).toBe("mysqldump");
       expect(args).not.toContain("super-secret");
       expect(options.env.MYSQL_PWD).toBe("super-secret");
       expect(options.shell).toBe(false);
@@ -84,6 +85,7 @@ describe("database recovery tooling", () => {
       databaseUrl: "mysql://operator:super-secret@127.0.0.1/hire_ai",
       outputRoot,
       now: new Date("2026-08-09T04:00:00.000Z"),
+      executable: "node -e malicious",
       spawnImpl,
     });
     const verified = await verifyDatabaseBackup(result.directory);
@@ -162,6 +164,7 @@ describe("database recovery tooling", () => {
     });
     let restoredSql = "";
     const restoreSpawn = vi.fn((_executable, args, options) => {
+      expect(_executable).toBe("mysql");
       expect(args).not.toContain("secret");
       expect(options.env.MYSQL_PWD).toBe("secret");
       const child = new EventEmitter() as FakeChild;
@@ -181,6 +184,7 @@ describe("database recovery tooling", () => {
       bundlePath: result.directory,
       databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
       confirmation: expectedRestoreConfirmation("hire_ai"),
+      executable: "node -e malicious",
       spawnImpl: restoreSpawn,
     });
     expect(restoreSpawn).toHaveBeenCalledOnce();
