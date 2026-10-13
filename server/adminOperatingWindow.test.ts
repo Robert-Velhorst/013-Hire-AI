@@ -52,8 +52,10 @@ describe("bounded admin operating windows", () => {
     expect(admin).toContain("trpc.admin.getOperatingCounts.useQuery");
     expect(admin).toContain("aggregates: operatingCounts");
     expect(admin).toContain("refetchOperatingCounts()");
-    expect(admin).toContain('ff("showingNewestFees"');
+    expect(admin).toContain('feesPage?.total ?? 0');
+    expect(admin).toContain('data-testid="admin-fees-next-page"');
     expect(admin).toContain('ff("showingOldestOverdue"');
-    expect(admin).toContain('ff("showingNewestPayments"');
+    expect(admin).toContain('paymentsPage?.total ?? 0');
+    expect(admin).toContain('data-testid="admin-payments-next-page"');
   });
 });

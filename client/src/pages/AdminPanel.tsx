@@ -177,6 +177,10 @@ export default function AdminPanel() {
   const [scrapingMaxJobsPerRun, setScrapingMaxJobsPerRun] = useState("100");
   const [restrictScrapingSources, setRestrictScrapingSources] = useState(false);
   const [selectedScrapingSources, setSelectedScrapingSources] = useState<string[]>([]);
+  const [feeStatusFilter, setFeeStatusFilter] = useState<"all" | "pending_verification" | "active" | "paused" | "ended" | "suspended" | "disputed">("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "pending" | "paid" | "failed" | "refunded">("all");
+  const [feeCursorHistory, setFeeCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [paymentCursorHistory, setPaymentCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
@@ -198,10 +202,12 @@ export default function AdminPanel() {
     { limit: 8 },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
-  const { data: fees, refetch: refetchFees } = trpc.admin.listFees.useQuery(
-    { status: "all", limit: 100, offset: 0 },
+  const feeCursor = feeCursorHistory[feeCursorHistory.length - 1];
+  const { data: feesPage, refetch: refetchFees } = trpc.admin.listFees.useQuery(
+    { status: feeStatusFilter, limit: 50, ...(feeCursor ? { cursor: feeCursor } : {}) },
     { enabled: isAdmin }
   );
+  const fees = feesPage?.items;
   const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(undefined, { enabled: isAdmin });
   const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(undefined, { enabled: isAdmin });
   const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
@@ -243,10 +249,12 @@ export default function AdminPanel() {
         && reviewEvidence?.reviewItem.category === "privacy_deletion",
     }
   );
-  const { data: payments } = trpc.admin.listPayments.useQuery(
-    { limit: 50, offset: 0 },
+  const paymentCursor = paymentCursorHistory[paymentCursorHistory.length - 1];
+  const { data: paymentsPage } = trpc.admin.listPayments.useQuery(
+    { status: paymentStatusFilter, limit: 50, ...(paymentCursor ? { cursor: paymentCursor } : {}) },
     { enabled: isAdmin }
   );
+  const payments = paymentsPage?.items;
   const {
     data: scrapingStatus,
     refetch: refetchScrapingStatus,
@@ -1209,10 +1217,29 @@ export default function AdminPanel() {
           <TabsContent value="overview">
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-white text-base">{fc("allSuccessFees")}</CardTitle>
-                {(operatingCounts?.feesTotal ?? 0) > (fees?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestFees", { count: operatingCounts?.feesTotal ?? 0 })}</p>
-                )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-white text-base">{fc("allSuccessFees")}</CardTitle>
+                    <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {feesPage?.total ?? 0}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-fees-status-filter"
+                      value={feeStatusFilter}
+                      onChange={(event) => {
+                        setFeeStatusFilter(event.target.value as typeof feeStatusFilter);
+                        setFeeCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      <option value="all">{locale === "nl" ? "Alle statussen" : "All statuses"}</option>
+                      {["pending_verification", "active", "paused", "ended", "suspended", "disputed"].map((status) => (
+                        <option key={status} value={status}>{statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1296,6 +1323,29 @@ export default function AdminPanel() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                  <Button
+                    data-testid="admin-fees-previous-page"
+                    variant="outline"
+                    size="sm"
+                    disabled={feeCursorHistory.length <= 1}
+                    onClick={() => setFeeCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  >
+                    {locale === "nl" ? "Vorige" : "Previous"}
+                  </Button>
+                  <span className="text-xs text-slate-400">
+                    {locale === "nl" ? "Pagina" : "Page"} {feeCursorHistory.length} · {fees?.length ?? 0} / {feesPage?.total ?? 0}
+                  </span>
+                  <Button
+                    data-testid="admin-fees-next-page"
+                    variant="outline"
+                    size="sm"
+                    disabled={!feesPage?.hasMore || !feesPage.nextCursor}
+                    onClick={() => feesPage?.nextCursor && setFeeCursorHistory((history) => [...history, feesPage.nextCursor!])}
+                  >
+                    {locale === "nl" ? "Volgende" : "Next"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1597,13 +1647,32 @@ export default function AdminPanel() {
           <TabsContent value="payments">
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-400" />
-                  {fc("paymentHistory")}
-                </CardTitle>
-                {(operatingCounts?.paymentsTotal ?? 0) > (payments?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestPayments", { count: operatingCounts?.paymentsTotal ?? 0 })}</p>
-                )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-white text-base flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-green-400" />
+                      {fc("paymentHistory")}
+                    </CardTitle>
+                    <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {paymentsPage?.total ?? 0}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-payments-status-filter"
+                      value={paymentStatusFilter}
+                      onChange={(event) => {
+                        setPaymentStatusFilter(event.target.value as typeof paymentStatusFilter);
+                        setPaymentCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      <option value="all">{locale === "nl" ? "Alle statussen" : "All statuses"}</option>
+                      {["pending", "paid", "failed", "refunded"].map((status) => (
+                        <option key={status} value={status}>{statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1647,6 +1716,29 @@ export default function AdminPanel() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                  <Button
+                    data-testid="admin-payments-previous-page"
+                    variant="outline"
+                    size="sm"
+                    disabled={paymentCursorHistory.length <= 1}
+                    onClick={() => setPaymentCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  >
+                    {locale === "nl" ? "Vorige" : "Previous"}
+                  </Button>
+                  <span className="text-xs text-slate-400">
+                    {locale === "nl" ? "Pagina" : "Page"} {paymentCursorHistory.length} · {payments?.length ?? 0} / {paymentsPage?.total ?? 0}
+                  </span>
+                  <Button
+                    data-testid="admin-payments-next-page"
+                    variant="outline"
+                    size="sm"
+                    disabled={!paymentsPage?.hasMore || !paymentsPage.nextCursor}
+                    onClick={() => paymentsPage?.nextCursor && setPaymentCursorHistory((history) => [...history, paymentsPage.nextCursor!])}
+                  >
+                    {locale === "nl" ? "Volgende" : "Next"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

@@ -33,6 +33,11 @@ import { buildPrivacyErasurePreview } from "../privacyRetention";
 import { storageGet } from "../storage";
 import { canTransitionSuccessFeeStatus } from "../successFeeStateMachine";
 import { addSuccessFeeHold, refreshSuccessFeeEffectiveStatus, resolveSuccessFeeHolds } from "../successFeeHolds";
+import {
+  adminTimestampIdCursorSchema,
+  createAdminCursorPage,
+  isAfterDescendingTimestampIdCursor,
+} from "../adminPagination";
 type StripeReconciliationAction = "pause" | "resume" | "cancel";
 
 function stripeActionForFeeStatus(currentStatus: string, requestedStatus: string): StripeReconciliationAction | null {
@@ -462,30 +467,48 @@ export const adminRouter = router({
           .enum(["all", "pending_verification", "active", "paused", "ended", "suspended", "disputed"])
           .default("all"),
         limit: z.number().min(1).max(100).default(50),
-        offset: z.number().min(0).default(0),
+        cursor: adminTimestampIdCursorSchema.optional(),
       })
     )
     .query(async ({ input }) => {
       const memoryFallback = await getAdminMemoryFallback();
       if (memoryFallback) {
-        return memoryFallback.fees
+        const rows = memoryFallback.fees
           .filter((fee) => input.status === "all" || fee.status === input.status)
-          .slice(input.offset, input.offset + input.limit);
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id - left.id);
+        const afterCursor = rows.filter((fee) => isAfterDescendingTimestampIdCursor(
+          fee,
+          input.cursor,
+          (item) => item.createdAt,
+          (item) => item.id
+        ));
+        return createAdminCursorPage(afterCursor.slice(0, input.limit + 1), input.limit, rows.length, (fee) => ({
+          timestamp: fee.createdAt,
+          id: fee.id,
+        }));
       }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const conditions =
-        input.status !== "all" ? [eq(successFees.status, input.status as any)] : [];
+      const conditions = [
+        ...(input.status !== "all" ? [eq(successFees.status, input.status as any)] : []),
+        ...(input.cursor ? [or(
+          lt(successFees.createdAt, input.cursor.timestamp),
+          and(eq(successFees.createdAt, input.cursor.timestamp), lt(successFees.id, input.cursor.id))
+        )!] : []),
+      ];
+      const filter = input.status !== "all" ? eq(successFees.status, input.status as any) : undefined;
 
-      const feeWindow = await db
+      const [rows, totalRows] = await Promise.all([
+        db
         .select({ id: successFees.id })
         .from(successFees)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(successFees.createdAt), desc(successFees.id))
-        .limit(input.limit)
-        .offset(input.offset);
-      if (feeWindow.length === 0) return [];
+        .limit(input.limit + 1),
+        db.select({ count: sql<number>`COUNT(*)` }).from(successFees).where(filter),
+      ]);
+      if (rows.length === 0) return createAdminCursorPage([], input.limit, Number(totalRows[0]?.count ?? 0), () => ({ timestamp: new Date(0), id: 1 }));
 
       const fees = await db
         .select({
@@ -510,10 +533,13 @@ export const adminRouter = router({
         })
         .from(successFees)
         .leftJoin(users, eq(successFees.userId, users.id))
-        .where(inArray(successFees.id, feeWindow.map((fee) => fee.id)))
+        .where(inArray(successFees.id, rows.map((fee) => fee.id)))
         .orderBy(desc(successFees.createdAt), desc(successFees.id));
 
-      return fees;
+      return createAdminCursorPage(fees, input.limit, Number(totalRows[0]?.count ?? 0), (fee) => ({
+        timestamp: fee.createdAt,
+        id: fee.id,
+      }));
     }),
 
   // ─── Overdue Verifications ───────────────────────────────────────────────────
@@ -1244,18 +1270,30 @@ export const adminRouter = router({
     .input(
       z.object({
         limit: z.number().min(1).max(100).default(50),
-        offset: z.number().min(0).default(0),
+        cursor: adminTimestampIdCursorSchema.optional(),
+        status: z.enum(["all", "pending", "paid", "failed", "refunded"]).default("all"),
       })
     )
     .query(async ({ input }) => {
       const memoryFallback = await getAdminMemoryFallback();
       if (memoryFallback) {
-        return memoryFallback.payments.slice(input.offset, input.offset + input.limit);
+        return createAdminCursorPage([], input.limit, memoryFallback.payments.length, () => ({
+          timestamp: new Date(0),
+          id: 1,
+        }));
       }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const payments = await db
+      const paymentConditions = [
+        ...(input.status === "all" ? [] : [eq(feePayments.status, input.status)]),
+        ...(input.cursor ? [or(
+          lt(feePayments.createdAt, input.cursor.timestamp),
+          and(eq(feePayments.createdAt, input.cursor.timestamp), lt(feePayments.id, input.cursor.id))
+        )!] : []),
+      ];
+      const paymentFilter = input.status === "all" ? undefined : eq(feePayments.status, input.status);
+      const [payments, totalRows] = await Promise.all([db
         .select({
           id: feePayments.id,
           successFeeId: feePayments.successFeeId,
@@ -1267,6 +1305,7 @@ export const adminRouter = router({
           periodStart: feePayments.periodStart,
           periodEnd: feePayments.periodEnd,
           stripeInvoiceId: feePayments.stripeInvoiceId,
+          createdAt: feePayments.createdAt,
           userName: users.name,
           userEmail: users.email,
           employerName: successFees.employerName,
@@ -1274,11 +1313,15 @@ export const adminRouter = router({
         .from(feePayments)
         .leftJoin(users, eq(feePayments.userId, users.id))
         .leftJoin(successFees, eq(feePayments.successFeeId, successFees.id))
-        .orderBy(desc(feePayments.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
+        .where(paymentConditions.length ? and(...paymentConditions) : undefined)
+        .orderBy(desc(feePayments.createdAt), desc(feePayments.id))
+        .limit(input.limit + 1),
+      db.select({ count: sql<number>`COUNT(*)` }).from(feePayments).where(paymentFilter)]);
 
-      return payments;
+      return createAdminCursorPage(payments, input.limit, Number(totalRows[0]?.count ?? 0), (payment) => ({
+        timestamp: payment.createdAt,
+        id: payment.id,
+      }));
     }),
 
   // ─── Add Admin Note ──────────────────────────────────────────────────────────
