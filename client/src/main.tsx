@@ -1,31 +1,28 @@
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
-import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import { reportApiMutationFailure, reportApiQueryFailure } from "./lib/apiErrorReporting";
+import { resolveAnalyticsScriptUrl } from "./lib/analyticsConfig";
+import { createHireTrpcClient } from "./lib/trpcClient";
 import "./index.css";
 
 const queryClient = new QueryClient();
 
 const loadAnalytics = () => {
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
+  const allowedOrigin = import.meta.env.VITE_ANALYTICS_ALLOWED_ORIGIN;
   const websiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
-  if (!endpoint || !websiteId) return;
-
-  let scriptUrl: URL;
-  try {
-    scriptUrl = new URL("/umami", endpoint);
-  } catch {
-    return;
-  }
+  if (!websiteId) return;
+  const scriptUrl = resolveAnalyticsScriptUrl(endpoint, allowedOrigin);
+  if (!scriptUrl) return;
 
   const script = document.createElement("script");
   script.defer = true;
-  script.src = scriptUrl.toString();
+  script.src = scriptUrl;
   script.dataset.websiteId = websiteId;
   document.head.appendChild(script);
 };
@@ -60,20 +57,7 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-        });
-      },
-    }),
-  ],
-});
+const trpcClient = createHireTrpcClient("/api/trpc");
 
 loadAnalytics();
 

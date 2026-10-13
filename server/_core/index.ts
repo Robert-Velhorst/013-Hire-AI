@@ -7,7 +7,10 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerConnectorOAuthRoutes } from "../connectorOAuthRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic } from "./static";
+import {
+  registerApiNotFound,
+  serveStatic,
+} from "./static";
 import { registerStripeWebhook } from "../stripeWebhook";
 import { ENV, validateProductionEnv } from "./env";
 import { applyHttpSafetyHeaders, getRuntimeReadiness } from "./httpSafety";
@@ -29,16 +32,23 @@ import { createDatabaseReadinessProbe } from "./databaseReadiness";
 import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostics";
 import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { registerApplicationBodyParsers } from "./bodyParsers";
+import { registerDocumentUploadRoutes } from "../documentUploadRoutes";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
 import { registerApiRateLimit } from "./apiRateLimit";
 import { createRuntimeInstanceId } from "./runtimeInstance";
+import { assertProductionDatabaseSchema } from "../databaseSchemaValidation";
+import { startCloudResumeCandidateCleanup } from "../cloudResumeCandidateStore";
 
 let startupStage: StartupStage = "configuration validation";
-const runtimeInstanceId = createRuntimeInstanceId();
 
 async function startServer() {
+  const runtimeInstanceId = createRuntimeInstanceId();
   validateProductionEnv();
+  if (ENV.isProduction) {
+    startupStage = "database schema validation";
+    await assertProductionDatabaseSchema(ENV.databaseUrl);
+  }
   startupStage = "platform catalog initialization";
   await ensureScraperPlatformCatalog();
   configureOperationalFailurePersistence(persistOperationalFailureSignals);
@@ -51,7 +61,7 @@ async function startServer() {
   const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });
   app.disable("x-powered-by");
   app.use((_req, res, next) => {
-    applyHttpSafetyHeaders(res, ENV.isProduction);
+    applyHttpSafetyHeaders(res, ENV.isProduction, ENV.analyticsAllowedOrigin);
     next();
   });
   app.get("/healthz", (_req, res) => {
@@ -87,8 +97,9 @@ async function startServer() {
   // Browser session writes must prove that their Origin matches the direct or
   // trusted-proxy request origin. Stripe and HAI use separate earlier routes.
   registerCookieOriginProtection(app);
-  // The JSON envelope accommodates the bounded 10 MiB document payload after
-  // base64 expansion without reserving a 50 MiB parser budget for every request.
+  registerDocumentUploadRoutes(app);
+  // Ordinary JSON stays small; the raw-byte document routes above own the
+  // authenticated, bounded streaming upload path.
   registerApplicationBodyParsers(app);
   // Development-only authenticated QA routes for protected operating-ledger pages.
   registerDevAuthRoutes(app);
@@ -104,6 +115,7 @@ async function startServer() {
       createContext,
     })
   );
+  registerApiNotFound(app);
   // development mode uses Vite, production mode uses static files
   if (!ENV.isProduction) {
     const { setupVite } = await import("./vite");
@@ -112,9 +124,14 @@ async function startServer() {
     serveStatic(app);
   }
 
+  startupStage = "listener binding";
   const bindHost = resolveBindHost(process.env.HOST);
   const preferredPort = resolvePreferredPort(process.env.PORT);
-  const port = await resolveAvailablePort(preferredPort, bindHost, !ENV.isProduction);
+  const port = await resolveAvailablePort(
+    preferredPort,
+    bindHost,
+    !ENV.isProduction
+  );
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
@@ -122,6 +139,8 @@ async function startServer() {
 
   let autonomousScheduler: { start(): void; stop(): Promise<void> } | null = null;
   let jobScrapingScheduler: { start(): void; stop(): Promise<void> } | null = null;
+  const { StripeReconciliationWorker } = await import("../stripeReconciliationWorker");
+  const stripeReconciliationWorker = new StripeReconciliationWorker();
   if (ENV.autonomousSchedulerEnabled) {
     const { getAutonomousScheduler } = await import("../autonomousScheduler");
     autonomousScheduler = getAutonomousScheduler();
@@ -135,7 +154,6 @@ async function startServer() {
     });
   }
 
-  startupStage = "listener binding";
   await new Promise<void>((resolve, reject) => {
     const handleError = (error: Error) => reject(error);
     server.once("error", handleError);
@@ -147,6 +165,8 @@ async function startServer() {
 
   autonomousScheduler?.start();
   jobScrapingScheduler?.start();
+  stripeReconciliationWorker.start();
+  const stopCloudResumeCandidateCleanup = startCloudResumeCandidateCleanup();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -164,6 +184,8 @@ async function startServer() {
       await drainRuntime(server, [
         () => autonomousScheduler?.stop(),
         () => jobScrapingScheduler?.stop(),
+        () => stripeReconciliationWorker.stop(),
+        stopCloudResumeCandidateCleanup,
       ], [closeOperationalResources]);
       clearTimeout(forceExit);
       process.exit(0);
@@ -194,9 +216,9 @@ async function closeOperationalResources() {
   if (failed) throw new Error("Operational resources could not close cleanly.");
 }
 
-startServer().catch(async () => {
+startServer().catch(async error => {
   logOperationalFailure("Server", "Startup");
-  writeStartupFailureStage(startupStage);
+  writeStartupFailureStage(startupStage, error);
   try {
     await closeOperationalResources();
   } catch {

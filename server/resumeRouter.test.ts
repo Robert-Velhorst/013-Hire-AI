@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
 const mocks = vi.hoisted(() => ({
@@ -9,9 +10,25 @@ const mocks = vi.hoisted(() => ({
   resumeToProfileData: vi.fn(),
   setActiveVersion: vi.fn(),
   uploadResume: vi.fn(),
+  scanSensitiveUpload: vi.fn(),
+  downloadCloudResumeDocument: vi.fn(),
+  completeCloudResumeCandidate: vi.fn().mockResolvedValue(undefined),
+  releaseCloudResumeCandidate: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("./uploadValidation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./uploadValidation")>(),
+  scanSensitiveUpload: mocks.scanSensitiveUpload,
+}));
+
+vi.mock("./cloudDocumentDiscovery", () => ({
+  downloadCloudResumeDocument: mocks.downloadCloudResumeDocument,
+  completeCloudResumeCandidate: mocks.completeCloudResumeCandidate,
+  releaseCloudResumeCandidate: mocks.releaseCloudResumeCandidate,
 }));
 
 vi.mock("./resumeStorage", () => ({
+  getMimeTypeFromExtension: (fileName: string) => fileName.endsWith(".txt") ? "text/plain" : "application/octet-stream",
   uploadResume: mocks.uploadResume,
   getActiveResume: mocks.getActiveResume,
   getResumeVersionPage: mocks.getResumeVersionPage,
@@ -63,30 +80,131 @@ describe("resume router synchronization", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    for (const mock of Object.values(mocks)) mock.mockReset();
+    mocks.scanSensitiveUpload.mockResolvedValue({ scanned: true, provider: "synthetic-scanner" });
+    mocks.downloadCloudResumeDocument.mockResolvedValue({
+      candidateId: "C".repeat(43), provider: "google_drive",
+      data: Buffer.from("Candidate resume"), fileName: "candidate resume.txt", mimeType: "text/plain",
+    });
     mocks.parseResumeFromFile.mockResolvedValue({ skills: [], experience: [], education: [], certifications: [], languages: [] });
     mocks.resumeToProfileData.mockReturnValue({
       skills: "TypeScript, React",
       experience: "Built job-search tooling",
       education: "BSc Computer Science",
     });
-    mocks.uploadResume.mockResolvedValue(versionOne);
-    mocks.setActiveVersion.mockResolvedValue(true);
-    mocks.deleteResumeVersion.mockResolvedValue(true);
+    // Model the version service's commit boundary; actual atomicity is tested on MySQL.
+    mocks.uploadResume.mockImplementation(async (userId, _bytes, _name, _mime, profileData = {}) => {
+      await upsertUserProfile({
+        userId, resumeUrl: versionOne.fileUrl, resumeFileKey: versionOne.fileKey, ...profileData,
+      });
+      return versionOne;
+    });
+    mocks.setActiveVersion.mockImplementation(async userId => {
+      await upsertUserProfile({ userId, resumeUrl: versionOne.fileUrl, resumeFileKey: versionOne.fileKey });
+      return true;
+    });
+    mocks.deleteResumeVersion.mockImplementation(async userId => {
+      await upsertUserProfile({ userId, resumeUrl: null, resumeFileKey: null });
+      return true;
+    });
     mocks.getActiveResume.mockResolvedValue(versionOne);
     mocks.getResumeVersionPage.mockResolvedValue({ items: [versionOne], nextCursor: null });
   });
 
-  it("parses and stores imported files through versioned resume storage before updating the profile", async () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("rejects a real blank PDF without AI, stored versions or profile changes", async () => {
+    const { parseResumeFromFile } = await vi.importActual<typeof import("./resumeParser")>("./resumeParser");
+    mocks.parseResumeFromFile.mockImplementationOnce(parseResumeFromFile);
+    const fetchMock = vi.fn(() => { throw new Error("Unexpected provider call"); });
+    vi.stubGlobal("fetch", fetchMock);
+    const userId = 190086;
+    await upsertUserProfile({ userId, skills: "Existing skills", experience: "Recorded experience" });
+    const before = await getUserProfile(userId);
     const caller = appRouter.createCaller(createContext(userId));
-    const result = await caller.resume.parseFile({
-      filename: "candidate resume.txt",
-      mimeType: "text/plain",
-      fileData: Buffer.from("Candidate resume", "utf8").toString("base64"),
+    const blank = readFileSync(new URL("./testFixtures/blank-resume.pdf", import.meta.url));
+
+    await expect(caller.resume.parseFile({
+      filename: "blank.pdf", mimeType: "application/pdf", fileData: blank.toString("base64"),
+    })).rejects.toThrow(/no readable text/i);
+
+    expect(mocks.scanSensitiveUpload).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+    expect(await getUserProfile(userId)).toEqual(before);
+  }, 30_000);
+
+  const importResume = (caller: ReturnType<typeof appRouter.createCaller>, source: "local" | "cloud") =>
+    source === "local" ? caller.resume.parseFile({
+      filename: "candidate resume.txt", mimeType: "text/plain",
+      fileData: Buffer.from("Candidate resume").toString("base64"),
+    }) : caller.profile.importCloudResume({ candidateId: "C".repeat(43) });
+
+  it.each(["local", "cloud"] as const)("blocks %s resume parsing and changes when scanning fails", async (source) => {
+    const blockedUser = source === "local" ? 190080 : 190081;
+    await upsertUserProfile({ userId: blockedUser, skills: "Existing skills" });
+    mocks.scanSensitiveUpload.mockRejectedValueOnce(new Error("Scanner unavailable"));
+    const caller = appRouter.createCaller(createContext(blockedUser));
+
+    await expect(importResume(caller, source)).rejects.toThrow();
+
+    expect(mocks.scanSensitiveUpload.mock.calls[0]?.[0]).toEqual({
+      data: Buffer.from("Candidate resume"), fileName: "candidate_resume.txt", mimeType: "text/plain",
     });
+    expect(mocks.parseResumeFromFile).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+    if (source === "cloud") {
+      expect(mocks.releaseCloudResumeCandidate).toHaveBeenCalledWith(blockedUser, "C".repeat(43));
+    }
+    expect(await getUserProfile(blockedUser)).toMatchObject({ skills: "Existing skills" });
+  });
+
+  it.each(["local", "cloud"] as const)("awaits the %s scan verdict before parsing", async (source) => {
+    let finishScan!: () => void;
+    mocks.scanSensitiveUpload.mockImplementationOnce(() => new Promise(resolve => {
+      finishScan = () => resolve({ scanned: true, provider: "synthetic-scanner" });
+    }));
+    const caller = appRouter.createCaller(createContext(source === "local" ? 190082 : 190083));
+    const pending = importResume(caller, source);
+    try {
+      await vi.waitFor(() => expect(mocks.scanSensitiveUpload).toHaveBeenCalledOnce());
+      expect(mocks.parseResumeFromFile).not.toHaveBeenCalled();
+      expect(mocks.uploadResume).not.toHaveBeenCalled();
+    } finally {
+      finishScan?.();
+      await pending;
+    }
+    expect(mocks.parseResumeFromFile).toHaveBeenCalledOnce();
+    expect(mocks.uploadResume).toHaveBeenCalledOnce();
+  });
+
+  it.each(["local", "cloud"] as const)("rejects mismatched %s file bytes before scanning or parsing", async (source) => {
+    mocks.downloadCloudResumeDocument.mockResolvedValueOnce({
+      candidateId: "C".repeat(43), provider: "google_drive",
+      data: Buffer.from("not a PDF"), fileName: "resume.pdf", mimeType: "application/pdf",
+    });
+    const caller = appRouter.createCaller(createContext(source === "local" ? 190084 : 190085));
+    const pending = source === "local" ? caller.resume.parseFile({
+      filename: "resume.pdf", mimeType: "application/pdf",
+      fileData: Buffer.from("not a PDF").toString("base64"),
+    }) : importResume(caller, source);
+    await expect(pending).rejects.toThrow();
+    expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
+    expect(mocks.parseResumeFromFile).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it.each(["local", "cloud"] as const)("passes %s parsed evidence to the versioned storage transaction", async source => {
+    const caller = appRouter.createCaller(createContext(userId));
+    const result = await importResume(caller, source);
 
     expect(mocks.parseResumeFromFile).toHaveBeenCalledOnce();
-    expect(mocks.uploadResume).toHaveBeenCalledWith(userId, expect.any(Buffer), "candidate_resume.txt", "text/plain");
+    expect(mocks.uploadResume).toHaveBeenCalledWith(userId, expect.any(Buffer), "candidate_resume.txt", "text/plain", {
+      skills: "TypeScript, React", experience: "Built job-search tooling", education: "BSc Computer Science",
+    });
+    if (source === "cloud") {
+      expect(mocks.completeCloudResumeCandidate).toHaveBeenCalledWith(userId, "C".repeat(43));
+    }
     expect(result.resume).toEqual(versionOne);
 
     const profile = await getUserProfile(userId);
@@ -127,14 +245,20 @@ describe("resume router synchronization", () => {
   it("keeps profile resume metadata aligned when an operator changes or removes the active version", async () => {
     const caller = appRouter.createCaller(createContext(userId));
 
-    await caller.resume.setActiveVersion({ version: 1 });
-    expect(mocks.setActiveVersion).toHaveBeenCalledWith(userId, 1);
+    await caller.resume.setActiveVersion({ version: 1, resumeId: versionOne.id });
+    expect(mocks.setActiveVersion).toHaveBeenCalledWith(userId, 1, versionOne.id);
     expect(await getUserProfile(userId)).toMatchObject({ resumeFileKey: versionOne.fileKey });
 
-    mocks.getActiveResume.mockResolvedValueOnce(null);
-    await caller.resume.deleteVersion({ version: 1 });
-    expect(mocks.deleteResumeVersion).toHaveBeenCalledWith(userId, 1);
+    await caller.resume.deleteVersion({ version: 1, resumeId: versionOne.id });
+    expect(mocks.deleteResumeVersion).toHaveBeenCalledWith(userId, 1, versionOne.id);
     expect(await getUserProfile(userId)).toMatchObject({ resumeUrl: null, resumeFileKey: null });
+  });
+
+  it.each(["setActiveVersion", "deleteVersion"] as const)("requires an immutable resume ID for %s", async (method) => {
+    const caller = appRouter.createCaller(createContext(userId));
+    await expect(caller.resume[method]({ version: 1 } as never)).rejects.toThrow();
+    expect(mocks.setActiveVersion).not.toHaveBeenCalled();
+    expect(mocks.deleteResumeVersion).not.toHaveBeenCalled();
   });
 
   it("returns a bounded owner-scoped resume history page", async () => {
@@ -146,6 +270,57 @@ describe("resume router synchronization", () => {
     });
     expect(mocks.getResumeVersionPage).toHaveBeenCalledWith(userId, { limit: 25 });
   });
+
+  it("rejects malformed base64 before scanning or storing a resume", async () => {
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.resume.uploadWithHistory({
+      fileData: "not base64!",
+      fileName: "resume.txt",
+      mimeType: "text/plain",
+    })).rejects.toThrow();
+    expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing resume payload on the legacy tRPC path", async () => {
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.resume.parseFile({
+      filename: "resume.txt",
+      mimeType: "text/plain",
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it.each(["history", "local", "cloud", "activate", "delete"] as const)(
+    "does not overwrite a newer profile after the %s version operation returns", async source => {
+      const userId = 190090;
+      const newer = {
+        userId, resumeUrl: `private://resumes/${userId}/newer.txt`,
+        resumeFileKey: `resumes/${userId}/newer.txt`, skills: "Newer verified evidence",
+      };
+      // A later request commits before the earlier service call returns to this router.
+      const newerCommit = async () => { await upsertUserProfile(newer); };
+      mocks.uploadResume.mockImplementation(async () => { await newerCommit(); return versionOne; });
+      mocks.setActiveVersion.mockImplementation(async () => { await newerCommit(); return true; });
+      mocks.deleteResumeVersion.mockImplementation(async () => { await newerCommit(); return true; });
+      const caller = appRouter.createCaller(createContext(userId));
+      if (source === "history") {
+        await caller.resume.uploadWithHistory({
+          fileData: Buffer.from("Candidate resume").toString("base64"), fileName: "resume.txt", mimeType: "text/plain",
+        });
+      } else if (source === "activate") {
+        await caller.resume.setActiveVersion({ version: versionOne.version, resumeId: versionOne.id });
+      } else if (source === "delete") {
+        await caller.resume.deleteVersion({ version: versionOne.version, resumeId: versionOne.id });
+      } else {
+        await importResume(caller, source);
+      }
+      expect(await getUserProfile(userId)).toMatchObject(newer);
+    }
+  );
 
   it("rejects legacy metadata-only uploads without creating misleading profile evidence", async () => {
     const metadataOnlyUserId = 190072;
@@ -163,5 +338,78 @@ describe("resume router synchronization", () => {
 
     expect(await getUserProfile(metadataOnlyUserId)).toBeUndefined();
     expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it("does not accept browser-supplied cloud object metadata as import authority", async () => {
+    const caller = appRouter.createCaller(createContext(190074));
+
+    await expect(caller.profile.importCloudResume({
+      candidateId: "forged-provider-id",
+      provider: "google_drive",
+      sourceId: "someone-elses-resume",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: 100,
+      modifiedAt: null,
+    } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(mocks.downloadCloudResumeDocument).not.toHaveBeenCalled();
+  });
+
+  it("keeps the candidate lease when resume storage has an uncertain outcome", async () => {
+    const caller = appRouter.createCaller(createContext(190075));
+    mocks.uploadResume.mockRejectedValueOnce(new Error("Storage response was lost."));
+
+    await expect(importResume(caller, "cloud")).rejects.toThrow();
+
+    expect(mocks.uploadResume).toHaveBeenCalledOnce();
+    expect(mocks.releaseCloudResumeCandidate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { resumeUrl: "https://unverified.example.test/resume.pdf" },
+    { resumeFileKey: "resumes/another-user/private.pdf" },
+    { resumeUrl: "https://unverified.example.test/resume.pdf", resumeFileKey: "resumes/another-user/private.pdf" },
+    { resumeFileKey: "" },
+    { resumeUrl: null, resumeFileKey: null },
+  ])("rejects direct profile resume metadata writes: %j", async (metadata) => {
+    const userId = 190087;
+    await upsertUserProfile({
+      userId,
+      skills: "Existing skills",
+      resumeUrl: "private://resumes/190087/verified.txt",
+      resumeFileKey: "resumes/190087/verified.txt",
+    });
+    const before = await getUserProfile(userId);
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.profile.update({
+      skills: "Should not be partially saved",
+      ...metadata,
+    } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(await getUserProfile(userId)).toEqual(before);
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+    expect(mocks.setActiveVersion).not.toHaveBeenCalled();
+    expect(mocks.deleteResumeVersion).not.toHaveBeenCalled();
+  });
+
+  it("allows ordinary profile edits without changing the verified resume reference", async () => {
+    const userId = 190088;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "private://resumes/190088/verified.txt",
+      resumeFileKey: "resumes/190088/verified.txt",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await caller.profile.update({ skills: "TypeScript, React", desiredLocations: "Netherlands" });
+
+    expect(await getUserProfile(userId)).toMatchObject({
+      skills: "TypeScript, React",
+      desiredLocations: "Netherlands",
+      resumeUrl: "private://resumes/190088/verified.txt",
+      resumeFileKey: "resumes/190088/verified.txt",
+    });
   });
 });

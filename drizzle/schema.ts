@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { JOB_STORAGE_MAX_CHARS } from "../shared/jobStoragePolicy";
 
@@ -246,6 +247,7 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   encryptedAccessToken: text("encrypted_access_token").notNull(),
   encryptedRefreshToken: text("encrypted_refresh_token"),
   accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  accessTokenLifetime: mysqlEnum("access_token_lifetime", ["expiring", "non_expiring", "unknown"]).default("unknown").notNull(),
   tokenType: varchar("token_type", { length: 64 }),
   grantedScopes: text("granted_scopes"),
   refreshLeaseToken: varchar("refresh_lease_token", { length: 64 }),
@@ -255,6 +257,46 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
 }, (table) => [
   uniqueIndex("connector_authorizations_user_provider_unique").on(table.userId, table.provider),
   index("connector_authorizations_refresh_lease_idx").on(table.refreshLeaseExpiresAt),
+]);
+
+/** Provider-side access cleanup survives deletion of the encrypted local grant. */
+export const connectorRevocationObligations = mysqlTable("connector_revocation_obligations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]).notNull(),
+  status: mysqlEnum("status", ["manual_required", "retry_required", "completed"]).default("retry_required").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status IN ('manual_required', 'retry_required')
+    THEN CONCAT(user_id, ':', provider)
+    ELSE NULL
+  END`),
+  instructionVersion: varchar("instruction_version", { length: 32 }).notNull(),
+  lastErrorCode: mysqlEnum("last_error_code", ["provider_rejected", "network_failure", "credential_unavailable"]),
+  completionEvidence: mysqlEnum("completion_evidence", ["provider_api_confirmed", "user_attested_manual_removal", "operator_attested_manual_removal"]),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("connector_revocation_obligations_active_identity_unique").on(table.activeIdentity),
+  index("connector_revocation_obligations_user_status_idx").on(table.userId, table.status, table.updatedAt),
+]);
+
+/** Short-lived, user-owned cloud resume selections; provider IDs never come from import requests. */
+export const cloudResumeCandidates = mysqlTable("cloud_resume_candidates", {
+  candidateId: varchar("candidate_id", { length: 64 }).primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["google_drive", "dropbox"]).notNull(),
+  sourceId: varchar("source_id", { length: 1000 }).notNull(),
+  name: varchar("name", { length: 500 }).notNull(),
+  mimeType: varchar("mime_type", { length: 255 }).notNull(),
+  size: int("size", { unsigned: true }),
+  modifiedAt: timestamp("modified_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  importLeaseUntil: timestamp("import_lease_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("cloud_resume_candidates_user_expiry_idx").on(table.userId, table.expiresAt),
+  index("cloud_resume_candidates_expiry_idx").on(table.expiresAt),
 ]);
 
 /**
@@ -503,6 +545,11 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
     "privacy_deletion"
   ]).notNull(),
   status: mysqlEnum("status", ["open", "in_progress", "resolved", "dismissed"]).default("open").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status IN ('open', 'in_progress')
+    THEN CONCAT(user_id, ':', entity_type, ':', entity_id, ':', category)
+    ELSE NULL
+  END`),
   priority: mysqlEnum("priority", ["low", "medium", "high", "critical"]).default("medium").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
@@ -513,6 +560,7 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
+  uniqueIndex("admin_review_items_active_identity_unique").on(table.activeIdentity),
   index("admin_review_items_status_priority_idx").on(table.status, table.priority),
   index("admin_review_items_status_created_idx").on(table.status, table.createdAt),
   index("admin_review_items_status_created_id_idx").on(table.status, table.createdAt, table.id),
@@ -577,6 +625,19 @@ export const privacyErasureTasks = mysqlTable("privacy_erasure_tasks", {
   index("privacy_erasure_tasks_user_status_idx").on(table.userId, table.status),
 ]);
 
+/** Minimal keyed tombstones prevent erased OAuth subjects from being reprovisioned. */
+export const erasedOAuthIdentities = mysqlTable("erased_oauth_identities", {
+  id: int("id").autoincrement().primaryKey(),
+  keyVersion: int("key_version", { unsigned: true }).notNull(),
+  identityHash: varchar("identity_hash", { length: 64 }).notNull(),
+  erasedAt: timestamp("erased_at").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("erased_oauth_identities_key_hash_unique").on(
+    table.keyVersion,
+    table.identityHash
+  ),
+]);
+
 /**
  * Application Approvals
  * Captures explicit user/admin approval for consequential job-search actions.
@@ -596,6 +657,11 @@ export const applicationApprovals = mysqlTable("application_approvals", {
     "billing_action"
   ]).notNull(),
   status: mysqlEnum("status", ["pending", "approved", "rejected", "cancelled"]).default("pending").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status = 'pending'
+    THEN CONCAT(user_id, ':', entity_type, ':', entity_id, ':', approval_type)
+    ELSE NULL
+  END`),
   riskLevel: mysqlEnum("risk_level", ["low", "medium", "high", "critical"]).default("medium").notNull(),
   requestedBy: mysqlEnum("requested_by", ["system", "user", "admin"]).default("system").notNull(),
   decidedBy: mysqlEnum("decided_by", ["user", "admin"]),
@@ -608,6 +674,7 @@ export const applicationApprovals = mysqlTable("application_approvals", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
+  uniqueIndex("application_approvals_active_identity_unique").on(table.activeIdentity),
   index("application_approvals_user_status_idx").on(table.userId, table.status),
   index("application_approvals_user_status_created_idx").on(table.userId, table.status, table.createdAt),
   index("application_approvals_offer_attribution_operating_idx").on(
@@ -1022,7 +1089,9 @@ export type JobDuplicate = typeof jobDuplicates.$inferSelect;
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type SocialMediaProfile = typeof socialMediaProfiles.$inferSelect;
 export type UserConnectorAccount = typeof userConnectorAccounts.$inferSelect;
-export type ConnectorAuthorization = typeof connectorAuthorizations.$inferSelect;
+export type ConnectorAuthorization = Omit<typeof connectorAuthorizations.$inferSelect, "accessTokenLifetime"> & {
+  accessTokenLifetime?: "expiring" | "non_expiring" | "unknown";
+};
 export type Application = typeof applications.$inferSelect;
 export type ApplicationDecision = typeof applicationDecisions.$inferSelect;
 export type ApplicationMaterial = typeof applicationMaterials.$inferSelect;
@@ -1067,6 +1136,7 @@ export const successFees = mysqlTable("success_fees", {
   stripePriceId: varchar("stripe_price_id", { length: 255 }),
   stripeCheckoutSessionId: varchar("stripe_checkout_session_id", { length: 255 }),
   status: mysqlEnum("status", ["pending_verification", "active", "paused", "ended", "suspended", "disputed"]).default("pending_verification").notNull(),
+  lifecycleStatus: mysqlEnum("lifecycle_status", ["pending_verification", "active", "paused", "ended"]).default("pending_verification").notNull(),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   nextVerificationDue: timestamp("next_verification_due"),
@@ -1086,6 +1156,24 @@ export const successFees = mysqlTable("success_fees", {
   index("success_fees_user_application_created_idx").on(table.userId, table.applicationId, table.createdAt, table.id),
   index("success_fees_user_status_due_id_idx").on(table.userId, table.status, table.nextVerificationDue, table.id),
   index("success_fees_status_due_id_idx").on(table.status, table.nextVerificationDue, table.id),
+]);
+
+/** Independent, auditable reasons that prevent a success fee from resuming. */
+export const successFeeHolds = mysqlTable("success_fee_holds", {
+  id: int("id").autoincrement().primaryKey(),
+  successFeeId: int("success_fee_id").notNull().references(() => successFees.id, { onDelete: "cascade" }),
+  holdType: mysqlEnum("hold_type", ["payment", "account", "administrator", "legal", "verification", "dispute", "legacy_review"]).notNull(),
+  reason: text("reason").notNull(),
+  sourceKey: varchar("source_key", { length: 255 }),
+  createdByUserId: int("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdByActor: mysqlEnum("created_by_actor", ["system", "user", "admin"]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: int("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolutionEvidence: text("resolution_evidence"),
+}, (table) => [
+  index("success_fee_holds_fee_active_idx").on(table.successFeeId, table.resolvedAt, table.id),
+  index("success_fee_holds_type_active_idx").on(table.holdType, table.resolvedAt, table.id),
 ]);
 
 /**
@@ -1133,6 +1221,29 @@ export const feePayments = mysqlTable("fee_payments", {
   index("fee_payments_created_id_idx").on(table.createdAt, table.id),
 ]);
 
+/** Durable provider commands follow committed local billing authority changes. */
+export const stripeReconciliationCommands = mysqlTable("stripe_reconciliation_commands", {
+  id: int("id").autoincrement().primaryKey(),
+  successFeeId: int("success_fee_id").notNull(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).notNull(),
+  commandKey: varchar("command_key", { length: 64 }).notNull(),
+  action: mysqlEnum("action", ["pause", "resume", "cancel"]).notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "succeeded", "failed", "superseded"]).default("pending").notNull(),
+  attemptCount: int("attempt_count").default(0).notNull(),
+  lastErrorCode: varchar("last_error_code", { length: 120 }),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  leaseId: varchar("lease_id", { length: 64 }),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("stripe_reconciliation_command_key_unique").on(table.commandKey),
+  index("stripe_reconciliation_status_next_id_idx").on(table.status, table.nextAttemptAt, table.id),
+  index("stripe_reconciliation_fee_created_idx").on(table.successFeeId, table.createdAt, table.id),
+]);
+
 /**
  * Stripe Webhook Events
  * A durable event ledger prevents duplicate delivery from repeating payment writes
@@ -1142,7 +1253,7 @@ export const stripeWebhookEvents = mysqlTable("stripe_webhook_events", {
   id: int("id").autoincrement().primaryKey(),
   stripeEventId: varchar("stripe_event_id", { length: 255 }).notNull(),
   eventType: varchar("event_type", { length: 120 }).notNull(),
-  status: mysqlEnum("status", ["processing", "processed", "failed"]).default("processing").notNull(),
+  status: mysqlEnum("status", ["processing", "processed", "failed", "quarantined"]).default("processing").notNull(),
   errorMessage: text("error_message"),
   receivedAt: timestamp("received_at").defaultNow().notNull(),
   processedAt: timestamp("processed_at"),

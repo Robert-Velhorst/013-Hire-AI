@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 import {
   getReportHireCompletionSummary,
   getReportHireEvidenceSummary,
+  type ReportHireResultLike,
   type ReportHireEvidenceState,
 } from "@/lib/reportHireEvidence";
 import { openExternalUrl } from "@/lib/externalUrl";
@@ -19,7 +20,7 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { formatBillingCurrency, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
 import { DEFAULT_BILLING_CURRENCY, MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES, type SupportedBillingCurrency } from "@shared/billing";
 import { getVerificationUploadMimeType, validateVerificationUpload, VERIFICATION_UPLOAD_ACCEPT } from "@shared/documentUploads";
-import { readFileAsBase64 } from "@/lib/documentUpload";
+import { uploadDocument } from "@/lib/documentUpload";
 
 interface ReportHireDialogProps {
   open: boolean;
@@ -40,10 +41,10 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
     startDate: getLocalCalendarDate(),
   });
   const [offerLetter, setOfferLetter] = useState<File | null>(null);
-  const [offerLetterBase64, setOfferLetterBase64] = useState<string>("");
+  const [reportHireResult, setReportHireResult] = useState<ReportHireResultLike | null>(null);
+  const [reportHirePending, setReportHirePending] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileReadIdRef = useRef(0);
   const { data: applications = [] } = trpc.applications.listAcceptedOffers.useQuery(
     { applicationId },
     { enabled: open }
@@ -62,7 +63,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
   const evidenceSummary = getReportHireEvidenceSummary({
     application: linkedApplication,
     attributionReview: selectedAttributionReview,
-    hasOfferLetter: Boolean(offerLetter && offerLetterBase64),
+    hasOfferLetter: Boolean(offerLetter),
     termsAccepted,
   });
 
@@ -86,31 +87,12 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
     }));
   }, [linkedApplication, open]);
 
-  const reportHire = trpc.successFees.reportHire.useMutation({
-    onSuccess: (data) => {
-      if (data.checkoutUrl) {
-        if (!openExternalUrl(data.checkoutUrl)) {
-          toast.error("The hire was recorded, but Stripe returned an invalid Checkout URL.");
-        }
-      }
-      setStep("success");
-      onSuccess?.();
-      toast.success(data.checkoutUrl
-        ? "Hire report recorded. Continue in Stripe Checkout to authorize billing; proof and review state are in the operating ledger."
-        : "Hire report recorded. Billing setup is unavailable right now; reopen Billing to retry without losing the proof and review record.");
-    },
-    onError: (err) => {
-      toast.error(err.message || "Failed to report hire. Please try again.");
-    },
-  });
-  const completionSummary = getReportHireCompletionSummary(reportHire.data);
+  const completionSummary = getReportHireCompletionSummary(reportHireResult);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const readId = ++fileReadIdRef.current;
     setOfferLetter(null);
-    setOfferLetterBase64("");
     const validationError = validateVerificationUpload(file);
     if (validationError) {
       toast.error(validationError);
@@ -118,17 +100,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       return;
     }
 
-    try {
-      const base64 = await readFileAsBase64(file);
-      if (readId !== fileReadIdRef.current) return;
-      setOfferLetter(file);
-      setOfferLetterBase64(base64);
-    } catch (error) {
-      if (readId === fileReadIdRef.current) {
-        toast.error(error instanceof Error ? error.message : "Unable to read the selected file.");
-        e.target.value = "";
-      }
-    }
+    setOfferLetter(file);
   };
 
   const handleSubmit = () => {
@@ -136,7 +108,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       toast.error("Please fill in all required fields");
       return;
     }
-    if (!offerLetter || !offerLetterBase64) {
+    if (!offerLetter) {
       toast.error("Please upload your offer letter");
       return;
     }
@@ -151,7 +123,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
     setStep("terms");
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!termsAccepted) {
       toast.error("Please accept the terms to continue");
       return;
@@ -161,24 +133,42 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       return;
     }
 
-    reportHire.mutate({
-      employerName: formData.employerName,
-      jobTitle: formData.jobTitle,
-      monthlySalary: parseFloat(formData.monthlySalary),
-      currency: formData.currency,
-      startDate: formData.startDate,
-      applicationId: selectedApplicationId,
-      offerLetterBase64,
-      offerLetterMimeType: getVerificationUploadMimeType(offerLetter!)!,
-      offerLetterFileName: offerLetter!.name,
-      termsAccepted: true,
-    });
+    setReportHirePending(true);
+    try {
+      const result = await uploadDocument<ReportHireResultLike>({
+        file: offerLetter!,
+        kind: "hire-proof",
+        metadata: {
+          employerName: formData.employerName,
+          jobTitle: formData.jobTitle,
+          monthlySalary: parseFloat(formData.monthlySalary),
+          currency: formData.currency,
+          startDate: formData.startDate,
+          applicationId: selectedApplicationId,
+          offerLetterMimeType: getVerificationUploadMimeType(offerLetter!)!,
+          offerLetterFileName: offerLetter!.name,
+          termsAccepted: true,
+        },
+      });
+      setReportHireResult(result);
+      if (result.checkoutUrl && !openExternalUrl(result.checkoutUrl)) {
+        toast.error("The hire was recorded, but Stripe returned an invalid Checkout URL.");
+      }
+      setStep("success");
+      onSuccess?.();
+      toast.success(result.checkoutUrl
+        ? "Hire report recorded. Continue in Stripe Checkout to authorize billing; proof and review state are in the operating ledger."
+        : "Hire report recorded. Billing setup is unavailable right now; reopen Billing to retry without losing the proof and review record.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to report hire. Please try again.");
+    } finally {
+      setReportHirePending(false);
+    }
   };
 
   const monthlyFee = formData.monthlySalary ? (parseFloat(formData.monthlySalary) * 0.05).toFixed(2) : "0.00";
 
   const handleClose = () => {
-    fileReadIdRef.current += 1;
     setStep("form");
     setFormData({
       employerName: "",
@@ -188,11 +178,10 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
       startDate: getLocalCalendarDate(),
     });
     setOfferLetter(null);
-    setOfferLetterBase64("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setTermsAccepted(false);
     setSelectedApplicationId(applicationId);
-    reportHire.reset();
+    setReportHireResult(null);
     onOpenChange(false);
   };
 
@@ -402,7 +391,7 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
               <Button
                 onClick={handleSubmit}
                 className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
-                disabled={!formData.employerName || !formData.jobTitle || !formData.monthlySalary || !offerLetter || !offerLetterBase64}
+                disabled={!formData.employerName || !formData.jobTitle || !formData.monthlySalary || !offerLetter}
               >
                 Continue to Terms
               </Button>
@@ -496,10 +485,10 @@ export function ReportHireDialog({ open, onOpenChange, applicationId, onSuccess 
                 </Button>
                 <Button
                   onClick={handleConfirm}
-                  disabled={!termsAccepted || reportHire.isPending}
+                  disabled={!termsAccepted || reportHirePending}
                   className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
                 >
-                  {reportHire.isPending ? "Setting up..." : "Confirm & Set Up Payment"}
+                  {reportHirePending ? "Setting up..." : "Confirm & Set Up Payment"}
                 </Button>
               </div>
             </div>

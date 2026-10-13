@@ -1,8 +1,9 @@
 import "dotenv/config";
 import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
-import { migrate } from "drizzle-orm/mysql2/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import path from "node:path";
+import { planPendingMigrations } from "./database-migration-plan.mjs";
 
 const databaseUrl = String(process.env.DATABASE_URL || "").trim();
 if (!databaseUrl) {
@@ -43,6 +44,7 @@ const lockWaitSeconds = boundedInteger(
   300
 );
 let connection;
+let database;
 let lockName;
 let lockAcquired = false;
 
@@ -68,10 +70,37 @@ try {
     );
   }
 
-  await migrate(drizzle(connection), {
-    migrationsFolder: path.resolve(import.meta.dirname, "..", "drizzle"),
-  });
-  console.log("Database migrations applied successfully.");
+  const migrationsFolder = path.resolve(import.meta.dirname, "..", "drizzle");
+  const migrations = readMigrationFiles({ migrationsFolder });
+  database = drizzle(connection);
+  const migrationConfig = { migrationsTable: "__drizzle_migrations" };
+
+  // Initialize the Drizzle ledger, then apply by exact SQL hash in journal
+  // order. The stock MySQL migrator uses the maximum created_at as a cursor,
+  // which silently skips committed entries when journal timestamps go back.
+  await database.dialect.migrate([], database.session, migrationConfig);
+  const [appliedRows] = await connection.query(
+    "SELECT hash, created_at FROM `__drizzle_migrations`"
+  );
+  const migrationRows = Array.isArray(appliedRows) ? appliedRows : [];
+  const latestCreatedAt = migrationRows.reduce(
+    (latest, row) => Math.max(latest, Number(row.created_at) || 0),
+    0
+  );
+  const pending = planPendingMigrations(
+    migrations,
+    migrationRows.map(row => String(row.hash)),
+    latestCreatedAt
+  );
+
+  for (const migration of pending) {
+    await database.dialect.migrate(
+      [migration],
+      database.session,
+      migrationConfig
+    );
+  }
+  console.log(`Database migrations applied successfully (${pending.length} new).`);
 } catch (error) {
   console.error(`Database migration failed: ${deepestErrorMessage(error)}`);
   process.exitCode = 1;

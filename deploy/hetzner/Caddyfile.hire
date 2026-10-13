@@ -1,0 +1,11 @@
+# Site fragment. Merge into the existing host proxy only after inspecting it.
+# Verify backend readiness and trusted proxy origin handling before activation.
+013-hire.ai.noodzakelijkonline.de {
+    @privateConnector path /api/hai /api/hai/* /.well-known/agent-card.json
+    handle @privateConnector {
+        respond 404
+    }
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+}

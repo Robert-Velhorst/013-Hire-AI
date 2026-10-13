@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import {
   applicationAttempts,
   connectorAuthorizations,
+  connectorRevocationObligations,
   employmentVerifications,
   privacyErasureRuns,
   privacyErasureTasks,
@@ -65,22 +66,41 @@ const privateObjectSources = [
 
 async function collectTasks(db: TaskQueryDb, runId: number, userId: number) {
   const tasks: PlannedTask[] = [];
-  const authorizations = await db
+  const [authorizations, obligations] = await Promise.all([db
     .select({
       id: connectorAuthorizations.id,
       provider: connectorAuthorizations.provider,
     })
     .from(connectorAuthorizations)
-    .where(eq(connectorAuthorizations.userId, userId));
-  for (const authorization of authorizations) {
+    .where(eq(connectorAuthorizations.userId, userId)), db
+    .select({
+      id: connectorRevocationObligations.id,
+      provider: connectorRevocationObligations.provider,
+      status: connectorRevocationObligations.status,
+    })
+    .from(connectorRevocationObligations)
+    .where(and(
+      eq(connectorRevocationObligations.userId, userId),
+      isNotNull(connectorRevocationObligations.activeIdentity)
+    ))]);
+  const openByProvider = new Map(obligations.map(obligation => [obligation.provider, obligation]));
+  const providers = new Set([
+    ...authorizations.map(authorization => authorization.provider),
+    ...obligations.map(obligation => obligation.provider),
+  ]);
+  for (const provider of Array.from(providers)) {
+    const obligation = openByProvider.get(provider);
+    const authorization = authorizations.find(item => item.provider === provider);
     tasks.push({
       runId,
       userId,
-      taskKey: `provider:${authorization.provider}:${authorization.id}`,
+      taskKey: `provider:${provider}:${obligation?.id ?? authorization?.id ?? "unknown"}`,
       kind: "provider_revoke",
-      sourceTable: "connector_authorizations",
-      sourceRecordId: authorization.id,
-      provider: authorization.provider,
+      sourceTable: obligation ? "connector_revocation_obligations" : "connector_authorizations",
+      sourceRecordId: obligation?.id ?? authorization?.id ?? null,
+      provider,
+      ...(obligation?.status === "manual_required" ? { status: "blocked" as const } : {}),
+      ...(obligation?.status === "manual_required" ? { lastErrorCode: "manual_provider_cleanup_required" } : {}),
     });
   }
 

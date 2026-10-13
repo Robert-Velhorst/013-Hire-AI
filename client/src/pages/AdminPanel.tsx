@@ -65,6 +65,7 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
     rejected: "bg-red-500/20 text-red-400 border-red-500/30",
     paid: "bg-green-500/20 text-green-400 border-green-500/30",
     failed: "bg-red-500/20 text-red-400 border-red-500/30",
+    quarantined: "bg-orange-500/20 text-orange-300 border-orange-500/30",
     open: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
     in_progress: "bg-blue-500/20 text-blue-400 border-blue-500/30",
     resolved: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -105,6 +106,36 @@ function ScraperRunOutcomeBadge({ outcome, label }: { outcome: "success" | "part
     failed: { tone: "border-red-500/30 text-red-300" },
   }[outcome];
   return <Badge variant="outline" className={details.tone}>{label}</Badge>;
+}
+
+function AdminCursorPaginator({
+  page,
+  pageNumber,
+  testId,
+  locale,
+  onPrevious,
+  onNext,
+}: {
+  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: { timestamp: Date; id: number } | null } | undefined;
+  pageNumber: number;
+  testId: string;
+  locale: string;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+      <Button data-testid={`${testId}-previous-page`} variant="outline" size="sm" disabled={pageNumber <= 1} onClick={onPrevious}>
+        {locale === "nl" ? "Vorige" : "Previous"}
+      </Button>
+      <span className="text-xs text-slate-400">
+        {locale === "nl" ? "Pagina" : "Page"} {pageNumber} · {page?.items.length ?? 0} / {page?.total ?? 0}
+      </span>
+      <Button data-testid={`${testId}-next-page`} variant="outline" size="sm" disabled={!page?.hasMore || !page.nextCursor} onClick={onNext}>
+        {locale === "nl" ? "Volgende" : "Next"}
+      </Button>
+    </div>
+  );
 }
 
 const RUN_OUTCOME_COPY_KEYS = {
@@ -165,35 +196,70 @@ export default function AdminPanel() {
   const [statusDialog, setStatusDialog] = useState<{ open: boolean; feeId: number | null; currentStatus: string }>({ open: false, feeId: null, currentStatus: "" });
   const [newStatus, setNewStatus] = useState("");
   const [statusNote, setStatusNote] = useState("");
+  const [holdResolutionEvidence, setHoldResolutionEvidence] = useState<Record<number, string>>({});
   const [reviewDialog, setReviewDialog] = useState<{ open: boolean; itemId: number | null; status: "resolved" | "dismissed" }>({ open: false, itemId: null, status: "resolved" });
   const [reviewResolution, setReviewResolution] = useState("");
   const [erasureCleanupConfirmation, setErasureCleanupConfirmation] = useState("");
   const [databaseErasureConfirmation, setDatabaseErasureConfirmation] = useState("");
-  const [manualCleanupEvidence, setManualCleanupEvidence] = useState<Record<number, string>>({});
+  const [manualCleanupAttestation, setManualCleanupAttestation] = useState<Record<number, boolean>>({});
   const [evidenceDialog, setEvidenceDialog] = useState<{ open: boolean; itemId: number | null }>({ open: false, itemId: null });
   const [scrapingIntervalMinutes, setScrapingIntervalMinutes] = useState("60");
   const [scrapingMaxJobsPerRun, setScrapingMaxJobsPerRun] = useState("100");
   const [restrictScrapingSources, setRestrictScrapingSources] = useState(false);
   const [selectedScrapingSources, setSelectedScrapingSources] = useState<string[]>([]);
+  const [feeStatusFilter, setFeeStatusFilter] = useState<"all" | "pending_verification" | "active" | "paused" | "ended" | "suspended" | "disputed">("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "pending" | "paid" | "failed" | "refunded">("all");
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<"all" | "open" | "in_progress" | "resolved" | "dismissed">("open");
+  const [feeCursorHistory, setFeeCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [paymentCursorHistory, setPaymentCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [overdueCursorHistory, setOverdueCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [verificationCursorHistory, setVerificationCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [reviewCursorHistory, setReviewCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
   const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
   const { data: operatingCounts, refetch: refetchOperatingCounts } = trpc.admin.getOperatingCounts.useQuery(undefined, { enabled: isAdmin });
-  const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
-    { limit: 8 },
+  const { data: stripeReconciliation, refetch: refetchStripeReconciliation } = trpc.admin.getStripeReconciliationStatus.useQuery(undefined, {
+    enabled: isAdmin,
+    refetchInterval: 30_000,
+  });
+  const { data: stripeWebhookIssues, refetch: refetchStripeWebhookIssues } = trpc.admin.getStripeWebhookIssues.useQuery(
+    { limit: 50 },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
-  const { data: fees, refetch: refetchFees } = trpc.admin.listFees.useQuery(
-    { status: "all", limit: 100, offset: 0 },
+  const { data: successFeeHolds, refetch: refetchSuccessFeeHolds } = trpc.admin.getSuccessFeeHolds.useQuery(
+    { limit: 100 },
+    { enabled: isAdmin, refetchInterval: 30_000 }
+  );
+  const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
+    { limit: 100 },
+    { enabled: isAdmin, refetchInterval: 30_000 }
+  );
+  const feeCursor = feeCursorHistory[feeCursorHistory.length - 1];
+  const { data: feesPage, refetch: refetchFees } = trpc.admin.listFees.useQuery(
+    { status: feeStatusFilter, limit: 50, ...(feeCursor ? { cursor: feeCursor } : {}) },
     { enabled: isAdmin }
   );
-  const { data: overdue, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(undefined, { enabled: isAdmin });
-  const { data: pendingVerifications, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(undefined, { enabled: isAdmin });
-  const { data: reviewQueue, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
-    { status: "open", limit: 100 },
+  const fees = feesPage?.items;
+  const overdueCursor = overdueCursorHistory[overdueCursorHistory.length - 1];
+  const { data: overduePage, refetch: refetchOverdue } = trpc.admin.listOverdueVerifications.useQuery(
+    { limit: 50, ...(overdueCursor ? { cursor: overdueCursor } : {}) },
+    { enabled: isAdmin },
+  );
+  const overdue = overduePage?.items;
+  const verificationCursor = verificationCursorHistory[verificationCursorHistory.length - 1];
+  const { data: pendingVerificationsPage, refetch: refetchVerifications } = trpc.admin.listPendingVerifications.useQuery(
+    { limit: 50, ...(verificationCursor ? { cursor: verificationCursor } : {}) },
+    { enabled: isAdmin },
+  );
+  const pendingVerifications = pendingVerificationsPage?.items;
+  const reviewCursor = reviewCursorHistory[reviewCursorHistory.length - 1];
+  const { data: reviewQueuePage, refetch: refetchReviewQueue } = trpc.admin.getReviewQueue.useQuery(
+    { status: reviewStatusFilter, limit: 50, ...(reviewCursor ? { cursor: reviewCursor } : {}) },
     { enabled: isAdmin }
   );
+  const reviewQueue = reviewQueuePage?.items;
   const reviewDialogItem = reviewQueue?.find((item) => item.id === reviewDialog.itemId);
   const isPrivacyDeletionDialog = reviewDialogItem?.category === "privacy_deletion";
   const {
@@ -229,10 +295,12 @@ export default function AdminPanel() {
         && reviewEvidence?.reviewItem.category === "privacy_deletion",
     }
   );
-  const { data: payments } = trpc.admin.listPayments.useQuery(
-    { limit: 50, offset: 0 },
+  const paymentCursor = paymentCursorHistory[paymentCursorHistory.length - 1];
+  const { data: paymentsPage } = trpc.admin.listPayments.useQuery(
+    { status: paymentStatusFilter, limit: 50, ...(paymentCursor ? { cursor: paymentCursor } : {}) },
     { enabled: isAdmin }
   );
+  const payments = paymentsPage?.items;
   const {
     data: scrapingStatus,
     refetch: refetchScrapingStatus,
@@ -263,9 +331,27 @@ export default function AdminPanel() {
       refetchFees();
       refetchStats();
       refetchOperatingCounts();
+      refetchStripeReconciliation();
       setStatusDialog({ open: false, feeId: null, currentStatus: "" });
       setNewStatus("");
       setStatusNote("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const reopenStripeWebhook = trpc.admin.reopenQuarantinedStripeWebhook.useMutation({
+    onSuccess: async () => {
+      toast.success(fc("stripeWebhookReopened"));
+      await refetchStripeWebhookIssues();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const resolveSuccessFeeHold = trpc.admin.resolveSuccessFeeHold.useMutation({
+    onSuccess: async () => {
+      toast.success(fc("successFeeHoldResolved"));
+      setHoldResolutionEvidence({});
+      await Promise.all([refetchSuccessFeeHolds(), refetchFees(), refetchStripeReconciliation()]);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -278,6 +364,7 @@ export default function AdminPanel() {
       refetchStats();
       refetchReviewQueue();
       refetchOperatingCounts();
+      refetchStripeReconciliation();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -345,7 +432,7 @@ export default function AdminPanel() {
   const confirmManualPrivacyCleanup = trpc.admin.confirmManualPrivacyCleanup.useMutation({
     onSuccess: async (_result, variables) => {
       toast.success(fc("manualCleanupRecorded"));
-      setManualCleanupEvidence((current) => ({ ...current, [variables.taskId]: "" }));
+      setManualCleanupAttestation((current) => ({ ...current, [variables.taskId]: false }));
       await refetchPrivacyErasurePlan();
     },
     onError: (err) => toast.error(err.message),
@@ -630,7 +717,7 @@ export default function AdminPanel() {
               </p>
             </div>
             <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
-              {operationalFailures?.signals.length ? operationalFailures.signals.slice(0, 4).map((signal) => (
+              {operationalFailures?.signals.length ? operationalFailures.signals.map((signal) => (
                 <div key={`${signal.scope}:${signal.operation}`} className="min-w-0 border-l border-slate-700 pl-3 text-xs">
                   <div className="truncate font-medium text-slate-200" title={`${signal.scope}: ${signal.operation}`}>
                     {signal.scope}: {signal.operation}
@@ -677,6 +764,14 @@ export default function AdminPanel() {
             <TabsTrigger value="payments" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400">
               {ac("paymentsTab")}
             </TabsTrigger>
+            <TabsTrigger value="stripe-reconciliation" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-300">
+              {fc("stripeReconciliationTab")}
+              {((stripeReconciliation?.pending ?? 0) + (stripeReconciliation?.failed ?? 0)) > 0 && (
+                <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">
+                  {(stripeReconciliation?.pending ?? 0) + (stripeReconciliation?.failed ?? 0)}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger
               value="discovery"
               data-testid="admin-job-discovery-tab"
@@ -685,6 +780,176 @@ export default function AdminPanel() {
               {ac("jobDiscovery")}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="stripe-reconciliation">
+            <Card className="bg-slate-900/60 border-slate-800/50">
+              <CardHeader>
+                <CardTitle className="text-white text-base">{fc("stripeReconciliationTitle")}</CardTitle>
+                <p className="text-xs text-slate-400">{fc("stripeReconciliationDetail")}</p>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    [fc("stripeSyncPending"), stripeReconciliation?.pending ?? 0],
+                    [fc("stripeSyncProcessing"), stripeReconciliation?.processing ?? 0],
+                    [fc("stripeSyncFailed"), stripeReconciliation?.failed ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={label} className="border border-slate-800 bg-slate-950/50 p-3">
+                      <div className="text-lg font-semibold text-white">{value}</div>
+                      <div className="text-xs text-slate-400">{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-left text-slate-400">
+                        <th className="py-2 pr-4">{fc("stripeSyncFee")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncSubscription")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncAction")}</th>
+                        <th className="py-2 pr-4">{fc("status")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncAttempts")}</th>
+                        <th className="py-2">{fc("stripeSyncNextAttempt")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stripeReconciliation?.commands.map(command => (
+                        <tr key={command.id} className="border-b border-slate-800/50">
+                          <td className="py-3 pr-4 text-slate-300">#{command.successFeeId}</td>
+                          <td className="py-3 pr-4 font-mono text-xs text-slate-400">{command.stripeSubscriptionId}</td>
+                          <td className="py-3 pr-4 capitalize text-slate-300">{command.action}</td>
+                          <td className="py-3 pr-4"><StatusBadge status={command.status} /></td>
+                          <td className="py-3 pr-4 text-slate-300">
+                            {command.attemptCount}{command.lastErrorCode ? ` · ${command.lastErrorCode}` : ""}
+                          </td>
+                          <td className="py-3 text-slate-400">{dateTimeFormatter.format(new Date(command.nextAttemptAt))}</td>
+                        </tr>
+                      ))}
+                      {stripeReconciliation?.commands.length === 0 && (
+                        <tr><td colSpan={6} className="py-8 text-center text-slate-500">{fc("stripeSyncEmpty")}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+            <section aria-labelledby="stripe-webhook-issues-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 id="stripe-webhook-issues-heading" className="text-sm font-semibold text-white">{fc("stripeWebhookIssues")}</h2>
+                  <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("stripeWebhookIssuesDetail")}</p>
+                </div>
+                <Badge variant="outline" className="w-fit border-orange-500/30 text-orange-300">
+                  {stripeWebhookIssues?.length ?? 0}
+                </Badge>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400">
+                      <th className="py-2 pr-4">Event</th>
+                      <th className="py-2 pr-4">Type</th>
+                      <th className="py-2 pr-4">{fc("status")}</th>
+                      <th className="py-2 pr-4">{fc("stripeWebhookReason")}</th>
+                      <th className="py-2 pr-4">Updated</th>
+                      <th className="py-2">{fc("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeWebhookIssues?.map(event => (
+                      <tr key={event.id} className="border-b border-slate-800/50">
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-300">{event.stripeEventId}</td>
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-400">{event.eventType}</td>
+                        <td className="py-3 pr-4"><StatusBadge status={event.status} label={getAdminFinancialStatusCopy(locale, event.status)} /></td>
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-400">{event.errorMessage ?? "-"}</td>
+                        <td className="py-3 pr-4 text-xs text-slate-400">{dateTimeFormatter.format(new Date(event.updatedAt))}</td>
+                        <td className="py-3">
+                          {event.status === "quarantined" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={reopenStripeWebhook.isPending}
+                              onClick={() => {
+                                if (!window.confirm(fc("stripeWebhookReopenConfirm"))) return;
+                                reopenStripeWebhook.mutate({ eventRowId: event.id, confirmation: "REOPEN" });
+                              }}
+                            >
+                              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                              {fc("stripeWebhookReopen")}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {stripeWebhookIssues?.length === 0 && (
+                      <tr><td colSpan={6} className="py-6 text-center text-xs text-slate-500">{fc("stripeWebhookEmpty")}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section aria-labelledby="success-fee-holds-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 id="success-fee-holds-heading" className="text-sm font-semibold text-white">{fc("successFeeHolds")}</h2>
+                  <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("successFeeHoldsDetail")}</p>
+                </div>
+                <Badge variant="outline" className="w-fit border-red-500/30 text-red-300">{successFeeHolds?.length ?? 0}</Badge>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400">
+                      <th className="py-2 pr-4">{fc("employerRole")}</th>
+                      <th className="py-2 pr-4">{fc("successFeeHoldReason")}</th>
+                      <th className="py-2 pr-4">{fc("status")}</th>
+                      <th className="py-2 pr-4">{fc("successFeeHoldCreated")}</th>
+                      <th className="py-2">{fc("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {successFeeHolds?.map((hold) => {
+                      const requiresDedicatedWorkflow = hold.holdType === "payment" || hold.holdType === "account";
+                      const evidence = holdResolutionEvidence[hold.id] ?? "";
+                      return (
+                        <tr key={hold.id} className="border-b border-slate-800/50 align-top">
+                          <td className="py-3 pr-4 text-slate-300">{hold.employerName} / {hold.jobTitle}<span className="block text-xs text-slate-500">#{hold.successFeeId}</span></td>
+                          <td className="py-3 pr-4 text-xs text-slate-300"><StatusBadge status={hold.holdType} label={getAdminFinancialStatusCopy(locale, hold.holdType)} /><p className="mt-2 max-w-lg whitespace-pre-wrap text-slate-400">{hold.reason}</p></td>
+                          <td className="py-3 pr-4"><StatusBadge status={hold.effectiveStatus} label={getAdminFinancialStatusCopy(locale, hold.effectiveStatus)} /></td>
+                          <td className="py-3 pr-4 text-xs text-slate-400">{dateTimeFormatter.format(new Date(hold.createdAt))} · {fc(hold.createdByActor === "admin" ? "adminActor" : hold.createdByActor === "system" ? "systemActor" : "userActor")}</td>
+                          <td className="py-3">
+                            {requiresDedicatedWorkflow ? <span className="text-xs text-slate-500">{fc(hold.holdType === "payment" ? "successFeeHoldPaymentWorkflow" : "successFeeHoldAccountWorkflow")}</span> : (
+                              <div className="flex min-w-64 flex-col gap-2">
+                                <Textarea
+                                  value={evidence}
+                                  onChange={(event) => setHoldResolutionEvidence((current) => ({ ...current, [hold.id]: event.target.value }))}
+                                  placeholder={fc("successFeeHoldEvidencePlaceholder")}
+                                  rows={2}
+                                  maxLength={5000}
+                                  aria-label={fc("successFeeHoldEvidenceLabel")}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resolveSuccessFeeHold.isPending || evidence.trim().length < 10}
+                                  onClick={() => resolveSuccessFeeHold.mutate({ holdId: hold.id, evidence: evidence.trim() })}
+                                >
+                                  {fc("resolve")}
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {successFeeHolds?.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-500">{fc("successFeeHoldsEmpty")}</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </TabsContent>
 
           <TabsContent value="discovery" data-testid="admin-job-discovery-panel">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
@@ -998,10 +1263,29 @@ export default function AdminPanel() {
           <TabsContent value="overview">
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-white text-base">{fc("allSuccessFees")}</CardTitle>
-                {(operatingCounts?.feesTotal ?? 0) > (fees?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestFees", { count: operatingCounts?.feesTotal ?? 0 })}</p>
-                )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-white text-base">{fc("allSuccessFees")}</CardTitle>
+                    <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {feesPage?.total ?? 0}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-fees-status-filter"
+                      value={feeStatusFilter}
+                      onChange={(event) => {
+                        setFeeStatusFilter(event.target.value as typeof feeStatusFilter);
+                        setFeeCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      <option value="all">{locale === "nl" ? "Alle statussen" : "All statuses"}</option>
+                      {["pending_verification", "active", "paused", "ended", "suspended", "disputed"].map((status) => (
+                        <option key={status} value={status}>{statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1086,6 +1370,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                <AdminCursorPaginator
+                  page={feesPage}
+                  pageNumber={feeCursorHistory.length}
+                  testId="admin-fees"
+                  locale={locale}
+                  onPrevious={() => setFeeCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => feesPage?.nextCursor && setFeeCursorHistory((history) => [...history, feesPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1098,9 +1390,7 @@ export default function AdminPanel() {
                   <AlertTriangle className="h-5 w-5 text-orange-400" />
                   {fc("overdueVerifications")}
                 </CardTitle>
-                {(operatingCounts?.overdueVerifications ?? 0) > (overdue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingOldestOverdue", { count: operatingCounts?.overdueVerifications ?? 0 })}</p>
-                )}
+                <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {overduePage?.total ?? 0}</p>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1177,6 +1467,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                <AdminCursorPaginator
+                  page={overduePage}
+                  pageNumber={overdueCursorHistory.length}
+                  testId="admin-overdue"
+                  locale={locale}
+                  onPrevious={() => setOverdueCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => overduePage?.nextCursor && setOverdueCursorHistory((history) => [...history, overduePage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1189,9 +1487,7 @@ export default function AdminPanel() {
                   <FileText className="h-5 w-5 text-yellow-400" />
                   {fc("pendingVerificationReviews")}
                 </CardTitle>
-                {(operatingCounts?.pendingVerifications ?? 0) > (pendingVerifications?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestVerifications", { count: operatingCounts?.pendingVerifications ?? 0 })}</p>
-                )}
+                <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {pendingVerificationsPage?.total ?? 0}</p>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1253,6 +1549,14 @@ export default function AdminPanel() {
                     </div>
                   )}
                 </div>
+                <AdminCursorPaginator
+                  page={pendingVerificationsPage}
+                  pageNumber={verificationCursorHistory.length}
+                  testId="admin-verifications"
+                  locale={locale}
+                  onPrevious={() => setVerificationCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => pendingVerificationsPage?.nextCursor && setVerificationCursorHistory((history) => [...history, pendingVerificationsPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1265,9 +1569,25 @@ export default function AdminPanel() {
                   <Shield className="h-5 w-5 text-cyan-400" />
                   {fc("operatingReviewQueue")}
                 </CardTitle>
-                {(operatingCounts?.reviewTotal ?? 0) > (reviewQueue?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestReviews", { count: operatingCounts?.reviewTotal ?? 0 })}</p>
-                )}
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {reviewQueuePage?.total ?? 0}</p>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-reviews-status-filter"
+                      value={reviewStatusFilter}
+                      onChange={(event) => {
+                        setReviewStatusFilter(event.target.value as typeof reviewStatusFilter);
+                        setReviewCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      {["open", "in_progress", "resolved", "dismissed", "all"].map((status) => (
+                        <option key={status} value={status}>{status === "all" ? (locale === "nl" ? "Alle statussen" : "All statuses") : statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -1344,28 +1664,32 @@ export default function AdminPanel() {
                                 <FileText className="h-3.5 w-3.5 mr-1" />
                                 {fc("evidence")}
                               </Button>
-                              <Button
-                                size="sm"
-                                className="h-8 bg-cyan-600 hover:bg-cyan-700 text-white"
-                                onClick={() => {
-                                  setReviewDialog({ open: true, itemId: item.id, status: "resolved" });
-                                  setReviewResolution("");
-                                }}
-                              >
-                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
-                                {fc(item.category === "privacy_deletion" ? "recordReview" : "resolve")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 border-slate-700 text-slate-300"
-                                onClick={() => {
-                                  setReviewDialog({ open: true, itemId: item.id, status: "dismissed" });
-                                  setReviewResolution("");
-                                }}
-                              >
-                                {fc(item.category === "privacy_deletion" ? "closeRequest" : "dismiss")}
-                              </Button>
+                              {(item.status === "open" || item.status === "in_progress") && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 bg-cyan-600 hover:bg-cyan-700 text-white"
+                                    onClick={() => {
+                                      setReviewDialog({ open: true, itemId: item.id, status: "resolved" });
+                                      setReviewResolution("");
+                                    }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                    {fc(item.category === "privacy_deletion" ? "recordReview" : "resolve")}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 border-slate-700 text-slate-300"
+                                    onClick={() => {
+                                      setReviewDialog({ open: true, itemId: item.id, status: "dismissed" });
+                                      setReviewResolution("");
+                                    }}
+                                  >
+                                    {fc(item.category === "privacy_deletion" ? "closeRequest" : "dismiss")}
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1378,6 +1702,14 @@ export default function AdminPanel() {
                     </div>
                   )}
                 </div>
+                <AdminCursorPaginator
+                  page={reviewQueuePage}
+                  pageNumber={reviewCursorHistory.length}
+                  testId="admin-reviews"
+                  locale={locale}
+                  onPrevious={() => setReviewCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => reviewQueuePage?.nextCursor && setReviewCursorHistory((history) => [...history, reviewQueuePage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1386,13 +1718,32 @@ export default function AdminPanel() {
           <TabsContent value="payments">
             <Card className="bg-slate-900/60 border-slate-800/50">
               <CardHeader>
-                <CardTitle className="text-white text-base flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-400" />
-                  {fc("paymentHistory")}
-                </CardTitle>
-                {(operatingCounts?.paymentsTotal ?? 0) > (payments?.length ?? 0) && (
-                  <p className="text-xs text-slate-400">{ff("showingNewestPayments", { count: operatingCounts?.paymentsTotal ?? 0 })}</p>
-                )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-white text-base flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-green-400" />
+                      {fc("paymentHistory")}
+                    </CardTitle>
+                    <p className="mt-1 text-xs text-slate-400">{locale === "nl" ? "Totaal" : "Total"}: {paymentsPage?.total ?? 0}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{fc("status")}</span>
+                    <select
+                      data-testid="admin-payments-status-filter"
+                      value={paymentStatusFilter}
+                      onChange={(event) => {
+                        setPaymentStatusFilter(event.target.value as typeof paymentStatusFilter);
+                        setPaymentCursorHistory([undefined]);
+                      }}
+                      className="h-9 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+                    >
+                      <option value="all">{locale === "nl" ? "Alle statussen" : "All statuses"}</option>
+                      {["pending", "paid", "failed", "refunded"].map((status) => (
+                        <option key={status} value={status}>{statusLabel(status)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1437,6 +1788,14 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                <AdminCursorPaginator
+                  page={paymentsPage}
+                  pageNumber={paymentCursorHistory.length}
+                  testId="admin-payments"
+                  locale={locale}
+                  onPrevious={() => setPaymentCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => paymentsPage?.nextCursor && setPaymentCursorHistory((history) => [...history, paymentsPage.nextCursor!])}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1614,19 +1973,21 @@ export default function AdminPanel() {
                           {privacyErasurePlan.tasks.filter((task) => task.kind === "provider_revoke" && task.status === "blocked").map((task) => (
                             <div key={`manual-${task.id}`} className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
                               <Label className="text-amber-100">{ff("manualCleanupEvidence", { provider: task.provider ?? "provider" })}</Label>
-                              <Textarea
-                                value={manualCleanupEvidence[task.id] ?? ""}
-                                onChange={(event) => setManualCleanupEvidence((current) => ({ ...current, [task.id]: event.target.value }))}
-                                className="border-slate-700 bg-slate-950 text-white"
-                                rows={3}
-                              />
+                              <div className="flex items-start gap-2">
+                                <Checkbox
+                                  checked={manualCleanupAttestation[task.id] ?? false}
+                                  onCheckedChange={(checked) => setManualCleanupAttestation((current) => ({ ...current, [task.id]: checked === true }))}
+                                  aria-label={fc("manualCleanupAttestation")}
+                                />
+                                <span className="text-xs text-slate-300">{fc("manualCleanupAttestation")}</span>
+                              </div>
                               <Button
                                 variant="outline"
-                                disabled={confirmManualPrivacyCleanup.isPending || (manualCleanupEvidence[task.id]?.trim().length ?? 0) < 20}
+                                disabled={confirmManualPrivacyCleanup.isPending || !manualCleanupAttestation[task.id]}
                                 onClick={() => confirmManualPrivacyCleanup.mutate({
                                   runId: privacyErasurePlan.run.id,
                                   taskId: task.id,
-                                  evidence: manualCleanupEvidence[task.id] ?? "",
+                                  evidence: "operator_attested_manual_removal",
                                 })}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />

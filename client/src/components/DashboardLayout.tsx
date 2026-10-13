@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LogOut, PanelLeft, Briefcase, FileText, User, Bell, Bookmark, Activity, ClipboardCheck, Zap, Users } from "lucide-react";
+import { LogOut, PanelLeft, Briefcase, FileText, User, Bell, Bookmark, Activity, ClipboardCheck, Zap, Users, Globe2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -31,6 +31,7 @@ import { useLocale } from "@/contexts/LocaleContext";
 const menuItems = [
   { icon: Activity, labelKey: "dashboard", path: "/dashboard" },
   { icon: Briefcase, labelKey: "findJobs", path: "/jobs" },
+  { icon: Globe2, labelKey: "sourceRegister", path: "/sources" },
   { icon: FileText, labelKey: "applications", path: "/applications" },
   { icon: ClipboardCheck, labelKey: "reviewQueue", path: "/review-queue" },
   { icon: Bookmark, labelKey: "savedJobs", path: "/saved" },

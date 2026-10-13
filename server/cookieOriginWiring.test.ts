@@ -13,7 +13,7 @@ describe("cookie-origin middleware wiring", () => {
     const hai = entrypoint.indexOf("registerHaiConnectorRoutes(app)");
     const origin = entrypoint.indexOf("registerCookieOriginProtection(app)");
     const parsers = entrypoint.indexOf("registerApplicationBodyParsers(app)");
-    const trpc = entrypoint.indexOf('app.use(\n    "/api/trpc"');
+    const trpc = entrypoint.search(/app\.use\(\s*"\/api\/trpc"/);
 
     expect(stripe).toBeGreaterThan(-1);
     expect(rateLimit).toBeGreaterThan(stripe);

@@ -349,17 +349,30 @@ Upload a resume file to S3.
 ```
 
 ### `resume.parseFile`
-Parse an uploaded resume file (PDF/DOCX).
+Parse an uploaded resume file (PDF/DOCX) through the protected tRPC compatibility endpoint.
+
+**Preferred browser upload:** `POST /api/document-uploads/resume-parse` with the raw
+file bytes as `application/octet-stream` and a JSON `X-Hire-Upload-Metadata` header
+containing `filename` and `mimeType`. The endpoint authenticates and reserves bounded
+upload/scanner capacity before consuming the body. Files are limited to 10 MiB; chunked
+uploads are counted while streaming. The same endpoint family supports `resume-history`,
+`hire-proof`, and `verification` using their corresponding protected mutation metadata.
+Browser clients should use these raw-byte routes instead of base64 JSON.
 
 **Type:** Mutation (Protected)
 
 **Input:**
 ```typescript
 {
-  fileContent: string; // Base64 encoded
+  fileData: string; // Base64 encoded compatibility input
+  filename: string;
   mimeType: string;
 }
 ```
+
+The legacy tRPC input remains available for compatibility but has only the ordinary
+1 MiB JSON envelope budget. New clients should use the raw-byte route for files near
+the 10 MiB file limit.
 
 ---
 

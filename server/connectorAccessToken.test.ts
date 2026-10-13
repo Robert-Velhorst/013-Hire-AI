@@ -13,6 +13,7 @@ function authorization(overrides: Partial<ConnectorAuthorization> = {}): Connect
     encryptedAccessToken: "encrypted-old-access",
     encryptedRefreshToken: "encrypted-old-refresh",
     accessTokenExpiresAt: new Date("2026-08-14T11:59:00.000Z"),
+    accessTokenLifetime: "expiring",
     tokenType: "Bearer",
     grantedScopes: JSON.stringify([
       "https://www.googleapis.com/auth/gmail.metadata",
@@ -43,6 +44,68 @@ function dependencies(): ConnectorAccessTokenDependencies {
 }
 
 describe("shared connector access tokens", () => {
+  it("uses a persisted non-expiring provider token without refresh or persistence", async () => {
+    const deps = dependencies();
+    await expect(getUsableConnectorAccessToken({
+      userId: 6,
+      provider: "github",
+      authorization: authorization({
+        userId: 6,
+        encryptedRefreshToken: null,
+        accessTokenExpiresAt: null,
+        accessTokenLifetime: "non_expiring",
+      }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+      fetcher: vi.fn<typeof fetch>(),
+      dependencies: deps,
+    })).resolves.toBe("old-access");
+
+    expect(deps.acquireConnectorRefreshLease).not.toHaveBeenCalled();
+    expect(deps.refreshConnectorAccessToken).not.toHaveBeenCalled();
+    expect(deps.upsertConnectorAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("does not infer that a legacy null-expiry token is non-expiring", async () => {
+    const deps = dependencies();
+    await expect(getUsableConnectorAccessToken({
+      userId: 6,
+      provider: "github",
+      authorization: authorization({
+        userId: 6,
+        encryptedRefreshToken: null,
+        accessTokenExpiresAt: null,
+        accessTokenLifetime: "unknown",
+      }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+      fetcher: vi.fn<typeof fetch>(),
+      dependencies: deps,
+    })).rejects.toMatchObject({ reason: "expired" });
+    expect(deps.refreshConnectorAccessToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unclassified refresh response instead of returning a one-use unknown token", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.refreshConnectorAccessToken).mockResolvedValue({
+      accessToken: "unclassified-token",
+      refreshToken: null,
+      expiresAt: null,
+      accessTokenLifetime: "unknown",
+      tokenType: "Bearer",
+      grantedScopes: [],
+      scopeWasReturned: true,
+    });
+
+    await expect(getUsableConnectorAccessToken({
+      userId: 6,
+      provider: "gmail",
+      authorization: authorization({ userId: 6 }),
+      now: new Date("2026-08-14T12:00:00.000Z"),
+      fetcher: vi.fn<typeof fetch>(),
+      dependencies: deps,
+    })).rejects.toMatchObject({ reason: "expired" });
+    expect(deps.upsertConnectorAuthorization).not.toHaveBeenCalled();
+  });
+
   it("coalesces concurrent refreshes and preserves stored scopes when the provider omits them", async () => {
     const deps = dependencies();
     let release!: () => void;

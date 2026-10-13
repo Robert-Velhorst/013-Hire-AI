@@ -5,7 +5,7 @@
 
 import { storageDelete, storagePut, storageGet } from "./storage";
 import { getDb } from "./db";
-import { userResumes, users } from "../drizzle/schema";
+import { userProfiles, userResumes, users } from "../drizzle/schema";
 import { eq, desc, and, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { RESUME_MIME_TYPES, validateUploadedFile } from "./uploadValidation";
@@ -43,6 +43,30 @@ const PRIVATE_FILE_REFERENCE_PREFIX = "private://";
 
 function privateFileReference(fileKey: string) {
   return `${PRIVATE_FILE_REFERENCE_PREFIX}${fileKey}`;
+}
+
+type ResumeProfileData = Partial<Pick<typeof userProfiles.$inferInsert,
+  "skills" | "experience" | "education" | "linkedinUrl" | "githubUrl" | "portfolioUrl"
+>>;
+
+async function syncResumeProfile(
+  tx: Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>, "insert">,
+  userId: number,
+  resume: { fileUrl: string; fileKey: string } | null,
+  profileData: ResumeProfileData = {}
+) {
+  // Use the caller's owner-locked transaction; never publish a stale post-commit snapshot.
+  const updates = {
+    skills: profileData.skills,
+    experience: profileData.experience,
+    education: profileData.education,
+    linkedinUrl: profileData.linkedinUrl,
+    githubUrl: profileData.githubUrl,
+    portfolioUrl: profileData.portfolioUrl,
+    resumeUrl: resume?.fileUrl ?? null,
+    resumeFileKey: resume?.fileKey ?? null,
+  };
+  await tx.insert(userProfiles).values({ userId, ...updates }).onDuplicateKeyUpdate({ set: updates });
 }
 
 // ============================================================================
@@ -96,7 +120,8 @@ export async function uploadResume(
   userId: number,
   fileData: Buffer | Uint8Array,
   fileName: string,
-  mimeType?: string
+  mimeType?: string,
+  profileData: ResumeProfileData = {}
 ): Promise<ResumeUploadResult> {
   const db = await getDb();
   if (!db) {
@@ -151,6 +176,7 @@ export async function uploadResume(
         version,
         isActive: 1,
       });
+      await syncResumeProfile(tx, userId, { fileUrl, fileKey }, profileData);
       return { insertId: Number(result[0].insertId), version };
     });
   } catch (error) {
@@ -301,19 +327,20 @@ export async function getResumeVersion(userId: number, version: number): Promise
 /**
  * Set a specific version as active
  */
-export async function setActiveVersion(userId: number, version: number): Promise<boolean> {
+export async function setActiveVersion(userId: number, version: number, resumeId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
   return await db.transaction(async (tx) => {
     await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
     const target = await tx
-      .select({ id: userResumes.id })
+      .select({ id: userResumes.id, fileUrl: userResumes.fileUrl, fileKey: userResumes.fileKey })
       .from(userResumes)
-      .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)))
+      .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version), eq(userResumes.id, resumeId)))
       .limit(1);
     if (!target[0]) return false;
     await tx.update(userResumes).set({ isActive: 0 }).where(eq(userResumes.userId, userId));
     await tx.update(userResumes).set({ isActive: 1 }).where(eq(userResumes.id, target[0].id));
+    await syncResumeProfile(tx, userId, target[0]);
     return true;
   });
 }
@@ -321,13 +348,13 @@ export async function setActiveVersion(userId: number, version: number): Promise
 /**
  * Delete a specific resume version
  */
-export async function deleteResumeVersion(userId: number, version: number): Promise<boolean> {
+export async function deleteResumeVersion(userId: number, version: number, resumeId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
 
   // Check if this is the active version
   const resume = await getResumeVersion(userId, version);
-  if (!resume) return false;
+  if (!resume || resume.id !== resumeId) return false;
 
   // Remove the private object first. Keep the ledger record if storage cleanup
   // fails so the file remains discoverable and can be retried by the user.
@@ -338,13 +365,14 @@ export async function deleteResumeVersion(userId: number, version: number): Prom
     const target = await tx
       .select({ id: userResumes.id, isActive: userResumes.isActive })
       .from(userResumes)
-      .where(and(eq(userResumes.userId, userId), eq(userResumes.version, version)))
+      // A concurrent delete/upload can reuse the version number while storage is pending.
+      .where(and(eq(userResumes.userId, userId), eq(userResumes.id, resume.id), eq(userResumes.fileKey, resume.fileKey)))
       .limit(1);
     if (!target[0]) return false;
     await tx.delete(userResumes).where(eq(userResumes.id, target[0].id));
     if (target[0].isActive === 1) {
       const remaining = await tx
-        .select({ id: userResumes.id })
+        .select({ id: userResumes.id, fileUrl: userResumes.fileUrl, fileKey: userResumes.fileKey })
         .from(userResumes)
         .where(eq(userResumes.userId, userId))
         .orderBy(desc(userResumes.version), desc(userResumes.id))
@@ -352,6 +380,7 @@ export async function deleteResumeVersion(userId: number, version: number): Prom
       if (remaining[0]) {
         await tx.update(userResumes).set({ isActive: 1 }).where(eq(userResumes.id, remaining[0].id));
       }
+      await syncResumeProfile(tx, userId, remaining[0] ?? null);
     }
     return true;
   });

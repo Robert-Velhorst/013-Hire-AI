@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
-import { createPool, type Pool } from "mysql2/promise";
+import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import {
   InsertUser,
   users,
@@ -73,6 +73,7 @@ import {
   filterJobListings,
   type JobSearchFilterState,
 } from "@shared/jobSearchFilters";
+import { REMOTE_ONLY_EXCLUSION_PATTERN } from "@shared/remoteEligibility";
 import { isOfferEligibleApplicationStatus } from "@shared/offerEligibility";
 import { getListingObservationCutoff, isJobListingCurrent } from "@shared/jobListingFreshness";
 import { PROFILE_EVIDENCE_LIMITS, profileEvidenceLimitMessage } from "@shared/profileEvidenceLimits";
@@ -93,6 +94,11 @@ import {
   logOperationalFailure,
   type OperationalFailureSignal,
 } from "./operationalFailureLog";
+import {
+  ErasedOAuthIdentityError,
+  getOAuthIdentityDigests,
+  getOAuthIdentityLockName,
+} from "./erasedOAuthIdentity";
 
 type InsertJob = InferInsertModel<typeof jobs>;
 type InsertUserProfile = InferInsertModel<typeof userProfiles>;
@@ -150,6 +156,7 @@ const memoryApplicationCampaigns: (InsertApplicationCampaign & { id: number; cre
 const memoryInterviewPreparations: (InsertInterviewPreparation & { id: number; createdAt: Date })[] = [];
 const memoryJobMatches: (InsertJobMatch & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memorySuccessFees: (InsertSuccessFee & { id: number; createdAt: Date; updatedAt: Date })[] = [];
+const memoryApplicationTransactionTails = new Map<number, Promise<void>>();
 const memoryAutonomousRuns = new Map<number, {
   leaseToken: string | null;
   leaseExpiresAt: number;
@@ -166,6 +173,81 @@ let memoryJobDiscoveryLease: {
   lastStartedAt: number | null;
   lastCompletedAt: number | null;
 } | null = null;
+
+type MemoryRow = { id: number };
+
+function captureMemoryRows<T extends MemoryRow>(rows: T[], matches: (row: T) => boolean) {
+  return rows.filter(matches).map((row) => ({ row, values: structuredClone(row) }));
+}
+
+function restoreMemoryRows<T extends MemoryRow>(
+  rows: T[],
+  matches: (row: T) => boolean,
+  snapshot: Array<{ row: T; values: T }>
+) {
+  const snapshotIds = new Set(snapshot.map(({ row }) => row.id));
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (matches(row) && !snapshotIds.has(row.id)) rows.splice(index, 1);
+  }
+  for (const { row, values } of snapshot) {
+    Object.assign(row, structuredClone(values));
+    if (!rows.some((current) => current.id === row.id)) rows.push(row);
+  }
+}
+
+/** Snapshot and roll back the memory-backed evidence belonging to one application. */
+export async function withMemoryApplicationTransaction<T>(
+  applicationId: number,
+  userId: number,
+  operation: () => Promise<T>,
+  captureLocalRollback: () => () => void = () => () => undefined
+): Promise<T> {
+  const previous = memoryApplicationTransactionTails.get(applicationId) || Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  memoryApplicationTransactionTails.set(applicationId, current);
+  await previous;
+
+  const rollbackLocalState = captureLocalRollback();
+  const application = memoryApplications.find((row) => row.id === applicationId && row.userId === userId);
+  const applicationBefore = application ? structuredClone(application) : null;
+  const auditMatches = (row: (typeof memoryAuditEvents)[number]) =>
+    row.userId === userId && row.entityType === "application" && row.entityId === applicationId;
+  const responseMatches = (row: (typeof memoryEmployerResponses)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const notificationMatches = (row: (typeof memoryApplicationNotifications)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const approvalMatches = (row: (typeof memoryApplicationApprovals)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const reviewMatches = (row: AdminReviewItem) =>
+    row.userId === userId && row.entityType === "application" && row.entityId === applicationId;
+  const snapshots = {
+    responses: captureMemoryRows(memoryEmployerResponses, responseMatches),
+    notifications: captureMemoryRows(memoryApplicationNotifications, notificationMatches),
+    audits: captureMemoryRows(memoryAuditEvents, auditMatches),
+    approvals: captureMemoryRows(memoryApplicationApprovals, approvalMatches),
+    reviews: captureMemoryRows(memoryAdminReviewItems, reviewMatches),
+  };
+
+  try {
+    return await operation();
+  } catch (error) {
+    if (application && applicationBefore) Object.assign(application, applicationBefore);
+    restoreMemoryRows(memoryEmployerResponses, responseMatches, snapshots.responses);
+    restoreMemoryRows(memoryApplicationNotifications, notificationMatches, snapshots.notifications);
+    restoreMemoryRows(memoryAuditEvents, auditMatches, snapshots.audits);
+    restoreMemoryRows(memoryApplicationApprovals, approvalMatches, snapshots.approvals);
+    restoreMemoryRows(memoryAdminReviewItems, reviewMatches, snapshots.reviews);
+    rollbackLocalState();
+    throw error;
+  } finally {
+    release();
+    if (memoryApplicationTransactionTails.get(applicationId) === current) {
+      memoryApplicationTransactionTails.delete(applicationId);
+    }
+  }
+}
 
 const JOB_DISCOVERY_LEASE_NAME = "global";
 const JOB_DISCOVERY_LEASE_MS = 2 * 60 * 1000;
@@ -331,6 +413,9 @@ function parseAutonomousRunSummary(value: string | null | undefined): Autonomous
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
+  if (!_db && !ENV.databaseUrl && ENV.isProduction) {
+    throw new Error("Production database is not configured");
+  }
   if (!_db && ENV.databaseUrl) {
     try {
       _pool = createPool({
@@ -347,9 +432,80 @@ export async function getDb() {
       logOperationalFailure("Database", "Connection initialization");
       _pool = null;
       _db = null;
+      throw new Error("Database connection initialization failed");
     }
   }
   return _db;
+}
+
+async function isOAuthIdentityErasedOnConnection(
+  connection: PoolConnection,
+  openId: string
+) {
+  const digests = getOAuthIdentityDigests(openId);
+  if (digests.length === 0) {
+    throw new Error("OAuth identity erasure keys are not configured.");
+  }
+  const predicates = digests.map(() => "(key_version = ? AND identity_hash = ?)");
+  const values = digests.flatMap(digest => [digest.keyVersion, digest.identityHash]);
+  const [rows] = await connection.query(
+    `SELECT id FROM erased_oauth_identities WHERE ${predicates.join(" OR ")} LIMIT 1`,
+    values
+  );
+  return (rows as Array<{ id: number }>).length > 0;
+}
+
+export async function isOAuthIdentityErased(openId: string): Promise<boolean> {
+  const database = await getDb();
+  if (!database || !_pool) return false;
+  const connection = await _pool.getConnection();
+  try {
+    return await isOAuthIdentityErasedOnConnection(connection, openId);
+  } finally {
+    connection.release();
+  }
+}
+
+/** Serialize account provisioning and erasure finalization for one OAuth subject. */
+export async function withOAuthIdentitySerialization<T>(
+  openId: string,
+  operation: (connection: PoolConnection) => Promise<T>
+): Promise<T> {
+  await getDb();
+  if (!_pool) throw new Error("A persistent database is required for OAuth identity protection.");
+  const lockName = getOAuthIdentityLockName(openId);
+  const connection = await _pool.getConnection();
+  let lockAcquired = false;
+  let connectionUsable = true;
+  try {
+    const [rows] = await connection.query(
+      "SELECT GET_LOCK(?, 10) AS acquired",
+      [lockName]
+    );
+    lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
+    if (!lockAcquired) {
+      throw new Error("Could not acquire the OAuth identity serialization lock.");
+    }
+    return await operation(connection);
+  } finally {
+    try {
+      if (lockAcquired) {
+        const [rows] = await connection.query(
+          "SELECT RELEASE_LOCK(?) AS released",
+          [lockName]
+        );
+        if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
+          throw new Error("OAuth identity serialization lock cleanup failed.");
+        }
+      }
+    } catch (error) {
+      connection.destroy();
+      connectionUsable = false;
+      throw error;
+    } finally {
+      if (connectionUsable) connection.release();
+    }
+  }
 }
 
 /** Drain the explicit SQL pool after HTTP requests and workers have stopped. */
@@ -415,7 +571,9 @@ export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
       .limit(boundedLimit),
   ]);
   return {
-    processStartedAt: summaryRows[0]?.firstOccurredAt?.toISOString() ?? new Date().toISOString(),
+    processStartedAt: summaryRows[0]?.firstOccurredAt
+      ? new Date(summaryRows[0].firstOccurredAt).toISOString()
+      : new Date().toISOString(),
     totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
     uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
     signals: rows.map((signal) => ({
@@ -545,8 +703,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
+    await withOAuthIdentitySerialization(user.openId, async connection => {
+      const identityDb = drizzle(connection);
+      await identityDb.transaction(async tx => {
+        if (await isOAuthIdentityErasedOnConnection(connection, user.openId)) {
+          throw new ErasedOAuthIdentityError();
+        }
+        await tx.insert(users).values(values).onDuplicateKeyUpdate({
+          set: updateSet,
+        });
+      });
     });
   } catch (error) {
     logOperationalFailure("Database", "User upsert");
@@ -915,15 +1081,8 @@ function addJobSearchFilterConditions(conditions: SQL[], filters: JobSearchFilte
       like(jobs.responsibilities, "%wfh%")
     );
     if (remoteCondition) conditions.push(remoteCondition);
-    const remoteOnlyExclusions = [jobs.location, jobs.title, jobs.description, jobs.requirements, jobs.responsibilities]
-      .flatMap((column) => [
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%hybrid%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%onsite%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%on-site%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%in office%'`,
-        sql`LOWER(COALESCE(${column}, '')) NOT LIKE '%in-office%'`,
-      ]);
-    conditions.push(...remoteOnlyExclusions);
+    const remoteOnlyText = sql`CONCAT_WS(' ', ${jobs.location}, ${jobs.title}, ${jobs.description}, ${jobs.requirements}, ${jobs.responsibilities})`;
+    conditions.push(sql`LOWER(${remoteOnlyText}) NOT REGEXP ${REMOTE_ONLY_EXCLUSION_PATTERN}`);
   }
   if (filters.visaSponsorshipOnly) conditions.push(eq(jobs.visaSponsorshipAvailable, 1));
   if (filters.openHiringSupportOnly) conditions.push(eq(jobs.openHiringSupport, 1));
@@ -966,9 +1125,7 @@ function addJobSearchFilterConditions(conditions: SQL[], filters: JobSearchFilte
     ? null
     : filters.salaryCurrency.toUpperCase();
   const salaryCurrencyMatches = selectedSalaryCurrency
-    ? selectedSalaryCurrency === "USD"
-      ? or(eq(jobs.salaryCurrency, selectedSalaryCurrency), isNull(jobs.salaryCurrency))
-      : eq(jobs.salaryCurrency, selectedSalaryCurrency)
+    ? eq(jobs.salaryCurrency, selectedSalaryCurrency)
     : null;
   const salaryOverlap = and(
     or(isNull(jobs.salaryMin), lte(jobs.salaryMin, filters.salaryRange[1])),
@@ -2059,8 +2216,9 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
     );
     if (existing) {
       existing.encryptedAccessToken = authorization.encryptedAccessToken;
-      existing.encryptedRefreshToken = authorization.encryptedRefreshToken ?? existing.encryptedRefreshToken ?? null;
+      existing.encryptedRefreshToken = authorization.encryptedRefreshToken ?? null;
       existing.accessTokenExpiresAt = authorization.accessTokenExpiresAt ?? null;
+      existing.accessTokenLifetime = authorization.accessTokenLifetime ?? "unknown";
       existing.tokenType = authorization.tokenType ?? null;
       existing.grantedScopes = authorization.grantedScopes ?? null;
       existing.refreshLeaseToken = authorization.refreshLeaseToken ?? existing.refreshLeaseToken ?? null;
@@ -2076,6 +2234,7 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
       encryptedAccessToken: authorization.encryptedAccessToken,
       encryptedRefreshToken: authorization.encryptedRefreshToken ?? null,
       accessTokenExpiresAt: authorization.accessTokenExpiresAt ?? null,
+      accessTokenLifetime: authorization.accessTokenLifetime ?? "unknown",
       tokenType: authorization.tokenType ?? null,
       grantedScopes: authorization.grantedScopes ?? null,
       refreshLeaseToken: authorization.refreshLeaseToken ?? null,
@@ -2093,8 +2252,9 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
     .onDuplicateKeyUpdate({
       set: {
         encryptedAccessToken: authorization.encryptedAccessToken,
-        encryptedRefreshToken: authorization.encryptedRefreshToken ?? sql`COALESCE(${connectorAuthorizations.encryptedRefreshToken}, NULL)`,
+        encryptedRefreshToken: authorization.encryptedRefreshToken ?? null,
         accessTokenExpiresAt: authorization.accessTokenExpiresAt ?? null,
+        accessTokenLifetime: authorization.accessTokenLifetime ?? "unknown",
         tokenType: authorization.tokenType ?? null,
         grantedScopes: authorization.grantedScopes ?? null,
         updatedAt: now,
@@ -4639,6 +4799,7 @@ export async function createAdminReviewItem(item: InsertAdminReviewItem) {
     const record = {
       ...item,
       id: memoryAdminReviewItems.length + 1,
+      activeIdentity: null,
       status: item.status ?? "open",
       priority: item.priority ?? "medium",
       description: item.description ?? null,
@@ -4653,33 +4814,20 @@ export async function createAdminReviewItem(item: InsertAdminReviewItem) {
     return { insertId: record.id };
   }
 
-  const existing = await db
-    .select({ id: adminReviewItems.id })
-    .from(adminReviewItems)
-    .where(and(
-      eq(adminReviewItems.userId, item.userId),
-      eq(adminReviewItems.entityType, item.entityType),
-      eq(adminReviewItems.entityId, item.entityId),
-      eq(adminReviewItems.category, item.category),
-      or(eq(adminReviewItems.status, "open"), eq(adminReviewItems.status, "in_progress"))
-    ))
-    .limit(1);
-
-  if (existing[0]) {
-    await db
-      .update(adminReviewItems)
-      .set({
-        priority: item.priority ?? "medium",
-        title: item.title,
-        description: item.description,
-        assignedTo: item.assignedTo,
-      })
-      .where(eq(adminReviewItems.id, existing[0].id));
-    return { insertId: existing[0].id, existing: true };
-  }
-
-  const result = await db.insert(adminReviewItems).values(item);
-  return { insertId: Number(result[0].insertId) };
+  const result = await db.insert(adminReviewItems).values(item).onDuplicateKeyUpdate({
+    set: {
+      id: sql`LAST_INSERT_ID(id)`,
+      priority: item.priority ?? "medium",
+      title: item.title,
+      description: item.description,
+      assignedTo: item.assignedTo,
+      updatedAt: new Date(),
+    },
+  });
+  return {
+    insertId: Number(result[0].insertId),
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function listAdminReviewItems(
@@ -5163,6 +5311,7 @@ export async function createApplicationApproval(approval: InsertApplicationAppro
     const record = {
       ...approval,
       id: memoryApplicationApprovals.length + 1,
+      activeIdentity: null,
       applicationId: approval.applicationId ?? null,
       status: approval.status ?? "pending",
       riskLevel: approval.riskLevel ?? "medium",
@@ -5180,34 +5329,22 @@ export async function createApplicationApproval(approval: InsertApplicationAppro
     return { insertId: record.id };
   }
 
-  const existing = await db
-    .select({ id: applicationApprovals.id })
-    .from(applicationApprovals)
-    .where(and(
-      eq(applicationApprovals.userId, approval.userId),
-      eq(applicationApprovals.entityType, approval.entityType),
-      eq(applicationApprovals.entityId, approval.entityId),
-      eq(applicationApprovals.approvalType, approval.approvalType),
-      eq(applicationApprovals.status, "pending")
-    ))
-    .limit(1);
-  if (existing[0]) {
-    await db
-      .update(applicationApprovals)
-      .set({
-        applicationId: approval.applicationId,
-        riskLevel: approval.riskLevel ?? "medium",
-        requestedBy: approval.requestedBy ?? "system",
-        title: approval.title,
-        description: approval.description,
-        payload: approval.payload,
-      })
-      .where(eq(applicationApprovals.id, existing[0].id));
-    return { insertId: existing[0].id, existing: true };
-  }
-
-  const result = await db.insert(applicationApprovals).values(approval);
-  return { insertId: Number(result[0].insertId) };
+  const result = await db.insert(applicationApprovals).values(approval).onDuplicateKeyUpdate({
+    set: {
+      id: sql`LAST_INSERT_ID(id)`,
+      applicationId: approval.applicationId,
+      riskLevel: approval.riskLevel ?? "medium",
+      requestedBy: approval.requestedBy ?? "system",
+      title: approval.title,
+      description: approval.description,
+      payload: approval.payload,
+      updatedAt: new Date(),
+    },
+  });
+  return {
+    insertId: Number(result[0].insertId),
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function listUserApplicationApprovals(

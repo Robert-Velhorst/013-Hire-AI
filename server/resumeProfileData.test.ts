@@ -14,6 +14,14 @@ describe("resume profile conversion", () => {
     expect(resumeToProfileData(emptyResume)).toEqual({});
   });
 
+  it("omits structurally valid but blank work and education records", () => {
+    expect(resumeToProfileData({
+      ...emptyResume,
+      experience: [{ company: "", title: " ", startDate: "", endDate: "", description: "\n" }],
+      education: [{ institution: "", degree: "\t", field: "", graduationDate: " " }],
+    })).toEqual({});
+  });
+
   it("keeps documented experience without manufacturing years from role count", () => {
     const profileData = resumeToProfileData({
       ...emptyResume,

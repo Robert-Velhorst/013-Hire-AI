@@ -3,7 +3,7 @@
  * Handles saved jobs, application notes, interview scheduling, and follow-up emails
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { eq, and, desc, asc, sql, inArray, isNull, lte, lt, or, gt } from "drizzle-orm";
 import {
@@ -33,6 +33,7 @@ import {
   touchApplicationActivity,
   updateApplicationStatus,
   upsertInterviewPreparation,
+  withMemoryApplicationTransaction,
 } from "./db";
 import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type Application, type ApplicationApproval, type EmployerResponse, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
@@ -59,6 +60,9 @@ import {
   getLatestSchedulableInterviewInvite,
   type InterviewSchedulingRequirement,
 } from "./interviewScheduling";
+
+type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type DatabaseTransaction = Parameters<Parameters<DatabaseConnection["transaction"]>[0]>[0];
 
 async function assertUserOwnsApplication(applicationId: number, userId: number) {
   const db = await getDb();
@@ -835,7 +839,11 @@ async function retireInterviewNotificationsAfterApplicationClosure(
   return notificationIds;
 }
 
-export async function recordEmployerResponse(input: RecordEmployerResponseInput, userId: number) {
+export async function recordEmployerResponse(
+  input: RecordEmployerResponseInput,
+  userId: number,
+  transaction?: DatabaseTransaction
+) {
   const db = await getDb();
   if (!db) {
     const application = await getUserApplicationById(userId, input.applicationId);
@@ -1124,7 +1132,7 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
     };
   }
 
-  return await db.transaction(async (tx) => {
+  const persist = async (tx: DatabaseTransaction) => {
     const owner = await tx
       .select({ id: users.id })
       .from(users)
@@ -1483,6 +1491,14 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
           title: "Confirm offer attribution",
           description: response.noteContent,
           payload: approvalPayload,
+        }).onDuplicateKeyUpdate({
+          set: {
+            id: sql`LAST_INSERT_ID(id)`,
+            title: "Confirm offer attribution",
+            description: response.noteContent,
+            payload: approvalPayload,
+            updatedAt: new Date(),
+          },
         });
       }
       await tx.insert(adminReviewItems).values({
@@ -1493,6 +1509,14 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
         priority: "high",
         title: "Offer response needs success-fee attribution review",
         description: response.noteContent,
+      }).onDuplicateKeyUpdate({
+        set: {
+          id: sql`LAST_INSERT_ID(id)`,
+          priority: "high",
+          title: "Offer response needs success-fee attribution review",
+          description: response.noteContent,
+          updatedAt: new Date(),
+        },
       });
     }
 
@@ -1508,7 +1532,8 @@ export async function recordEmployerResponse(input: RecordEmployerResponseInput,
       cancelledInterviewIds,
       retiredInterviewNotificationIds,
     };
-  });
+  };
+  return transaction ? persist(transaction) : db.transaction(persist);
 }
 
 // ==================== INTERVIEW SCHEDULING ====================
@@ -1545,6 +1570,41 @@ async function findOwnedMemoryInterview(interviewId: number, userId: number) {
     throw new Error("Interview not found.");
   }
   return interview;
+}
+
+async function withMemoryInterviewTransaction<T>(
+  interviewId: number,
+  userId: number,
+  operation: (interview: (typeof memoryInterviewSchedules)[number]) => Promise<T>
+) {
+  const initial = await findOwnedMemoryInterview(interviewId, userId);
+  return withMemoryApplicationTransaction(
+    initial.applicationId,
+    userId,
+    async () => operation(await findOwnedMemoryInterview(interviewId, userId)),
+    () => {
+      const before = structuredClone(initial);
+      const applicationInterviews = memoryInterviewSchedules
+        .filter((interview) => interview.applicationId === initial.applicationId)
+        .map((interview) => ({ interview, values: structuredClone(interview) }));
+      return () => {
+        Object.assign(initial, before);
+        const originalIds = new Set(applicationInterviews.map(({ interview }) => interview.id));
+        for (let index = memoryInterviewSchedules.length - 1; index >= 0; index -= 1) {
+          const interview = memoryInterviewSchedules[index];
+          if (interview.applicationId === initial.applicationId && !originalIds.has(interview.id)) {
+            memoryInterviewSchedules.splice(index, 1);
+          }
+        }
+        for (const { interview, values } of applicationInterviews) {
+          Object.assign(interview, structuredClone(values));
+          if (!memoryInterviewSchedules.some((current) => current.id === interview.id)) {
+            memoryInterviewSchedules.push(interview);
+          }
+        }
+      };
+    }
+  );
 }
 
 async function acknowledgeInterviewNotificationsAfterScheduling(applicationId: number, userId: number) {
@@ -2985,22 +3045,87 @@ export async function updateInterviewStatus(
 ) {
   const db = await getDb();
   if (!db) {
-    const interview = await findOwnedMemoryInterview(interviewId, userId);
-    const currentStatus = interview.status || "scheduled";
+    return withMemoryInterviewTransaction(interviewId, userId, async (interview) => {
+      const currentStatus = interview.status || "scheduled";
+      if (!canTransitionInterviewStatus(currentStatus, status)) {
+        throw new Error(`Interview cannot move from ${currentStatus} to ${status}.`);
+      }
+      if (currentStatus === status) return { success: true };
+
+      interview.status = status;
+      interview.updatedAt = new Date();
+      if (status === "completed") {
+        await touchApplicationActivity(interview.applicationId, userId);
+      }
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId: interview.applicationId,
+        action: "interview_status_updated",
+        actor: "user",
+        source: "applications.updateInterviewStatus",
+        beforeState: JSON.stringify({ status: currentStatus }),
+        afterState: JSON.stringify({ status, interviewId }),
+        riskLevel: status === "cancelled" ? "medium" : "low",
+      });
+
+      return { success: true };
+    });
+  }
+
+  return await db.transaction(async (tx) => {
+    const interview = await tx
+      .select({
+        applicationId: interviewSchedules.applicationId,
+        status: interviewSchedules.status,
+      })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .where(and(
+        eq(interviewSchedules.id, interviewId),
+        eq(applications.userId, userId)
+      ))
+      .limit(1)
+      .for("update");
+    if (!interview[0]) throw new Error("Interview not found.");
+    const currentStatus = interview[0].status || "scheduled";
     if (!canTransitionInterviewStatus(currentStatus, status)) {
       throw new Error(`Interview cannot move from ${currentStatus} to ${status}.`);
     }
     if (currentStatus === status) return { success: true };
 
-    interview.status = status;
-    interview.updatedAt = new Date();
-    if (status === "completed") {
-      await touchApplicationActivity(interview.applicationId, userId);
+    const result = await tx
+      .update(interviewSchedules)
+      .set({ status })
+      .where(
+        and(
+          eq(interviewSchedules.id, interviewId),
+          eq(interviewSchedules.status, currentStatus),
+          sql`EXISTS (
+            SELECT 1 FROM applications
+            WHERE applications.id = ${interviewSchedules.applicationId}
+            AND applications.user_id = ${userId}
+          )`
+        )
+      );
+    if (Number(result[0].affectedRows) === 0) {
+      throw new Error("Interview status changed concurrently. Refresh and try again.");
     }
-    await createAuditEvent({
+
+    if (status === "completed") {
+      await tx
+        .update(applications)
+        .set({ lastActivity: new Date() })
+        .where(and(
+          eq(applications.id, interview[0].applicationId),
+          eq(applications.userId, userId)
+        ));
+    }
+
+    await tx.insert(auditEvents).values({
       userId,
       entityType: "application",
-      entityId: interview.applicationId,
+      entityId: interview[0].applicationId,
       action: "interview_status_updated",
       actor: "user",
       source: "applications.updateInterviewStatus",
@@ -3010,68 +3135,7 @@ export async function updateInterviewStatus(
     });
 
     return { success: true };
-  }
-
-  const interview = await db
-    .select({
-      applicationId: interviewSchedules.applicationId,
-      status: interviewSchedules.status,
-    })
-    .from(interviewSchedules)
-    .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
-    .where(and(
-      eq(interviewSchedules.id, interviewId),
-      eq(applications.userId, userId)
-    ))
-    .limit(1);
-  if (!interview[0]) throw new Error("Interview not found.");
-  const currentStatus = interview[0].status || "scheduled";
-  if (!canTransitionInterviewStatus(currentStatus, status)) {
-    throw new Error(`Interview cannot move from ${currentStatus} to ${status}.`);
-  }
-  if (currentStatus === status) return { success: true };
-
-  const result = await db
-    .update(interviewSchedules)
-    .set({ status })
-    .where(
-      and(
-        eq(interviewSchedules.id, interviewId),
-        eq(interviewSchedules.status, currentStatus),
-        sql`EXISTS (
-          SELECT 1 FROM applications
-          WHERE applications.id = ${interviewSchedules.applicationId}
-          AND applications.user_id = ${userId}
-        )`
-      )
-    );
-  if (Number(result[0].affectedRows) === 0) {
-    throw new Error("Interview status changed concurrently. Refresh and try again.");
-  }
-
-  if (status === "completed") {
-    await db
-      .update(applications)
-      .set({ lastActivity: new Date() })
-      .where(and(
-        eq(applications.id, interview[0].applicationId),
-        eq(applications.userId, userId)
-      ));
-  }
-
-  await db.insert(auditEvents).values({
-    userId,
-    entityType: "application",
-    entityId: interview[0].applicationId,
-    action: "interview_status_updated",
-    actor: "user",
-    source: "applications.updateInterviewStatus",
-    beforeState: JSON.stringify({ status: currentStatus }),
-    afterState: JSON.stringify({ status, interviewId }),
-    riskLevel: status === "cancelled" ? "medium" : "low",
   });
-
-  return { success: true };
 }
 
 export type InterviewOutcomeType = "next_round" | "offer" | "rejection" | "no_response" | "other";
@@ -3112,8 +3176,17 @@ function interviewOutcomeSource(input: RecordInterviewOutcomeInput): EmployerRes
   return input.outcome === "no_response" ? "other" : input.source;
 }
 
-function interviewOutcomeSourceReference(input: RecordInterviewOutcomeInput) {
-  return input.outcome === "no_response" ? null : input.sourceReference;
+function interviewOutcomeSourceReference(input: RecordInterviewOutcomeInput, interviewId: number) {
+  if (input.outcome !== "no_response" && input.sourceReference?.trim()) {
+    return input.sourceReference;
+  }
+  if (input.outcome === "offer" || input.outcome === "next_round") return input.sourceReference;
+
+  const identity = createHash("sha256")
+    .update(`${interviewId}\0${input.outcome}\0${input.source}\0${input.summary.trim()}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `hireai-interview-${interviewId}-${input.outcome}-${identity}`;
 }
 
 function interviewOutcomeSummary(input: RecordInterviewOutcomeInput) {
@@ -3127,8 +3200,7 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
   const db = await getDb();
   const receivedAt = input.receivedAt || new Date();
 
-  if (!db) {
-    const interview = await findOwnedMemoryInterview(input.interviewId, userId);
+  if (!db) return withMemoryInterviewTransaction(input.interviewId, userId, async (interview) => {
     const currentInterviewStatus = interview.status || "scheduled";
     if (currentInterviewStatus === "cancelled") {
       throw new Error("Cancelled interviews cannot receive outcomes.");
@@ -3139,90 +3211,148 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
       interviewId: input.interviewId,
       responseType: interviewOutcomeResponseType(input.outcome),
       source: interviewOutcomeSource(input),
-      sourceReference: interviewOutcomeSourceReference(input),
+      sourceReference: interviewOutcomeSourceReference(input, input.interviewId),
       summary: interviewOutcomeSummary(input),
       receivedAt,
     };
     normalizeEmployerResponse(responseInput, application.status || "pending", receivedAt);
 
     if (currentInterviewStatus !== "completed") {
-      await updateInterviewStatus(input.interviewId, "completed", userId);
+      interview.status = "completed";
+      interview.updatedAt = receivedAt;
+      await touchApplicationActivity(interview.applicationId, userId, receivedAt);
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId: interview.applicationId,
+        action: "interview_status_updated",
+        actor: "user",
+        source: "applications.updateInterviewStatus",
+        beforeState: JSON.stringify({ status: currentInterviewStatus }),
+        afterState: JSON.stringify({ status: "completed", interviewId: input.interviewId }),
+        riskLevel: "low",
+      });
     }
     const response = await recordEmployerResponse(responseInput, userId);
 
-    await createAuditEvent({
-      userId,
-      entityType: "application",
-      entityId: interview.applicationId,
-      action: "interview_outcome_recorded",
-      actor: "user",
-      source: "applications.recordInterviewOutcome",
-      beforeState: JSON.stringify({ interviewStatus: currentInterviewStatus }),
-      afterState: JSON.stringify({
-        interviewId: input.interviewId,
-        outcome: input.outcome,
-        responseId: response.responseId,
-        responseType: response.responseType,
-      }),
-      riskLevel: input.outcome === "offer" ? "high" : input.outcome === "rejection" ? "medium" : "low",
-    });
+    if (!response.existing) {
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId: interview.applicationId,
+        action: "interview_outcome_recorded",
+        actor: "user",
+        source: "applications.recordInterviewOutcome",
+        beforeState: JSON.stringify({ interviewStatus: currentInterviewStatus }),
+        afterState: JSON.stringify({
+          interviewId: input.interviewId,
+          outcome: input.outcome,
+          responseId: response.responseId,
+          responseType: response.responseType,
+        }),
+        riskLevel: input.outcome === "offer" ? "high" : input.outcome === "rejection" ? "medium" : "low",
+      });
+    }
 
     return { ...response, interviewStatus: "completed", outcome: input.outcome };
-  }
-
-  const interview = await db
-    .select({
-      applicationId: interviewSchedules.applicationId,
-      status: interviewSchedules.status,
-      applicationStatus: applications.status,
-    })
-    .from(interviewSchedules)
-    .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
-    .where(and(
-      eq(interviewSchedules.id, input.interviewId),
-      eq(applications.userId, userId)
-    ))
-    .limit(1);
-  if (!interview[0]) throw new Error("Interview not found.");
-
-  const currentInterviewStatus = interview[0].status || "scheduled";
-  if (currentInterviewStatus === "cancelled") {
-    throw new Error("Cancelled interviews cannot receive outcomes.");
-  }
-  const responseInput = {
-    applicationId: interview[0].applicationId,
-    interviewId: input.interviewId,
-    responseType: interviewOutcomeResponseType(input.outcome),
-    source: interviewOutcomeSource(input),
-    sourceReference: interviewOutcomeSourceReference(input),
-    summary: interviewOutcomeSummary(input),
-    receivedAt,
-  };
-  normalizeEmployerResponse(responseInput, interview[0].applicationStatus || "pending", receivedAt);
-
-  if (currentInterviewStatus !== "completed") {
-    await updateInterviewStatus(input.interviewId, "completed", userId);
-  }
-  const response = await recordEmployerResponse(responseInput, userId);
-
-  await createAuditEvent({
-    userId,
-    entityType: "application",
-    entityId: interview[0].applicationId,
-    action: "interview_outcome_recorded",
-    actor: "user",
-    source: "applications.recordInterviewOutcome",
-    beforeState: JSON.stringify({ interviewStatus: currentInterviewStatus }),
-    afterState: JSON.stringify({
-      interviewId: input.interviewId,
-      outcome: input.outcome,
-      responseId: response.responseId,
-      responseType: response.responseType,
-    }),
-    riskLevel: input.outcome === "offer" ? "high" : input.outcome === "rejection" ? "medium" : "low",
   });
 
-  return { ...response, interviewStatus: "completed", outcome: input.outcome };
+  return await db.transaction(async (tx) => {
+    const interview = await tx
+      .select({
+        applicationId: interviewSchedules.applicationId,
+        status: interviewSchedules.status,
+        applicationStatus: applications.status,
+      })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .where(and(
+        eq(interviewSchedules.id, input.interviewId),
+        eq(applications.userId, userId)
+      ))
+      .limit(1)
+      .for("update");
+    if (!interview[0]) throw new Error("Interview not found.");
+
+    const currentInterviewStatus = interview[0].status || "scheduled";
+    if (currentInterviewStatus === "cancelled") {
+      throw new Error("Cancelled interviews cannot receive outcomes.");
+    }
+    const responseInput = {
+      applicationId: interview[0].applicationId,
+      interviewId: input.interviewId,
+      responseType: interviewOutcomeResponseType(input.outcome),
+      source: interviewOutcomeSource(input),
+      sourceReference: interviewOutcomeSourceReference(input, input.interviewId),
+      summary: interviewOutcomeSummary(input),
+      receivedAt,
+    };
+    normalizeEmployerResponse(responseInput, interview[0].applicationStatus || "pending", receivedAt);
+
+    if (currentInterviewStatus !== "completed") {
+      const updated = await tx
+        .update(interviewSchedules)
+        .set({ status: "completed" })
+        .where(and(
+          eq(interviewSchedules.id, input.interviewId),
+          eq(interviewSchedules.status, currentInterviewStatus),
+          sql`EXISTS (
+            SELECT 1 FROM applications
+            WHERE applications.id = ${interviewSchedules.applicationId}
+            AND applications.user_id = ${userId}
+          )`
+        ));
+      if (Number(updated[0].affectedRows) === 0) {
+        throw new Error("Interview status changed concurrently. Refresh and try again.");
+      }
+      await tx
+        .update(applications)
+        .set({ lastActivity: receivedAt })
+        .where(and(
+          eq(applications.id, interview[0].applicationId),
+          eq(applications.userId, userId)
+        ));
+    }
+
+    const response = await recordEmployerResponse(responseInput, userId, tx);
+    if (!response.existing) {
+      await tx.insert(auditEvents).values({
+        userId,
+        entityType: "application",
+        entityId: interview[0].applicationId,
+        action: "interview_outcome_recorded",
+        actor: "user",
+        source: "applications.recordInterviewOutcome",
+        beforeState: JSON.stringify({ interviewStatus: currentInterviewStatus }),
+        afterState: JSON.stringify({
+          interviewId: input.interviewId,
+          outcome: input.outcome,
+          responseId: response.responseId,
+          responseType: response.responseType,
+        }),
+        riskLevel: input.outcome === "offer" ? "high" : input.outcome === "rejection" ? "medium" : "low",
+      });
+    }
+
+    return { ...response, interviewStatus: "completed" as const, outcome: input.outcome };
+  });
+}
+
+function isSameInterviewRescheduleApproval(
+  approval: Pick<ApplicationApproval, "approvalType" | "status" | "payload">,
+  interviewId: number,
+  scheduledAt: Date
+) {
+  if (approval.approvalType !== "interview_schedule" || approval.status !== "approved") return false;
+  try {
+    const payload = JSON.parse(approval.payload || "{}") as {
+      interviewId?: number;
+      scheduledAt?: string;
+    };
+    return payload.interviewId === interviewId && payload.scheduledAt === scheduledAt.toISOString();
+  } catch {
+    return false;
+  }
 }
 
 export async function rescheduleInterview(interviewId: number, newDate: Date, userId: number) {
@@ -3231,12 +3361,18 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     throw new Error("Interview must be rescheduled in the future.");
   }
 
-  if (!db) {
-    const interview = await findOwnedMemoryInterview(interviewId, userId);
+  if (!db) return withMemoryInterviewTransaction(interviewId, userId, async (interview) => {
     const currentStatus = interview.status || "scheduled";
     if (!canTransitionInterviewStatus(currentStatus, "rescheduled")) {
       throw new Error(`Interview cannot move from ${currentStatus} to rescheduled.`);
     }
+
+    const priorDecision = currentStatus === "rescheduled" &&
+      interview.scheduledAt.getTime() === newDate.getTime()
+      ? (await listUserApplicationApprovalsForApplication(userId, interview.applicationId))
+        .find((approval) => isSameInterviewRescheduleApproval(approval, interviewId, newDate))
+      : undefined;
+    if (priorDecision) return { success: true, approvalId: priorDecision.id, existing: true };
 
     interview.scheduledAt = newDate;
     interview.status = "rescheduled";
@@ -3264,6 +3400,7 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     });
     const approvalId = Number(approval.insertId);
 
+    await touchApplicationActivity(interview.applicationId, userId, newDate);
     await createAuditEvent({
       userId,
       entityType: "application",
@@ -3282,95 +3419,118 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     });
 
     return { success: true, approvalId };
-  }
+  });
 
-  const interview = await db
-    .select({
-      applicationId: interviewSchedules.applicationId,
-      status: interviewSchedules.status,
-    })
-    .from(interviewSchedules)
-    .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
-    .where(and(
-      eq(interviewSchedules.id, interviewId),
-      eq(applications.userId, userId)
-    ))
-    .limit(1);
-  if (!interview[0]) throw new Error("Interview not found.");
-  const currentStatus = interview[0].status || "scheduled";
-  if (!canTransitionInterviewStatus(currentStatus, "rescheduled")) {
-    throw new Error(`Interview cannot move from ${currentStatus} to rescheduled.`);
-  }
-
-  const result = await db
-    .update(interviewSchedules)
-    .set({
-      scheduledAt: newDate,
-      status: "rescheduled",
-    })
-    .where(
-      and(
+  return await db.transaction(async (tx) => {
+    const interview = await tx
+      .select({
+        applicationId: interviewSchedules.applicationId,
+        status: interviewSchedules.status,
+        scheduledAt: interviewSchedules.scheduledAt,
+      })
+      .from(interviewSchedules)
+      .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
+      .where(and(
         eq(interviewSchedules.id, interviewId),
-        eq(interviewSchedules.status, currentStatus),
-        sql`EXISTS (
-          SELECT 1 FROM applications
-          WHERE applications.id = ${interviewSchedules.applicationId}
-          AND applications.user_id = ${userId}
-        )`
-      )
-    );
-  if (Number(result[0].affectedRows) === 0) {
-    throw new Error("Interview status changed concurrently. Refresh and try again.");
-  }
-  const approval = await db.insert(applicationApprovals).values({
-    userId,
-    applicationId: interview[0].applicationId,
-    entityType: "application",
-    entityId: interview[0].applicationId,
-    approvalType: "interview_schedule",
-    status: "approved",
-    riskLevel: "high",
-    requestedBy: "user",
-    decidedBy: "user",
-    title: "Interview time rescheduled",
-    description: `User rescheduled interview #${interviewId} for ${newDate.toISOString()}.`,
-    payload: JSON.stringify({
-      interviewId,
-      previousStatus: currentStatus,
-      scheduledAt: newDate.toISOString(),
-    }),
-    decisionNote: "User accepted the new interview time.",
-    requestedAt: new Date(),
-    decidedAt: new Date(),
+        eq(applications.userId, userId)
+      ))
+      .limit(1)
+      .for("update");
+    if (!interview[0]) throw new Error("Interview not found.");
+    const currentStatus = interview[0].status || "scheduled";
+    if (!canTransitionInterviewStatus(currentStatus, "rescheduled")) {
+      throw new Error(`Interview cannot move from ${currentStatus} to rescheduled.`);
+    }
+
+    const priorDecision = currentStatus === "rescheduled" &&
+      interview[0].scheduledAt.getTime() === newDate.getTime()
+      ? (await tx
+        .select({ id: applicationApprovals.id, payload: applicationApprovals.payload })
+        .from(applicationApprovals)
+        .where(and(
+          eq(applicationApprovals.userId, userId),
+          eq(applicationApprovals.applicationId, interview[0].applicationId),
+          eq(applicationApprovals.approvalType, "interview_schedule"),
+          eq(applicationApprovals.status, "approved")
+        )))
+        .find((approval) => isSameInterviewRescheduleApproval({
+          ...approval,
+          approvalType: "interview_schedule",
+          status: "approved",
+        }, interviewId, newDate))
+      : undefined;
+    if (priorDecision) return { success: true, approvalId: priorDecision.id, existing: true };
+
+    const result = await tx
+      .update(interviewSchedules)
+      .set({
+        scheduledAt: newDate,
+        status: "rescheduled",
+      })
+      .where(
+        and(
+          eq(interviewSchedules.id, interviewId),
+          eq(interviewSchedules.status, currentStatus),
+          sql`EXISTS (
+            SELECT 1 FROM applications
+            WHERE applications.id = ${interviewSchedules.applicationId}
+            AND applications.user_id = ${userId}
+          )`
+        )
+      );
+    if (Number(result[0].affectedRows) === 0) {
+      throw new Error("Interview status changed concurrently. Refresh and try again.");
+    }
+    const approval = await tx.insert(applicationApprovals).values({
+      userId,
+      applicationId: interview[0].applicationId,
+      entityType: "application",
+      entityId: interview[0].applicationId,
+      approvalType: "interview_schedule",
+      status: "approved",
+      riskLevel: "high",
+      requestedBy: "user",
+      decidedBy: "user",
+      title: "Interview time rescheduled",
+      description: `User rescheduled interview #${interviewId} for ${newDate.toISOString()}.`,
+      payload: JSON.stringify({
+        interviewId,
+        previousStatus: currentStatus,
+        scheduledAt: newDate.toISOString(),
+      }),
+      decisionNote: "User accepted the new interview time.",
+      requestedAt: new Date(),
+      decidedAt: new Date(),
+    });
+    const approvalId = Number(approval[0].insertId);
+
+    await tx
+      .update(applications)
+      .set({ lastActivity: newDate })
+      .where(and(
+        eq(applications.id, interview[0].applicationId),
+        eq(applications.userId, userId)
+      ));
+
+    await tx.insert(auditEvents).values({
+      userId,
+      entityType: "application",
+      entityId: interview[0].applicationId,
+      action: "interview_rescheduled",
+      actor: "user",
+      source: "applications.rescheduleInterview",
+      beforeState: JSON.stringify({ status: currentStatus }),
+      afterState: JSON.stringify({
+        status: "rescheduled",
+        interviewId,
+        scheduledAt: newDate.toISOString(),
+      }),
+      riskLevel: "high",
+      approvalId,
+    });
+
+    return { success: true, approvalId };
   });
-  const approvalId = Number(approval[0].insertId);
-
-  await db
-    .update(applications)
-    .set({ lastActivity: newDate })
-    .where(and(
-      eq(applications.id, interview[0].applicationId),
-      eq(applications.userId, userId)
-    ));
-
-  await db.insert(auditEvents).values({
-    userId,
-    entityType: "application",
-    entityId: interview[0].applicationId,
-    action: "interview_rescheduled",
-    actor: "user",
-    source: "applications.rescheduleInterview",
-    beforeState: JSON.stringify({ status: currentStatus }),
-    afterState: JSON.stringify({
-      status: "rescheduled",
-      interviewId,
-      scheduledAt: newDate.toISOString(),
-    }),
-    riskLevel: "high",
-    approvalId,
-  });
-
-  return { success: true, approvalId };
 }
 
 // ==================== FOLLOW-UP EMAILS ====================
@@ -3564,6 +3724,14 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
       description: approvalCopy.description,
       payload: JSON.stringify({ message, ...metadata }),
       decidedAt: null,
+    }).onDuplicateKeyUpdate({
+      set: {
+        id: sql`LAST_INSERT_ID(id)`,
+        title: approvalCopy.title,
+        description: approvalCopy.description,
+        payload: JSON.stringify({ message, ...metadata }),
+        updatedAt: new Date(),
+      },
     });
     await tx.insert(auditEvents).values({
       userId,
@@ -5020,13 +5188,13 @@ export async function conductMockInterview(
     messages: [
       {
         role: "system",
-        content: `You are an expert interviewer conducting a mock interview for a ${job.title} position. Evaluate the candidate's response and provide constructive feedback.`,
+        content: "You are an expert interviewer conducting a mock interview. Use the supplied job title only as context for evaluating the candidate's response, and provide constructive feedback.",
       },
       {
         role: "user",
-        content: `The candidate's response to interview question ${questionIndex + 1}:
-
-"${userResponse}"
+        content: `Untrusted job title data (JSON string): ${JSON.stringify(job.title)}
+Candidate response data (JSON string): ${JSON.stringify(userResponse)}
+Interview question number: ${questionIndex + 1}
 
 Evaluate this response and provide:
 1. Detailed feedback on the response

@@ -262,7 +262,7 @@ export function getJobMatchDecisionSummary(
       ? "Salary range is below stated expectations"
       : "",
     salaryCurrencyRequiresReview
-      ? `Salary is listed in ${normalizeSalaryCurrency(job.salaryCurrency)} and needs review against the ${normalizeSalaryCurrency(profile?.salaryExpectationCurrency)} expectation`
+      ? `Salary is listed in ${normalizeSalaryCurrency(job.salaryCurrency) ?? "an unknown currency"} and needs review against the ${normalizeSalaryCurrency(profile?.salaryExpectationCurrency) ?? "unspecified"} expectation`
       : "",
     locationFit === "gap" && !hasAutonomousBlocker("location")
       ? "Location does not match stated preferences"

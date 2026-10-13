@@ -11,7 +11,11 @@ import {
   applications,
   auditEvents,
   autonomousRunStates,
+  cloudResumeCandidates,
   connectorAuthorizations,
+  connectorRevocationObligations,
+  erasedOAuthIdentities,
+  stripeReconciliationCommands,
   educationEntries,
   employerResponses,
   employmentVerifications,
@@ -40,7 +44,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 
-export const PRIVACY_RETENTION_POLICY_VERSION = "2026-08-09.v2";
+export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-13.v2";
 
 export type PrivacyRetentionAction = "erase" | "scrub_and_retain" | "retain";
 
@@ -71,6 +75,7 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "social_media_profiles", action: "erase", reason: erasableReason, tableRef: socialMediaProfiles, userColumn: socialMediaProfiles.userId },
   { table: "user_connector_accounts", action: "erase", reason: erasableReason, tableRef: userConnectorAccounts, userColumn: userConnectorAccounts.userId, providerRevocationRequired: true },
   { table: "connector_authorizations", action: "erase", reason: "Encrypted grants must be revoked with the provider before local deletion.", tableRef: connectorAuthorizations, userColumn: connectorAuthorizations.userId, providerRevocationRequired: true },
+  { table: "connector_revocation_obligations", action: "erase", reason: "Minimal provider-cleanup evidence is removed only after every provider revocation obligation is completed.", tableRef: connectorRevocationObligations, userColumn: connectorRevocationObligations.userId, providerRevocationRequired: true },
   { table: "applications", action: "scrub_and_retain", reason: ledgerReason, tableRef: applications, userColumn: applications.userId },
   { table: "application_decisions", action: "erase", reason: erasableReason, tableRef: applicationDecisions, userColumn: applicationDecisions.userId },
   { table: "application_attempts", action: "scrub_and_retain", reason: ledgerReason, tableRef: applicationAttempts, userColumn: applicationAttempts.userId, privateObjectColumns: ["screenshot_key"] },
@@ -81,6 +86,7 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "application_approvals", action: "scrub_and_retain", reason: ledgerReason, tableRef: applicationApprovals, userColumn: applicationApprovals.userId },
   { table: "application_campaigns", action: "erase", reason: erasableReason, tableRef: applicationCampaigns, userColumn: applicationCampaigns.userId },
   { table: "autonomous_run_states", action: "erase", reason: erasableReason, tableRef: autonomousRunStates, userColumn: autonomousRunStates.userId },
+  { table: "cloud_resume_candidates", action: "erase", reason: "Ephemeral cloud object selectors are deleted after import, expiry, or account erasure.", tableRef: cloudResumeCandidates, userColumn: cloudResumeCandidates.userId },
   { table: "job_matches", action: "erase", reason: erasableReason, tableRef: jobMatches, userColumn: jobMatches.userId },
   { table: "interview_preparation", action: "erase", reason: erasableReason, tableRef: interviewPreparation, userColumn: interviewPreparation.userId },
   { table: "inbox_response_candidates", action: "erase", reason: erasableReason, tableRef: inboxResponseCandidates, userColumn: inboxResponseCandidates.userId },
@@ -147,6 +153,25 @@ export const indirectPrivacyRetentionPolicy: IndirectPolicyEntry[] = [
 export const privacyRetentionPolicyTables = [
   ...directPrivacyRetentionPolicy.map((entry) => entry.table),
   ...indirectPrivacyRetentionPolicy.map((entry) => entry.table),
+  "erased_oauth_identities",
+  "stripe_reconciliation_commands",
+];
+
+export const globallyRetainedPrivacyRecords = [
+  {
+    table: "erased_oauth_identities",
+    action: "retain" as const,
+    reason:
+      "Keyed, non-reversible OAuth identity hashes prevent account recreation after erasure; the table stores no source identifier or user link.",
+    tableRef: erasedOAuthIdentities,
+  },
+  {
+    table: "stripe_reconciliation_commands",
+    action: "retain" as const,
+    reason:
+      "Durable provider pause, resume, and cancellation outcomes are required to reconcile billing authority; rows reference a fee record and external subscription and need an approved retention schedule.",
+    tableRef: stripeReconciliationCommands,
+  },
 ];
 
 export async function buildPrivacyErasurePreview(userId: number) {

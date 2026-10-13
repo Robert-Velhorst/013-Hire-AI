@@ -170,7 +170,13 @@ describe("GitHub profile discovery", () => {
 
   it("marks the connector for reauthorization when GitHub rejects its grant", async () => {
     const deps = dependencies();
-    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
+    (deps.getConnectorAuthorization as ReturnType<typeof vi.fn>).mockResolvedValue({
+      encryptedAccessToken: "encrypted-github-token",
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: null,
+      accessTokenLifetime: "non_expiring",
+    });
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
 
     await expect(discoverGitHubProfile(18, { fetcher, now, dependencies: deps }))
       .rejects.toThrow("authorization is no longer valid");
@@ -178,6 +184,26 @@ describe("GitHub profile discovery", () => {
       provider: "github",
       status: "needs_reauth",
       lastVerifiedAt: now,
+    }));
+  });
+
+  it("does not revoke a non-expiring token on a 403 insufficient-scope response", async () => {
+    const deps = dependencies();
+    (deps.getConnectorAuthorization as ReturnType<typeof vi.fn>).mockResolvedValue({
+      encryptedAccessToken: "encrypted-github-token",
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: null,
+      accessTokenLifetime: "non_expiring",
+    });
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
+
+    await expect(discoverGitHubProfile(18, { fetcher, now, dependencies: deps }))
+      .rejects.toThrow("temporarily unavailable");
+    expect(deps.upsertUserConnectorAccount).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: "needs_reauth",
     }));
   });
 

@@ -27,9 +27,9 @@ describe("success-fee access policy", () => {
   it("blocks billing, proof, and employment-status mutations until terms are accepted", async () => {
     const caller = successFeesRouter.createCaller(createContext());
     const actions = [
-      () => caller.reportHire({ employerName: "Example", jobTitle: "Engineer", monthlySalary: 5000, currency: "USD", startDate: "2026-07-13", offerLetterBase64: "proof", offerLetterMimeType: "application/pdf", offerLetterFileName: "offer.pdf", termsAccepted: true }),
+      () => caller.reportHire({ employerName: "Example", jobTitle: "Engineer", monthlySalary: 5000, currency: "USD", startDate: "2026-07-13", offerLetterBase64: "cHJvb2Y=", offerLetterMimeType: "application/pdf", offerLetterFileName: "offer.pdf", termsAccepted: true }),
       () => caller.retryBillingCheckout({ successFeeId: 1, confirmBillingSetup: true }),
-      () => caller.submitVerification({ successFeeId: 1, documentBase64: "proof", documentMimeType: "application/pdf", documentFileName: "proof.pdf", documentType: "employment_letter" }),
+      () => caller.submitVerification({ successFeeId: 1, documentBase64: "cHJvb2Y=", documentMimeType: "application/pdf", documentFileName: "proof.pdf", documentType: "employment_letter" }),
       () => caller.reportEmploymentEnded({ successFeeId: 1, endDate: "2026-07-13T00:00:00.000Z" }),
     ];
 

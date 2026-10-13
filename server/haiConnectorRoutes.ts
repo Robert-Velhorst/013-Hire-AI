@@ -8,13 +8,14 @@ import {
 } from "./haiConnector";
 
 const maxBodyBytes = 16 * 1024;
+const requestIdSchema = z.union([z.string().min(1).max(255), z.number().finite()]);
 const textPartSchema = z.object({
   text: z.string().trim().min(1),
   mediaType: z.literal("text/plain").optional(),
 }).strict();
 const requestSchema = z.object({
   jsonrpc: z.literal("2.0"),
-  id: z.union([z.string().min(1).max(255), z.number().finite()]),
+  id: requestIdSchema,
   method: z.string().min(1).max(80),
   params: z.object({
     message: z.object({
@@ -30,8 +31,9 @@ function bearerToken(header: string | undefined) {
   return match?.[1] ?? "";
 }
 
-function rpcError(res: Response, id: string | number | null, code: number, message: string) {
-  res.status(400).json({ jsonrpc: "2.0", id, error: { code, message } });
+function rpcError(res: Response, id: unknown, code: number, message: string) {
+  const parsedId = requestIdSchema.safeParse(id);
+  res.status(400).json({ jsonrpc: "2.0", id: parsedId.success ? parsedId.data : null, error: { code, message } });
 }
 
 function boundedJsonParser(req: Request, res: Response, next: NextFunction) {
@@ -63,22 +65,23 @@ export function registerHaiConnectorRoutes(
     res.json(card);
   });
 
-  app.get("/api/hai/status", (req, res) => {
-    if (!service.authorize(bearerToken(req.header("authorization")))) {
-      res.sendStatus(404);
-      return;
-    }
+  const requireHaiAuth = async (req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(service.status());
-  });
-
-  const requireHaiAuth = (req: Request, res: Response, next: NextFunction) => {
-    if (!service.authorize(bearerToken(req.header("authorization")))) {
-      res.sendStatus(404);
+    try {
+      if (!(await service.authorize(bearerToken(req.header("authorization"))))) {
+        res.sendStatus(404);
+        return;
+      }
+    } catch {
+      res.status(503).send("Hire.AI connector authorization is temporarily unavailable.");
       return;
     }
     next();
   };
+
+  app.get("/api/hai/status", requireHaiAuth, (_req, res) => {
+    res.json(service.status());
+  });
 
   app.post("/api/hai/a2a", requireHaiAuth, boundedJsonParser, async (req, res) => {
     if (req.header("A2A-Version")?.trim() !== HAI_CONNECTOR_PROTOCOL_VERSION) {

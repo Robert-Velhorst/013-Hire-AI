@@ -5,11 +5,31 @@ const mocks = vi.hoisted(() => {
   const updateWhere = vi.fn();
   const updateSet = vi.fn(() => ({ where: updateWhere }));
   const stripeUpdate = vi.fn();
-  const selectWhere = vi.fn();
+  const insertedRows: Record<string, unknown>[] = [];
+  const selectResults: unknown[][] = [];
+  const select = vi.fn(() => {
+    const value = selectResults.shift() ?? [];
+    const chain: any = {
+      from: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      limit: vi.fn(() => chain),
+      for: vi.fn(() => chain),
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve(value).then(resolve, reject),
+    };
+    return chain;
+  });
+  const insertValues = vi.fn((value: Record<string, unknown>) => {
+    insertedRows.push(value);
+    return Promise.resolve();
+  });
+  const mockTx = {
+    select,
+    update: vi.fn(() => ({ set: updateSet })),
+    insert: vi.fn(() => ({ values: (value: Record<string, unknown>) => Object.assign(insertValues(value), { onDuplicateKeyUpdate: vi.fn(() => insertValues.mock.results.at(-1)?.value) }) })),
+  };
+  const transaction = vi.fn(async (operation: (tx: typeof mockTx) => Promise<unknown>) => operation(mockTx));
   const mockDb = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({ where: selectWhere })),
-    })),
+    transaction,
     update: vi.fn(() => ({ set: updateSet })),
   };
 
@@ -22,8 +42,12 @@ const mocks = vi.hoisted(() => {
     listAdminReviewItems: vi.fn(),
     mockDb,
     resolveAdminReviewItem: vi.fn(),
-    selectWhere,
     stripeUpdate,
+    insertedRows,
+    selectResults,
+    transaction,
+    insertValues,
+    select,
     updateSet,
     updateWhere,
   };
@@ -71,64 +95,64 @@ function createAdminContext(userId: number): TrpcContext {
 describe("admin account suspension Stripe synchronization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.insertedRows.length = 0;
+    mocks.selectResults.splice(0, mocks.selectResults.length,
+      [{ id: 88, accountStatus: "active" }],
+      [{
+        id: 211,
+        userId: 88,
+        status: "active",
+        lifecycleStatus: "active",
+        stripeSubscriptionId: "sub_account_211",
+        notes: null,
+      }],
+      [],
+      [{ holdType: "account" }],
+    );
     mocks.getDb.mockResolvedValue(mocks.mockDb);
     mocks.getAdminMemoryFallback.mockResolvedValue(null);
-    mocks.selectWhere.mockResolvedValue([{
-      id: 211,
-      userId: 88,
-      status: "active",
-      stripeSubscriptionId: "sub_account_211",
-      notes: null,
-    }]);
     mocks.stripeUpdate.mockResolvedValue({ id: "sub_account_211" });
     mocks.updateWhere.mockResolvedValue([{ affectedRows: 1 }]);
   });
 
-  it("pauses active subscriptions before suspending the account and fee ledger", async () => {
+  it("commits local suspension, revocation, audit, and an idempotent Stripe command together", async () => {
     const caller = adminRouter.createCaller(createAdminContext(17));
 
     await expect(caller.suspendUser({
       userId: 88,
       reason: "Verification remains overdue after review.",
-    })).resolves.toEqual({ success: true });
+    })).resolves.toEqual({ success: true, billingSynchronization: "queued" });
 
-    expect(mocks.stripeUpdate).toHaveBeenCalledWith("sub_account_211", {
-      pause_collection: { behavior: "void" },
-    });
-    expect(mocks.updateSet).toHaveBeenCalledWith({ accountStatus: "suspended" });
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({ accountStatus: "suspended" }));
     expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({ status: "suspended" }));
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "user",
-      entityId: 88,
-      action: "user_suspended",
-    }));
+    expect(mocks.insertedRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        successFeeId: 211,
+        stripeSubscriptionId: "sub_account_211",
+        action: "pause",
+        status: "pending",
+        commandKey: expect.any(String),
+      }),
+      expect.objectContaining({ action: "user_suspended", actor: "admin" }),
+      expect.objectContaining({ category: "legal_escalation", priority: "critical" }),
+    ]));
   });
 
-  it("does not suspend the account or fees when Stripe cannot pause billing", async () => {
+  it("commits local containment without calling an unavailable Stripe provider", async () => {
     mocks.stripeUpdate.mockRejectedValueOnce(new Error("provider unavailable"));
     const caller = adminRouter.createCaller(createAdminContext(17));
 
     await expect(caller.suspendUser({
       userId: 88,
       reason: "Verification remains overdue after review.",
-    })).rejects.toMatchObject({
-      code: "PRECONDITION_FAILED",
-      message: "Stripe could not synchronize this suspension. The local account and fee statuses were not changed.",
-    });
+    })).resolves.toMatchObject({ success: true, billingSynchronization: "queued" });
 
-    expect(mocks.mockDb.update).not.toHaveBeenCalled();
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "user",
-      entityId: 88,
-      action: "user_suspension_blocked_stripe_sync",
-      riskLevel: "critical",
-    }));
-    expect(mocks.createAdminReviewItem).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "user",
-      entityId: 88,
-      category: "payment_failed",
-      priority: "critical",
-    }));
+    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({ accountStatus: "suspended" }));
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
+    expect(mocks.insertedRows.some(row => row.action === "user_suspended")).toBe(true);
+    expect(mocks.insertedRows.some(row => row.action === "pause")).toBe(true);
   });
 
   it("prevents an administrator from suspending their own active session", async () => {
@@ -142,7 +166,7 @@ describe("admin account suspension Stripe synchronization", () => {
       message: "An administrator cannot suspend their own account.",
     });
 
-    expect(mocks.mockDb.select).not.toHaveBeenCalled();
+    expect(mocks.select).not.toHaveBeenCalled();
     expect(mocks.mockDb.update).not.toHaveBeenCalled();
     expect(mocks.stripeUpdate).not.toHaveBeenCalled();
   });

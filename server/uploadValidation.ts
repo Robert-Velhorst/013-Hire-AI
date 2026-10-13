@@ -1,4 +1,5 @@
 import { ENV } from "./_core/env";
+import { readBoundedResponseJson } from "./_core/outboundRequest";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -79,14 +80,26 @@ function releaseScanPermit() {
   waiter.resolve(releaseScanPermit);
 }
 
+function createScanPermitRelease() {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    releaseScanPermit();
+  };
+}
+
 async function acquireScanPermit() {
   if (activeScans < scannerConcurrency()) {
     activeScans += 1;
-    return releaseScanPermit;
+    return createScanPermitRelease();
+  }
+  if (scanWaiters.length >= scannerConcurrency()) {
+    throw new Error("The malware scanner is busy; retry the upload.");
   }
   return await new Promise<() => void>((resolve, reject) => {
     const waiter = {
-      resolve,
+      resolve: () => resolve(createScanPermitRelease()),
       reject,
       timer: setTimeout(() => {
         const index = scanWaiters.indexOf(waiter);
@@ -192,20 +205,14 @@ async function scanWithHttp(input: {
       signal: AbortSignal.timeout(scannerTimeoutMs()),
       redirect: "error",
     });
-    if (!response.ok) throw new Error("scanner_status");
-    const declaredLength = Number.parseInt(
-      response.headers.get("content-length") ?? "0",
-      10
-    );
-    if (declaredLength > MAX_SCANNER_RESPONSE_BYTES)
-      throw new Error("scanner_response_too_large");
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_SCANNER_RESPONSE_BYTES)
-      throw new Error("scanner_response_too_large");
-    const result = JSON.parse(bytes.toString("utf8")) as {
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error("scanner_status");
+    }
+    const result = await readBoundedResponseJson<{
       clean?: boolean;
       provider?: string;
-    };
+    }>(response, MAX_SCANNER_RESPONSE_BYTES);
     if (result.clean !== true) {
       throw new Error("Sensitive upload was rejected by the malware scanner.");
     }
@@ -281,9 +288,10 @@ export async function scanSensitiveUpload(input: {
   data: Buffer | Uint8Array;
   fileName: string;
   mimeType: string;
-}): Promise<SensitiveUploadScanResult> {
+}, reservedPermit?: (() => void) | null): Promise<SensitiveUploadScanResult> {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
+    reservedPermit?.();
     if (ENV.isProduction) {
       throw new Error(
         "Sensitive uploads require an available malware scanner in production."
@@ -291,7 +299,7 @@ export async function scanSensitiveUpload(input: {
     }
     return { scanned: false, provider: "not_configured" };
   }
-  const release = await acquireScanPermit();
+  const release = reservedPermit ?? await acquireScanPermit();
   try {
     return mode === "windows_defender"
       ? await scanWithWindowsDefender(input)
@@ -299,6 +307,17 @@ export async function scanSensitiveUpload(input: {
   } finally {
     release();
   }
+}
+
+export async function reserveSensitiveUploadScanPermit() {
+  const mode = resolveMalwareScanMode();
+  if (mode === "unavailable") {
+    if (ENV.isProduction) {
+      throw new Error("Sensitive uploads require an available malware scanner in production.");
+    }
+    return null;
+  }
+  return acquireScanPermit();
 }
 
 function hasExpectedSignature(data: Buffer, mimeType: string): boolean {

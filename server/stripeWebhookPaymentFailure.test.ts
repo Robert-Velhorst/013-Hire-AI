@@ -2,59 +2,155 @@ import express from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const selectLimit = vi.fn();
+  const feeSelectLimit = vi.fn();
+  const userSelectLimit = vi.fn();
+  const paymentSelectLimit = vi.fn();
+  const holdSelectLimit = vi.fn();
   const insertValues = vi.fn();
-  const updateWhere = vi.fn();
-  const mockDb = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: selectLimit })),
-      })),
-    })),
-    insert: vi.fn(() => ({ values: insertValues })),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({ where: updateWhere })),
-    })),
-  };
+  const feeUpdateWhere = vi.fn();
+  const paymentUpdateWhere = vi.fn();
+  const holdUpdateWhere = vi.fn();
+  const eventUpdateWhere = vi.fn();
+  const transactionRollback = vi.fn();
+  const mockDb: Record<string, any> = {};
+  mockDb.select = vi.fn(() => ({
+    from: vi.fn((table: Record<PropertyKey, unknown>) => {
+      const name = table[Symbol.for("drizzle:Name")];
+      const limit = name === "users"
+        ? userSelectLimit
+        : name === "fee_payments"
+          ? paymentSelectLimit
+          : name === "success_fee_holds"
+            ? holdSelectLimit
+            : feeSelectLimit;
+      const query: Record<string, any> = {};
+      query.where = vi.fn(() => query);
+      query.limit = vi.fn(() => query);
+      query.for = vi.fn(() => Promise.resolve(limit()));
+      query.then = (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+        Promise.resolve(limit()).then(resolve, reject);
+      return query;
+    }),
+  }));
+  mockDb.insert = vi.fn(() => ({
+    values: (value: Record<string, unknown>) => Object.assign(insertValues(value), {
+      onDuplicateKeyUpdate: vi.fn(() => insertValues.mock.results.at(-1)?.value),
+    }),
+  }));
+  mockDb.update = vi.fn((table: Record<PropertyKey, unknown>) => {
+    const name = table[Symbol.for("drizzle:Name")];
+    const where =
+      name === "success_fees"
+        ? feeUpdateWhere
+        : name === "fee_payments"
+          ? paymentUpdateWhere
+          : name === "success_fee_holds"
+            ? holdUpdateWhere
+            : eventUpdateWhere;
+    return { set: vi.fn(() => ({ where })) };
+  });
+  mockDb.transaction = vi.fn(
+    async (callback: (tx: typeof mockDb) => Promise<void>) => {
+      try {
+        return await callback(mockDb);
+      } catch (error) {
+        transactionRollback();
+        throw error;
+      }
+    }
+  );
 
   return {
     mockDb,
-    selectLimit,
+    feeSelectLimit,
+    userSelectLimit,
+    paymentSelectLimit,
+    holdSelectLimit,
     insertValues,
-    updateWhere,
+    feeUpdateWhere,
+    paymentUpdateWhere,
+    holdUpdateWhere,
+    eventUpdateWhere,
+    transactionRollback,
     getDb: vi.fn(),
-    createAuditEvent: vi.fn(),
-    createAdminReviewItem: vi.fn(),
+    retrieveSubscription: vi.fn(),
+    listInvoiceLineItems: vi.fn(),
     claimStripeWebhookEvent: vi.fn(),
-    completeStripeWebhookEvent: vi.fn(),
     failStripeWebhookEvent: vi.fn(),
+    quarantineStripeWebhookEvent: vi.fn(),
   };
 });
 
-vi.mock("./db", () => ({
-  getDb: mocks.getDb,
-  createAuditEvent: mocks.createAuditEvent,
-  createAdminReviewItem: mocks.createAdminReviewItem,
-}));
-
+vi.mock("./db", () => ({ getDb: mocks.getDb }));
 vi.mock("./stripeWebhookLedger", () => ({
   claimStripeWebhookEvent: mocks.claimStripeWebhookEvent,
-  completeStripeWebhookEvent: mocks.completeStripeWebhookEvent,
   failStripeWebhookEvent: mocks.failStripeWebhookEvent,
+  quarantineStripeWebhookEvent: mocks.quarantineStripeWebhookEvent,
 }));
-
-vi.mock("./stripeClient", () => ({ getStripeClient: vi.fn(() => ({})) }));
+vi.mock("./stripeClient", () => ({
+  getStripeClient: vi.fn(() => ({
+    subscriptions: { retrieve: mocks.retrieveSubscription },
+    invoices: { listLineItems: mocks.listInvoiceLineItems },
+  })),
+}));
 
 import { registerStripeWebhook } from "./stripeWebhook";
 
-async function postWebhook(event: Record<string, unknown>, headers: Record<string, string> = {}) {
+const fee = {
+  id: 701,
+  userId: 81,
+  employerName: "Example Employer",
+  jobTitle: "Remote Engineer",
+  status: "active",
+  lifecycleStatus: "active",
+  stripeSubscriptionId: "sub_failed_701",
+  stripePriceId: "price_failed_701",
+  monthlyFeeAmount: 25000,
+  currency: "usd",
+};
+
+function invoice(id: string, status: "paid" | "failed") {
+  return {
+    id,
+    subscription: "sub_failed_701",
+    customer: "cus_failed_701",
+    amount_paid: 25000,
+    amount_due: 25000,
+    currency: "usd",
+    status_transitions: { paid_at: 1_784_217_600 },
+    period_start: 1_784_217_600,
+    period_end: 1_786_809_600,
+    lines: {
+      data: [
+        {
+          price: {
+            id: "price_failed_701",
+            currency: "usd",
+            unit_amount: 25000,
+          },
+          quantity: 1,
+          amount: 25000,
+          currency: "usd",
+        },
+      ],
+      has_more: false,
+    },
+    metadata: { testStatus: status },
+  };
+}
+
+async function postWebhook(
+  event: Record<string, unknown>,
+  headers: Record<string, string> = {}
+) {
   const app = express();
   registerStripeWebhook(app);
-  const server = await new Promise<ReturnType<typeof app.listen>>((resolve) => {
+  const server = await new Promise<ReturnType<typeof app.listen>>(resolve => {
     const listener = app.listen(0, "127.0.0.1", () => resolve(listener));
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Webhook test server did not bind to a TCP port.");
+  if (!address || typeof address === "string")
+    throw new Error("Webhook test server did not bind to a TCP port.");
 
   try {
     return await fetch(`http://127.0.0.1:${address.port}/api/stripe/webhook`, {
@@ -63,123 +159,292 @@ async function postWebhook(event: Record<string, unknown>, headers: Record<strin
       body: JSON.stringify(event),
     });
   } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) =>
+      server.close(error => (error ? reject(error) : resolve()))
+    );
   }
 }
 
-describe("Stripe payment failure webhook", () => {
+describe("Stripe payment webhook transaction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
     mocks.getDb.mockResolvedValue(mocks.mockDb);
     mocks.claimStripeWebhookEvent.mockResolvedValue({ claimed: true });
-    mocks.selectLimit.mockResolvedValue([{
-      id: 701,
-      userId: 81,
-      employerName: "Example Employer",
-      jobTitle: "Remote Engineer",
-      status: "active",
-      stripeSubscriptionId: "sub_failed_701",
-    }]);
+    mocks.retrieveSubscription.mockResolvedValue({
+      id: "sub_checkout_701",
+      customer: "cus_failed_701",
+      items: {
+        data: [
+          {
+            price: {
+              id: "price_failed_701",
+              currency: "usd",
+              unit_amount: 25000,
+            },
+            quantity: 1,
+          },
+        ],
+      },
+    });
+    mocks.listInvoiceLineItems.mockResolvedValue({ data: [], has_more: false });
+    mocks.feeSelectLimit.mockResolvedValue([fee]);
+    mocks.userSelectLimit.mockResolvedValue([
+      { stripeCustomerId: "cus_failed_701" },
+    ]);
+    mocks.paymentSelectLimit.mockResolvedValue([]);
+    mocks.holdSelectLimit.mockResolvedValue([]);
     mocks.insertValues.mockResolvedValue([{ insertId: 1 }]);
-    mocks.updateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.feeUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.paymentUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.holdUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.eventUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.mockDb.transaction.mockImplementation(
+      async (callback: (tx: typeof mocks.mockDb) => Promise<void>) => {
+        try {
+          return await callback(mocks.mockDb);
+        } catch (error) {
+          mocks.transactionRollback();
+          throw error;
+        }
+      }
+    );
   });
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it("does not expose Stripe verification failures to callers", async () => {
+  it("rejects invalid signatures before claiming or mutating the event", async () => {
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "configured-for-test");
-
     const response = await postWebhook(
-      { id: "evt_invalid_signature_701", type: "invoice.payment_failed", data: { object: {} } },
+      {
+        id: "evt_invalid_signature_701",
+        type: "invoice.payment_failed",
+        data: { object: {} },
+      },
       { "stripe-signature": "invalid-signature" }
     );
-
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe("Webhook signature verification failed.");
+    expect(await response.text()).toBe(
+      "Webhook signature verification failed."
+    );
+    expect(mocks.claimStripeWebhookEvent).not.toHaveBeenCalled();
   });
 
-  it("suspends the fee and opens an admin payment-failure review", async () => {
+  it("rejects unsigned events in production when the webhook secret is absent", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const response = await postWebhook({
+      id: "evt_unsigned_701",
+      type: "invoice.paid",
+      data: { object: {} },
+    });
+    expect(response.status).toBe(400);
+    expect(mocks.claimStripeWebhookEvent).not.toHaveBeenCalled();
+  });
+
+  it("commits failed payment, fee suspension, audit, review, and event completion in one transaction", async () => {
     const response = await postWebhook({
       id: "evt_payment_failure_701",
       type: "invoice.payment_failed",
-      data: {
-        object: {
-          id: "in_failed_701",
-          subscription: "sub_failed_701",
-          amount_due: 25000,
-          currency: "usd",
-          period_start: 1_784_217_600,
-          period_end: 1_786_809_600,
-        },
-      },
+      data: { object: invoice("in_failed_701", "failed") },
     });
 
     expect(response.status).toBe(200);
-    expect(mocks.insertValues).toHaveBeenCalledWith(expect.objectContaining({
-      successFeeId: 701,
-      userId: 81,
-      amount: 25000,
-      status: "failed",
-      stripeInvoiceId: "in_failed_701",
-    }));
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 701,
-      action: "stripe_payment_failed",
-      riskLevel: "high",
-    }));
-    expect(mocks.createAdminReviewItem).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 81,
-      entityType: "success_fee",
-      entityId: 701,
-      category: "payment_failed",
-      priority: "high",
-      title: "Stripe payment failed",
-    }));
-    expect(mocks.completeStripeWebhookEvent).toHaveBeenCalledWith("evt_payment_failure_701");
+    expect(mocks.mockDb.transaction).toHaveBeenCalledOnce();
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        successFeeId: 701,
+        userId: 81,
+        amount: 25000,
+        status: "failed",
+        stripeInvoiceId: "in_failed_701",
+      })
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "stripe_payment_failed",
+        entityType: "success_fee",
+        entityId: 701,
+      })
+    );
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "payment_failed",
+        priority: "high",
+        title: "Stripe payment failed",
+      })
+    );
+    expect(mocks.eventUpdateWhere).toHaveBeenCalledOnce();
+    expect(mocks.failStripeWebhookEvent).not.toHaveBeenCalled();
   });
 
-  it("records a past-due subscription transition and opens the recovery review", async () => {
+  it("updates the existing invoice row from failed to paid without inserting a duplicate", async () => {
+    mocks.paymentSelectLimit.mockResolvedValueOnce([
+      {
+        id: 901,
+        successFeeId: 701,
+        userId: 81,
+        amount: 25000,
+        currency: "usd",
+        stripeInvoiceId: "in_retry_701",
+        status: "failed",
+        paidAt: null,
+      },
+    ]);
+
     const response = await postWebhook({
-      id: "evt_subscription_past_due_701",
-      type: "customer.subscription.updated",
-      data: {
-        object: {
-          id: "sub_failed_701",
-          status: "past_due",
-        },
-      },
+      id: "evt_retry_paid_701",
+      type: "invoice.paid",
+      data: { object: invoice("in_retry_701", "paid") },
     });
 
     expect(response.status).toBe(200);
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 701,
-      action: "stripe_subscription_status_updated",
-      riskLevel: "high",
-      afterState: expect.stringContaining('"suspended"'),
-    }));
-    expect(mocks.createAdminReviewItem).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 81,
-      entityType: "success_fee",
-      entityId: 701,
-      category: "payment_failed",
-      priority: "high",
-    }));
-    expect(mocks.completeStripeWebhookEvent).toHaveBeenCalledWith("evt_subscription_past_due_701");
+    expect(mocks.paymentUpdateWhere).toHaveBeenCalledOnce();
+    expect(mocks.insertValues).not.toHaveBeenCalledWith(
+      expect.objectContaining({ stripeInvoiceId: "in_retry_701" })
+    );
   });
 
-  it("links a hosted Checkout subscription to the existing success-fee ledger", async () => {
-    mocks.selectLimit.mockResolvedValueOnce([{
-      id: 701,
-      userId: 81,
-      employerName: "Example Employer",
-      jobTitle: "Remote Engineer",
-      status: "pending_verification",
-      stripeSubscriptionId: null,
-    }]);
+  it("rolls back payment state when a later audit write fails", async () => {
+    mocks.insertValues.mockImplementation(
+      async (values: Record<string, unknown>) => {
+        if (values.action === "stripe_payment_failed")
+          throw new Error("audit storage unavailable");
+        return [{ insertId: 1 }];
+      }
+    );
+    const response = await postWebhook({
+      id: "evt_audit_failure_701",
+      type: "invoice.payment_failed",
+      data: { object: invoice("in_audit_failure_701", "failed") },
+    });
 
+    expect(response.status).toBe(500);
+    expect(mocks.transactionRollback).toHaveBeenCalledOnce();
+    expect(mocks.eventUpdateWhere).not.toHaveBeenCalled();
+    expect(mocks.failStripeWebhookEvent).toHaveBeenCalledWith(
+      "evt_audit_failure_701",
+      expect.any(Error)
+    );
+  });
+
+  it("quarantines a mismatched Stripe customer without mutating billing state", async () => {
+    mocks.userSelectLimit.mockResolvedValueOnce([
+      { stripeCustomerId: "cus_other" },
+    ]);
+
+    const response = await postWebhook({
+      id: "evt_customer_mismatch_701",
+      type: "invoice.paid",
+      data: { object: invoice("in_mismatch_701", "paid") },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+      quarantined: true,
+    });
+    expect(mocks.insertValues).not.toHaveBeenCalled();
+    expect(mocks.eventUpdateWhere).not.toHaveBeenCalled();
+    expect(mocks.quarantineStripeWebhookEvent).toHaveBeenCalledWith(
+      "evt_customer_mismatch_701",
+      "customer_mismatch"
+    );
+    expect(mocks.failStripeWebhookEvent).not.toHaveBeenCalled();
+  });
+
+  it("loads remaining Stripe invoice lines before validating a paginated invoice", async () => {
+    mocks.listInvoiceLineItems.mockResolvedValueOnce({
+      data: [
+        {
+          id: "il_complete_701",
+          price: {
+            id: "price_failed_701",
+            currency: "usd",
+            unit_amount: 25000,
+          },
+          quantity: 1,
+          amount: 25000,
+          currency: "usd",
+        },
+      ],
+      has_more: false,
+    });
+    const payload = invoice("in_paged_701", "paid");
+    payload.lines = { data: [], has_more: true };
+
+    const response = await postWebhook({
+      id: "evt_paged_invoice_701",
+      type: "invoice.paid",
+      data: { object: payload },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.listInvoiceLineItems).toHaveBeenCalledWith("in_paged_701", {
+      limit: 100,
+    });
+  });
+
+  it.each(["suspended", "disputed"] as const)(
+    "does not let invoice recovery clear an independent %s hold",
+    async status => {
+      mocks.feeSelectLimit.mockResolvedValueOnce([{ ...fee, status }]);
+      const holdType = status === "suspended" ? "administrator" : "legal";
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 41, holdType }]);
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 41, holdType }]);
+      const response = await postWebhook({
+        id: `evt_recovered_invoice_${status}_701`,
+        type: "invoice.paid",
+        data: { object: invoice(`in_recovered_${status}_701`, "paid") },
+      });
+      expect(response.status).toBe(200);
+      expect(mocks.feeUpdateWhere).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["suspended", "disputed"] as const)(
+    "does not let an active subscription update clear an independent %s hold",
+    async status => {
+      mocks.feeSelectLimit.mockResolvedValueOnce([{ ...fee, status }]);
+      const holdType = status === "suspended" ? "account" : "dispute";
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 42, holdType }]);
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 42, holdType }]);
+      const response = await postWebhook({
+        id: `evt_active_subscription_${status}_701`,
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: "sub_failed_701",
+            customer: "cus_failed_701",
+            status: "active",
+            items: {
+              data: [
+                {
+                  price: {
+                    id: "price_failed_701",
+                    currency: "usd",
+                    unit_amount: 25000,
+                  },
+                  quantity: 1,
+                },
+              ],
+            },
+          },
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(mocks.feeUpdateWhere).not.toHaveBeenCalled();
+    }
+  );
+
+  it("validates and links a completed Checkout subscription atomically", async () => {
+    mocks.feeSelectLimit.mockResolvedValueOnce([
+      {
+        ...fee,
+        status: "pending_verification",
+        stripeSubscriptionId: null,
+        stripeCheckoutSessionId: null,
+      },
+    ]);
     const response = await postWebhook({
       id: "evt_checkout_completed_701",
       type: "checkout.session.completed",
@@ -187,21 +452,22 @@ describe("Stripe payment failure webhook", () => {
         object: {
           id: "cs_test_701",
           status: "complete",
+          customer: "cus_failed_701",
           client_reference_id: "701",
           metadata: { successFeeId: "701" },
           subscription: "sub_checkout_701",
         },
       },
     });
-
     expect(response.status).toBe(200);
-    expect(mocks.mockDb.update).toHaveBeenCalled();
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 701,
-      action: "stripe_checkout_subscription_linked",
-      riskLevel: "critical",
-    }));
-    expect(mocks.completeStripeWebhookEvent).toHaveBeenCalledWith("evt_checkout_completed_701");
+    expect(mocks.retrieveSubscription).toHaveBeenCalledWith("sub_checkout_701");
+    expect(mocks.feeUpdateWhere).toHaveBeenCalledOnce();
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "stripe_checkout_subscription_linked",
+        entityType: "success_fee",
+        entityId: 701,
+      })
+    );
   });
 });

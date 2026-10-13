@@ -72,6 +72,7 @@ export type OAuthTokenResponse = {
   accessToken: string;
   refreshToken: string | null;
   expiresAt: Date | null;
+  accessTokenLifetime: "expiring" | "non_expiring" | "unknown";
   tokenType: string | null;
   grantedScopes: string[];
   scopeWasReturned: boolean;
@@ -372,7 +373,8 @@ function refreshTokenEndpointBody(config: ConnectorOAuthConfig, refreshToken: st
 
 async function parseOAuthTokenResponse(
   response: Response,
-  fallbackScopes: string[]
+  fallbackScopes: string[],
+  provider: OAuthConnectorProvider
 ): Promise<OAuthTokenResponse> {
   let payload: Record<string, unknown> = {};
   try {
@@ -391,6 +393,12 @@ async function parseOAuthTokenResponse(
   const expiresIn = typeof payload.expires_in === "number"
     ? payload.expires_in
     : typeof payload.expires_in === "string" ? Number(payload.expires_in) : NaN;
+  const hasExpiry = Number.isFinite(expiresIn) && expiresIn > 0 && expiresIn <= MAX_TOKEN_LIFETIME_SECONDS;
+  const refreshToken = typeof payload.refresh_token === "string" &&
+    payload.refresh_token.length > 0 &&
+    payload.refresh_token.length <= MAX_PROVIDER_TOKEN_LENGTH
+    ? payload.refresh_token
+    : null;
   const grantedScope = (typeof payload.scope === "string"
     ? payload.scope.split(/[\s,]+/)
     : fallbackScopes)
@@ -399,14 +407,13 @@ async function parseOAuthTokenResponse(
     .slice(0, MAX_GRANTED_SCOPES);
   return {
     accessToken,
-    refreshToken: typeof payload.refresh_token === "string" &&
-      payload.refresh_token.length > 0 &&
-      payload.refresh_token.length <= MAX_PROVIDER_TOKEN_LENGTH
-      ? payload.refresh_token
-      : null,
-    expiresAt: Number.isFinite(expiresIn) && expiresIn > 0 && expiresIn <= MAX_TOKEN_LIFETIME_SECONDS
-      ? new Date(Date.now() + expiresIn * 1000)
-      : null,
+    refreshToken,
+    expiresAt: hasExpiry ? new Date(Date.now() + expiresIn * 1000) : null,
+    accessTokenLifetime: hasExpiry
+      ? "expiring"
+      : provider === "github" && !Object.hasOwn(payload, "expires_in") && !refreshToken
+        ? "non_expiring"
+        : "unknown",
     tokenType: typeof payload.token_type === "string" && payload.token_type.length <= 100
       ? payload.token_type
       : null,
@@ -441,7 +448,7 @@ export async function exchangeConnectorAuthorizationCode(
     },
     body: tokenEndpointBody(config, code),
   }));
-  return parseOAuthTokenResponse(response, config.scopes);
+  return parseOAuthTokenResponse(response, config.scopes, config.provider);
 }
 
 export async function refreshConnectorAccessToken(
@@ -457,5 +464,5 @@ export async function refreshConnectorAccessToken(
     },
     body: refreshTokenEndpointBody(config, refreshToken),
   }));
-  return parseOAuthTokenResponse(response, config.scopes);
+  return parseOAuthTokenResponse(response, config.scopes, config.provider);
 }

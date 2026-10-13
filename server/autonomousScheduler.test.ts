@@ -14,7 +14,11 @@ vi.mock("./autonomousService", () => ({
   runScheduledAutonomousForUser: mocks.runScheduledAutonomousForUser,
 }));
 
-import { AutonomousScheduler } from "./autonomousScheduler";
+import {
+  AutonomousScheduler,
+  MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS,
+  MAX_RETAINED_AUTONOMOUS_USER_STATUSES,
+} from "./autonomousScheduler";
 
 describe("AutonomousScheduler", () => {
   beforeEach(() => {
@@ -154,6 +158,53 @@ describe("AutonomousScheduler", () => {
     expect(scheduler.getStatus().enrolledUsers).toBe(101);
   });
 
+  it("bounds retained per-user status and keeps the most recently processed users", async () => {
+    mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
+      Array.from(
+        { length: MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1 },
+        (_, index) => ({
+          userId: index + 1,
+          preferences: JSON.stringify({
+            autonomousEnabled: true,
+            scanFrequency: "daily",
+          }),
+        })
+      )
+    );
+    mocks.runScheduledAutonomousForUser.mockResolvedValue({
+      queuedApplicationRecords: 0,
+      queuedReviewRecords: 0,
+      queuedManualRecords: 0,
+      queuedFollowUps: 0,
+      skippedDuplicateFollowUps: 0,
+      skippedResumeEvidenceActions: 0,
+      skippedProfileReadinessActions: 0,
+      skippedEvidenceGatedActions: 0,
+      skippedEmptySourceActions: 0,
+      failedActions: 0,
+    });
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    let retainedStatuses = 0;
+    for (
+      let userId = 1;
+      userId <= MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1;
+      userId++
+    ) {
+      if (scheduler.getUserStatus(userId)) retainedStatuses++;
+    }
+    expect(retainedStatuses).toBe(MAX_RETAINED_AUTONOMOUS_USER_STATUSES);
+    expect(scheduler.getUserStatus(1)).toBeNull();
+    expect(
+      scheduler.getUserStatus(MAX_RETAINED_AUTONOMOUS_USER_STATUSES + 1)
+    ).toMatchObject({
+      jobsQueued: 0,
+      failedActions: 0,
+    });
+  });
+
   it("runs at most three enrolled users concurrently", async () => {
     mocks.getProfilesWithAutonomousPreferences.mockResolvedValue(
       Array.from({ length: 7 }, (_, index) => ({
@@ -206,6 +257,25 @@ describe("AutonomousScheduler", () => {
       "User 22: Autonomous work could not complete. Review the operating ledger before retrying.",
     ]);
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("provider-secret");
+  });
+
+  it("bounds error samples and counts every omitted scheduler error", async () => {
+    const failedUsers = MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS + 17;
+    const profile = (index: number) => ({
+        userId: index + 1,
+        preferences: JSON.stringify({ autonomousEnabled: true, scanFrequency: "daily" }),
+    });
+    mocks.getProfilesWithAutonomousPreferences
+      .mockResolvedValueOnce(Array.from({ length: 100 }, (_, index) => profile(index)))
+      .mockResolvedValueOnce(Array.from({ length: failedUsers - 100 }, (_, index) => profile(index + 100)));
+    mocks.runScheduledAutonomousForUser.mockRejectedValue(new Error("private provider detail"));
+
+    const scheduler = new AutonomousScheduler();
+    await scheduler.runDueUsers();
+
+    expect(scheduler.getStatus().errors).toHaveLength(MAX_RETAINED_AUTONOMOUS_SCHEDULER_ERRORS);
+    expect(scheduler.getStatus().omittedErrorCount).toBe(17);
+    expect(JSON.stringify(scheduler.getStatus())).not.toContain("private provider detail");
   });
 
   it("aborts active users and does not dequeue more work during shutdown", async () => {

@@ -20,11 +20,11 @@ function contains(value: unknown, filter: string | undefined) {
 
 /** One bounded page from Arbeitnow's documented no-key job API. */
 export class ArbeitnowScraper extends BaseScraper {
-  constructor(platformId: number) {
+  constructor(platformId: number, market: "DE" | "GB" = "DE") {
     super({
-      platformName: "Arbeitnow",
+      platformName: market === "GB" ? "Arbeitnow UK" : "Arbeitnow",
       platformId,
-      baseUrl: "https://www.arbeitnow.com/api/job-board-api",
+      baseUrl: market === "GB" ? "https://www.arbeitnow.co.uk/api/job-board-api" : "https://www.arbeitnow.com/api/job-board-api",
       rateLimit: 2_000,
       maxRetries: 3,
     });
@@ -58,7 +58,7 @@ export class ArbeitnowScraper extends BaseScraper {
             title: rawJob.title,
             company: rawJob.company_name,
             description: rawJob.description,
-            location: rawJob.location || "Remote - Germany",
+            location: rawJob.location || "Remote - location unspecified",
             skills: rawJob.tags?.join(", "),
             jobType: rawJob.job_types?.[0],
             // Arbeitnow requires API consumers to link back to the provider.

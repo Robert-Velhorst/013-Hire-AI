@@ -229,6 +229,23 @@ describe("Drizzle migration journal", () => {
     expect(migration).toContain("`connector_authorizations_refresh_lease_idx`");
   });
 
+  it("keeps provider revocation obligations durable without storing credentials", () => {
+    const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
+    const migration = readFileSync(
+      resolve(process.cwd(), "drizzle", "0082_material_stardust.sql"),
+      "utf8"
+    );
+
+    expect(schema).toContain('mysqlTable("connector_revocation_obligations"');
+    expect(schema).toContain('uniqueIndex("connector_revocation_obligations_active_identity_unique")');
+    expect(schema).toContain('"provider_api_confirmed", "user_attested_manual_removal", "operator_attested_manual_removal"');
+    expect(migration).toContain("CREATE TABLE `connector_revocation_obligations`");
+    expect(migration).toContain("GENERATED ALWAYS AS");
+    expect(migration).toContain("`connector_revocation_obligations_active_identity_unique`");
+    expect(migration).not.toContain("access_token");
+    expect(migration).not.toContain("refresh_token");
+  });
+
   it("keeps durable operational failure aggregates aligned with the runtime schema", () => {
     const schema = readFileSync(resolve(process.cwd(), "drizzle", "schema.ts"), "utf8");
     const migration = readFileSync(

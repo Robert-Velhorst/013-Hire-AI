@@ -17,6 +17,7 @@ const jobs = [
     platformId: 1,
     salaryMin: 120000,
     salaryMax: 160000,
+    salaryCurrency: "USD",
     applicationProcess: "greenhouse",
     visaSponsorshipAvailable: 1,
     openHiringSupport: 1,
@@ -68,7 +69,7 @@ describe("job search filters", () => {
       salaryCurrency: "USD",
     }, new Date("2026-07-10T12:00:00.000Z"));
 
-    expect(result.map((job) => job.id)).toEqual([1, 3]);
+    expect(result.map((job) => job.id)).toEqual([1]);
   });
 
   it("combines evidence, ATS, recency, and experience filters", () => {
@@ -107,6 +108,24 @@ describe("job search filters", () => {
     expect(result.map((job) => job.id)).toContain(4);
   });
 
+  it("keeps a listing with no remote evidence out of the remote-only results", () => {
+    const result = filterJobListings([
+      ...jobs,
+      {
+        id: 6,
+        title: "Platform Engineer",
+        company: "Unknown Work Mode",
+        description: "Build reliable services.",
+        requirements: "TypeScript experience",
+        location: null,
+        jobType: "full-time",
+        platformId: 6,
+      },
+    ], defaultJobSearchFilters);
+
+    expect(result.map((job) => job.id)).not.toContain(6);
+  });
+
   it("excludes hybrid listings even when their text also mentions remote work", () => {
     const result = filterJobListings([
       ...jobs,
@@ -143,7 +162,7 @@ describe("job search filters", () => {
       salaryDisclosedOnly: true,
     }, new Date("2026-07-10T12:00:00.000Z"));
 
-    expect(included.map((job) => job.id)).toContain(3);
+    expect(included.map((job) => job.id)).not.toContain(3);
     expect(disclosedOnly.map((job) => job.id)).not.toContain(3);
   });
 
@@ -199,6 +218,20 @@ describe("job search filters", () => {
     });
 
     expect(result.map((job) => job.id)).toEqual([4]);
+  });
+
+  it("does not treat an unknown listing currency as the selected currency", () => {
+    const result = filterJobListings([
+      { ...jobs[0], id: 4, salaryCurrency: null },
+      { ...jobs[0], id: 5, salaryCurrency: "ZZZ" },
+      { ...jobs[0], id: 6, salaryCurrency: "USD" },
+    ], {
+      ...defaultJobSearchFilters,
+      remoteOnly: false,
+      salaryCurrency: "USD",
+    });
+
+    expect(result.map((job) => job.id)).toEqual([6]);
   });
 
   it("hides explicit payment and forwarding signals from discovery", () => {

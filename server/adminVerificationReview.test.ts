@@ -5,25 +5,38 @@ import { adminRouter } from "./routers/admin";
 const mocks = vi.hoisted(() => {
   const selectLimit = vi.fn();
   const updateWhere = vi.fn();
+  const insertValues = vi.fn();
+  const selectResults: unknown[][] = [];
   const updateSet = vi.fn(() => ({
     where: updateWhere,
   }));
+  const makeSelect = () => {
+    const query: any = {};
+    query.from = vi.fn(() => query);
+    query.where = vi.fn(() => query);
+    query.limit = vi.fn(() => query);
+    query.for = vi.fn(() => Promise.resolve(selectResults.shift() ?? []));
+    query.then = (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+      Promise.resolve(selectResults.shift() ?? []).then(resolve, reject);
+    return query;
+  };
+  const tx = {
+    select: vi.fn(makeSelect),
+    update: vi.fn(() => ({ set: updateSet })),
+    insert: vi.fn(() => ({ values: insertValues })),
+  };
   const mockDb = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: selectLimit,
-        })),
-      })),
-    })),
+    select: vi.fn(makeSelect),
     update: vi.fn(() => ({
       set: updateSet,
     })),
+    transaction: vi.fn(async (operation: (value: typeof tx) => Promise<unknown>) => operation(tx)),
   };
 
   return {
     mockDb,
     selectLimit,
+    selectResults,
     updateWhere,
     createAdminReviewItem: vi.fn(),
     createAuditEvent: vi.fn(),
@@ -75,12 +88,13 @@ describe("admin verification review lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDb.mockResolvedValue(mocks.mockDb);
-    mocks.selectLimit.mockResolvedValue([{
-      id: 7001,
-      userId: 42,
-      successFeeId: 88,
-      status: "pending",
-    }]);
+    mocks.selectResults.splice(0, mocks.selectResults.length,
+      [{ id: 7001, userId: 42, successFeeId: 88, status: "pending" }],
+      [{ id: 88, userId: 42, status: "suspended", lifecycleStatus: "active", stripeSubscriptionId: "sub_88" }],
+      [{ id: 7001, userId: 42, successFeeId: 88, status: "pending" }],
+      [],
+      [],
+    );
     mocks.updateWhere.mockResolvedValue([{ affectedRows: 1 }]);
     mocks.listActiveAdminReviewItemsForEntity.mockResolvedValue([
       {

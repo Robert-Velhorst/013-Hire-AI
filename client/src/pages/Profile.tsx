@@ -33,6 +33,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { PROFILE_EVIDENCE_LIMITS } from "@shared/profileEvidenceLimits";
 import { trpc } from "@/lib/trpc";
+import { uploadDocument } from "@/lib/documentUpload";
 import { openExternalUrl } from "@/lib/externalUrl";
 import {
   getProfileEvidenceControlSummary,
@@ -61,12 +62,11 @@ import {
 } from "@/components/ui/dialog";
 
 type CloudResumeDocument = {
+  candidateId: string;
   provider: "google_drive" | "dropbox";
-  sourceId: string;
   name: string;
   mimeType: string;
   size: number | null;
-  modifiedAt: string | null;
 };
 
 type InboxResponseCandidate = {
@@ -136,6 +136,7 @@ export default function Profile() {
   const [salaryCurrency, setSalaryCurrency] = useState("USD");
   const [needsVisaSponsorship, setNeedsVisaSponsorship] = useState(false);
   const [cloudResumeDocuments, setCloudResumeDocuments] = useState<CloudResumeDocument[]>([]);
+  const [cloudResumeDiscoveryTruncated, setCloudResumeDiscoveryTruncated] = useState(false);
   const [inboxResponseTypeOverrides, setInboxResponseTypeOverrides] = useState<Record<number, InboxResponseType>>({});
   const [githubProfileCandidate, setGitHubProfileCandidate] = useState<GitHubProfileCandidate | null>(null);
   const [linkedInIdentityCandidate, setLinkedInIdentityCandidate] = useState<LinkedInIdentityCandidate | null>(null);
@@ -238,6 +239,7 @@ export default function Profile() {
   const discoverCloudDocuments = trpc.profile.discoverCloudDocuments.useMutation({
     onSuccess: (result) => {
       setCloudResumeDocuments(result.documents);
+      setCloudResumeDiscoveryTruncated(result.truncated);
       toast.success(
         result.documents.length === 1
           ? t("foundCloudResume")
@@ -250,6 +252,7 @@ export default function Profile() {
     onSuccess: async ({ resume }) => {
       toast.success(t("cloudResumeImported", { version: resume.version }));
       setCloudResumeDocuments([]);
+      setCloudResumeDiscoveryTruncated(false);
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -315,25 +318,13 @@ export default function Profile() {
     },
     onError: (error) => toast.error(error.message || t("unableDismissInboxResponse")),
   });
-  const parseResumeFile = trpc.resume.parseFile.useMutation({
-    onSuccess: async ({ resume }) => {
-      toast.success(t("resumeImported", { version: resume.version }));
-      await Promise.all([
-        profileQuery.refetch(),
-        evidenceReadinessQuery.refetch(),
-        activeResumeQuery.refetch(),
-        resumeVersionsQuery.refetch(),
-      ]);
-    },
-    onError: (error) => toast.error(error.message || t("unableImportResume")),
-  });
   const setActiveResume = trpc.resume.setActiveVersion.useMutation({
     onSuccess: async ({ success }) => {
       if (!success) {
         toast.error(t("unableActivateResume"));
-        return;
+      } else {
+        toast.success(t("activeResumeUpdated"));
       }
-      toast.success(t("activeResumeUpdated"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -347,9 +338,9 @@ export default function Profile() {
     onSuccess: async ({ success }) => {
       if (!success) {
         toast.error(t("unableDeleteResume"));
-        return;
+      } else {
+        toast.success(t("resumeVersionDeleted"));
       }
-      toast.success(t("resumeVersionDeleted"));
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -482,11 +473,23 @@ export default function Profile() {
 
     setIsUploading(true);
     try {
-      await parseResumeFile.mutateAsync({
-        fileData: await fileToBase64(file),
-        mimeType,
-        filename: file.name,
+      const result = await uploadDocument<{ resume: { version: number } }>({
+        file,
+        kind: "resume-parse",
+        metadata: {
+          mimeType,
+          filename: file.name,
+        },
       });
+      toast.success(t("resumeImported", { version: result.resume.version }));
+      await Promise.all([
+        profileQuery.refetch(),
+        evidenceReadinessQuery.refetch(),
+        activeResumeQuery.refetch(),
+        resumeVersionsQuery.refetch(),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("unableImportResume"));
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -550,7 +553,7 @@ export default function Profile() {
   };
 
   const handleCloudResumeImport = (document: CloudResumeDocument) => {
-    importCloudResume.mutate(document);
+    importCloudResume.mutate({ candidateId: document.candidateId });
   };
 
   const handleInboxDiscovery = (provider: InboxResponseCandidate["provider"]) => {
@@ -817,11 +820,16 @@ export default function Profile() {
                 />
               </label>
             </div>
-            {cloudResumeDocuments.length > 0 ? (
+            {cloudResumeDocuments.length > 0 || cloudResumeDiscoveryTruncated ? (
               <div className="mt-4 space-y-2 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("cloudResumeCandidates")}</p>
+                {cloudResumeDiscoveryTruncated ? (
+                  <p className="text-xs text-amber-300" role="status">
+                    {t("cloudResumeSearchTruncated")}
+                  </p>
+                ) : null}
                 {cloudResumeDocuments.map((document) => (
-                  <div key={`${document.provider}:${document.sourceId}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
+                  <div key={document.candidateId} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-white">{document.name}</p>
                       <p className="mt-1 text-xs text-slate-400">
@@ -1006,7 +1014,7 @@ export default function Profile() {
                         <div className="flex items-center gap-2">
                           {resume.isActive ? <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200">{t("activeLabel")}</Badge> : null}
                           {!resume.isActive ? (
-                            <Button size="sm" variant="outline" onClick={() => setActiveResume.mutate({ version: resume.version })} disabled={setActiveResume.isPending}>
+                            <Button size="sm" variant="outline" onClick={() => setActiveResume.mutate({ version: resume.version, resumeId: resume.id })} disabled={setActiveResume.isPending}>
                               {t("useThisVersion")}
                             </Button>
                           ) : null}
@@ -1015,7 +1023,7 @@ export default function Profile() {
                             variant="ghost"
                             className="text-red-300 hover:text-red-200"
                             onClick={() => {
-                              if (confirm(t("confirmDeleteResumeVersion", { version: resume.version }))) deleteResumeVersion.mutate({ version: resume.version });
+                              if (confirm(t("confirmDeleteResumeVersion", { version: resume.version }))) deleteResumeVersion.mutate({ version: resume.version, resumeId: resume.id });
                             }}
                             disabled={deleteResumeVersion.isPending}
                             aria-label={t("deleteResumeVersionLabel", { version: resume.version })}
@@ -2116,21 +2124,6 @@ function getResumeMimeType(file: File): string | null {
   return file.type || null;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Unable to read the selected file"));
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Unable to read the selected file"));
-        return;
-      }
-      resolve(result.split(",", 2)[1] || "");
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
   experience: any;

@@ -19,9 +19,9 @@ try {
 } catch {
     throw "Hire.AI is not ready at $localReadiness. Start the Windows runtime and verify its database first."
 }
-if ($local.ready -ne $true) { throw 'The local Hire.AI runtime is not ready.' }
+if ($local.ready -isnot [bool] -or $local.ready -ne $true) { throw 'The local Hire.AI runtime is not ready.' }
 $localInstanceId = [string]$local.instanceId
-if ($localInstanceId -notmatch '^[A-Za-z0-9_-]{32,128}$') {
+if ($local.instanceId -isnot [string] -or $localInstanceId -notmatch '\A[A-Za-z0-9_-]{32,128}\z') {
     throw 'The local Hire.AI runtime did not provide a valid process identity.'
 }
 
@@ -49,8 +49,10 @@ try {
         Start-Sleep -Seconds 1
         try {
             $response = Invoke-RestMethod -Uri $publicReadiness -Headers @{ 'ngrok-skip-browser-warning' = 'true' } -TimeoutSec 5
-            $identityMismatch = $response.ready -eq $true -and [string]$response.instanceId -ne $localInstanceId
-            $healthy = $response.ready -eq $true -and $response.instanceId -eq $localInstanceId
+            $ready = $response.ready -is [bool] -and $response.ready -eq $true
+            $identityMatches = $response.instanceId -is [string] -and $response.instanceId -ceq $localInstanceId
+            $identityMismatch = $ready -and -not $identityMatches
+            $healthy = $ready -and $identityMatches -and -not $process.HasExited
         } catch {
             $healthy = $false
         }

@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { useLocale, type TranslationKey } from "@/contexts/LocaleContext";
 import { formatBillingCalendarDate, formatBillingCurrency, formatBillingDate, formatBillingSalary, getLocalCalendarDate } from "@/lib/billingPresentation";
 import { getVerificationUploadMimeType, validateVerificationUpload, VERIFICATION_UPLOAD_ACCEPT } from "@shared/documentUploads";
-import { readFileAsBase64 } from "@/lib/documentUpload";
+import { uploadDocument } from "@/lib/documentUpload";
 import {
   DollarSign, FileText, CheckCircle, Clock, AlertTriangle,
   XCircle, Upload, ExternalLink, RefreshCw, Briefcase, Calendar, Shield, ClipboardCheck, PartyPopper
@@ -89,28 +89,41 @@ interface VerificationUploadDialogProps {
 function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess }: VerificationUploadDialogProps) {
   const { t } = useLocale();
   const [file, setFile] = useState<File | null>(null);
-  const [fileBase64, setFileBase64] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [documentType, setDocumentType] = useState<"paystub" | "employment_letter" | "bank_statement" | "other">("paystub");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileReadIdRef = useRef(0);
 
-  const submitVerification = trpc.successFees.submitVerification.useMutation({
-    onSuccess: () => {
+  const handleSubmitVerification = async () => {
+    if (!file || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await uploadDocument({
+        file,
+        kind: "verification",
+        metadata: {
+          successFeeId,
+          documentType,
+          documentFileName: file.name,
+          documentMimeType: getVerificationUploadMimeType(file)!,
+        },
+      });
       toast.success(t("verificationSubmitted"));
       fileReadIdRef.current += 1;
       setFile(null);
-      setFileBase64("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       onSuccess();
       onOpenChange(false);
-    },
-    onError: (err) => toast.error(err.message || t("verificationSubmitFailed")),
-  });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("verificationSubmitFailed"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const resetUpload = () => {
     fileReadIdRef.current += 1;
     setFile(null);
-    setFileBase64("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -124,24 +137,13 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
     if (!f) return;
     const readId = ++fileReadIdRef.current;
     setFile(null);
-    setFileBase64("");
     const validationError = validateVerificationUpload(f);
     if (validationError) {
       toast.error(validationError);
       e.target.value = "";
       return;
     }
-    try {
-      const base64 = await readFileAsBase64(f);
-      if (readId !== fileReadIdRef.current) return;
-      setFile(f);
-      setFileBase64(base64);
-    } catch (error) {
-      if (readId === fileReadIdRef.current) {
-        toast.error(error instanceof Error ? error.message : t("fileReadFailed"));
-        e.target.value = "";
-      }
-    }
+    if (readId === fileReadIdRef.current) setFile(f);
   };
 
   return (
@@ -188,11 +190,11 @@ function VerificationUploadDialog({ open, onOpenChange, successFeeId, onSuccess 
           <input ref={fileInputRef} type="file" accept={VERIFICATION_UPLOAD_ACCEPT} onChange={handleFileChange} className="hidden" />
 
           <Button
-            onClick={() => submitVerification.mutate({ successFeeId, documentBase64: fileBase64, documentType, documentFileName: file!.name, documentMimeType: getVerificationUploadMimeType(file!)! })}
-            disabled={!file || !fileBase64 || submitVerification.isPending}
+            onClick={() => void handleSubmitVerification()}
+            disabled={!file || isSubmitting}
             className="w-full bg-cyan-500 hover:bg-cyan-600 text-black font-semibold"
           >
-            {submitVerification.isPending ? t("uploading") : t("submitVerification")}
+            {isSubmitting ? t("uploading") : t("submitVerification")}
           </Button>
         </div>
       </DialogContent>

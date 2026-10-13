@@ -17,6 +17,7 @@ const Billing = lazy(() => import("./pages/Billing"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const JobSearch = lazy(() => import("./pages/JobSearch"));
+const Sources = lazy(() => import("./pages/Sources"));
 const Applications = lazy(() => import("./pages/Applications"));
 const JobAlerts = lazy(() => import("./pages/JobAlerts"));
 const ReviewQueue = lazy(() => import("./pages/ReviewQueue"));
@@ -42,6 +43,7 @@ function Router() {
         <Route path={"/"} component={LandingPage} />
         <Route path={"/dashboard"} component={Dashboard} />
         <Route path={"/jobs"} component={JobSearch} />
+        <Route path={"/sources"} component={Sources} />
         <Route path={"/applications"} component={Applications} />
         <Route path={"/review-queue"} component={ReviewQueue} />
         <Route path={"/team"} component={Team} />

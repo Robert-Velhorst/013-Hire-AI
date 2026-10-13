@@ -64,10 +64,11 @@ describe("inbox response discovery", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-701" }] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        snippet: "We would like to schedule an interview with Acme Analytics next week.",
+        internalDate: String(Date.parse("2026-07-13T10:00:00.000Z")),
+        snippet: "ignored because Gmail metadata scope cannot read message bodies",
         payload: { headers: [
           { name: "From", value: "recruiter@acme.example" },
-          { name: "Subject", value: "Acme Analytics interview" },
+          { name: "Subject", value: "Acme Analytics interview invitation" },
           { name: "Date", value: "Sun, 13 Jul 2026 10:00:00 +0000" },
         ] },
       }), { status: 200 }));
@@ -82,6 +83,10 @@ describe("inbox response discovery", () => {
       confidence: "medium",
     })]);
     expect(fetcher).toHaveBeenCalledTimes(2);
+    const listUrl = new URL(String(fetcher.mock.calls[0][0]));
+    expect(listUrl.searchParams.get("labelIds")).toBe("INBOX");
+    expect(listUrl.searchParams.has("q")).toBe(false);
+    expect(String(fetcher.mock.calls[1][0])).not.toContain("metadataHeaders=Date");
     expect(fetcher.mock.calls[0][1]).toEqual(expect.objectContaining({
       redirect: "error",
       signal: expect.any(AbortSignal),
@@ -102,10 +107,11 @@ describe("inbox response discovery", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-701" }] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        snippet: "We would like to schedule an interview with Acme Analytics next week.",
+        internalDate: String(Date.parse("2026-07-13T10:00:00.000Z")),
+        snippet: "ignored because Gmail metadata scope cannot read message bodies",
         payload: { headers: [
           { name: "From", value: "recruiter@acme.example" },
-          { name: "Subject", value: "Acme Analytics interview" },
+          { name: "Subject", value: "Acme Analytics interview invitation" },
           { name: "Date", value: "Sun, 13 Jul 2026 10:00:00 +0000" },
         ] },
       }), { status: 200 }));
@@ -121,7 +127,8 @@ describe("inbox response discovery", () => {
   it("checks all matched message references in one ownership-scoped database lookup", async () => {
     mocks.findEmployerResponseSourceReferences.mockResolvedValue(["gmail:gmail-recorded"]);
     const message = (hour: string) => new Response(JSON.stringify({
-      snippet: "Acme Analytics would like to discuss your application.",
+      internalDate: String(Date.parse(`2026-07-13T${hour}:00:00.000Z`)),
+      snippet: "ignored because Gmail metadata scope cannot read message bodies",
       payload: { headers: [
         { name: "From", value: "recruiter@acme.example" },
         { name: "Subject", value: "Acme Analytics application update" },
@@ -144,6 +151,66 @@ describe("inbox response discovery", () => {
       source: "email",
       sourceReferences: ["gmail:gmail-recorded", "gmail:gmail-new"],
     });
+  });
+
+  it("uses Gmail internalDate instead of an untrusted Date header for the lookback", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-stale" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        internalDate: String(Date.parse("2026-06-13T11:59:59.000Z")),
+        snippet: "ignored because Gmail metadata scope cannot read message bodies",
+        payload: { headers: [
+          { name: "From", value: "recruiter@acme.example" },
+          { name: "Subject", value: "Acme Analytics interview invitation" },
+          { name: "Date", value: "Mon, 13 Jul 2026 11:00:00 +0000" },
+        ] },
+      }), { status: 200 }));
+
+    await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher))).resolves.toEqual([]);
+    expect(mocks.findEmployerResponseSourceReferences).not.toHaveBeenCalled();
+  });
+
+  it("keeps a recent Gmail message when its sender-controlled Date header is stale", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-recent" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        internalDate: String(Date.parse("2026-07-13T10:00:00.000Z")),
+        snippet: "ignored because Gmail metadata scope cannot read message bodies",
+        payload: { headers: [
+          { name: "From", value: "recruiter@acme.example" },
+          { name: "Subject", value: "Acme Analytics interview invitation" },
+          { name: "Date", value: "Sat, 01 Jan 2000 00:00:00 +0000" },
+        ] },
+      }), { status: 200 }));
+
+    const candidates = await discoverInboxResponseCandidates(700, "gmail", options(fetcher));
+
+    expect(candidates).toEqual([expect.objectContaining({
+      messageId: "gmail-recent",
+      receivedAt: "2026-07-13T10:00:00.000Z",
+      preview: "",
+    })]);
+  });
+
+  it("does not use Gmail snippets as message-body data under metadata-only consent", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: "gmail-metadata-only" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        internalDate: String(Date.parse("2026-07-13T10:00:00.000Z")),
+        snippet: "We would like to schedule an interview with Acme Analytics next week.",
+        payload: { headers: [
+          { name: "From", value: "recruiter@acme.example" },
+          { name: "Subject", value: "Acme Analytics application update" },
+        ] },
+      }), { status: 200 }));
+
+    const candidates = await discoverInboxResponseCandidates(700, "gmail", options(fetcher));
+
+    expect(candidates).toEqual([expect.objectContaining({
+      messageId: "gmail-metadata-only",
+      preview: "",
+      suggestedResponseType: "other",
+    })]);
   });
 
   it("reads Gmail message details in ordered batches of at most five", async () => {
@@ -230,6 +297,19 @@ describe("inbox response discovery", () => {
     );
     expect(mocks.upsertUserConnectorAccount).toHaveBeenCalledWith(expect.objectContaining({
       provider: "gmail",
+      status: "needs_reauth",
+    }));
+  });
+
+  it("does not mark an inbox grant revoked for an insufficient-scope 403", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
+
+    await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher)))
+      .rejects.toThrow("temporarily unavailable");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalledWith(expect.objectContaining({
       status: "needs_reauth",
     }));
   });

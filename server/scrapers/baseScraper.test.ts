@@ -86,6 +86,23 @@ describe("base scraper application-link normalization", () => {
     });
   });
 
+  it("preserves missing location and unsupported currency as unknown", () => {
+    expect(scraper.normalize({ title: "Engineer", salaryMin: 90_000 })).toMatchObject({
+      location: undefined,
+      salaryMin: 90_000,
+      salaryCurrency: undefined,
+    });
+    expect(scraper.normalize({
+      title: "Engineer",
+      location: "Remote - Netherlands",
+      salaryMin: 90_000,
+      salaryCurrency: "ZZZ",
+    })).toMatchObject({
+      location: "Remote - Netherlands",
+      salaryCurrency: undefined,
+    });
+  });
+
   it("bounds provider-controlled fields to the database storage contract", () => {
     const normalized = scraper.normalize({
       title: "T".repeat(600),

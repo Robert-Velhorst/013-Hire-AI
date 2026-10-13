@@ -1,6 +1,7 @@
 import express from "express";
 import type { Server } from "node:http";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as database from "./db";
 import {
   HaiConnectorService,
   type HaiJobSearchSnapshot,
@@ -26,8 +27,14 @@ const snapshot: HaiJobSearchSnapshot = {
 };
 
 const servers: Server[] = [];
+let ownerId: number;
+beforeEach(async () => {
+  await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus: "active" });
+  ownerId = (await database.getUserByOpenId("hai-authorization-fixture"))!.id;
+});
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  vi.restoreAllMocks();
 });
 
 async function start(service: HaiConnectorService) {
@@ -47,7 +54,7 @@ function configuredService(provider = vi.fn(async () => snapshot)) {
     service: new HaiConnectorService({
       enabled: true,
       token,
-      userId: 41,
+      userId: ownerId,
       endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
     }, provider),
   };
@@ -90,10 +97,10 @@ describe("HAI connector configuration", () => {
     expect(validateHaiConnectorConfig({ ...config, endpointUrl: " http://127.0.0.1:3000/api/hai/a2a" })).toContain("surrounding whitespace");
   });
 
-  it("uses constant-time digest comparison semantics and exposes no token in status", () => {
+  it("accepts the configured bearer and exposes no token in status", async () => {
     const { service } = configuredService();
-    expect(service.authorize(token)).toBe(true);
-    expect(service.authorize(`${token}-wrong`)).toBe(false);
+    expect(await service.authorize(token)).toBe(true);
+    expect(await service.authorize(`${token}-wrong`)).toBe(false);
     expect(JSON.stringify(service.status())).not.toContain(token);
   });
 });
@@ -138,10 +145,10 @@ describe("HAI A2A route", () => {
     expect(body.result.task.artifacts[0].parts[0].data).toEqual(snapshot);
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
-    expect(provider).toHaveBeenCalledWith(41);
+    expect(provider).toHaveBeenCalledWith(ownerId);
   });
 
-  it("rejects mutation-shaped metadata and oversized input before reading Hire.AI state", async () => {
+  it("rejects mutation-shaped metadata and oversized input before building a job-search snapshot", async () => {
     const { service, provider } = configuredService();
     const base = await start(service);
     const headers = {
@@ -174,5 +181,108 @@ describe("HAI A2A route", () => {
     });
     expect(oversizedResponse.status).toBe(400);
     expect(provider).not.toHaveBeenCalled();
+  });
+
+  const endpoints = ["status", "a2a"] as const;
+  function request(base: string, endpoint: typeof endpoints[number], bearer = token) {
+    return fetch(`${base}/api/hai/${endpoint}`, endpoint === "status" ? {
+      headers: { authorization: `Bearer ${bearer}` },
+    } : {
+      method: "POST",
+      headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", "A2A-Version": "1.0" },
+      body: JSON.stringify(sendMessage()),
+    });
+  }
+
+  describe.each(endpoints)("%s account authorization", endpoint => {
+    it.each(["pending", "suspended"] as const)("blocks %s accounts even with the correct bearer", async accountStatus => {
+      await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus });
+      const { service, provider } = configuredService();
+      const response = await request(await start(service), endpoint);
+      expect(response.status).toBe(404);
+      expect(provider).not.toHaveBeenCalled();
+    });
+
+    it("blocks a missing or erased account", async () => {
+      const { provider } = configuredService();
+      const service = new HaiConnectorService({
+        enabled: true, token, userId: 2_147_483_647, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+      }, provider);
+      const response = await request(await start(service), endpoint);
+      expect(response.status).toBe(404);
+      expect(provider).not.toHaveBeenCalled();
+    });
+
+    it("does not retain authorization after the account is suspended", async () => {
+      const { service, provider } = configuredService();
+      const base = await start(service);
+      const first = await request(base, endpoint);
+      expect(first.status).toBe(200);
+      await first.text();
+      provider.mockClear();
+      await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus: "suspended" });
+      const second = await request(base, endpoint);
+      expect(second.status).toBe(404);
+      expect(provider).not.toHaveBeenCalled();
+    });
+
+    it("returns a bounded temporary failure without data when account lookup fails", async () => {
+      const { service, provider } = configuredService();
+      vi.spyOn(database, "getUserById").mockRejectedValueOnce(new Error("private-database-detail-do-not-return"));
+      const response = await request(await start(service), endpoint);
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const body = await response.text();
+      expect(body).not.toContain("private-database-detail");
+      expect(body.length).toBeLessThan(200);
+      expect(provider).not.toHaveBeenCalled();
+    });
+
+    it("rejects a wrong bearer without querying the account database", async () => {
+      const { service, provider } = configuredService();
+      const lookup = vi.spyOn(database, "getUserById");
+      const response = await request(await start(service), endpoint, "incorrect-token");
+      expect(response.status).toBe(404);
+      expect(lookup).not.toHaveBeenCalled();
+      expect(provider).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each(["1.0", "unsupported"])("JSON-RPC errors with protocol %s", protocol => {
+    it.each([
+      { label: "object", id: { privateInput: "must-not-be-echoed" } },
+      { label: "array", id: ["must-not-be-echoed"] },
+      { label: "oversized string", id: "x".repeat(4096) },
+      { label: "boolean", id: true },
+      { label: "null", id: null },
+    ])("does not reflect an invalid $label request identifier", async ({ id }) => {
+      const { service, provider } = configuredService();
+      const base = await start(service);
+      const response = await fetch(`${base}/api/hai/a2a`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "A2A-Version": protocol },
+        body: JSON.stringify({ ...sendMessage(), id }),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(400);
+      expect(body).toMatchObject({ jsonrpc: "2.0", id: null, error: {
+        code: protocol === "1.0" ? -32602 : -32009,
+      } });
+      expect(JSON.stringify(body)).not.toContain("must-not-be-echoed");
+      expect(JSON.stringify(body).length).toBeLessThan(500);
+      expect(provider).not.toHaveBeenCalled();
+    });
+
+    it.each([0, "request-1"])("retains a valid request identifier %j on errors", async id => {
+      const { service, provider } = configuredService();
+      const response = await fetch(`${await start(service)}/api/hai/a2a`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "A2A-Version": protocol },
+        body: JSON.stringify({ ...sendMessage({ parts: [] }), id }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ jsonrpc: "2.0", id });
+      expect(provider).not.toHaveBeenCalled();
+    });
   });
 });

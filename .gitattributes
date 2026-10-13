@@ -1,0 +1,3 @@
+deploy/hetzner/*.sh text eol=lf
+server/testFixtures/*.pdf binary
+server/testFixtures/*.docx binary

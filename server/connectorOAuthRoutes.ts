@@ -149,6 +149,9 @@ export function registerConnectorOAuthRoutes(app: Express) {
 
     try {
       const token = await exchangeConnectorAuthorizationCode(config, code);
+      if (token.accessTokenLifetime === "unknown" && !token.expiresAt && !token.refreshToken) {
+        throw new Error("The provider did not identify a usable connector token lifetime.");
+      }
       const missingScopes = getMissingProviderScopes(provider, token.grantedScopes, consentScopes);
       if (missingScopes.length > 0) {
         throw new Error("Required connector consent was not granted.");
@@ -159,6 +162,7 @@ export function registerConnectorOAuthRoutes(app: Express) {
         encryptedAccessToken: encryptConnectorToken(token.accessToken),
         encryptedRefreshToken: token.refreshToken ? encryptConnectorToken(token.refreshToken) : null,
         accessTokenExpiresAt: token.expiresAt,
+        accessTokenLifetime: token.accessTokenLifetime,
         tokenType: token.tokenType,
         grantedScopes: JSON.stringify(token.grantedScopes),
       });
@@ -181,6 +185,7 @@ export function registerConnectorOAuthRoutes(app: Express) {
           provider,
           status: "connected",
           tokenExpiresAt: token.expiresAt?.toISOString() ?? null,
+          tokenLifetime: token.accessTokenLifetime,
         }),
         riskLevel: "medium",
       });

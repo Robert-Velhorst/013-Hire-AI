@@ -1,6 +1,7 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
+import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -22,6 +23,20 @@ export function isValidJwtSecret(value: string | undefined): boolean {
   if (!value || value.length < 32 || value.length > 4_096) return false;
   if (value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value)) return false;
   return !JWT_SECRET_PLACEHOLDERS.has(value);
+}
+export function parseErasureIdentityHmacKeys(value: string | undefined): string[] {
+  return value ? value.split(",") : [];
+}
+export function areValidErasureIdentityHmacKeys(keys: unknown): keys is string[] {
+  return Array.isArray(keys) && keys.length > 0 && keys.length <= 64 && keys.every(key =>
+    typeof key === "string" &&
+    key.length >= 32 &&
+    key.length <= 4096 &&
+    key === key.trim() &&
+    !key.startsWith("replace-with-") &&
+    !key.startsWith("hire-ai-local-dev-") &&
+    !/[\u0000-\u001f\u007f,]/.test(key)
+  );
 }
 export function readBooleanFeatureFlag(value: string | undefined, fallback: boolean): boolean {
   const normalized = value?.trim().toLowerCase();
@@ -68,6 +83,12 @@ const readEnvWithLocalFallback = (name: string, fallback: string) => {
 export const ENV = {
   appId: readEnvWithLocalFallback("VITE_APP_ID", "hire-ai-local-dev"),
   cookieSecret: readEnvWithLocalFallback("JWT_SECRET", "hire-ai-local-dev-cookie-secret"),
+  erasureIdentityHmacKeys: parseErasureIdentityHmacKeys(
+    readEnvWithLocalFallback(
+      "ERASURE_IDENTITY_HMAC_KEYS",
+      "hire-ai-local-dev-erasure-identity-hmac-key"
+    )
+  ),
   sessionTtlMs: readBoundedInteger(
     "SESSION_TTL_MS",
     DEFAULT_SESSION_TTL_MS,
@@ -78,6 +99,7 @@ export const ENV = {
   databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
   databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
+  analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
@@ -122,6 +144,7 @@ export function validateProductionEnv() {
   assertRequiredEnv([
     "DATABASE_URL",
     "JWT_SECRET",
+    "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
     "OWNER_OPEN_ID",
@@ -133,9 +156,29 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
+    ENV.analyticsAllowedOrigin
+  );
+  const analyticsBuildOrigin = normalizeApprovedAnalyticsOrigin(
+    readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN")
+  );
+  if (
+    (ENV.analyticsAllowedOrigin.trim() && !analyticsRuntimeOrigin) ||
+    (readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN").trim() && !analyticsBuildOrigin) ||
+    analyticsRuntimeOrigin !== analyticsBuildOrigin
+  ) {
+    throw new Error(
+      "ANALYTICS_ALLOWED_ORIGIN and VITE_ANALYTICS_ALLOWED_ORIGIN must be the same valid HTTPS origin"
+    );
+  }
   if (!isValidJwtSecret(readEnv("JWT_SECRET"))) {
     throw new Error(
       "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
+    );
+  }
+  if (!areValidErasureIdentityHmacKeys(ENV.erasureIdentityHmacKeys)) {
+    throw new Error(
+      "ERASURE_IDENTITY_HMAC_KEYS must contain comma-separated 32-4096 character secrets without whitespace or control characters"
     );
   }
   if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {

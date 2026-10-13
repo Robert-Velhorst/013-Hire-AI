@@ -89,6 +89,20 @@ describe("LinkedIn identity discovery", () => {
     }));
   });
 
+  it("does not mark the LinkedIn grant revoked for an insufficient-scope 403", async () => {
+    const deps = dependencies();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
+
+    await expect(discoverLinkedInIdentity(21, { fetcher, now, dependencies: deps }))
+      .rejects.toThrow("temporarily unavailable");
+    expect(deps.upsertUserConnectorAccount).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: "needs_reauth",
+    }));
+  });
+
   it("rejects oversized LinkedIn identity metadata before refreshing account evidence", async () => {
     const deps = dependencies();
     const fetcher = vi.fn().mockResolvedValue(new Response("{}", {

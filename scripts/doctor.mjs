@@ -29,6 +29,7 @@ check("migration files", migrationFiles.length > 0 ? "pass" : "fail", `${migrati
 const requiredProductionEnv = [
   "DATABASE_URL",
   "JWT_SECRET",
+  "ERASURE_IDENTITY_HMAC_KEYS",
   "VITE_APP_ID",
   "OAUTH_SERVER_URL",
   "OWNER_OPEN_ID",
@@ -119,6 +120,24 @@ check(
     : jwtSecretValid
       ? "bounded non-placeholder secret configured"
       : "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
+);
+
+const erasureIdentityKeys = String(process.env.ERASURE_IDENTITY_HMAC_KEYS || "").split(",");
+const erasureIdentityKeysValid = erasureIdentityKeys.length > 0
+  && erasureIdentityKeys.length <= 64
+  && erasureIdentityKeys.every(key => key.length >= 32 && key.length <= 4_096
+    && key === key.trim()
+    && !key.startsWith("replace-with-")
+    && !key.startsWith("hire-ai-local-dev-")
+    && !/[\u0000-\u001f\u007f,]/.test(key));
+check(
+  "erasure identity protection key",
+  !process.env.ERASURE_IDENTITY_HMAC_KEYS && !isProduction ? "warn" : erasureIdentityKeysValid ? "pass" : "fail",
+  !process.env.ERASURE_IDENTITY_HMAC_KEYS && !isProduction
+    ? "not configured outside production"
+    : erasureIdentityKeysValid
+      ? `${erasureIdentityKeys.length} ordered key(s) configured`
+      : "ERASURE_IDENTITY_HMAC_KEYS must contain up to 64 ordered comma-separated 32-4096 character secrets without placeholders or whitespace"
 );
 
 const sessionTtlValue = String(process.env.SESSION_TTL_MS || "").trim();

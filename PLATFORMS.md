@@ -1,10 +1,15 @@
-# Remote Job Platforms - Complete List
+# Remote Job Source Directory
 
-This document lists all 50+ remote job platforms integrated into Hire.AI V2, organized by tier and category.
+This page is a curated 50-source reference directory, not a list of working integrations. The canonical catalog currently contains 90 names in [`server/scrapers/platformCatalog.ts`](server/scrapers/platformCatalog.ts) and [`server/scrapers/regionalPlatforms.ts`](server/scrapers/regionalPlatforms.ts).
 
 ## Overview
 
-Hire.AI V2 aggregates job listings from **50 remote job platforms** across 4 tiers, covering general job boards, industry-specific platforms, and niche markets.
+At this checkout, 52 adapter factories are registered (14 dedicated, 36 generic HTML, and 2 generic RSS), but only nine sources have an explicit policy allowing unattended API/RSS discovery. A registered adapter or catalog entry does not mean that the source is currently reachable, contractually approved, or being polled. The job-discovery scheduler is disabled by default; live source status must be read from runtime source-health records.
+
+Sources without an approved public ingestion contract remain manual or unavailable. Do not bypass access controls, account restrictions, rate limits, attribution requirements, or provider terms. For example, Working Nomads is held from unattended ingestion pending written authorization under its published Terms of Service section 3.1(d): [Terms of Service](https://www.workingnomads.com/terms-and-conditions).
+
+Hire.AI does not currently cover every remote job platform worldwide. The source catalog is an inventory of known sources, not a coverage guarantee.
+The tier groupings and short descriptions below are editorial reference notes; they are not a verified statement of current platform features or source health.
 
 ---
 
@@ -32,7 +37,7 @@ Focused remote job boards with strong communities and quality listings.
 | **Remotive** | https://remotive.io/ | General | Newsletter, community, resources |
 | **JustRemote** | https://justremote.co/ | General | Clean interface, global focus |
 | **Jobspresso** | https://jobspresso.co/ | General | Curated daily, quality over quantity |
-| **Working Nomads** | https://workingnomads.com/ | General | Digital nomad focus, location filters |
+| **Working Nomads** | https://workingnomads.com/ | General | Manual only until written authorization: its Terms of Service section 3.1(d) prohibits using the service to build a competitive product |
 | **NoDesk** | https://nodesk.co/ | General | Remote work resources, job board |
 | **Remotive.com** | https://remotive.com/ | General | Community-driven, remote culture |
 | **Pangian** | https://pangian.com/ | Diversity | Global diversity focus |
@@ -132,67 +137,15 @@ Specialized platforms for specific markets, regions, or demographics.
 
 ---
 
-## Platform Statistics
+## Source Status
 
-- **Total Platforms**: 50
-- **Tier 1**: 6 platforms (12%)
-- **Tier 2**: 9 platforms (18%)
-- **Tier 3**: 10 platforms (20%)
-- **Tier 4**: 25 platforms (50%)
+- **Catalogued names**: 90. This is not the number of sources being scraped.
+- **Registered adapters**: 52. Generic parser registrations are not proof of a working or authorized source.
+- **Allowed unattended discovery**: 9 public API/RSS sources, subject to their individual poll and attribution policies.
+- **Default scheduler state**: disabled (`JOB_SCRAPING_SCHEDULER_ENABLED=false`).
+- **Unavailable sources**: explicitly excluded when discontinued.
+- **Other sources**: manual until a suitable approved ingestion contract and adapter are available.
 
-### Category Breakdown
+The tables above are a 50-name curated reference and may not reflect all 90 canonical catalog records. Use runtime source-health results for observed availability and the source catalog for current policy; neither establishes universal job-market coverage.
 
-- **General**: 28 platforms (56%)
-- **Tech**: 6 platforms (12%)
-- **Design**: 3 platforms (6%)
-- **Diversity**: 3 platforms (6%)
-- **Regional**: 2 platforms (4%)
-- **Other Specialized**: 8 platforms (16%)
-
----
-
-## Integration Features
-
-### Job Aggregation
-- Real-time job discovery across all 50 platforms
-- Automated data normalization
-- Duplicate detection and removal
-- Format variation handling
-
-### Data Quality
-- Job validation and verification
-- Company information enrichment
-- Salary data normalization
-- Location standardization
-
-### User Experience
-- Unified search interface
-- Advanced filtering options
-- Personalized job matching
-- Application tracking across platforms
-
----
-
-## Future Expansion
-
-The platform is designed to easily accommodate additional job boards as they emerge. The modular architecture allows for:
-
-- Quick integration of new platforms
-- Custom scraping strategies per platform
-- Flexible data mapping
-- Scalable infrastructure
-
----
-
-## Notes
-
-- All platforms are actively monitored for uptime and data quality
-- Platform tiers are based on traffic, job volume, and reliability
-- Categories may overlap as platforms expand their offerings
-- Regular audits ensure platform information stays current
-
----
-
-**Last Updated**: January 2026
-**Total Active Platforms**: 50
-**Status**: All platforms operational and integrated
+**Status checked**: 2026-10-09. Source policies and terms can change; recheck before enabling a feed.

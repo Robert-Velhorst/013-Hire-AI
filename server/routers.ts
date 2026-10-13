@@ -1,4 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
+import {
+  isCanonicalBase64Payload,
+  MAX_DOCUMENT_UPLOAD_BASE64_LENGTH,
+  MAX_RESUME_TEXT_CHARS,
+} from "@shared/documentUploads";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -14,7 +19,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
 import { workspacesRouter } from "./routers/workspaces";
-import { uploadResume, getActiveResume, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
+import { uploadResume, getMimeTypeFromExtension, getActiveResume, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
 import {
   saveJob,
   unsaveJob,
@@ -50,6 +55,7 @@ import {
 } from "./applicationFeatures";
 import { MAX_FOLLOW_UP_MESSAGE_CHARS } from "./messageSanitization";
 import { SUPPORTED_LOCALES } from "@shared/localization";
+import { isKnownSalaryCurrency } from "@shared/salaryCurrency";
 
 const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
@@ -57,9 +63,12 @@ const boundedFilterText = z.string().trim().min(1).max(200);
 const boundedShortText = z.string().trim().min(1).max(255);
 const boundedNarrativeText = z.string().trim().min(1).max(20_000);
 const boundedAiList = z.array(z.string().trim().min(1).max(500)).max(50);
-const boundedResumeText = z.string().trim().min(1).max(500_000);
+const boundedResumeText = z.string().trim().min(1).max(MAX_RESUME_TEXT_CHARS);
 // 10 MiB of binary data expands to just under 14 MiB when base64 encoded.
-const boundedUploadBase64 = z.string().min(1).max(14_000_000);
+const boundedUploadBase64 = z.string()
+  .min(4)
+  .max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)
+  .refine(isCanonicalBase64Payload, "Invalid base64 document payload.");
 const boundedFileName = z.string().trim().min(1).max(255);
 const boundedMimeType = z.string().trim().min(1).max(120);
 const boundedProfilePayload = z.string().max(50_000);
@@ -74,7 +83,12 @@ const jobSearchFiltersInput = z.object({
   jobType: z.enum(["all", "full-time", "part-time", "contract", "temporary"]).optional(),
   platformId: z.string().trim().max(20).optional(),
   salaryRange: z.tuple([z.number().min(0).max(10_000_000), z.number().min(0).max(10_000_000)]).optional(),
-  salaryCurrency: z.union([z.literal("all"), z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase())]).optional(),
+  salaryCurrency: z.union([
+    z.literal("all"),
+    z.string().trim().regex(/^[A-Za-z]{3}$/)
+      .transform((value) => value.toUpperCase())
+      .refine(isKnownSalaryCurrency, "Use a supported ISO 4217 currency code."),
+  ]).optional(),
   remoteOnly: z.boolean().optional(),
   experienceLevel: z.enum(["all", "entry", "junior", "mid", "senior", "lead", "executive"]).optional(),
   applicationProcess: z.enum(["all", "greenhouse", "lever", "workday", "email", "other"]).optional(),
@@ -321,6 +335,57 @@ export const appRouter = router({
       }),
   }),
   privacy: router({
+    getConnectorRevocationObligations: protectedProcedure.query(async ({ ctx }) => {
+      const { listOpenConnectorRevocationObligations } = await import("./connectorRevocationObligations");
+      return listOpenConnectorRevocationObligations(ctx.user.id);
+    }),
+    retryConnectorRevocation: protectedProcedure
+      .input(z.object({ provider: z.enum(["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]) }))
+      .mutation(async ({ ctx, input }) => {
+        const { getOpenConnectorRevocationObligation } = await import("./connectorRevocationObligations");
+        const obligation = await getOpenConnectorRevocationObligation(ctx.user.id, input.provider);
+        if (!obligation) throw new TRPCError({ code: "NOT_FOUND", message: "No open provider cleanup action exists." });
+        const { disconnectConnectorAccess } = await import("./connectorDisconnect");
+        const result = await disconnectConnectorAccess(ctx.user.id, input.provider);
+        const { createAuditEvent } = await import("./db");
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "connector_revocation_retried",
+          actor: "user",
+          source: "privacy.retryConnectorRevocation",
+          afterState: JSON.stringify({ provider: input.provider, status: result.providerRevocation.status }),
+          riskLevel: result.providerRevocation.status === "failed" ? "high" : "medium",
+        });
+        return { status: result.providerRevocation.status };
+      }),
+    confirmConnectorRevocation: protectedProcedure
+      .input(z.object({ obligationId: z.number().int().positive(), confirmed: z.literal(true) }))
+      .mutation(async ({ ctx, input }) => {
+        const { listOpenConnectorRevocationObligations, completeConnectorRevocationObligation } = await import("./connectorRevocationObligations");
+        const obligation = (await listOpenConnectorRevocationObligations(ctx.user.id))
+          .find(item => item.id === input.obligationId);
+        if (!obligation) throw new TRPCError({ code: "NOT_FOUND", message: "Provider cleanup action not found." });
+        const completion = await completeConnectorRevocationObligation(
+          ctx.user.id,
+          obligation.provider,
+          "user_attested_manual_removal"
+        );
+        if (!completion.completed) throw new TRPCError({ code: "CONFLICT", message: "Provider cleanup status changed. Refresh and try again." });
+        const { createAuditEvent } = await import("./db");
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "connector_revocation_user_confirmed",
+          actor: "user",
+          source: "privacy.confirmConnectorRevocation",
+          afterState: JSON.stringify({ provider: obligation.provider, evidence: "user_attested_manual_removal" }),
+          riskLevel: "high",
+        });
+        return { success: true };
+      }),
     getDeletionRequest: protectedProcedure.query(async ({ ctx }) => {
       const { getLatestPrivacyDeletionReview } = await import("./db");
       return toPrivacyDeletionRequestView(await getLatestPrivacyDeletionReview(ctx.user.id));
@@ -562,6 +627,26 @@ export const appRouter = router({
 
   // Job Platforms
   platforms: router({
+    directory: publicProcedure.input(z.object({
+      query: z.string().trim().max(200).optional(),
+      region: z.enum(["global", "europe", "north_america", "latin_america", "asia", "middle_east", "africa", "oceania", "unknown"]).optional(),
+      country: z.string().regex(/^[A-Z]{2}$/).optional(),
+      language: z.string().regex(/^[a-z]{2}$/).optional(),
+      mode: z.enum(["automated", "manual", "unavailable", "alias"]).optional(),
+      state: z.enum(["success", "partial", "failed", "paused", "never_run", "not_initialized", "not_connected", "unavailable"]).optional(),
+      limit: z.number().int().min(1).max(100).default(25),
+      offset: z.number().int().min(0).max(100000).default(0),
+    })).query(async ({ input }) => {
+      const { getSourceDirectory } = await import("./sourceIntelligenceRepository");
+      return getSourceDirectory(input);
+    }),
+    comparisons: publicProcedure.input(z.object({
+      cursor: z.number().int().positive().optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    })).query(async ({ input }) => {
+      const { getSourceComparisonPage } = await import("./sourceIntelligenceRepository");
+      return getSourceComparisonPage(input);
+    }),
     list: publicProcedure.query(async () => {
       const { getAllJobPlatforms } = await import("./db");
       const { getPlatformDiscoveryPolicy } = await import("./scrapers/platformCatalog");
@@ -776,8 +861,10 @@ export const appRouter = router({
           salaryExpectationMin: z.number().int().min(0).max(10_000_000).nullable().optional(),
           salaryExpectationMax: z.number().int().min(0).max(10_000_000).nullable().optional(),
           salaryExpectationCurrency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
-          resumeUrl: safeHttpUrl.optional(),
-          resumeFileKey: z.string().trim().max(500).optional(),
+          // Resume references are owned by the versioned upload/activation routes.
+          // Reject legacy writes instead of silently accepting unverified metadata.
+          resumeUrl: z.never("Use versioned resume uploads to change the resume.").optional(),
+          resumeFileKey: z.never("Use versioned resume uploads to change the resume.").optional(),
           linkedinUrl: safeHttpUrl.nullable().optional(),
           githubUrl: safeHttpUrl.nullable().optional(),
           portfolioUrl: safeHttpUrl.nullable().optional(),
@@ -969,7 +1056,7 @@ export const appRouter = router({
         const { discoverCloudResumeDocuments } = await import("./cloudDocumentDiscovery");
         const { createAuditEvent } = await import("./db");
         try {
-          const documents = await discoverCloudResumeDocuments(ctx.user.id, input.provider);
+          const result = await discoverCloudResumeDocuments(ctx.user.id, input.provider);
           await createAuditEvent({
             userId: ctx.user.id,
             entityType: "user",
@@ -977,10 +1064,15 @@ export const appRouter = router({
             action: "cloud_resume_documents_discovered",
             actor: "user",
             source: "profile.discoverCloudDocuments",
-            afterState: JSON.stringify({ provider: input.provider, documentCount: documents.length }),
+            afterState: JSON.stringify({
+              provider: input.provider,
+              documentCount: result.documents.length,
+              scannedCount: result.scannedCount,
+              truncated: result.truncated,
+            }),
             riskLevel: "low",
           });
-          return { provider: input.provider, documents };
+          return { provider: input.provider, ...result };
         } catch (error) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
@@ -994,40 +1086,45 @@ export const appRouter = router({
 
     importCloudResume: protectedProcedure
       .input(z.object({
-        provider: z.enum(["google_drive", "dropbox"]),
-        sourceId: z.string().trim().min(1).max(1000),
-        name: z.string().trim().min(1).max(500),
-        mimeType: z.string().trim().min(1).max(255),
-        size: z.number().int().min(0).max(10 * 1024 * 1024).nullable(),
-        modifiedAt: z.string().datetime().nullable(),
+        candidateId: z.string().min(40).max(64).regex(/^[A-Za-z0-9_-]+$/),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { downloadCloudResumeDocument } = await import("./cloudDocumentDiscovery");
+        const {
+          completeCloudResumeCandidate,
+          downloadCloudResumeDocument,
+          releaseCloudResumeCandidate,
+        } = await import("./cloudDocumentDiscovery");
         const { parseResumeFromFile, resumeToProfileData } = await import("./resumeParser");
-        const { createAuditEvent, upsertUserProfile } = await import("./db");
-        const { RESUME_MIME_TYPES, validateUploadedFile } = await import("./uploadValidation");
+        const { createAuditEvent } = await import("./db");
+        const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
+        let claimedCandidateId: string | null = null;
+        let resumeStoreAttempted = false;
         try {
-          const document = await downloadCloudResumeDocument(ctx.user.id, input);
+          const document = await downloadCloudResumeDocument(ctx.user.id, input.candidateId);
+          claimedCandidateId = document.candidateId;
           const validation = validateUploadedFile({
             data: document.data,
             fileName: document.fileName,
             mimeType: document.mimeType,
             allowedMimeTypes: RESUME_MIME_TYPES,
           });
+          await scanSensitiveUpload({
+            data: document.data,
+            fileName: validation.fileName,
+            mimeType: document.mimeType,
+          });
           const parsed = await parseResumeFromFile(document.data, document.mimeType);
           const profileData = resumeToProfileData(parsed);
+          resumeStoreAttempted = true;
           const resume = await uploadResume(
             ctx.user.id,
             document.data,
             validation.fileName,
-            document.mimeType
+            document.mimeType,
+            profileData
           );
-          await upsertUserProfile({
-            userId: ctx.user.id,
-            resumeUrl: resume.fileUrl,
-            resumeFileKey: resume.fileKey,
-            ...profileData,
-          });
+          await completeCloudResumeCandidate(ctx.user.id, document.candidateId);
+          claimedCandidateId = null;
           const matchRefresh = await (await import("./profileMatchLedger")).refreshProfileMatchLedger({
             userId: ctx.user.id,
             source: "profile.importCloudResume",
@@ -1040,7 +1137,7 @@ export const appRouter = router({
             actor: "user",
             source: "profile.importCloudResume",
             afterState: JSON.stringify({
-              provider: input.provider,
+              provider: document.provider,
               resumeId: resume.id,
               resumeVersion: resume.version,
               matchRefresh,
@@ -1049,6 +1146,10 @@ export const appRouter = router({
           });
           return { success: true, parsed, profileData, resume, matchRefresh };
         } catch (error) {
+          // Storage may have committed before an upstream response failed; keep the lease to prevent duplicate resume versions.
+          if (claimedCandidateId && !resumeStoreAttempted) {
+            await releaseCloudResumeCandidate(ctx.user.id, claimedCandidateId).catch(() => undefined);
+          }
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
             message: safeExternalConnectorErrorMessage(
@@ -2852,17 +2953,17 @@ export const appRouter = router({
     // Parse resume from file (base64 encoded PDF/DOCX)
     parseFile: protectedProcedure
       .input(z.object({
-        fileData: boundedUploadBase64,
+        fileData: boundedUploadBase64.optional(),
         mimeType: boundedMimeType,
         filename: boundedFileName,
       }))
       .mutation(async ({ input, ctx }) => {
         const { parseResumeFromFile, resumeToProfileData } = await import("./resumeParser");
-        const { upsertUserProfile } = await import("./db");
-        const { RESUME_MIME_TYPES, validateUploadedFile } = await import("./uploadValidation");
+        const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
         
         // Decode base64 to buffer
-        const buffer = Buffer.from(input.fileData, "base64");
+        const buffer = ctx.documentUploadBytes ?? Buffer.from(input.fileData ?? "", "base64");
+        if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Resume bytes are required." });
         const validation = validateUploadedFile({
           data: buffer,
           fileName: input.filename,
@@ -2870,7 +2971,12 @@ export const appRouter = router({
           allowedMimeTypes: RESUME_MIME_TYPES,
         });
         
-        // Parse the resume
+        // Reject unsafe files before document parsers or AI receive their contents.
+        await scanSensitiveUpload({
+          data: buffer,
+          fileName: validation.fileName,
+          mimeType: input.mimeType,
+        }, ctx.uploadScanPermit);
         const parsed = await parseResumeFromFile(buffer, input.mimeType);
         
         // Convert to profile format
@@ -2882,16 +2988,9 @@ export const appRouter = router({
           ctx.user.id,
           buffer,
           validation.fileName,
-          input.mimeType
+          input.mimeType,
+          profileData
         );
-
-        // Update user profile with parsed data and file info
-        await upsertUserProfile({
-          userId: ctx.user.id,
-          resumeUrl: resume.fileUrl,
-          resumeFileKey: resume.fileKey,
-          ...profileData,
-        });
         const matchRefresh = await (await import("./profileMatchLedger")).refreshProfileMatchLedger({
           userId: ctx.user.id,
           source: "resume.parseFile",
@@ -2911,19 +3010,32 @@ export const appRouter = router({
     // Upload resume with version history
     uploadWithHistory: protectedProcedure
       .input(z.object({
-        fileData: boundedUploadBase64,
+        fileData: boundedUploadBase64.optional(),
         fileName: boundedFileName,
         mimeType: boundedMimeType.optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const buffer = Buffer.from(input.fileData, "base64");
-        const resume = await uploadResume(ctx.user.id, buffer, input.fileName, input.mimeType);
-        const { upsertUserProfile } = await import("./db");
-        await upsertUserProfile({
-          userId: ctx.user.id,
-          resumeUrl: resume.fileUrl,
-          resumeFileKey: resume.fileKey,
+        const buffer = ctx.documentUploadBytes ?? Buffer.from(input.fileData ?? "", "base64");
+        if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Resume bytes are required." });
+        const mimeType = input.mimeType || getMimeTypeFromExtension(input.fileName);
+        const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
+        const validation = validateUploadedFile({
+          data: buffer,
+          fileName: input.fileName,
+          mimeType,
+          allowedMimeTypes: RESUME_MIME_TYPES,
         });
+        await scanSensitiveUpload({
+          data: buffer,
+          fileName: validation.fileName,
+          mimeType,
+        }, ctx.uploadScanPermit);
+        const resume = await uploadResume(
+          ctx.user.id,
+          buffer,
+          validation.fileName,
+          mimeType
+        );
         return resume;
       }),
 
@@ -2947,35 +3059,17 @@ export const appRouter = router({
 
     // Set active version
     setActiveVersion: protectedProcedure
-      .input(z.object({ version: z.number().int().positive() }))
+      .input(z.object({ version: z.number().int().positive(), resumeId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
-        const success = await setActiveVersion(ctx.user.id, input.version);
-        if (success) {
-          const resume = await getActiveResume(ctx.user.id);
-          const { upsertUserProfile } = await import("./db");
-          await upsertUserProfile({
-            userId: ctx.user.id,
-            resumeUrl: resume?.fileUrl ?? null,
-            resumeFileKey: resume?.fileKey ?? null,
-          });
-        }
+        const success = await setActiveVersion(ctx.user.id, input.version, input.resumeId);
         return { success };
       }),
 
     // Delete a version
     deleteVersion: protectedProcedure
-      .input(z.object({ version: z.number().int().positive() }))
+      .input(z.object({ version: z.number().int().positive(), resumeId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
-        const success = await deleteResumeVersion(ctx.user.id, input.version);
-        if (success) {
-          const resume = await getActiveResume(ctx.user.id);
-          const { upsertUserProfile } = await import("./db");
-          await upsertUserProfile({
-            userId: ctx.user.id,
-            resumeUrl: resume?.fileUrl ?? null,
-            resumeFileKey: resume?.fileKey ?? null,
-          });
-        }
+        const success = await deleteResumeVersion(ctx.user.id, input.version, input.resumeId);
         return { success };
       }),
 

@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Activity, User, Settings, LogOut, Zap, DollarSign, Shield } from "lucide-react";
+import { Activity, User, Settings, LogOut, Zap, DollarSign, Shield, Globe2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -117,6 +117,9 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
                 </>
               )}
               <DropdownMenuSeparator className="bg-slate-800" />
+              <DropdownMenuItem onClick={() => setLocation("/sources")}>
+                <Globe2 className="mr-2 h-4 w-4" />{t("sourceRegister")}
+              </DropdownMenuItem>
               <DropdownMenuItem 
                 className="text-red-400 focus:bg-red-500/10 focus:text-red-400 cursor-pointer"
                 onClick={handleLogout}

@@ -1,6 +1,7 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import {
   acquireConnectorRefreshLease,
   getConnectorAuthorization,
@@ -17,6 +18,13 @@ import {
   readBoundedResponseJson,
   ResponseSizeLimitError,
 } from "./_core/outboundRequest";
+import {
+  claimCloudResumeCandidate,
+  completeCloudResumeCandidate,
+  releaseCloudResumeCandidate,
+  storeCloudResumeCandidates,
+  type StoredCloudResumeCandidate,
+} from "./cloudResumeCandidateStore";
 
 export const CLOUD_DOCUMENT_PROVIDERS = ["google_drive", "dropbox"] as const;
 export type CloudDocumentProvider = typeof CLOUD_DOCUMENT_PROVIDERS[number];
@@ -37,6 +45,8 @@ export type DownloadedCloudDocument = {
 };
 
 const MAX_DISCOVERED_DOCUMENTS = 50;
+const MAX_SCANNED_PROVIDER_DOCUMENTS = 500;
+const PROVIDER_PAGE_SIZE = 100;
 const MAX_RESUME_BYTES = 10 * 1024 * 1024;
 const MAX_DOCUMENT_METADATA_BYTES = 1024 * 1024;
 const CLOUD_DOCUMENT_READ_SCOPE = "files.content.read_resume_candidates";
@@ -49,6 +59,12 @@ function isCloudResumeMimeType(mimeType: string) {
     "text/rtf",
     "application/rtf",
   ].includes(mimeType);
+}
+
+function normalizeModifiedAt(value: unknown) {
+  if (typeof value !== "string") return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 /**
@@ -89,6 +105,9 @@ export type CloudDocumentDiscoveryDependencies = {
   getConnectorOAuthConfig: typeof getConnectorOAuthConfig;
   refreshConnectorAccessToken: typeof refreshConnectorAccessToken;
   releaseConnectorRefreshLease: typeof releaseConnectorRefreshLease;
+  storeCloudResumeCandidates: typeof storeCloudResumeCandidates;
+  claimCloudResumeCandidate: typeof claimCloudResumeCandidate;
+  releaseCloudResumeCandidate: typeof releaseCloudResumeCandidate;
 };
 
 const defaultDependencies: CloudDocumentDiscoveryDependencies = {
@@ -102,6 +121,9 @@ const defaultDependencies: CloudDocumentDiscoveryDependencies = {
   getConnectorOAuthConfig,
   refreshConnectorAccessToken,
   releaseConnectorRefreshLease,
+  storeCloudResumeCandidates,
+  claimCloudResumeCandidate,
+  releaseCloudResumeCandidate,
 };
 
 function parseScopes(value: string | null) {
@@ -225,7 +247,7 @@ function parseGoogleDriveDocuments(payload: unknown): CloudResumeDocument[] {
       name,
       mimeType,
       size,
-      modifiedAt: typeof value.modifiedTime === "string" ? value.modifiedTime : null,
+      modifiedAt: normalizeModifiedAt(value.modifiedTime),
     }];
   });
 }
@@ -251,13 +273,13 @@ function parseDropboxDocuments(payload: unknown): CloudResumeDocument[] {
       name,
       mimeType,
       size,
-      modifiedAt: typeof value.client_modified === "string" ? value.client_modified : null,
+      modifiedAt: normalizeModifiedAt(value.client_modified),
     }];
   });
 }
 
-function cloudApiError(provider: CloudDocumentProvider, status: number) {
-  if (status === 401 || status === 403) {
+function cloudApiError(provider: CloudDocumentProvider, response: Response) {
+  if (isAuthoritativeInvalidConnectorToken(response)) {
     return new Error(`${cloudProviderLabel(provider)} authorization is no longer valid. Reauthorize before document discovery.`);
   }
   return new Error(`${cloudProviderLabel(provider)} document discovery is temporarily unavailable.`);
@@ -267,111 +289,219 @@ async function throwCloudApiError(
   userId: number,
   account: ConnectorAccount,
   provider: CloudDocumentProvider,
-  status: number,
+  response: Response,
   dependencies: CloudDocumentDiscoveryDependencies
 ): Promise<never> {
-  if (status === 401 || status === 403) {
+  if (isAuthoritativeInvalidConnectorToken(response)) {
     await markCloudAccessNeedsReauth(userId, account, dependencies);
   }
-  throw cloudApiError(provider, status);
+  throw cloudApiError(provider, response);
 }
 
 export async function discoverCloudResumeDocuments(
   userId: number,
   provider: CloudDocumentProvider,
   options: { fetcher?: typeof fetch; now?: Date; dependencies?: CloudDocumentDiscoveryDependencies } = {}
-): Promise<CloudResumeDocument[]> {
+): Promise<{ documents: StoredCloudResumeCandidate[]; scannedCount: number; truncated: boolean }> {
   requireCloudProvider(provider);
   const fetcher = options.fetcher ?? fetch;
   const now = options.now ?? new Date();
   const dependencies = options.dependencies ?? defaultDependencies;
   const { accessToken, account } = await getCloudAccessToken(userId, provider, now, fetcher, dependencies);
 
-  const response = provider === "google_drive"
-    ? await fetcher("https://www.googleapis.com/drive/v3/files?" + new URLSearchParams({
-      q: "trashed = false",
-      orderBy: "modifiedTime desc",
-      pageSize: String(MAX_DISCOVERED_DOCUMENTS),
-      fields: "files(id,name,mimeType,size,modifiedTime)",
-    }), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      redirect: "error",
-      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
-    })
-    : await fetcher("https://api.dropboxapi.com/2/files/list_folder", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ path: "", recursive: true, include_deleted: false, limit: MAX_DISCOVERED_DOCUMENTS }),
-      redirect: "error",
-      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
-    });
-  if (!response.ok) await throwCloudApiError(userId, account, provider, response.status, dependencies);
-  let payload: unknown;
-  try {
-    payload = await readBoundedResponseJson<unknown>(response, MAX_DOCUMENT_METADATA_BYTES);
-  } catch (error) {
-    if (error instanceof ResponseSizeLimitError) {
-      throw new Error(`${cloudProviderLabel(provider)} returned too much document metadata.`);
+  const documents: CloudResumeDocument[] = [];
+  const seenCursors = new Set<string>();
+  let scannedCount = 0;
+  let resultsCapped = false;
+  let drivePageToken: string | undefined;
+  let dropboxCursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore && scannedCount < MAX_SCANNED_PROVIDER_DOCUMENTS && documents.length < MAX_DISCOVERED_DOCUMENTS) {
+    const pageSize = Math.min(PROVIDER_PAGE_SIZE, MAX_SCANNED_PROVIDER_DOCUMENTS - scannedCount);
+    const response = provider === "google_drive"
+      ? await fetcher("https://www.googleapis.com/drive/v3/files?" + new URLSearchParams({
+        q: "trashed = false",
+        orderBy: "modifiedTime desc",
+        pageSize: String(pageSize),
+        fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime)",
+        ...(drivePageToken ? { pageToken: drivePageToken } : {}),
+      }), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        redirect: "error",
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      })
+      : await fetcher(
+        dropboxCursor
+          ? "https://api.dropboxapi.com/2/files/list_folder/continue"
+          : "https://api.dropboxapi.com/2/files/list_folder",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(dropboxCursor
+            ? { cursor: dropboxCursor }
+            : { path: "", recursive: true, include_deleted: false, limit: pageSize }),
+          redirect: "error",
+          signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+        }
+      );
+    if (!response.ok) await throwCloudApiError(userId, account, provider, response, dependencies);
+    let payload: unknown;
+    try {
+      payload = await readBoundedResponseJson<unknown>(response, MAX_DOCUMENT_METADATA_BYTES);
+    } catch (error) {
+      if (error instanceof ResponseSizeLimitError) {
+        throw new Error(`${cloudProviderLabel(provider)} returned too much document metadata.`);
+      }
+      throw error;
     }
-    throw error;
+    const pageDocuments = provider === "google_drive"
+      ? parseGoogleDriveDocuments(payload)
+      : parseDropboxDocuments(payload);
+    const pageRows = payload && typeof payload === "object"
+      ? (provider === "google_drive"
+        ? (payload as { files?: unknown }).files
+        : (payload as { entries?: unknown }).entries)
+      : null;
+    scannedCount += Array.isArray(pageRows) ? pageRows.length : 0;
+    const remainingCandidates = MAX_DISCOVERED_DOCUMENTS - documents.length;
+    if (pageDocuments.length > remainingCandidates) resultsCapped = true;
+    documents.push(...pageDocuments.slice(0, remainingCandidates));
+
+    if (provider === "google_drive") {
+      const next = payload && typeof payload === "object" && typeof (payload as { nextPageToken?: unknown }).nextPageToken === "string"
+        ? (payload as { nextPageToken: string }).nextPageToken
+        : null;
+      hasMore = Boolean(next);
+      if (next && !seenCursors.has(next)) {
+        seenCursors.add(next);
+        drivePageToken = next;
+      } else if (next) {
+        throw new Error(`${cloudProviderLabel(provider)} returned a repeated pagination cursor.`);
+      }
+    } else {
+      const value = payload as { has_more?: unknown; cursor?: unknown };
+      hasMore = value?.has_more === true;
+      if (hasMore && typeof value.cursor === "string" && !seenCursors.has(value.cursor)) {
+        seenCursors.add(value.cursor);
+        dropboxCursor = value.cursor;
+      } else if (hasMore) {
+        throw new Error(`${cloudProviderLabel(provider)} returned an invalid pagination cursor.`);
+      }
+    }
   }
+  const truncated = hasMore || resultsCapped;
   await markCloudAccessVerified(userId, account, now, dependencies);
-  const documents = provider === "google_drive"
-    ? parseGoogleDriveDocuments(payload)
-    : parseDropboxDocuments(payload);
-  return documents.slice(0, MAX_DISCOVERED_DOCUMENTS);
+  const storedDocuments = await dependencies.storeCloudResumeCandidates(userId, provider, documents, now);
+  return { documents: storedDocuments, scannedCount, truncated };
 }
 
 export async function downloadCloudResumeDocument(
   userId: number,
-  document: CloudResumeDocument,
+  candidateId: string,
   options: { fetcher?: typeof fetch; now?: Date; dependencies?: CloudDocumentDiscoveryDependencies } = {}
-): Promise<DownloadedCloudDocument> {
-  requireCloudProvider(document.provider);
-  if (
-    !document.sourceId ||
-    document.sourceId.length > 1000 ||
-    !document.name ||
-    !isCloudResumeMimeType(document.mimeType) ||
-    !isLikelyCloudResumeDocumentName(document.name)
-  ) {
-    throw new Error("The selected cloud document is not a supported resume file.");
-  }
+): Promise<DownloadedCloudDocument & { candidateId: string; provider: CloudDocumentProvider }> {
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(candidateId)) throw new Error("The selected cloud resume candidate is invalid or expired.");
   const fetcher = options.fetcher ?? fetch;
   const now = options.now ?? new Date();
   const dependencies = options.dependencies ?? defaultDependencies;
-  const { accessToken, account } = await getCloudAccessToken(userId, document.provider, now, fetcher, dependencies);
-  const response = document.provider === "google_drive"
-    ? await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(document.sourceId)}?alt=media`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      redirect: "error",
-      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
-    })
-    : await fetcher("https://content.dropboxapi.com/2/files/download", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Dropbox-API-Arg": JSON.stringify({ path: document.sourceId }),
-      },
-      redirect: "error",
-      signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
-    });
-  if (!response.ok) await throwCloudApiError(userId, account, document.provider, response.status, dependencies);
-  let data: Buffer;
+  const candidate = await dependencies.claimCloudResumeCandidate(userId, candidateId, now);
+  if (!candidate) throw new Error("The selected cloud resume candidate is invalid, expired, already importing, or already used.");
+  const document: CloudResumeDocument = {
+    provider: candidate.provider,
+    sourceId: candidate.sourceId,
+    name: candidate.name,
+    mimeType: candidate.mimeType,
+    size: candidate.size,
+    modifiedAt: candidate.modifiedAt?.toISOString() ?? null,
+  };
   try {
-    data = Buffer.from(await readBoundedResponseBytes(response, MAX_RESUME_BYTES));
-  } catch (error) {
-    if (error instanceof ResponseSizeLimitError) {
-      throw new Error("The selected cloud document must be between 1 byte and 10MB.");
+    if (
+      !document.sourceId ||
+      document.sourceId.length > 1000 ||
+      !isCloudResumeMimeType(document.mimeType) ||
+      !isLikelyCloudResumeDocumentName(document.name) ||
+      (document.size !== null && (document.size < 1 || document.size > MAX_RESUME_BYTES))
+    ) {
+      throw new Error("The selected cloud document is not a supported resume file.");
     }
+    const { accessToken, account } = await getCloudAccessToken(userId, document.provider, now, fetcher, dependencies);
+    const metadataResponse = document.provider === "google_drive"
+      ? await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(document.sourceId)}?` + new URLSearchParams({ fields: "id,name,mimeType,size,modifiedTime,trashed" }), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        redirect: "error",
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      })
+      : await fetcher("https://api.dropboxapi.com/2/files/get_metadata", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ path: document.sourceId }),
+        redirect: "error",
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      });
+    if (!metadataResponse.ok) await throwCloudApiError(userId, account, document.provider, metadataResponse, dependencies);
+    const metadata = await readBoundedResponseJson<Record<string, unknown>>(metadataResponse, 64 * 1024);
+    const currentName = typeof metadata.name === "string" ? metadata.name : "";
+    const currentMime = document.provider === "google_drive"
+      ? (typeof metadata.mimeType === "string" ? metadata.mimeType : "")
+      : getMimeTypeFromExtension(currentName);
+    const currentSourceId = document.provider === "google_drive"
+      ? (typeof metadata.id === "string" ? metadata.id : "")
+      : (typeof metadata.path_lower === "string" ? metadata.path_lower : "");
+    const rawSize = typeof metadata.size === "string" || typeof metadata.size === "number" ? Number(metadata.size) : NaN;
+    const currentSize = Number.isFinite(rawSize) && rawSize >= 0 ? rawSize : null;
+    const modifiedValue = document.provider === "google_drive" ? metadata.modifiedTime : metadata.client_modified;
+    const currentModifiedAt = normalizeModifiedAt(modifiedValue);
+    if (
+      (document.provider === "google_drive" && metadata.trashed === true) ||
+      (document.provider === "dropbox" && metadata[".tag"] !== "file") ||
+      currentSourceId !== document.sourceId ||
+      currentName !== document.name ||
+      currentMime !== document.mimeType ||
+      currentSize !== document.size ||
+      currentModifiedAt !== document.modifiedAt ||
+      !isLikelyCloudResumeDocumentName(currentName) ||
+      !isCloudResumeMimeType(currentMime) ||
+      (currentSize !== null && (currentSize < 1 || currentSize > MAX_RESUME_BYTES))
+    ) {
+      throw new Error("The cloud resume changed since discovery. Discover it again before importing.");
+    }
+
+    const response = document.provider === "google_drive"
+      ? await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(document.sourceId)}?alt=media`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        redirect: "error",
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      })
+      : await fetcher("https://content.dropboxapi.com/2/files/download", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Dropbox-API-Arg": JSON.stringify({ path: document.sourceId }),
+        },
+        redirect: "error",
+        signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
+      });
+    if (!response.ok) await throwCloudApiError(userId, account, document.provider, response, dependencies);
+    let data: Buffer;
+    try {
+      data = Buffer.from(await readBoundedResponseBytes(response, MAX_RESUME_BYTES));
+    } catch (error) {
+      if (error instanceof ResponseSizeLimitError) {
+        throw new Error("The selected cloud document must be between 1 byte and 10MB.");
+      }
+      throw error;
+    }
+    if (data.length === 0) throw new Error("The selected cloud document must be between 1 byte and 10MB.");
+    await markCloudAccessVerified(userId, account, now, dependencies);
+    return { candidateId, provider: document.provider, fileName: document.name, mimeType: document.mimeType, data };
+  } catch (error) {
+    await dependencies.releaseCloudResumeCandidate(userId, candidateId);
     throw error;
   }
-  if (data.length === 0) {
-    throw new Error("The selected cloud document must be between 1 byte and 10MB.");
-  }
-  await markCloudAccessVerified(userId, account, now, dependencies);
-  return { fileName: document.name, mimeType: document.mimeType, data };
 }
+
+export { completeCloudResumeCandidate, releaseCloudResumeCandidate };

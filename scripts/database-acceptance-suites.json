@@ -1,0 +1,14 @@
+{
+  "suites": [
+    "server/_core/trpcHttp.integration.test.ts",
+    "server/activeReviewIdentity.integration.test.ts",
+    "server/adminOperatingQueues.integration.test.ts",
+    "server/cloudResumeCandidateStore.integration.test.ts",
+    "server/connectorRevocationObligations.integration.test.ts",
+    "server/connectorTokenLifetime.integration.test.ts",
+    "server/interviewLifecycle.integration.test.ts",
+    "server/privacyErasurePlanning.integration.test.ts",
+    "server/productionData.integration.test.ts",
+    "server/stripeWebhookTransactions.integration.test.ts"
+  ]
+}

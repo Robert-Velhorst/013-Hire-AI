@@ -1,0 +1,49 @@
+name: hire-ai
+
+services:
+  db:
+    image: ${MYSQL_IMAGE:?Set MYSQL_IMAGE to the verified MySQL digest}
+    restart: unless-stopped
+    mem_limit: 768m
+    pids_limit: 128
+    environment:
+      MYSQL_DATABASE: hire_ai
+      MYSQL_USER: hire_ai
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --max-connections=30
+      - --performance-schema=OFF
+      - --mysqlx=OFF
+    secrets:
+      - mysql_root_password
+      - mysql_app_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, --silent]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 12
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql-root-password
+  mysql_app_password:
+    file: ./secrets/mysql-app-password
+
+volumes:
+  mysql_data:
+
+networks:
+  backend:
+    internal: true

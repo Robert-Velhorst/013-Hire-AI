@@ -94,15 +94,65 @@ describe("bounded API rate limiting", () => {
     });
   });
 
-  it("evicts the oldest client instead of growing beyond its memory ceiling", async () => {
-    await withLimitedServer(async (baseUrl, limiter) => {
-      for (const address of ["198.51.100.4", "198.51.100.5", "198.51.100.6"]) {
-        await fetch(`${baseUrl}/api/value`, {
-          headers: { "x-forwarded-for": address },
-        });
-        expect(limiter.activeClientCount()).toBeLessThanOrEqual(2);
-      }
+  it("preserves active client budgets and rejects new clients at capacity", async () => {
+    await withLimitedServer(async (baseUrl, limiter, advance) => {
+      const clientA = { "x-forwarded-for": "198.51.100.4" };
+      const clientB = { "x-forwarded-for": "198.51.100.5" };
+      const clientC = { "x-forwarded-for": "198.51.100.6" };
+
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(200);
+      advance(3_000);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(200);
+      const capacityResponse = await fetch(`${baseUrl}/api/value`, {
+        headers: clientC,
+      });
+      expect(capacityResponse.status).toBe(503);
+      expect(capacityResponse.headers.get("retry-after")).toBe("7");
       expect(limiter.activeClientCount()).toBe(2);
+
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(200);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientA })).status
+      ).toBe(429);
+
+      advance(7_000);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientC })).status
+      ).toBe(200);
+      expect(limiter.activeClientCount()).toBe(2);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(200);
+      expect(
+        (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
+      ).toBe(429);
+    });
+  });
+
+  it("prunes only the expired map prefix and preserves later client windows", async () => {
+    await withLimitedServer(async (baseUrl, limiter, advance) => {
+      const clientA = { "x-forwarded-for": "198.51.100.14" };
+      const clientB = { "x-forwarded-for": "198.51.100.15" };
+      const clientC = { "x-forwarded-for": "198.51.100.16" };
+      const get = (headers: Record<string, string>) =>
+        fetch(`${baseUrl}/api/value`, { headers });
+
+      expect((await get(clientA)).status).toBe(200);
+      advance(3_000);
+      expect((await get(clientB)).status).toBe(200);
+      advance(7_000);
+
+      expect((await get(clientC)).status).toBe(200);
+      expect(limiter.activeClientCount()).toBe(2);
+      expect((await get(clientB)).status).toBe(200);
+      expect((await get(clientB)).status).toBe(429);
+      expect((await get(clientC)).status).toBe(200);
     });
   });
 

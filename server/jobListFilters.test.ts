@@ -115,6 +115,26 @@ describe("canonical job list filters", () => {
     expect(jobs.some((job) => job.id === hybridJob.id)).toBe(false);
   });
 
+  it("excludes mostly-remote roles with recurring office attendance", async () => {
+    const mostlyRemoteJob = {
+      ...sampleJobs[0],
+      id: 989907,
+      externalId: "mostly-remote-monthly-office-regression",
+      title: "Mostly Remote Eligibility Regression Engineer",
+      company: "Office Attendance Co",
+      location: "Neuruppin",
+      description: "Mostly remote within Germany, with monthly in-person collaboration at our Berlin office.",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    sampleJobs.push(mostlyRemoteJob);
+    injectedJobIds.push(mostlyRemoteJob.id);
+
+    const jobs = await getActiveJobs(250, 0, { query: "Mostly Remote Eligibility Regression" });
+
+    expect(jobs.some((job) => job.id === mostlyRemoteJob.id)).toBe(false);
+  });
+
   it("keeps a recently discovered listing without a provider posting date in a posted window", async () => {
     const recentlyDiscoveredJob = {
       ...sampleJobs[0],

@@ -16,6 +16,16 @@ describe("job normalization", () => {
     });
   });
 
+  it("keeps missing and unsupported salary currencies unknown", () => {
+    expect(normalizeSalary("60,000 - 75,000 annually")).toMatchObject({
+      currency: null,
+      min: 60000,
+      max: 75000,
+    });
+    expect(normalizeSalary("ZZZ 60,000 - 75,000 annually").currency).toBeNull();
+    expect(normalizeSalary("JPY 6,000,000 annually").currency).toBe("JPY");
+  });
+
   it("parses international thousands separators before downstream fit scoring", () => {
     expect(normalizeSalary("EUR 60.000 - 75.000 annually")).toMatchObject({
       currency: "EUR",
@@ -38,6 +48,25 @@ describe("job normalization", () => {
     }).salary).toMatchObject({ min: 60000, max: 75000, currency: "EUR" });
   });
 
+  it("keeps unknown geography distinct from remote and worldwide evidence", () => {
+    expect(normalizeLocation(undefined)).toMatchObject({
+      country: "Unknown",
+      region: "Unknown",
+      isRemote: false,
+      remoteType: "unknown",
+    });
+    expect(normalizeLocation("Berlin")).toMatchObject({
+      country: "Unknown",
+      region: "Unknown",
+      isRemote: false,
+    });
+    expect(normalizeLocation("Remote - Berlin")).toMatchObject({
+      country: "Unknown",
+      region: "Unknown",
+      isRemote: true,
+    });
+  });
+
   it("recognizes complete country names without treating city text as a country code", () => {
     expect(normalizeLocation("Remote - Berlin, Germany")).toMatchObject({
       country: "Germany",
@@ -50,8 +79,8 @@ describe("job normalization", () => {
       isRemote: true,
     });
     expect(normalizeLocation("Remote - Berlin")).toMatchObject({
-      country: "Worldwide",
-      region: "Global",
+      country: "Unknown",
+      region: "Unknown",
       isRemote: true,
     });
   });

@@ -1,119 +1,27 @@
-import { getTableConfig, type MySqlTable } from "drizzle-orm/mysql-core";
+import "dotenv/config";
 import mysql from "mysql2/promise";
-import * as schema from "../drizzle/schema";
-import {
-  compareDatabaseSchema,
-  hasDatabaseSchemaDrift,
-  type DatabaseColumnRow,
-  type DatabaseIndexRow,
-  type DatabaseForeignKeyRow,
-  type ExpectedDatabaseColumn,
-  type ExpectedDatabaseForeignKey,
-  type ExpectedDatabaseIndex,
-} from "./lib/database-schema-audit";
-
-function expectedRuntimeSchema() {
-  const tables = new Map<string, Set<string>>();
-  const columns = new Map<string, Map<string, ExpectedDatabaseColumn>>();
-  const indexes = new Map<string, Map<string, ExpectedDatabaseIndex>>();
-  const foreignKeys = new Map<string, ExpectedDatabaseForeignKey[]>();
-  for (const value of Object.values(schema)) {
-    try {
-      const config = getTableConfig(value as MySqlTable);
-      if (config.name && config.columns.length > 0) {
-        tables.set(config.name, new Set(config.columns.map((column) => column.name)));
-        columns.set(config.name, new Map(config.columns.map((column) => [
-          column.name,
-          {
-            sqlType: column.getSQLType(),
-            nullable: !column.notNull,
-          },
-        ])));
-        const tableIndexes = new Map(config.indexes.map((index) => [
-          index.config.name,
-          {
-            columns: index.config.columns
-              .map((column) => "name" in column ? column.name : null)
-              .filter((column): column is string => Boolean(column)),
-            unique: index.config.unique,
-          },
-        ]));
-        const primaryColumns = config.columns.filter((column) => column.primary).map((column) => column.name);
-        if (primaryColumns.length > 0) {
-          tableIndexes.set("PRIMARY", { columns: primaryColumns, unique: true });
-        }
-        indexes.set(config.name, tableIndexes);
-        foreignKeys.set(config.name, config.foreignKeys.map((foreignKey) => {
-          const reference = foreignKey.reference();
-          return {
-            columns: reference.columns.map((column) => column.name),
-            referencedTable: getTableConfig(reference.foreignTable).name,
-            referencedColumns: reference.foreignColumns.map((column) => column.name),
-            onDelete: foreignKey.onDelete ?? "restrict",
-            onUpdate: foreignKey.onUpdate ?? "no action",
-          };
-        }));
-      }
-    } catch {
-      // The schema module also exports types and relation helpers.
-    }
-  }
-  return { tables, columns, indexes, foreignKeys };
-}
+import { auditRuntimeDatabaseSchema } from "../server/databaseSchemaValidation";
+import { hasDatabaseSchemaDrift } from "./lib/database-schema-audit";
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for the schema audit.");
-
-  const connection = await mysql.createConnection(databaseUrl);
+  if (!databaseUrl) throw new Error("DATABASE_URL is required");
+  const connection = await mysql.createConnection({
+    uri: databaseUrl,
+    connectTimeout: 15_000,
+  });
   try {
-    const [columnRows] = await connection.query<DatabaseColumnRow[]>(
-      `SELECT table_name AS tableName, column_name AS columnName,
-              column_type AS sqlType, is_nullable AS isNullable
-       FROM information_schema.columns
-       WHERE table_schema = DATABASE()`
-    );
-    const [indexRows] = await connection.query<DatabaseIndexRow[]>(
-      `SELECT table_name AS tableName, index_name AS indexName, non_unique AS nonUnique,
-              seq_in_index AS sequence, column_name AS columnName
-       FROM information_schema.statistics
-       WHERE table_schema = DATABASE()`
-    );
-    const [foreignKeyRows] = await connection.query<DatabaseForeignKeyRow[]>(
-      `SELECT kcu.table_name AS tableName, kcu.constraint_name AS constraintName,
-              kcu.column_name AS columnName, kcu.ordinal_position AS sequence,
-              kcu.referenced_table_name AS referencedTable,
-              kcu.referenced_column_name AS referencedColumn,
-              rc.delete_rule AS deleteRule, rc.update_rule AS updateRule
-       FROM information_schema.key_column_usage kcu
-       JOIN information_schema.referential_constraints rc
-         ON rc.constraint_schema = kcu.constraint_schema
-        AND rc.constraint_name = kcu.constraint_name
-        AND rc.table_name = kcu.table_name
-       WHERE kcu.table_schema = DATABASE()
-         AND kcu.referenced_table_name IS NOT NULL`
-    );
-    const expected = expectedRuntimeSchema();
-    if (expected.tables.size === 0) throw new Error("Runtime schema metadata is empty.");
-    const audit = compareDatabaseSchema(
-      expected.tables,
-      columnRows,
-      expected.indexes,
-      indexRows,
-      expected.columns,
-      expected.foreignKeys,
-      foreignKeyRows
-    );
+    const audit = await auditRuntimeDatabaseSchema(connection);
     console.log(JSON.stringify(audit, null, 2));
-    if (hasDatabaseSchemaDrift(audit)) {
-      throw new Error("Database schema does not exactly match the runtime model.");
-    }
+    if (hasDatabaseSchemaDrift(audit)) throw new Error("Database schema drift");
   } finally {
-    await connection.end();
+    connection.destroy();
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "Database schema audit failed.");
-  process.exit(1);
+main().catch(() => {
+  console.error(
+    "Database schema audit failed. Check connectivity and reviewed migrations."
+  );
+  process.exitCode = 1;
 });

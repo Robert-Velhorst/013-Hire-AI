@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { COOKIE_NAME } from "@shared/const";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   adminReviewItems,
@@ -6,6 +7,9 @@ import {
   applicationMaterials,
   applications,
   connectorAuthorizations,
+  connectorRevocationObligations,
+  cloudResumeCandidates,
+  erasedOAuthIdentities,
   followUps,
   jobPlatforms,
   jobs,
@@ -15,7 +19,9 @@ import {
   userProfiles,
   users,
 } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, getUserByOpenId, isOAuthIdentityErased, upsertUser } from "./db";
+import { getCurrentOAuthIdentityDigest } from "./erasedOAuthIdentity";
+import { sdk } from "./_core/sdk";
 import { planPrivacyErasure } from "./privacyErasurePlanning";
 import {
   confirmManualPrivacyCleanup,
@@ -32,6 +38,8 @@ const runIntegration = process.env.PRIVACY_ERASURE_INTEGRATION === "true";
 describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
   const userId = 1_780_900_001;
   const adminId = 1_780_900_002;
+  const originalOpenId = `privacy-plan-${userId}`;
+  const unrelatedOpenId = `privacy-plan-unrelated-${userId}`;
   let reviewItemId = 0;
   let applicationId = 0;
   let jobId = 0;
@@ -44,7 +52,7 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     db = connection;
     await db.insert(users).values({
       id: userId,
-      openId: `privacy-plan-${userId}`,
+      openId: originalOpenId,
       name: "Sensitive Candidate Name",
       email: "privacy-plan@example.test",
       accountStatus: "suspended",
@@ -97,6 +105,16 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
       provider: "dropbox",
       encryptedAccessToken: "encrypted-provider-secret",
     });
+    await db.insert(cloudResumeCandidates).values({
+      candidateId: `privacy-candidate-${userId}`,
+      userId,
+      provider: "google_drive",
+      sourceId: "private-provider-object-id",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: 1024,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
     await db.insert(successFees).values({
       userId,
       employerName: "Retention Employer",
@@ -123,6 +141,14 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
 
   afterAll(async () => {
     if (!db) return;
+    const identityDigest = getCurrentOAuthIdentityDigest(originalOpenId);
+    await db
+      .delete(erasedOAuthIdentities)
+      .where(and(
+        eq(erasedOAuthIdentities.keyVersion, identityDigest.keyVersion),
+        eq(erasedOAuthIdentities.identityHash, identityDigest.identityHash)
+      ));
+    await db.delete(users).where(eq(users.openId, unrelatedOpenId));
     const runs = await db
       .select({ id: privacyErasureRuns.id })
       .from(privacyErasureRuns)
@@ -159,6 +185,9 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
   });
 
   it("creates one restart-safe plan without copying secrets or object keys", async () => {
+    const existingSession = await sdk.createSessionToken(originalOpenId, {
+      name: "Sensitive Candidate Name",
+    });
     const first = await planPrivacyErasure(reviewItemId, adminId);
     const second = await planPrivacyErasure(reviewItemId, adminId);
 
@@ -252,10 +281,17 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     );
     expect(manualTask).toBeDefined();
 
+    await db.insert(connectorRevocationObligations).values({
+      userId,
+      provider: "dropbox",
+      status: "manual_required",
+      instructionVersion: "2026-10-13.v1",
+    });
+
     await confirmManualPrivacyCleanup(
       first.run.id,
       manualTask!.id,
-      "Provider account permissions were removed and independently verified."
+      "operator_attested_manual_removal"
     );
     const readyRun = (
       await db
@@ -310,10 +346,37 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
       .set({ executionLeaseExpiresAt: new Date(Date.now() - 60_000) })
       .where(eq(privacyErasureRuns.id, first.run.id));
 
-    const finalized = await finalizePrivacyErasure(
+    let finalizationEntered!: () => void;
+    let finishFinalization!: () => void;
+    const finalizationReady = new Promise<void>(resolve => {
+      finalizationEntered = resolve;
+    });
+    const finalizationGate = new Promise<void>(resolve => {
+      finishFinalization = resolve;
+    });
+    const finalizing = finalizePrivacyErasure(
       first.run.id,
-      databaseConfirmation
+      databaseConfirmation,
+      {
+        beforeCommit: async () => {
+          finalizationEntered();
+          await finalizationGate;
+        },
+      }
     );
+    await finalizationReady;
+    const recreation = upsertUser({
+      openId: originalOpenId,
+      name: "Resurrected Candidate",
+    });
+    const identityLockHeld = await Promise.race([
+      recreation.then(() => false, () => false),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(true), 100)),
+    ]);
+    expect(identityLockHeld).toBe(true);
+    finishFinalization();
+    const finalized = await finalizing;
+    await expect(recreation).rejects.toThrow("cannot be provisioned after account erasure");
     expect(finalized.existing).toBe(false);
     expect(
       await finalizePrivacyErasure(first.run.id, databaseConfirmation)
@@ -361,13 +424,34 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     const erasedUser = (
       await db.select().from(users).where(eq(users.id, userId))
     )[0];
+    expect(await db.select().from(cloudResumeCandidates).where(eq(cloudResumeCandidates.userId, userId)))
+      .toHaveLength(0);
     expect(erasedUser).toMatchObject({
       name: null,
       email: null,
       loginMethod: null,
       stripeCustomerId: null,
       accountStatus: "suspended",
+      sessionVersion: 1,
     });
     expect(erasedUser.openId).toMatch(/^erased-/);
+    expect(await isOAuthIdentityErased(originalOpenId)).toBe(true);
+    expect(await getUserByOpenId(originalOpenId)).toBeUndefined();
+    await expect(sdk.createSessionToken(originalOpenId)).rejects.toThrow(
+      "cannot be recreated after erasure"
+    );
+    await expect(
+      sdk.authenticateRequest({
+        headers: { cookie: `${COOKIE_NAME}=${existingSession}` },
+      } as any)
+    ).rejects.toThrow("cannot be recreated after erasure");
+    await expect(
+      upsertUser({ openId: originalOpenId, name: "Retry after erasure" })
+    ).rejects.toThrow("cannot be provisioned after account erasure");
+    await upsertUser({ openId: unrelatedOpenId, name: "Unrelated Candidate" });
+    await expect(getUserByOpenId(unrelatedOpenId)).resolves.toMatchObject({
+      openId: unrelatedOpenId,
+      accountStatus: "active",
+    });
   });
 });

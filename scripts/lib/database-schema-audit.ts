@@ -103,24 +103,24 @@ export function compareDatabaseSchema(
   const mismatchedIndexes: string[] = [];
   const missingForeignKeys: string[] = [];
   const mismatchedForeignKeys: string[] = [];
-  for (const [tableName, expectedColumns] of expected) {
+  for (const [tableName, expectedColumns] of Array.from(expected)) {
     const actualColumns = actual.get(tableName);
     if (!actualColumns) {
       missingTables.push(tableName);
       continue;
     }
-    for (const columnName of expectedColumns) {
+    for (const columnName of Array.from(expectedColumns)) {
       if (!actualColumns.has(columnName)) missingColumns.push(`${tableName}.${columnName}`);
     }
-    for (const columnName of actualColumns) {
+    for (const columnName of Array.from(actualColumns)) {
       if (!expectedColumns.has(columnName)) unexpectedColumns.push(`${tableName}.${columnName}`);
     }
   }
 
   const normalizeSqlType = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
-  for (const [tableName, definitions] of expectedColumnDefinitions) {
+  for (const [tableName, definitions] of Array.from(expectedColumnDefinitions)) {
     const actualDefinitions = actualColumnDefinitions.get(tableName);
-    for (const [columnName, expectedDefinition] of definitions) {
+    for (const [columnName, expectedDefinition] of Array.from(definitions)) {
       const actualDefinition = actualDefinitions?.get(columnName);
       if (!actualDefinition) continue;
       if (
@@ -147,9 +147,9 @@ export function compareDatabaseSchema(
     actualIndexes.set(row.tableName, tableIndexes);
   }
 
-  for (const [tableName, indexes] of expectedIndexes) {
+  for (const [tableName, indexes] of Array.from(expectedIndexes)) {
     const actualTableIndexes = actualIndexes.get(tableName);
-    for (const [indexName, expectedIndex] of indexes) {
+    for (const [indexName, expectedIndex] of Array.from(indexes)) {
       const actualIndex = actualTableIndexes?.get(indexName);
       const qualifiedName = `${tableName}.${indexName}`;
       if (!actualIndex) {
@@ -176,7 +176,7 @@ export function compareDatabaseSchema(
     rows.push(row);
     groupedActualForeignKeys.set(key, rows);
   }
-  for (const rows of groupedActualForeignKeys.values()) {
+  for (const rows of Array.from(groupedActualForeignKeys.values())) {
     rows.sort((left, right) => left.sequence - right.sequence);
     const first = rows[0];
     const tableForeignKeys = actualForeignKeys.get(first.tableName) ?? [];
@@ -189,7 +189,7 @@ export function compareDatabaseSchema(
     });
     actualForeignKeys.set(first.tableName, tableForeignKeys);
   }
-  for (const [tableName, foreignKeys] of expectedForeignKeys) {
+  for (const [tableName, foreignKeys] of Array.from(expectedForeignKeys)) {
     const actualTableForeignKeys = actualForeignKeys.get(tableName) ?? [];
     for (const expectedForeignKey of foreignKeys) {
       const identity = foreignKeyIdentity(expectedForeignKey);

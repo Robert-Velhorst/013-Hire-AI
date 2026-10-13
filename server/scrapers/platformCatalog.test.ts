@@ -15,7 +15,7 @@ describe("scraper platform catalog", () => {
   it("covers every registered scraper and every referenced remote-job source", () => {
     const catalogNames = scraperPlatformCatalog.map((platform) => platform.name);
 
-    expect(catalogNames).toHaveLength(62);
+    expect(catalogNames).toHaveLength(90);
     expect(new Set(catalogNames).size).toBe(catalogNames.length);
     expect(getSupportedPlatforms().every((name) => catalogNames.includes(name))).toBe(true);
     expect(getMissingReferencedRemoteJobPlatforms()).toEqual([]);
@@ -42,7 +42,7 @@ describe("scraper platform catalog", () => {
   it("reports dedicated and generic parser provenance for every registered source", () => {
     const adapters = getSupportedPlatforms().map((name) => ({ name, adapter: getScraperAdapterMetadata(name) }));
 
-    expect(adapters.filter(({ adapter }) => adapter.kind === "dedicated")).toHaveLength(12);
+    expect(adapters.filter(({ adapter }) => adapter.kind === "dedicated")).toHaveLength(14);
     expect(adapters.filter(({ adapter }) => adapter.kind === "generic_rss").map(({ name }) => name))
       .toEqual(["NoDesk", "ProBlogger"]);
     expect(adapters.filter(({ adapter }) => adapter.kind === "generic_html")).toHaveLength(36);
@@ -50,6 +50,8 @@ describe("scraper platform catalog", () => {
   });
 
   it("only permits unattended discovery for explicit public API or RSS adapters", () => {
+    expect(scraperPlatformCatalog.filter((platform) => isAutomatedDiscoveryPlatform(platform.name)))
+      .toHaveLength(9);
     expect(isAutomatedDiscoveryPlatform("RemoteOK")).toBe(true);
     expect(isAutomatedDiscoveryPlatform("Remotive")).toBe(true);
     expect(isAutomatedDiscoveryPlatform("We Work Remotely")).toBe(true);
@@ -57,6 +59,9 @@ describe("scraper platform catalog", () => {
     expect(getPlatformMinimumPollIntervalMs("Jobicy")).toBe(60 * 60 * 1000);
     expect(isAutomatedDiscoveryPlatform("Arbeitnow")).toBe(true);
     expect(getPlatformMinimumPollIntervalMs("Arbeitnow")).toBe(60 * 60 * 1000);
+    expect(isAutomatedDiscoveryPlatform("Working Nomads")).toBe(false);
+    expect(getPlatformDiscoveryPolicy("Working Nomads").reason)
+      .toContain("written authorization is obtained");
     expect(isAutomatedDiscoveryPlatform("LinkedIn Jobs")).toBe(false);
     expect(isAutomatedDiscoveryPlatform("Upwork")).toBe(false);
     expect(getPlatformDiscoveryPolicy("Stack Overflow Jobs")).toMatchObject({ mode: "unavailable" });

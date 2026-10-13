@@ -1,0 +1,41 @@
+services:
+  app:
+    image: ${HIRE_AI_IMAGE:?Set HIRE_AI_IMAGE to the verified local image ID}
+    pull_policy: never
+    restart: "no"
+    init: true
+    mem_limit: 512m
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    env_file:
+      - ./.env.production
+      - ./.env.database
+      - ./.env.session
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_OPTIONS: --max-old-space-size=320
+      DATABASE_POOL_LIMIT: "5"
+      AUTONOMOUS_SCHEDULER_ENABLED: "false"
+      JOB_SCRAPING_SCHEDULER_ENABLED: "false"
+    ports:
+      - 127.0.0.1:3000:3000
+    networks:
+      - backend
+      - outbound
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  outbound:

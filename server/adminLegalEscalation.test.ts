@@ -1,26 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
-import { adminRouter } from "./routers/admin";
 
 const mocks = vi.hoisted(() => {
-  const selectLimit = vi.fn();
-  const updateWhere = vi.fn();
-  const updateSet = vi.fn(() => ({ where: updateWhere }));
-  const stripeUpdate = vi.fn();
-  const mockDb = {
-    select: vi.fn(),
-    update: vi.fn(() => ({ set: updateSet })),
+  const insertedRows: Record<string, unknown>[] = [];
+  const selectResults: unknown[][] = [];
+  const updateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) }));
+  const makeSelect = () => {
+    const value = selectResults.shift() ?? [];
+    const chain: any = {
+      from: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      limit: vi.fn(() => chain),
+      for: vi.fn(() => chain),
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve(value).then(resolve, reject),
+    };
+    return chain;
   };
-
+  const insertValues = vi.fn((value: Record<string, unknown>) => {
+    insertedRows.push(value);
+    return Promise.resolve();
+  });
+  const tx = {
+    select: vi.fn(makeSelect),
+    update: vi.fn(() => ({ set: updateSet })),
+    insert: vi.fn(() => ({ values: (value: Record<string, unknown>) => Object.assign(insertValues(value), { onDuplicateKeyUpdate: vi.fn(() => insertValues.mock.results.at(-1)?.value) }) })),
+  };
+  const transaction = vi.fn(async (operation: (value: typeof tx) => Promise<unknown>) => operation(tx));
+  const mockDb = {
+    select: vi.fn(makeSelect),
+    transaction,
+  };
   return {
-    mockDb,
-    selectLimit,
-    updateWhere,
-    updateSet,
-    stripeUpdate,
     createAdminReviewItem: vi.fn(),
     createAuditEvent: vi.fn(),
     getDb: vi.fn(),
+    mockDb,
+    stripeUpdate: vi.fn(),
+    insertedRows,
+    selectResults,
+    transaction,
+    updateSet,
   };
 });
 
@@ -34,10 +53,10 @@ vi.mock("./db", () => ({
 }));
 
 vi.mock("./stripeClient", () => ({
-  getStripeClient: vi.fn(() => ({
-    subscriptions: { update: mocks.stripeUpdate },
-  })),
+  getStripeClient: vi.fn(() => ({ subscriptions: { update: mocks.stripeUpdate } })),
 }));
+
+import { adminRouter } from "./routers/admin";
 
 function createAdminContext(userId: number): TrpcContext {
   return {
@@ -59,43 +78,46 @@ function createAdminContext(userId: number): TrpcContext {
   };
 }
 
+function seedEscalation() {
+  const disputedFee = {
+    id: 91,
+    userId: 500,
+    status: "active",
+    lifecycleStatus: "active",
+    stripeSubscriptionId: "sub_disputed",
+    notes: "Prior fee note",
+  };
+  const relatedActiveFee = {
+    id: 92,
+    userId: 500,
+    status: "active",
+    lifecycleStatus: "active",
+    stripeSubscriptionId: "sub_related",
+    notes: null,
+  };
+  mocks.selectResults.splice(0, mocks.selectResults.length,
+    [{ userId: 500 }],
+    [{ id: 500, accountStatus: "active" }],
+    [disputedFee],
+    [disputedFee, relatedActiveFee],
+    [],
+    [],
+    [{ holdType: "account" }, { holdType: "legal" }],
+    [],
+    [{ holdType: "account" }],
+  );
+}
+
 describe("admin legal escalation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.insertedRows.length = 0;
+    seedEscalation();
     mocks.getDb.mockResolvedValue(mocks.mockDb);
-    mocks.updateWhere.mockResolvedValue([{ affectedRows: 1 }]);
-    mocks.stripeUpdate.mockResolvedValue({ id: "sub_test" });
-
-    const disputedFee = {
-      id: 91,
-      userId: 500,
-      status: "active",
-      stripeSubscriptionId: "sub_disputed",
-      notes: "Prior fee note",
-    };
-    const relatedActiveFee = {
-      id: 92,
-      userId: 500,
-      status: "active",
-      stripeSubscriptionId: "sub_related",
-      notes: null,
-    };
-
-    mocks.selectLimit.mockResolvedValue([disputedFee]);
-    mocks.mockDb.select
-      .mockImplementationOnce(() => ({
-        from: () => ({
-          where: () => ({ limit: mocks.selectLimit }),
-        }),
-      }))
-      .mockImplementationOnce(() => ({
-        from: () => ({
-          where: () => Promise.resolve([disputedFee, relatedActiveFee]),
-        }),
-      }));
   });
 
-  it("pauses the disputed subscription and suspends every active fee before suspending the account", async () => {
+  it("commits account containment, fee changes, audit, review, and provider commands atomically", async () => {
+    mocks.stripeUpdate.mockRejectedValue(new Error("provider unavailable"));
     const caller = adminRouter.createCaller(createAdminContext(70));
 
     const result = await caller.flagLegalEscalation({
@@ -103,57 +125,48 @@ describe("admin legal escalation", () => {
       reason: "Required employment verification remained unresolved.",
     });
 
-    expect(result.success).toBe(true);
-    expect(mocks.stripeUpdate).toHaveBeenCalledWith("sub_disputed", {
-      pause_collection: { behavior: "void" },
-    });
-    expect(mocks.stripeUpdate).toHaveBeenCalledWith("sub_related", {
-      pause_collection: { behavior: "void" },
-    });
+    expect(result).toMatchObject({ success: true, billingSynchronization: "queued" });
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
     expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({ status: "disputed" }));
     expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({
       status: "suspended",
+    }));
+    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({
       notes: expect.stringContaining("success fee #91"),
     }));
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 92,
-      action: "success_fee_suspended_for_legal_escalation",
-      riskLevel: "critical",
+    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({
+      accountStatus: "suspended",
+      sessionVersion: expect.anything(),
     }));
-    expect(mocks.createAdminReviewItem).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 500,
-      entityType: "success_fee",
-      entityId: 91,
-      category: "legal_escalation",
-      priority: "critical",
-    }));
+    expect(mocks.insertedRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ successFeeId: 91, action: "pause", status: "pending" }),
+      expect.objectContaining({ successFeeId: 92, action: "pause", status: "pending" }),
+      expect.objectContaining({
+        entityType: "success_fee",
+        entityId: 92,
+        action: "success_fee_suspended_for_legal_escalation",
+        riskLevel: "critical",
+      }),
+      expect.objectContaining({ action: "legal_escalation_flagged", riskLevel: "critical" }),
+      expect.objectContaining({ category: "legal_escalation", priority: "critical" }),
+    ]));
   });
 
-  it("does not change local enforcement state when Stripe cannot pause legal-escalation billing", async () => {
-    mocks.stripeUpdate.mockRejectedValueOnce(new Error("provider unavailable"));
+  it("does not enqueue duplicate pauses when the account and fees are already contained", async () => {
+    seedEscalation();
+    mocks.selectResults[1] = [{ id: 500, accountStatus: "suspended" }];
+    mocks.selectResults[2] = [{ id: 91, userId: 500, status: "disputed", lifecycleStatus: "active", stripeSubscriptionId: "sub_disputed", notes: "Prior fee note" }];
+    mocks.selectResults[3] = [];
+    mocks.selectResults[4] = [{ id: 801 }];
+    mocks.selectResults[5] = [{ id: 802 }];
+    mocks.selectResults[6] = [{ holdType: "account" }, { holdType: "legal" }];
     const caller = adminRouter.createCaller(createAdminContext(70));
 
-    await expect(caller.flagLegalEscalation({
-      feeId: 91,
-      reason: "Required employment verification remained unresolved.",
-    })).rejects.toMatchObject({
-      code: "PRECONDITION_FAILED",
-      message: "Stripe could not synchronize this legal escalation. The local account and fee statuses were not changed.",
-    });
+    const result = await caller.flagLegalEscalation({ feeId: 91, reason: "Still under review." });
 
-    expect(mocks.updateSet).not.toHaveBeenCalled();
-    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 91,
-      action: "legal_escalation_blocked_stripe_sync",
-      riskLevel: "critical",
-    }));
-    expect(mocks.createAdminReviewItem).toHaveBeenCalledWith(expect.objectContaining({
-      entityType: "success_fee",
-      entityId: 91,
-      category: "payment_failed",
-      priority: "critical",
-    }));
+    expect(result.billingSynchronization).toBe("not_required");
+    expect(mocks.insertedRows.some(row => row.action === "pause")).toBe(false);
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
   });
 });

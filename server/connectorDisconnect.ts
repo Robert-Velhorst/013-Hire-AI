@@ -12,13 +12,27 @@ import {
 import {
   revokeConnectorGrant,
   type ConnectorRevocationResult,
+  getConnectorRevocationInstruction,
 } from "./connectorRevocation";
+import {
+  completeConnectorRevocationObligation,
+  getOpenConnectorRevocationObligation,
+  recordConnectorRevocationObligation,
+} from "./connectorRevocationObligations";
 
 type ConnectorProvider = typeof userConnectorAccounts.$inferInsert.provider;
 type Revoker = (
   provider: OAuthConnectorProvider,
   accessToken: string
 ) => Promise<ConnectorRevocationResult>;
+
+function safeRevocationFailureCode(error: unknown) {
+  if (error instanceof TypeError) return "network_failure" as const;
+  if (error instanceof Error && /decrypt|encryption|credential|configured/i.test(error.message)) {
+    return "credential_unavailable" as const;
+  }
+  return "provider_rejected" as const;
+}
 
 export async function disconnectConnectorAccess(
   userId: number,
@@ -35,6 +49,17 @@ export async function disconnectConnectorAccess(
     ? await getConnectorAuthorization(userId, provider)
     : null;
 
+  if (!authorization && isOAuthConnectorProvider(provider)) {
+    const obligation = await getOpenConnectorRevocationObligation(userId, provider);
+    if (obligation) {
+      providerRevocation = {
+        status: obligation.status === "manual_required" ? "manual_required" : "failed",
+        detail: getConnectorRevocationInstruction(provider),
+      };
+    }
+    return { account, providerRevocation };
+  }
+
   if (authorization && isOAuthConnectorProvider(provider)) {
     try {
       providerRevocation = await revoker(
@@ -45,6 +70,23 @@ export async function disconnectConnectorAccess(
         provider === "gmail" || provider === "google_drive"
           ? (["gmail", "google_drive"] as const)
           : ([provider] as const);
+
+      if (providerRevocation.status === "manual_required") {
+        await recordConnectorRevocationObligation({
+          userId,
+          provider,
+          status: "manual_required",
+        });
+      } else {
+        for (const affectedProvider of affectedProviders) {
+          await completeConnectorRevocationObligation(
+            userId,
+            affectedProvider,
+            "provider_api_confirmed"
+          );
+        }
+      }
+
       await Promise.all(
         affectedProviders.map(async affectedProvider => {
           await deleteConnectorAuthorization(userId, affectedProvider);
@@ -53,12 +95,17 @@ export async function disconnectConnectorAccess(
           }
         })
       );
-    } catch {
+    } catch (error) {
       providerRevocation = {
         status: "failed",
-        detail:
-          "Provider revocation failed. Hire.AI access is disabled, but the encrypted grant was retained so revocation can be retried.",
+        detail: "Provider revocation could not be confirmed. Hire.AI access is disabled and the encrypted grant was retained for retry.",
       };
+      await recordConnectorRevocationObligation({
+        userId,
+        provider,
+        status: "retry_required",
+        lastErrorCode: safeRevocationFailureCode(error),
+      });
     }
   }
 

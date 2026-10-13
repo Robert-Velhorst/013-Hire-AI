@@ -66,8 +66,9 @@ function parseStoredScopes(value: string | null) {
   }
 }
 
-function hasUsableAccessToken(authorization: ConnectorAuthorization, nowMs: number) {
+export function isUsableConnectorAccessToken(authorization: ConnectorAuthorization, nowMs: number) {
   const expiresAt = authorization.accessTokenExpiresAt?.getTime() ?? null;
+  if (authorization.accessTokenLifetime === "non_expiring" && expiresAt === null) return true;
   return expiresAt !== null && expiresAt > nowMs + TOKEN_EXPIRY_SKEW_MS;
 }
 
@@ -84,7 +85,7 @@ export async function getUsableConnectorAccessToken(input: {
     ...connectorAccessTokenDependencies,
     ...input.dependencies,
   };
-  if (hasUsableAccessToken(input.authorization, input.now.getTime())) {
+  if (isUsableConnectorAccessToken(input.authorization, input.now.getTime())) {
     return dependencies.decryptConnectorToken(input.authorization.encryptedAccessToken);
   }
   if (!input.authorization.encryptedRefreshToken) {
@@ -108,7 +109,7 @@ export async function getUsableConnectorAccessToken(input: {
       while (dependencies.currentTime() < deadline) {
         await dependencies.sleep(REFRESH_POLL_MS);
         const current = await dependencies.getConnectorAuthorization(input.userId, input.provider);
-        if (current && hasUsableAccessToken(current, dependencies.currentTime())) {
+        if (current && isUsableConnectorAccessToken(current, dependencies.currentTime())) {
           return dependencies.decryptConnectorToken(current.encryptedAccessToken);
         }
         const leaseExpiresAt = current?.refreshLeaseExpiresAt?.getTime() ?? 0;
@@ -129,7 +130,7 @@ export async function getUsableConnectorAccessToken(input: {
 
     try {
       const current = await dependencies.getConnectorAuthorization(input.userId, input.provider);
-      if (current && hasUsableAccessToken(current, dependencies.currentTime())) {
+      if (current && isUsableConnectorAccessToken(current, dependencies.currentTime())) {
         return dependencies.decryptConnectorToken(current.encryptedAccessToken);
       }
       const authorization = current ?? input.authorization;
@@ -148,6 +149,9 @@ export async function getUsableConnectorAccessToken(input: {
         dependencies.decryptConnectorToken(authorization.encryptedRefreshToken),
         input.fetcher
       );
+      if (!refreshed.expiresAt && refreshed.accessTokenLifetime !== "non_expiring") {
+        throw new ConnectorAccessTokenError("expired");
+      }
       const storedScopes = parseStoredScopes(authorization.grantedScopes);
       const grantedScopes = refreshed.scopeWasReturned === false && storedScopes.length > 0
         ? storedScopes
@@ -160,6 +164,7 @@ export async function getUsableConnectorAccessToken(input: {
           ? dependencies.encryptConnectorToken(refreshed.refreshToken)
           : authorization.encryptedRefreshToken,
         accessTokenExpiresAt: refreshed.expiresAt,
+        accessTokenLifetime: refreshed.accessTokenLifetime,
         tokenType: refreshed.tokenType,
         grantedScopes: JSON.stringify(grantedScopes),
       });

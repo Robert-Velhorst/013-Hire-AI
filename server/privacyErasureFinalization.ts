@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminReviewItems,
   applicationApprovals,
@@ -12,7 +13,9 @@ import {
   applications,
   auditEvents,
   autonomousRunStates,
+  cloudResumeCandidates,
   connectorAuthorizations,
+  connectorRevocationObligations,
   educationEntries,
   employerResponses,
   followUps,
@@ -23,6 +26,8 @@ import {
   jobMatches,
   privacyErasureRuns,
   privacyErasureTasks,
+  erasedOAuthIdentities,
+  stripeReconciliationCommands,
   savedJobs,
   socialMediaProfiles,
   userConnectorAccounts,
@@ -36,7 +41,8 @@ import {
   workspaceMembers,
   workspaces,
 } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, withOAuthIdentitySerialization } from "./db";
+import { getCurrentOAuthIdentityDigest } from "./erasedOAuthIdentity";
 import {
   PRIVACY_RETENTION_POLICY_VERSION,
   privacyRetentionPolicyTables,
@@ -50,6 +56,7 @@ export const privacyFinalizerPolicyTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_revocation_obligations",
   "applications",
   "application_decisions",
   "application_materials",
@@ -61,6 +68,7 @@ export const privacyFinalizerPolicyTables = [
   "application_approvals",
   "application_campaigns",
   "autonomous_run_states",
+  "cloud_resume_candidates",
   "job_matches",
   "interview_preparation",
   "follow_ups",
@@ -76,6 +84,8 @@ export const privacyFinalizerPolicyTables = [
   "job_alerts",
   "privacy_erasure_runs",
   "privacy_erasure_tasks",
+  "erased_oauth_identities",
+  "stripe_reconciliation_commands",
   "success_fees",
   "employment_verifications",
   "fee_payments",
@@ -202,6 +212,29 @@ export async function finalizePrivacyErasure(
     );
   }
 
+  const unresolvedProviderObligations = await db
+    .select({ id: connectorRevocationObligations.id })
+    .from(connectorRevocationObligations)
+    .where(and(
+      eq(connectorRevocationObligations.userId, run.userId),
+      inArray(connectorRevocationObligations.status, ["manual_required", "retry_required"])
+    ))
+    .limit(1);
+  if (unresolvedProviderObligations.length > 0) {
+    throw new Error("Provider revocation obligations must be completed before account erasure.");
+  }
+
+  const targetIdentity = (
+    await db
+      .select({ openId: users.openId })
+      .from(users)
+      .where(eq(users.id, run.userId))
+      .limit(1)
+  )[0];
+  if (!targetIdentity) {
+    throw new Error("The account identity is unavailable for erasure finalization.");
+  }
+
   const leaseId = randomUUID();
   const claimed = await db
     .update(privacyErasureRuns)
@@ -231,8 +264,27 @@ export async function finalizePrivacyErasure(
   }
 
   try {
-    const result = await db.transaction(async tx => {
-      const userIdentity = (await tx.select({ email: users.email }).from(users).where(eq(users.id, run.userId)).limit(1))[0];
+    const result = await withOAuthIdentitySerialization(
+      targetIdentity.openId,
+      async connection => drizzle(connection).transaction(async tx => {
+      const userIdentity = (await tx.select({ openId: users.openId, email: users.email }).from(users).where(eq(users.id, run.userId)).limit(1))[0];
+      if (!userIdentity || userIdentity.openId !== targetIdentity.openId) {
+        throw new Error("The account identity changed before erasure finalization.");
+      }
+      const identityDigest = getCurrentOAuthIdentityDigest(userIdentity.openId);
+      await tx.insert(erasedOAuthIdentities).values(identityDigest);
+      const unresolvedProviderObligations = await tx
+        .select({ id: connectorRevocationObligations.id })
+        .from(connectorRevocationObligations)
+        .where(and(
+          eq(connectorRevocationObligations.userId, run.userId),
+          inArray(connectorRevocationObligations.status, ["manual_required", "retry_required"])
+        ))
+        .limit(1)
+        .for("update");
+      if (unresolvedProviderObligations.length > 0) {
+        throw new Error("Provider revocation obligations must be completed before account erasure.");
+      }
       const applicationRows = await tx
         .select({ id: applications.id })
         .from(applications)
@@ -305,6 +357,11 @@ export async function finalizePrivacyErasure(
           autonomousRunStates,
           autonomousRunStates.userId,
         ],
+        [
+          "cloud_resume_candidates",
+          cloudResumeCandidates,
+          cloudResumeCandidates.userId,
+        ],
         ["job_matches", jobMatches, jobMatches.userId],
         [
           "interview_preparation",
@@ -332,6 +389,11 @@ export async function finalizePrivacyErasure(
           "connector_authorizations",
           connectorAuthorizations,
           connectorAuthorizations.userId,
+        ],
+        [
+          "connector_revocation_obligations",
+          connectorRevocationObligations,
+          connectorRevocationObligations.userId,
         ],
         [
           "user_connector_accounts",
@@ -437,6 +499,7 @@ export async function finalizePrivacyErasure(
             loginMethod: null,
             stripeCustomerId: null,
             accountStatus: "suspended",
+            sessionVersion: sql`${users.sessionVersion} + 1`,
           })
           .where(eq(users.id, run.userId))
       );
@@ -482,7 +545,8 @@ export async function finalizePrivacyErasure(
           )
         );
       return { deleted, scrubbed };
-    });
+      })
+    );
     return {
       success: true,
       existing: false,

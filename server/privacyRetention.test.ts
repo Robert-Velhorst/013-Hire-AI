@@ -19,6 +19,7 @@ const expectedUserOwnedTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_revocation_obligations",
   "applications",
   "application_decisions",
   "application_materials",
@@ -30,6 +31,7 @@ const expectedUserOwnedTables = [
   "application_approvals",
   "application_campaigns",
   "autonomous_run_states",
+  "cloud_resume_candidates",
   "job_matches",
   "interview_preparation",
   "follow_ups",
@@ -45,6 +47,8 @@ const expectedUserOwnedTables = [
   "job_alerts",
   "privacy_erasure_runs",
   "privacy_erasure_tasks",
+  "erased_oauth_identities",
+  "stripe_reconciliation_commands",
   "success_fees",
   "employment_verifications",
   "fee_payments",
@@ -130,6 +134,7 @@ describe("privacy retention inventory", () => {
     ]);
     expect(directPrivacyRetentionPolicy.filter((entry) => entry.providerRevocationRequired).map((entry) => entry.table).sort()).toEqual([
       "connector_authorizations",
+      "connector_revocation_obligations",
       "user_connector_accounts",
     ]);
   });

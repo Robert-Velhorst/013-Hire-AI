@@ -55,7 +55,7 @@ export class LinkedInScraper extends BaseScraper {
           const normalizedJob = this.normalizeJob({
             title: rawJob.title,
             company: rawJob.company,
-            location: rawJob.location || "Remote",
+            location: rawJob.location,
             description: rawJob.description,
             applicationUrl: rawJob.link,
             externalId: rawJob.jobId,

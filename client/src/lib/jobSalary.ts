@@ -20,7 +20,11 @@ export function formatJobSalary(
   if (!min && !max) return isDutch ? "Niet opgegeven" : "Not specified";
 
   const currency = normalizeSalaryCurrency(salaryCurrency);
-  if (min && max) return `${formatSalaryAmount(min, currency, locale)} - ${formatSalaryAmount(max, currency, locale)}`;
-  if (min) return `${formatSalaryAmount(min, currency, locale)}+`;
-  return `${isDutch ? "Tot" : "Up to"} ${formatSalaryAmount(max!, currency, locale)}`;
+  const formatAmount = (amount: number) => currency
+    ? formatSalaryAmount(amount, currency, locale)
+    : new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 0 }).format(amount);
+  const currencyNote = currency ? "" : ` (${isDutch ? "valuta niet vermeld" : "currency not specified"})`;
+  if (min && max) return `${formatAmount(min)} - ${formatAmount(max)}${currencyNote}`;
+  if (min) return `${formatAmount(min)}+${currencyNote}`;
+  return `${isDutch ? "Tot" : "Up to"} ${formatAmount(max!)}${currencyNote}`;
 }

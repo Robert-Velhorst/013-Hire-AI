@@ -11,6 +11,7 @@ import {
 } from "./db";
 import { getJobAlerts, getSavedJobs } from "./applicationFeatures";
 import { getResumeVersions } from "./resumeStorage";
+import { listConnectorRevocationHistory } from "./connectorRevocationObligations";
 
 /**
  * Produces a user-owned portable record without private object keys, signed URLs,
@@ -31,6 +32,7 @@ export async function buildPrivacyDataExport(userId: number) {
     jobAlerts,
     resumes,
     auditEvents,
+    connectorRevocationHistory,
   ] = await Promise.all([
     getUserProfile(userId),
     getUserApplications(userId),
@@ -44,10 +46,11 @@ export async function buildPrivacyDataExport(userId: number) {
     getJobAlerts(userId),
     getResumeVersions(userId),
     getAuditEventsForUser(userId, 100),
+    listConnectorRevocationHistory(userId),
   ]);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     profile,
     applications,
@@ -77,6 +80,7 @@ export async function buildPrivacyDataExport(userId: number) {
       uploadedAt: resume.uploadedAt,
     })),
     auditEvents,
+    connectorRevocationHistory,
     excluded: [
       "Resume, offer, and verification file bytes are not included. Use authenticated document download while access is retained.",
       "Connector authorization tokens, private storage keys, and provider credentials are never exported.",
