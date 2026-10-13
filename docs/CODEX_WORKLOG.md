@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-10-13 - Database-enforced active approval and review identities
+
+- Added generated nullable identity columns and unique indexes for pending application approvals and open/in-progress admin reviews. Resolved records keep their audit history and no longer occupy the active identity, so a later approval/review cycle can be created.
+- Migration `0081` deterministically retains the newest row for each legacy active identity, closes older duplicate rows with an explanatory note, then adds the uniqueness constraints. Database helpers and direct approval/review creation paths now use conflict-safe upserts instead of relying on select-then-insert across application replicas.
+- Added opt-in isolated-MySQL coverage for simultaneous creates across all six approval types and nine review categories, reopen-after-resolution behavior, and the actual legacy duplicate cleanup SQL. The Stripe payment-failure review regression is included in the database acceptance suite.
+- Verification: `pnpm db:generate` reported no schema changes; `pnpm check` passed; isolated MySQL 8.4 acceptance passed 9 suites / 32 tests from a fresh migrated database; full regular tests passed 298 files / 1,708 tests (8 opt-in files / 29 tests skipped); production build passed with 87 JavaScript chunks and 582,227 startup JavaScript bytes within budget. The migrated-MySQL schema audit reported no missing or mismatched schema objects, and the rollback-only 5,000-row query-plan audit used its expected indexes. These checks do not establish live-provider or deployment acceptance.
+
 ## 2026-10-13 - Gmail metadata-scope inbox discovery
 
 - Removed Gmail's `q=newer_than:30d` list parameter because Google rejects search queries under the `gmail.metadata` scope. Inbox discovery now asks for the `INBOX` label, keeps the existing 50-message scan bound, requests only sender and subject headers, and uses Gmail `internalDate` for the lookback and displayed received timestamp. Missing or malformed provider timestamps fail closed. It does not use the `snippet` field as body data under metadata-only consent; Gmail matches/classifies from allowed headers, so body-dependent response classification remains limited until a broader verified scope is justified and approved.

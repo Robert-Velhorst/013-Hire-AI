@@ -4799,6 +4799,7 @@ export async function createAdminReviewItem(item: InsertAdminReviewItem) {
     const record = {
       ...item,
       id: memoryAdminReviewItems.length + 1,
+      activeIdentity: null,
       status: item.status ?? "open",
       priority: item.priority ?? "medium",
       description: item.description ?? null,
@@ -4813,33 +4814,20 @@ export async function createAdminReviewItem(item: InsertAdminReviewItem) {
     return { insertId: record.id };
   }
 
-  const existing = await db
-    .select({ id: adminReviewItems.id })
-    .from(adminReviewItems)
-    .where(and(
-      eq(adminReviewItems.userId, item.userId),
-      eq(adminReviewItems.entityType, item.entityType),
-      eq(adminReviewItems.entityId, item.entityId),
-      eq(adminReviewItems.category, item.category),
-      or(eq(adminReviewItems.status, "open"), eq(adminReviewItems.status, "in_progress"))
-    ))
-    .limit(1);
-
-  if (existing[0]) {
-    await db
-      .update(adminReviewItems)
-      .set({
-        priority: item.priority ?? "medium",
-        title: item.title,
-        description: item.description,
-        assignedTo: item.assignedTo,
-      })
-      .where(eq(adminReviewItems.id, existing[0].id));
-    return { insertId: existing[0].id, existing: true };
-  }
-
-  const result = await db.insert(adminReviewItems).values(item);
-  return { insertId: Number(result[0].insertId) };
+  const result = await db.insert(adminReviewItems).values(item).onDuplicateKeyUpdate({
+    set: {
+      id: sql`LAST_INSERT_ID(id)`,
+      priority: item.priority ?? "medium",
+      title: item.title,
+      description: item.description,
+      assignedTo: item.assignedTo,
+      updatedAt: new Date(),
+    },
+  });
+  return {
+    insertId: Number(result[0].insertId),
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function listAdminReviewItems(
@@ -5323,6 +5311,7 @@ export async function createApplicationApproval(approval: InsertApplicationAppro
     const record = {
       ...approval,
       id: memoryApplicationApprovals.length + 1,
+      activeIdentity: null,
       applicationId: approval.applicationId ?? null,
       status: approval.status ?? "pending",
       riskLevel: approval.riskLevel ?? "medium",
@@ -5340,34 +5329,22 @@ export async function createApplicationApproval(approval: InsertApplicationAppro
     return { insertId: record.id };
   }
 
-  const existing = await db
-    .select({ id: applicationApprovals.id })
-    .from(applicationApprovals)
-    .where(and(
-      eq(applicationApprovals.userId, approval.userId),
-      eq(applicationApprovals.entityType, approval.entityType),
-      eq(applicationApprovals.entityId, approval.entityId),
-      eq(applicationApprovals.approvalType, approval.approvalType),
-      eq(applicationApprovals.status, "pending")
-    ))
-    .limit(1);
-  if (existing[0]) {
-    await db
-      .update(applicationApprovals)
-      .set({
-        applicationId: approval.applicationId,
-        riskLevel: approval.riskLevel ?? "medium",
-        requestedBy: approval.requestedBy ?? "system",
-        title: approval.title,
-        description: approval.description,
-        payload: approval.payload,
-      })
-      .where(eq(applicationApprovals.id, existing[0].id));
-    return { insertId: existing[0].id, existing: true };
-  }
-
-  const result = await db.insert(applicationApprovals).values(approval);
-  return { insertId: Number(result[0].insertId) };
+  const result = await db.insert(applicationApprovals).values(approval).onDuplicateKeyUpdate({
+    set: {
+      id: sql`LAST_INSERT_ID(id)`,
+      applicationId: approval.applicationId,
+      riskLevel: approval.riskLevel ?? "medium",
+      requestedBy: approval.requestedBy ?? "system",
+      title: approval.title,
+      description: approval.description,
+      payload: approval.payload,
+      updatedAt: new Date(),
+    },
+  });
+  return {
+    insertId: Number(result[0].insertId),
+    existing: Number(result[0].affectedRows) !== 1,
+  };
 }
 
 export async function listUserApplicationApprovals(

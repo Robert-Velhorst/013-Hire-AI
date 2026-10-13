@@ -757,6 +757,14 @@ export const adminRouter = router({
             priority: input.status === "disputed" ? "critical" : "high",
             title: input.status === "disputed" ? "Disputed success fee requires admin follow-up" : "Suspended success fee requires admin review",
             description: input.notes ?? `Status changed from ${fee.status} to ${input.status}.`,
+          }).onDuplicateKeyUpdate({
+            set: {
+              id: sql`LAST_INSERT_ID(id)`,
+              priority: input.status === "disputed" ? "critical" : "high",
+              title: input.status === "disputed" ? "Disputed success fee requires admin follow-up" : "Suspended success fee requires admin review",
+              description: input.notes ?? `Status changed from ${fee.status} to ${input.status}.`,
+              updatedAt: new Date(),
+            },
           });
         }
         return { success: true, billingSynchronization: queued ? "queued" as const : "not_required" as const };
@@ -1045,6 +1053,14 @@ export const adminRouter = router({
           priority: "critical",
           title: "Suspended user account requires admin follow-up",
           description: input.reason,
+        }).onDuplicateKeyUpdate({
+          set: {
+            id: sql`LAST_INSERT_ID(id)`,
+            priority: "critical",
+            title: "Suspended user account requires admin follow-up",
+            description: input.reason,
+            updatedAt: new Date(),
+          },
         });
         return {
           success: true,
@@ -1253,6 +1269,14 @@ export const adminRouter = router({
           priority: "critical",
           title: "Legal escalation flagged",
           description: input.reason,
+        }).onDuplicateKeyUpdate({
+          set: {
+            id: sql`LAST_INSERT_ID(id)`,
+            priority: "critical",
+            title: "Legal escalation flagged",
+            description: input.reason,
+            updatedAt: new Date(),
+          },
         });
         return {
           success: true,

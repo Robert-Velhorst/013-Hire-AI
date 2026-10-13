@@ -1491,6 +1491,14 @@ export async function recordEmployerResponse(
           title: "Confirm offer attribution",
           description: response.noteContent,
           payload: approvalPayload,
+        }).onDuplicateKeyUpdate({
+          set: {
+            id: sql`LAST_INSERT_ID(id)`,
+            title: "Confirm offer attribution",
+            description: response.noteContent,
+            payload: approvalPayload,
+            updatedAt: new Date(),
+          },
         });
       }
       await tx.insert(adminReviewItems).values({
@@ -1501,6 +1509,14 @@ export async function recordEmployerResponse(
         priority: "high",
         title: "Offer response needs success-fee attribution review",
         description: response.noteContent,
+      }).onDuplicateKeyUpdate({
+        set: {
+          id: sql`LAST_INSERT_ID(id)`,
+          priority: "high",
+          title: "Offer response needs success-fee attribution review",
+          description: response.noteContent,
+          updatedAt: new Date(),
+        },
       });
     }
 
@@ -3708,6 +3724,14 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
       description: approvalCopy.description,
       payload: JSON.stringify({ message, ...metadata }),
       decidedAt: null,
+    }).onDuplicateKeyUpdate({
+      set: {
+        id: sql`LAST_INSERT_ID(id)`,
+        title: approvalCopy.title,
+        description: approvalCopy.description,
+        payload: JSON.stringify({ message, ...metadata }),
+        updatedAt: new Date(),
+      },
     });
     await tx.insert(auditEvents).values({
       userId,

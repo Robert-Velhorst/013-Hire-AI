@@ -32,7 +32,11 @@ const mocks = vi.hoisted(() => {
       return query;
     }),
   }));
-  mockDb.insert = vi.fn(() => ({ values: insertValues }));
+  mockDb.insert = vi.fn(() => ({
+    values: (value: Record<string, unknown>) => Object.assign(insertValues(value), {
+      onDuplicateKeyUpdate: vi.fn(() => insertValues.mock.results.at(-1)?.value),
+    }),
+  }));
   mockDb.update = vi.fn((table: Record<PropertyKey, unknown>) => {
     const name = table[Symbol.for("drizzle:Name")];
     const where =

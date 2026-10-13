@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { JOB_STORAGE_MAX_CHARS } from "../shared/jobStoragePolicy";
 
@@ -522,6 +523,11 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
     "privacy_deletion"
   ]).notNull(),
   status: mysqlEnum("status", ["open", "in_progress", "resolved", "dismissed"]).default("open").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status IN ('open', 'in_progress')
+    THEN CONCAT(user_id, ':', entity_type, ':', entity_id, ':', category)
+    ELSE NULL
+  END`),
   priority: mysqlEnum("priority", ["low", "medium", "high", "critical"]).default("medium").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
@@ -532,6 +538,7 @@ export const adminReviewItems = mysqlTable("admin_review_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
+  uniqueIndex("admin_review_items_active_identity_unique").on(table.activeIdentity),
   index("admin_review_items_status_priority_idx").on(table.status, table.priority),
   index("admin_review_items_status_created_idx").on(table.status, table.createdAt),
   index("admin_review_items_status_created_id_idx").on(table.status, table.createdAt, table.id),
@@ -628,6 +635,11 @@ export const applicationApprovals = mysqlTable("application_approvals", {
     "billing_action"
   ]).notNull(),
   status: mysqlEnum("status", ["pending", "approved", "rejected", "cancelled"]).default("pending").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status = 'pending'
+    THEN CONCAT(user_id, ':', entity_type, ':', entity_id, ':', approval_type)
+    ELSE NULL
+  END`),
   riskLevel: mysqlEnum("risk_level", ["low", "medium", "high", "critical"]).default("medium").notNull(),
   requestedBy: mysqlEnum("requested_by", ["system", "user", "admin"]).default("system").notNull(),
   decidedBy: mysqlEnum("decided_by", ["user", "admin"]),
@@ -640,6 +652,7 @@ export const applicationApprovals = mysqlTable("application_approvals", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 }, (table) => [
+  uniqueIndex("application_approvals_active_identity_unique").on(table.activeIdentity),
   index("application_approvals_user_status_idx").on(table.userId, table.status),
   index("application_approvals_user_status_created_idx").on(table.userId, table.status, table.createdAt),
   index("application_approvals_offer_attribution_operating_idx").on(

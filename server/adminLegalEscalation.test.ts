@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => {
   const tx = {
     select: vi.fn(makeSelect),
     update: vi.fn(() => ({ set: updateSet })),
-    insert: vi.fn(() => ({ values: insertValues })),
+    insert: vi.fn(() => ({ values: (value: Record<string, unknown>) => Object.assign(insertValues(value), { onDuplicateKeyUpdate: vi.fn(() => insertValues.mock.results.at(-1)?.value) }) })),
   };
   const transaction = vi.fn(async (operation: (value: typeof tx) => Promise<unknown>) => operation(tx));
   const mockDb = {

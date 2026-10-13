@@ -10,7 +10,7 @@ import {
   users,
   type SuccessFee,
 } from "../drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getStripeClient } from "./stripeClient";
 import {
   claimStripeWebhookEvent,
@@ -495,6 +495,14 @@ export function registerStripeWebhook(app: Express) {
                   priority: "high",
                   title: "Stripe payment failed",
                   description: `Stripe could not collect ${amount} ${currency} for ${fee.employerName} (${fee.jobTitle}). Review billing recovery before any escalation.`,
+                }).onDuplicateKeyUpdate({
+                  set: {
+                    id: sql`LAST_INSERT_ID(id)`,
+                    priority: "high",
+                    title: "Stripe payment failed",
+                    description: `Stripe could not collect ${amount} ${currency} for ${fee.employerName} (${fee.jobTitle}). Review billing recovery before any escalation.`,
+                    updatedAt: new Date(),
+                  },
                 });
               }
               break;
@@ -604,6 +612,14 @@ export function registerStripeWebhook(app: Express) {
                   priority: "high",
                   title: "Stripe payment failed",
                   description: `Stripe marked the subscription for ${fee.employerName} (${fee.jobTitle}) as past due. Review billing recovery before any escalation.`,
+                }).onDuplicateKeyUpdate({
+                  set: {
+                    id: sql`LAST_INSERT_ID(id)`,
+                    priority: "high",
+                    title: "Stripe payment failed",
+                    description: `Stripe marked the subscription for ${fee.employerName} (${fee.jobTitle}) as past due. Review billing recovery before any escalation.`,
+                    updatedAt: new Date(),
+                  },
                 });
               }
               break;

@@ -568,6 +568,13 @@
       "when": 1791910000002,
       "tag": "0080_connector_token_lifetime",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1791869478934,
+      "tag": "0081_mighty_oracle",
+      "breakpoints": true
     }
   ]
 }

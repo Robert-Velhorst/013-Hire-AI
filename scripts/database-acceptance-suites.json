@@ -1,6 +1,7 @@
 {
   "suites": [
     "server/_core/trpcHttp.integration.test.ts",
+    "server/activeReviewIdentity.integration.test.ts",
     "server/adminOperatingQueues.integration.test.ts",
     "server/cloudResumeCandidateStore.integration.test.ts",
     "server/connectorTokenLifetime.integration.test.ts",
