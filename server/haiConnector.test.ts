@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as database from "./db";
 import {
   buildHaiRemoteJobResults,
+  HAI_CONNECTOR_AGENT_VERSION,
   HaiConnectorService,
   parseHaiRemoteJobSearchQuery,
   type HaiRemoteJob,
@@ -242,6 +243,9 @@ describe("HAI A2A route", () => {
     expect(card.skills[0].id).toBe("hire_ai_read_only_status");
     expect(card.skills[1].id).toBe("hire_ai_remote_job_search");
     expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false, extendedAgentCard: false });
+    expect(card.securitySchemes.haiLocalBearer.httpAuthSecurityScheme.scheme).toBe("Bearer");
+    expect(card.securityRequirements).toEqual([{ schemes: { haiLocalBearer: [] } }]);
+    expect(cardResponse.headers.get("etag")).toContain(HAI_CONNECTOR_AGENT_VERSION);
 
     const response = await fetch(`${base}/api/hai/a2a`, {
       method: "POST",

@@ -17,7 +17,7 @@ import { defaultJobSearchFilters } from "@shared/jobSearchFilters";
 export type { HaiConnectorConfig } from "./haiConnectorConfig";
 
 export const HAI_CONNECTOR_PROTOCOL_VERSION = "1.0";
-export const HAI_CONNECTOR_AGENT_VERSION = "1.2.0";
+export const HAI_CONNECTOR_AGENT_VERSION = "1.2.1";
 const HAI_REMOTE_JOB_RESULT_LIMIT = 10;
 
 export type HaiJobSearchSnapshot = {
@@ -221,7 +221,7 @@ export class HaiConnectorService {
       securitySchemes: {
         haiLocalBearer: { httpAuthSecurityScheme: { scheme: "Bearer", description: "Configured local HAI connector token." } },
       },
-      securityRequirements: [{ haiLocalBearer: [] }],
+      securityRequirements: [{ schemes: { haiLocalBearer: [] } }],
     };
   }
 
