@@ -129,6 +129,14 @@ describe("HAI A2A route", () => {
     expect(cardResponse.status).toBe(200);
     expect(card.skills[0].id).toBe("hire_ai_read_only_status");
     expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false, extendedAgentCard: false });
+    expect(card.supportedInterfaces).toEqual([{
+      url: "http://127.0.0.1:3000/api/hai/a2a",
+      protocolBinding: "JSONRPC",
+      protocolVersion: "1.0",
+    }]);
+    expect(card.defaultInputModes).toContain("text/plain");
+    expect(card.defaultOutputModes).toContain("application/json");
+    expect(card.securityRequirements).toEqual([{ haiLocalBearer: [] }]);
 
     const response = await fetch(`${base}/api/hai/a2a`, {
       method: "POST",
@@ -143,6 +151,8 @@ describe("HAI A2A route", () => {
     expect(response.status).toBe(200);
     expect(body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
     expect(body.result.task.artifacts[0].parts[0].data).toEqual(snapshot);
+    expect(body.result.task.artifacts[0].parts[0].mediaType).toBe("application/json");
+    expect(sendMessage().params.message.parts[0].mediaType).toBe("text/plain");
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(ownerId);
