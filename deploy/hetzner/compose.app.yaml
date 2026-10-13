@@ -27,6 +27,7 @@ services:
       - 127.0.0.1:3000:3000
     networks:
       - backend
+      - hai_peer
       - outbound
     depends_on:
       db:
@@ -38,4 +39,7 @@ services:
         max-file: "3"
 
 networks:
+  hai_peer:
+    name: hire-ai_peer
+    internal: true
   outbound:

@@ -81,6 +81,8 @@ describe("HAI connector configuration", () => {
     expect(validateHaiConnectorConfig({ enabled: false, token: "", userId: null, endpointUrl: "" })).toBeNull();
     expect(validateHaiConnectorConfig({ enabled: true, token: "short", userId: 1, endpointUrl: "http://127.0.0.1/a" })).toContain("32");
     expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
+    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "http://app:3000/api/hai/a2a" })).toBeNull();
+    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "http://untrusted-service:3000/api/hai/a2a" })).toContain("local");
   });
 
   it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {

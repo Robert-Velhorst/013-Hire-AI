@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
@@ -163,10 +163,7 @@ async function scanWithWindowsDefender(input: {
   if (!executable)
     throw new Error("Windows Defender command-line scanner is unavailable.");
   const directory = await mkdtemp(join(tmpdir(), "hire-ai-scan-"));
-  const filePath = join(
-    directory,
-    sanitizeUploadFileName(basename(input.fileName))
-  );
+  const filePath = join(directory, "upload");
   try {
     await writeFile(filePath, Buffer.from(input.data), { mode: 0o600 });
     await runWindowsDefender(executable, filePath);
@@ -243,7 +240,8 @@ export const VERIFICATION_MIME_TYPES = new Set<string>(VERIFICATION_UPLOAD_MIME_
 
 export function sanitizeUploadFileName(fileName: string): string {
   const trimmed = fileName.trim().replace(/[/\\]/g, "_");
-  return trimmed.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "upload";
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
+  return sanitized && sanitized !== "." && sanitized !== ".." ? sanitized : "upload";
 }
 
 export function validateUploadedFile(input: {

@@ -14,6 +14,18 @@ Copy the deployment files to `/opt/hire-ai`, owned by root with mode `0700`. Kee
 
 The initial memory limits are 768 MiB for MySQL and 512 MiB for the application. They leave some host capacity but are not evidence that scanners, additional tools or many simultaneous users will fit on the 2 GB server. Do not build large releases alongside a busy live workload.
 
+## Private HAI Peer
+
+When HAI runs in a Docker container on this host, connect that container only to the dedicated internal `hire-ai_peer` network. Do not attach it to `hire-ai_backend`, which also contains MySQL. Hire.AI is reachable on that peer network as `http://app:3000`; set `HAI_CONNECTOR_URL=http://app:3000/api/hai/a2a` in the private production environment. Store the same independently generated `HAI_CONNECTOR_TOKEN` in both applications and use the intended active Hire.AI account ID. The connector remains read-only and exposes aggregate status only.
+
+After bringing up Hire.AI, connect the HAI container to the existing network using its exact container name:
+
+```bash
+docker network connect hire-ai_peer <HAI_CONTAINER_NAME>
+```
+
+Verify that HAI can resolve `app` and retrieve `http://app:3000/.well-known/agent-card.json` from inside its container. Then run the authenticated A2A contract check using the secret mounted through HAI's private environment; do not pass the token as a command-line argument or print it. The peer network is internal and does not publish Hire.AI to the internet. Disconnect the peer with `docker network disconnect hire-ai_peer <HAI_CONTAINER_NAME>` when disabling the integration.
+
 ## Database Preparation
 
 Run as root on the approved host:
