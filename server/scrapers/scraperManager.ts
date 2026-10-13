@@ -299,7 +299,8 @@ export class ScraperManager {
     }
 
     const controller = new AbortController();
-    let timeout: NodeJS.Timeout | undefined;
+    let timeoutSignal: AbortSignal | undefined;
+    let timeoutListener: (() => void) | undefined;
     let removeAbortListener = () => {};
     try {
       const cancellation = new Promise<never>((_, reject) => {
@@ -319,14 +320,12 @@ export class ScraperManager {
         scraper.scrape({ ...options, signal: controller.signal }),
         cancellation,
         new Promise<never>((_, reject) => {
-          timeout = setTimeout(
-            () => {
-              reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
-              controller.abort();
-            },
-            // codeql[js/resource-exhaustion] Constructor input is clamped to 1-300000ms before it reaches this timer.
-            this.scrapeTimeoutMs
-          );
+          timeoutSignal = AbortSignal.timeout(this.scrapeTimeoutMs);
+          timeoutListener = () => {
+            reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
+            controller.abort();
+          };
+          timeoutSignal.addEventListener("abort", timeoutListener, { once: true });
         }),
       ]);
       const sanitizedResult = {
@@ -350,7 +349,9 @@ export class ScraperManager {
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), result);
       return result;
     } finally {
-      if (timeout) clearTimeout(timeout);
+      if (timeoutSignal && timeoutListener) {
+        timeoutSignal.removeEventListener("abort", timeoutListener);
+      }
       removeAbortListener();
       releaseRun();
       if (this.platformRunTails.get(platformName) === currentRun) {

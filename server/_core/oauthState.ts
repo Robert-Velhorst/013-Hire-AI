@@ -28,7 +28,7 @@ function isValidCallbackUri(value: string) {
 }
 
 function signPayload(encodedPayload: string, secret: string) {
-  // codeql[js/insufficient-password-hash] This is HMAC authentication with the app signing key, not password storage.
+  // CodeQL review: this is HMAC authentication with the app signing key, not password storage.
   return createHmac("sha256", secret).update(encodedPayload).digest("base64url");
 }
 

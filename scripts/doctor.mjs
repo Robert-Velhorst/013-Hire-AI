@@ -73,15 +73,15 @@ function windowsDefenderAvailable() {
   if (process.env.ProgramFiles) candidates.push(path.join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe"));
   if (process.env.ProgramData) {
     const root = path.join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform");
-    // codeql[js/path-injection] This local doctor uses the operator-configured Defender install path, never a request value.
+    // CodeQL review: this local doctor uses the operator-configured Defender install path, never a request value.
     if (fs.existsSync(root)) {
-      // codeql[js/path-injection] Directory enumeration is limited to the local Defender platform directory above.
+      // Directory enumeration is limited to the local Defender platform directory above.
       const versions = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
         .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
       candidates.unshift(...versions.map(version => path.join(root, version, "MpCmdRun.exe")));
     }
   }
-  // codeql[js/path-injection] Candidates are built only from local Windows Defender installation paths.
+  // Candidates are built only from local Windows Defender installation paths.
   return candidates.some(candidate => fs.existsSync(candidate));
 }
 

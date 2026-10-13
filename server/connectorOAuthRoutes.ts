@@ -92,7 +92,7 @@ function completeRedirect(provider: string, status: "connected" | "denied" | "fa
 }
 
 export function registerConnectorOAuthRoutes(app: Express) {
-  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom connector OAuth limiter.
+  // CodeQL review: the first middleware is the bounded custom connector OAuth limiter.
   app.get(
     "/api/connectors/oauth/callback",
     createSensitiveRouteRateLimiter("connectorOAuthCallback"),

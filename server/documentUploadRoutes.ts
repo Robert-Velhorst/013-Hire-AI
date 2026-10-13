@@ -222,7 +222,7 @@ async function handleDocumentUpload(req: Request, res: Response) {
 }
 
 export function registerDocumentUploadRoutes(app: Express) {
-  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom upload limiter.
+  // CodeQL review: the first middleware is the bounded custom upload limiter.
   app.post(DOCUMENT_UPLOAD_PATH, createSensitiveRouteRateLimiter("documentUpload"), (req, res) => {
     void handleDocumentUpload(req, res).catch(() => {
       if (!res.destroyed && !res.headersSent) {
