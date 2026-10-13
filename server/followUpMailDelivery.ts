@@ -10,6 +10,7 @@ import {
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import {
   acquireConnectorRefreshLease,
   getConnectorAuthorization,
@@ -42,6 +43,13 @@ type FollowUpMailDeliveryDependencies = {
   upsertConnectorAuthorization: typeof upsertConnectorAuthorization;
   upsertUserConnectorAccount: typeof upsertUserConnectorAccount;
 };
+
+export class FollowUpProviderRejectionError extends Error {
+  constructor(message: string, readonly authorizationRejected: boolean) {
+    super(message);
+    this.name = "FollowUpProviderRejectionError";
+  }
+}
 
 const defaults: FollowUpMailDeliveryDependencies = {
   acquireConnectorRefreshLease,
@@ -190,7 +198,12 @@ export async function sendFollowUpProviderMessage(
       },
       body: JSON.stringify({ raw }),
     }));
-    if (!response.ok) throw new Error(`Gmail rejected the follow-up delivery (${response.status}).`);
+    if (!response.ok) {
+      throw new FollowUpProviderRejectionError(
+        `Gmail rejected the follow-up delivery (${response.status}).`,
+        isAuthoritativeInvalidConnectorToken(response)
+      );
+    }
     const payload = await readProviderJson<{ id?: unknown }>(response);
     if (typeof payload.id !== "string" || !payload.id) {
       throw new Error("Gmail accepted the request without a deterministic message identifier.");
@@ -213,7 +226,12 @@ export async function sendFollowUpProviderMessage(
       saveToSentItems: true,
     }),
   }));
-  if (!response.ok) throw new Error(`Outlook rejected the follow-up delivery (${response.status}).`);
+  if (!response.ok) {
+    throw new FollowUpProviderRejectionError(
+      `Outlook rejected the follow-up delivery (${response.status}).`,
+      isAuthoritativeInvalidConnectorToken(response)
+    );
+  }
   return { messageId: null, confirmation: "Outlook accepted the approved follow-up for delivery and saved it to Sent Items." };
 }
 
@@ -405,8 +423,8 @@ export async function sendApprovedFollowUp(
     const reason = failureMessage(error);
     // An accepted message without an identifier may already have been sent.
     // Only an explicit rejection is safe to classify as a known failure.
-    if (/rejected the follow-up delivery/i.test(reason)) {
-      if (/\((401|403)\)/.test(reason)) {
+    if (error instanceof FollowUpProviderRejectionError) {
+      if (error.authorizationRejected) {
         await markMailAccessNeedsReauth(input.userId, access.account, dependencies);
       }
       await recordKnownDeliveryFailure(input, attemptKey, reason);

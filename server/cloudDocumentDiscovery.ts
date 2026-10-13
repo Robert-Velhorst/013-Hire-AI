@@ -1,6 +1,7 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import {
   acquireConnectorRefreshLease,
   getConnectorAuthorization,
@@ -277,8 +278,8 @@ function parseDropboxDocuments(payload: unknown): CloudResumeDocument[] {
   });
 }
 
-function cloudApiError(provider: CloudDocumentProvider, status: number) {
-  if (status === 401 || status === 403) {
+function cloudApiError(provider: CloudDocumentProvider, response: Response) {
+  if (isAuthoritativeInvalidConnectorToken(response)) {
     return new Error(`${cloudProviderLabel(provider)} authorization is no longer valid. Reauthorize before document discovery.`);
   }
   return new Error(`${cloudProviderLabel(provider)} document discovery is temporarily unavailable.`);
@@ -288,13 +289,13 @@ async function throwCloudApiError(
   userId: number,
   account: ConnectorAccount,
   provider: CloudDocumentProvider,
-  status: number,
+  response: Response,
   dependencies: CloudDocumentDiscoveryDependencies
 ): Promise<never> {
-  if (status === 401 || status === 403) {
+  if (isAuthoritativeInvalidConnectorToken(response)) {
     await markCloudAccessNeedsReauth(userId, account, dependencies);
   }
-  throw cloudApiError(provider, status);
+  throw cloudApiError(provider, response);
 }
 
 export async function discoverCloudResumeDocuments(
@@ -347,7 +348,7 @@ export async function discoverCloudResumeDocuments(
           signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
         }
       );
-    if (!response.ok) await throwCloudApiError(userId, account, provider, response.status, dependencies);
+    if (!response.ok) await throwCloudApiError(userId, account, provider, response, dependencies);
     let payload: unknown;
     try {
       payload = await readBoundedResponseJson<unknown>(response, MAX_DOCUMENT_METADATA_BYTES);
@@ -441,7 +442,7 @@ export async function downloadCloudResumeDocument(
         redirect: "error",
         signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
       });
-    if (!metadataResponse.ok) await throwCloudApiError(userId, account, document.provider, metadataResponse.status, dependencies);
+    if (!metadataResponse.ok) await throwCloudApiError(userId, account, document.provider, metadataResponse, dependencies);
     const metadata = await readBoundedResponseJson<Record<string, unknown>>(metadataResponse, 64 * 1024);
     const currentName = typeof metadata.name === "string" ? metadata.name : "";
     const currentMime = document.provider === "google_drive"
@@ -484,7 +485,7 @@ export async function downloadCloudResumeDocument(
         redirect: "error",
         signal: outboundRequestSignal(OUTBOUND_TIMEOUT_MS.standard),
       });
-    if (!response.ok) await throwCloudApiError(userId, account, document.provider, response.status, dependencies);
+    if (!response.ok) await throwCloudApiError(userId, account, document.provider, response, dependencies);
     let data: Buffer;
     try {
       data = Buffer.from(await readBoundedResponseBytes(response, MAX_RESUME_BYTES));

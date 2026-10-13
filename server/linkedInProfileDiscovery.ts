@@ -1,4 +1,6 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
+import { isUsableConnectorAccessToken } from "./connectorAccessToken";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import { decryptConnectorToken } from "./connectorOAuth";
 import {
   getConnectorAuthorization,
@@ -61,11 +63,7 @@ async function getLinkedInAccessToken(
   }
 
   const authorization = await dependencies.getConnectorAuthorization(userId, "linkedin");
-  if (
-    !authorization ||
-    !authorization.accessTokenExpiresAt ||
-    authorization.accessTokenExpiresAt.getTime() <= now.getTime() + 60_000
-  ) {
+  if (!authorization || !isUsableConnectorAccessToken(authorization, now.getTime())) {
     await markLinkedInAccessNeedsReauth(userId, account, dependencies);
     throw new Error("LinkedIn authorization has expired. Reauthorize before identity discovery.");
   }
@@ -123,7 +121,7 @@ export async function discoverLinkedInIdentity(
     providerRequestInit({ headers: { Authorization: `Bearer ${accessToken}` } })
   );
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    if (isAuthoritativeInvalidConnectorToken(response)) {
       await markLinkedInAccessNeedsReauth(userId, account, dependencies);
       throw new Error("LinkedIn authorization is no longer valid. Reauthorize before identity discovery.");
     }

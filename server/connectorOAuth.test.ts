@@ -138,6 +138,54 @@ describe("external connector OAuth boundary", () => {
     }));
   });
 
+  it("recognizes GitHub OAuth tokens with no expiry as provider-declared non-expiring", async () => {
+    const config = getConnectorOAuthConfig("github", environment)!;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      access_token: "github-long-lived-token",
+      token_type: "bearer",
+      scope: "read:user",
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await exchangeConnectorAuthorizationCode(config, "authorization-code", fetcher);
+
+    expect(result).toMatchObject({
+      expiresAt: null,
+      accessTokenLifetime: "non_expiring",
+      refreshToken: null,
+    });
+  });
+
+  it("recognizes GitHub's opt-in expiring-token response and refresh grant", async () => {
+    const config = getConnectorOAuthConfig("github", environment)!;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      access_token: "github-expiring-token",
+      refresh_token: "github-refresh-token",
+      expires_in: 28_800,
+      token_type: "bearer",
+      scope: "read:user",
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await exchangeConnectorAuthorizationCode(config, "authorization-code", fetcher);
+
+    expect(result).toMatchObject({
+      accessTokenLifetime: "expiring",
+      refreshToken: "github-refresh-token",
+    });
+    expect(result.expiresAt?.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("leaves an unrecognized missing expiry as unknown", async () => {
+    const config = getConnectorOAuthConfig("linkedin", environment)!;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      access_token: "provider-token",
+      token_type: "Bearer",
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await exchangeConnectorAuthorizationCode(config, "authorization-code", fetcher);
+
+    expect(result).toMatchObject({ expiresAt: null, accessTokenLifetime: "unknown" });
+  });
+
   it("uses the same protected token endpoint to refresh an expiring connector grant", async () => {
     const config = getConnectorOAuthConfig("google_drive", environment)!;
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({

@@ -61,7 +61,10 @@ describe("approved follow-up mailbox delivery", () => {
   });
 
   it("does not treat a provider rejection as delivery evidence", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 403 }));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
 
     await expect(sendFollowUpProviderMessage(
       "gmail",
@@ -70,7 +73,26 @@ describe("approved follow-up mailbox delivery", () => {
       "Follow-up",
       "Hello",
       fetcher
-    )).rejects.toThrow("Gmail rejected");
+    )).rejects.toMatchObject({
+      message: "Gmail rejected the follow-up delivery (403).",
+      authorizationRejected: false,
+    });
+  });
+
+  it("marks only an authoritative invalid-token provider rejection", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="invalid_token"' },
+    }));
+
+    await expect(sendFollowUpProviderMessage(
+      "gmail",
+      "access-token",
+      "recruiter@example.com",
+      "Follow-up",
+      "Hello",
+      fetcher
+    )).rejects.toMatchObject({ authorizationRejected: true });
   });
 
   it("rejects oversized Gmail acknowledgements without treating them as delivery evidence", async () => {

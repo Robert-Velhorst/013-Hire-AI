@@ -1,6 +1,7 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import {
   acquireConnectorRefreshLease,
   findEmployerResponseSourceReferences,
@@ -167,10 +168,10 @@ async function throwInboxApiError(
   userId: number,
   account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
   provider: InboxProvider,
-  status: number,
+  response: Response,
   dependencies: InboxResponseDiscoveryDependencies
 ): Promise<never> {
-  if (status === 401 || status === 403) {
+  if (isAuthoritativeInvalidConnectorToken(response)) {
     await markInboxAccessNeedsReauth(userId, account, dependencies);
     throw new Error(`${displayName(provider)} authorization is no longer valid. Reauthorize before inbox discovery.`);
   }
@@ -278,7 +279,7 @@ export async function discoverInboxResponseCandidates(
       maxResults: String(MAX_MESSAGES),
       q: "newer_than:30d",
     }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }, options.signal));
-    if (!list.ok) await throwInboxApiError(userId, account, "gmail", list.status, dependencies);
+    if (!list.ok) await throwInboxApiError(userId, account, "gmail", list, dependencies);
     const payload = await readBoundedResponseJson<{ messages?: Array<{ id?: unknown }> }>(
       list,
       MAX_INBOX_LIST_BYTES
@@ -296,7 +297,7 @@ export async function discoverInboxResponseCandidates(
         }, options.signal));
         if (!detail.ok) {
           if (detail.status === 401 || detail.status === 403) {
-            await throwInboxApiError(userId, account, "gmail", detail.status, dependencies);
+            await throwInboxApiError(userId, account, "gmail", detail, dependencies);
           }
           return null;
         }
@@ -332,7 +333,7 @@ export async function discoverInboxResponseCandidates(
     "$filter": `receivedDateTime ge ${lookbackStart}`,
     "$orderby": "receivedDateTime desc",
   }), inboxRequest({ headers: { Authorization: `Bearer ${accessToken}` } }, options.signal));
-  if (!response.ok) await throwInboxApiError(userId, account, "outlook", response.status, dependencies);
+  if (!response.ok) await throwInboxApiError(userId, account, "outlook", response, dependencies);
   const payload = await readBoundedResponseJson<{ value?: Array<Record<string, unknown>> }>(
     response,
     MAX_INBOX_LIST_BYTES

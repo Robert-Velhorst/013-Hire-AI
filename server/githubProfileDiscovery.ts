@@ -1,4 +1,5 @@
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
+import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import {
@@ -233,7 +234,7 @@ export async function discoverGitHubProfile(
     providerRequestInit({ headers })
   );
   if (!userResponse.ok) {
-    if (userResponse.status === 401 || userResponse.status === 403) {
+    if (isAuthoritativeInvalidConnectorToken(userResponse)) {
       await markGitHubAccessNeedsReauth(userId, account, dependencies);
       throw new Error("GitHub authorization is no longer valid. Reauthorize before profile discovery.");
     }
@@ -253,7 +254,7 @@ export async function discoverGitHubProfile(
     providerRequestInit({ headers })
   );
   if (!repositoriesResponse.ok) {
-    if (repositoriesResponse.status === 401 || repositoriesResponse.status === 403) {
+    if (isAuthoritativeInvalidConnectorToken(repositoriesResponse)) {
       await markGitHubAccessNeedsReauth(userId, account, dependencies);
       throw new Error("GitHub authorization is no longer valid. Reauthorize before profile discovery.");
     }

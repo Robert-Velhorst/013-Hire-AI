@@ -246,6 +246,7 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   encryptedAccessToken: text("encrypted_access_token").notNull(),
   encryptedRefreshToken: text("encrypted_refresh_token"),
   accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  accessTokenLifetime: mysqlEnum("access_token_lifetime", ["expiring", "non_expiring", "unknown"]).default("unknown").notNull(),
   tokenType: varchar("token_type", { length: 64 }),
   grantedScopes: text("granted_scopes"),
   refreshLeaseToken: varchar("refresh_lease_token", { length: 64 }),
@@ -1053,7 +1054,9 @@ export type JobDuplicate = typeof jobDuplicates.$inferSelect;
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type SocialMediaProfile = typeof socialMediaProfiles.$inferSelect;
 export type UserConnectorAccount = typeof userConnectorAccounts.$inferSelect;
-export type ConnectorAuthorization = typeof connectorAuthorizations.$inferSelect;
+export type ConnectorAuthorization = Omit<typeof connectorAuthorizations.$inferSelect, "accessTokenLifetime"> & {
+  accessTokenLifetime?: "expiring" | "non_expiring" | "unknown";
+};
 export type Application = typeof applications.$inferSelect;
 export type ApplicationDecision = typeof applicationDecisions.$inferSelect;
 export type ApplicationMaterial = typeof applicationMaterials.$inferSelect;

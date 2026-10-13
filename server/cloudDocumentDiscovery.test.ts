@@ -373,6 +373,19 @@ describe("cloud resume discovery", () => {
     }));
   });
 
+  it("does not mark a cloud grant revoked for an insufficient-scope 403", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
+
+    await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher)))
+      .rejects.toThrow("temporarily unavailable");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: "needs_reauth",
+    }));
+  });
+
   it("refreshes a grant with missing expiry metadata instead of treating it as permanent access", async () => {
     mocks.getConnectorAuthorization.mockResolvedValue({
       userId: 501,

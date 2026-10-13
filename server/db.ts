@@ -2216,8 +2216,9 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
     );
     if (existing) {
       existing.encryptedAccessToken = authorization.encryptedAccessToken;
-      existing.encryptedRefreshToken = authorization.encryptedRefreshToken ?? existing.encryptedRefreshToken ?? null;
+      existing.encryptedRefreshToken = authorization.encryptedRefreshToken ?? null;
       existing.accessTokenExpiresAt = authorization.accessTokenExpiresAt ?? null;
+      existing.accessTokenLifetime = authorization.accessTokenLifetime ?? "unknown";
       existing.tokenType = authorization.tokenType ?? null;
       existing.grantedScopes = authorization.grantedScopes ?? null;
       existing.refreshLeaseToken = authorization.refreshLeaseToken ?? existing.refreshLeaseToken ?? null;
@@ -2233,6 +2234,7 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
       encryptedAccessToken: authorization.encryptedAccessToken,
       encryptedRefreshToken: authorization.encryptedRefreshToken ?? null,
       accessTokenExpiresAt: authorization.accessTokenExpiresAt ?? null,
+      accessTokenLifetime: authorization.accessTokenLifetime ?? "unknown",
       tokenType: authorization.tokenType ?? null,
       grantedScopes: authorization.grantedScopes ?? null,
       refreshLeaseToken: authorization.refreshLeaseToken ?? null,
@@ -2250,8 +2252,9 @@ export async function upsertConnectorAuthorization(authorization: InsertConnecto
     .onDuplicateKeyUpdate({
       set: {
         encryptedAccessToken: authorization.encryptedAccessToken,
-        encryptedRefreshToken: authorization.encryptedRefreshToken ?? sql`COALESCE(${connectorAuthorizations.encryptedRefreshToken}, NULL)`,
+        encryptedRefreshToken: authorization.encryptedRefreshToken ?? null,
         accessTokenExpiresAt: authorization.accessTokenExpiresAt ?? null,
+        accessTokenLifetime: authorization.accessTokenLifetime ?? "unknown",
         tokenType: authorization.tokenType ?? null,
         grantedScopes: authorization.grantedScopes ?? null,
         updatedAt: now,

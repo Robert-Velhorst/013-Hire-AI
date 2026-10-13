@@ -1,5 +1,13 @@
 # Codex Worklog
 
+## 2026-10-13 - Connector token lifetime and authorization rejection handling
+
+- Reproduced that provider responses without `expires_in` were stored as null expiry and immediately rejected, including GitHub OAuth's documented long-lived default token mode.
+- Added persisted `expiring`, `non_expiring`, and `unknown` states. New GitHub no-expiry tokens are reusable; migration `0080` conservatively backfills only exact `read:user` GitHub grants without expiry or refresh token. Ambiguous legacy grants remain unknown; refresh responses without a usable lifetime fail closed. Reauthorization no longer retains a stale refresh token from a prior grant.
+- Centralized invalid-token classification: HTTP 401 is treated as rejected; HTTP 403 requires `WWW-Authenticate: ... error="invalid_token"`. Applied this to GitHub, LinkedIn, Drive/Dropbox, Gmail/Outlook inbox reads, and follow-up sends so permission failures do not incorrectly revoke account state.
+- Verification: 85 focused connector tests passed; full suite passed 298 files / 1,705 tests (7 files / 26 tests skipped by opt-in); TypeScript and production build passed; isolated MySQL 8.4 applied all migrations and passed 8 suites / 29 tests, including the migration's actual synthetic legacy-row backfill.
+- GitHub provider contract checked against [GitHub OAuth Apps documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps); bearer-token rejection semantics follow [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750.html). Live provider, deployed hosting, and legal acceptance remain separate gates.
+
 ## 2026-08-14 - Cache-stable production browser bundles
 
 - Split the 577,363-byte browser entry into a 284,254-byte application entry plus independently cacheable React and data-client runtimes while leaving route-specific UI dependencies lazy.

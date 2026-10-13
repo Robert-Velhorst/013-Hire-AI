@@ -234,6 +234,19 @@ describe("inbox response discovery", () => {
     }));
   });
 
+  it("does not mark an inbox grant revoked for an insufficient-scope 403", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, {
+      status: 403,
+      headers: { "www-authenticate": 'Bearer error="insufficient_scope"' },
+    }));
+
+    await expect(discoverInboxResponseCandidates(700, "gmail", options(fetcher)))
+      .rejects.toThrow("temporarily unavailable");
+    expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: "needs_reauth",
+    }));
+  });
+
   it("marks an expired inbox grant without a refresh token for reauthorization", async () => {
     mocks.getConnectorAuthorization.mockResolvedValue({
       encryptedAccessToken: "expired-access",

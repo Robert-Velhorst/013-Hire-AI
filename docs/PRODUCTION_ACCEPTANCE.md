@@ -1,10 +1,19 @@
 # Production Acceptance
 
-Updated: 2026-10-09. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
+Updated: 2026-10-13. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
 
 **Release decision: not ready for public production use.** This document separates verified technical work from the remaining product and operator requirements. Passing tests or a successful image build is not acceptance of live providers or autonomous employer submission.
 
-## Current Verification (2026-10-09)
+## Current Verification (2026-10-13)
+
+- `pnpm check` passed.
+- `pnpm test` passed 298 files / 1,705 tests; 7 opt-in suites / 26 tests were skipped by the regular test command.
+- `pnpm build` passed. The production shell is 653 bytes, 87 JavaScript chunks remain within the 350 KiB per-chunk budget, and startup JavaScript totals 582,227 bytes within the 614,400-byte budget.
+- Isolated MySQL 8.4 acceptance applied the complete migration history through `0080_connector_token_lifetime.sql`; all 8 approved suites and 29 tests passed. The connector-lifetime suite executes the migration's actual legacy backfill SQL against synthetic rows.
+- Connector OAuth and delivery regression tests passed 85 tests across 11 files. Token lifetimes are persisted as expiring, non-expiring, or unknown; ambiguous legacy grants remain unknown except GitHub grants with the recorded current `read:user` scope and no expiry/refresh token. 403 responses only require reauthorization when the bearer challenge explicitly says `invalid_token`; ordinary insufficient-scope responses do not revoke the local account state.
+- These are local and isolated-database checks, not live OAuth-provider acceptance. Public deployment, HTTPS, real connector credentials and provider responses, legal/privacy approval, billing, and employer submission remain unverified.
+
+## Historical Verification (2026-10-09)
 
 - `pnpm audit --audit-level moderate` reports no known vulnerabilities after upgrading Axios to 1.20.0 and Vitest to 4.1.11, overriding vulnerable transitive versions, and removing Mammoth's unused CLI/`argparse` dependency from pnpm's resolved graph. The app's DOCX extraction API remains in use and has a synthetic regression test.
 - TypeScript checking passed. The full regular suite passed 285 files / 1,593 tests; two opt-in MySQL suites / 17 tests were skipped in that local run.
