@@ -1,5 +1,9 @@
 import { COOKIE_NAME } from "@shared/const";
-import { MAX_RESUME_TEXT_CHARS } from "@shared/documentUploads";
+import {
+  isCanonicalBase64Payload,
+  MAX_DOCUMENT_UPLOAD_BASE64_LENGTH,
+  MAX_RESUME_TEXT_CHARS,
+} from "@shared/documentUploads";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -15,7 +19,7 @@ import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
 import { successFeesRouter } from "./routers/successFees";
 import { adminRouter } from "./routers/admin";
 import { workspacesRouter } from "./routers/workspaces";
-import { uploadResume, getActiveResume, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
+import { uploadResume, getMimeTypeFromExtension, getActiveResume, setActiveVersion, deleteResumeVersion, getResumeStats, getResumeDownloadUrl } from "./resumeStorage";
 import {
   saveJob,
   unsaveJob,
@@ -61,7 +65,10 @@ const boundedNarrativeText = z.string().trim().min(1).max(20_000);
 const boundedAiList = z.array(z.string().trim().min(1).max(500)).max(50);
 const boundedResumeText = z.string().trim().min(1).max(MAX_RESUME_TEXT_CHARS);
 // 10 MiB of binary data expands to just under 14 MiB when base64 encoded.
-const boundedUploadBase64 = z.string().min(1).max(14_000_000);
+const boundedUploadBase64 = z.string()
+  .min(4)
+  .max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)
+  .refine(isCanonicalBase64Payload, "Invalid base64 document payload.");
 const boundedFileName = z.string().trim().min(1).max(255);
 const boundedMimeType = z.string().trim().min(1).max(120);
 const boundedProfilePayload = z.string().max(50_000);
@@ -2943,7 +2950,25 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.fileData, "base64");
-        const resume = await uploadResume(ctx.user.id, buffer, input.fileName, input.mimeType);
+        const mimeType = input.mimeType || getMimeTypeFromExtension(input.fileName);
+        const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
+        const validation = validateUploadedFile({
+          data: buffer,
+          fileName: input.fileName,
+          mimeType,
+          allowedMimeTypes: RESUME_MIME_TYPES,
+        });
+        await scanSensitiveUpload({
+          data: buffer,
+          fileName: validation.fileName,
+          mimeType,
+        });
+        const resume = await uploadResume(
+          ctx.user.id,
+          buffer,
+          validation.fileName,
+          mimeType
+        );
         return resume;
       }),
 

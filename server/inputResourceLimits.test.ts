@@ -84,9 +84,11 @@ describe("transport resource limits", () => {
     const routers = readFileSync(resolve(process.cwd(), "server", "routers.ts"), "utf8");
     const fees = readFileSync(resolve(process.cwd(), "server", "routers", "successFees.ts"), "utf8");
 
-    expect(routers).toContain("const boundedUploadBase64 = z.string().min(1).max(14_000_000)");
+    expect(routers).toContain(".max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)");
+    expect(routers).toContain(".refine(isCanonicalBase64Payload");
     expect(routers).toContain("fileData: boundedUploadBase64");
-    expect(fees).toContain("const boundedDocumentBase64 = z.string().min(1).max(14_000_000)");
+    expect(fees).toContain(".max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)");
+    expect(fees).toContain(".refine(isCanonicalBase64Payload");
     expect(fees).toContain("offerLetterBase64: boundedDocumentBase64");
     expect(fees).toContain("documentBase64: boundedDocumentBase64");
   });

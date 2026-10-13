@@ -9,7 +9,7 @@ import {
 
 describe("HTTP runtime resource policy", () => {
   it("keeps the JSON envelope just above the bounded 10 MiB document transport", () => {
-    expect(APPLICATION_JSON_LIMIT).toBe("16mb");
+    expect(APPLICATION_JSON_LIMIT).toBe("1mb");
     expect(APPLICATION_FORM_LIMIT).toBe("1mb");
   });
 

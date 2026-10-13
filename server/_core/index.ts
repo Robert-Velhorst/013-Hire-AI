@@ -95,8 +95,8 @@ async function startServer() {
   // Browser session writes must prove that their Origin matches the direct or
   // trusted-proxy request origin. Stripe and HAI use separate earlier routes.
   registerCookieOriginProtection(app);
-  // The JSON envelope accommodates the bounded 10 MiB document payload after
-  // base64 expansion without reserving a 50 MiB parser budget for every request.
+  // Ordinary JSON stays small; only authenticated document procedures receive
+  // the larger base64 envelope under bounded upload admission.
   registerApplicationBodyParsers(app);
   // Development-only authenticated QA routes for protected operating-ledger pages.
   registerDevAuthRoutes(app);

@@ -24,6 +24,7 @@ vi.mock("./cloudDocumentDiscovery", () => ({
 }));
 
 vi.mock("./resumeStorage", () => ({
+  getMimeTypeFromExtension: (fileName: string) => fileName.endsWith(".txt") ? "text/plain" : "application/octet-stream",
   uploadResume: mocks.uploadResume,
   getActiveResume: mocks.getActiveResume,
   getResumeVersionPage: mocks.getResumeVersionPage,
@@ -259,6 +260,18 @@ describe("resume router synchronization", () => {
       nextCursor: null,
     });
     expect(mocks.getResumeVersionPage).toHaveBeenCalledWith(userId, { limit: 25 });
+  });
+
+  it("rejects malformed base64 before scanning or storing a resume", async () => {
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.resume.uploadWithHistory({
+      fileData: "not base64!",
+      fileName: "resume.txt",
+      mimeType: "text/plain",
+    })).rejects.toThrow();
+    expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
   });
 
   it.each(["history", "local", "cloud", "activate", "delete"] as const)(

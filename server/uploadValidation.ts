@@ -85,6 +85,9 @@ async function acquireScanPermit() {
     activeScans += 1;
     return releaseScanPermit;
   }
+  if (scanWaiters.length >= scannerConcurrency()) {
+    throw new Error("The malware scanner is busy; retry the upload.");
+  }
   return await new Promise<() => void>((resolve, reject) => {
     const waiter = {
       resolve,

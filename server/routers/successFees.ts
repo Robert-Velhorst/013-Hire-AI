@@ -25,9 +25,16 @@ import { calculateNextVerificationDue } from "../successFeeDates";
 import { nanoid } from "nanoid";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES } from "@shared/billing";
+import {
+  isCanonicalBase64Payload,
+  MAX_DOCUMENT_UPLOAD_BASE64_LENGTH,
+} from "@shared/documentUploads";
 
 const FEE_PERCENT = 5;
-const boundedDocumentBase64 = z.string().min(1).max(14_000_000);
+const boundedDocumentBase64 = z.string()
+  .min(4)
+  .max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)
+  .refine(isCanonicalBase64Payload, "Invalid base64 document payload.");
 const boundedDocumentMimeType = z.string().trim().min(1).max(120);
 const boundedDocumentFileName = z.string().trim().min(1).max(255);
 const UNRESOLVED_SUCCESS_FEE_STATUSES = [

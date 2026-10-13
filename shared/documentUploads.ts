@@ -1,5 +1,25 @@
 export const MAX_DOCUMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_DOCUMENT_UPLOAD_BASE64_LENGTH =
+  4 * Math.ceil(MAX_DOCUMENT_UPLOAD_BYTES / 3);
 export const MAX_RESUME_TEXT_CHARS = 500_000;
+
+export function isCanonicalBase64Payload(value: string): boolean {
+  const matchesAlphabet =
+    value.length > 0 &&
+    value.length % 4 === 0 &&
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value
+    );
+  if (!matchesAlphabet) return false;
+
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  if (padding === 0) return true;
+  const lastSextet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".indexOf(
+      value[value.length - padding - 1]
+    );
+  return padding === 2 ? lastSextet % 16 === 0 : lastSextet % 4 === 0;
+}
 
 export const VERIFICATION_UPLOAD_MIME_TYPES = [
   "application/pdf",
@@ -12,7 +32,8 @@ export const VERIFICATION_UPLOAD_MIME_TYPES = [
   "image/png",
 ] as const;
 
-export const VERIFICATION_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.txt,.rtf,.jpg,.jpeg,.png";
+export const VERIFICATION_UPLOAD_ACCEPT =
+  ".pdf,.doc,.docx,.txt,.rtf,.jpg,.jpeg,.png";
 
 const VERIFICATION_MIME_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   pdf: "application/pdf",
@@ -25,15 +46,26 @@ const VERIFICATION_MIME_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
   png: "image/png",
 };
 
-export function getVerificationUploadMimeType(file: { name: string; type: string }): string | null {
-  if ((VERIFICATION_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type)) return file.type;
+export function getVerificationUploadMimeType(file: {
+  name: string;
+  type: string;
+}): string | null {
+  if ((VERIFICATION_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type))
+    return file.type;
   const extension = file.name.split(".").pop()?.toLowerCase();
-  return extension ? VERIFICATION_MIME_TYPE_BY_EXTENSION[extension] ?? null : null;
+  return extension
+    ? (VERIFICATION_MIME_TYPE_BY_EXTENSION[extension] ?? null)
+    : null;
 }
 
-export function validateVerificationUpload(file: { name: string; size: number; type: string }): string | null {
+export function validateVerificationUpload(file: {
+  name: string;
+  size: number;
+  type: string;
+}): string | null {
   if (file.size <= 0) return "The selected file is empty.";
-  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) return "File must be 10MB or smaller.";
+  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES)
+    return "File must be 10MB or smaller.";
   if (!getVerificationUploadMimeType(file)) {
     return "Choose a PDF, Word, text, RTF, JPG, or PNG file.";
   }
@@ -42,6 +74,7 @@ export function validateVerificationUpload(file: { name: string; size: number; t
 
 export function extractBase64Payload(dataUrl: string): string {
   const separator = dataUrl.indexOf(",");
-  if (separator < 0 || !dataUrl.slice(0, separator).endsWith(";base64")) return "";
+  if (separator < 0 || !dataUrl.slice(0, separator).endsWith(";base64"))
+    return "";
   return dataUrl.slice(separator + 1);
 }

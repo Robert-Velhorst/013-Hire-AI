@@ -186,8 +186,15 @@ describe("sensitive upload validation", () => {
       fileName: "second.txt",
       mimeType: "text/plain",
     });
+    const overflow = scanSensitiveUpload({
+      data: Buffer.from("overflow"),
+      fileName: "overflow.txt",
+      mimeType: "text/plain",
+    });
+    const overflowRejected = expect(overflow).rejects.toThrow("scanner is busy");
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    await overflowRejected;
     releaseFirst(
       new Response(JSON.stringify({ clean: true }), { status: 200 })
     );

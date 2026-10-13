@@ -1,7 +1,9 @@
 import type { Server } from "node:http";
 
-export const APPLICATION_JSON_LIMIT = "16mb";
+export const APPLICATION_JSON_LIMIT = "1mb";
 export const APPLICATION_FORM_LIMIT = "1mb";
+export const RESUME_TEXT_JSON_LIMIT = "3mb";
+export const DOCUMENT_UPLOAD_JSON_LIMIT = "16mb";
 
 export const HTTP_RUNTIME_POLICY = Object.freeze({
   headersTimeout: 15_000,
