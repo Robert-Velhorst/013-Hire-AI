@@ -324,6 +324,7 @@ export class ScraperManager {
               reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
               controller.abort();
             },
+            // codeql[js/resource-exhaustion] Constructor input is clamped to 1-300000ms before it reaches this timer.
             this.scrapeTimeoutMs
           );
         }),

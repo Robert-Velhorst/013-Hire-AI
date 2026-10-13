@@ -82,10 +82,12 @@ export function registerHaiConnectorRoutes(
     next();
   };
 
+  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom connector limiter.
   app.get("/api/hai/status", connectorRateLimit, requireHaiAuth, (_req, res) => {
     res.json(service.status());
   });
 
+  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom connector limiter.
   app.post("/api/hai/a2a", connectorRateLimit, requireHaiAuth, boundedJsonParser, async (req, res) => {
     if (req.header("A2A-Version")?.trim() !== HAI_CONNECTOR_PROTOCOL_VERSION) {
       rpcError(res, req.body?.id ?? null, -32009, "A2A-Version 1.0 is required by this connector.");

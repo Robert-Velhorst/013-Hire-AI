@@ -21,6 +21,7 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom OAuth login limiter.
   app.get("/api/oauth/login", oauthLoginRateLimit, (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
@@ -56,6 +57,7 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // codeql[js/missing-rate-limiting] The first middleware is the bounded custom OAuth callback limiter.
   app.get("/api/oauth/callback", oauthCallbackRateLimit, async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
