@@ -6,6 +6,7 @@ import {
   HAI_CONNECTOR_AGENT_VERSION,
   HAI_CONNECTOR_PROTOCOL_VERSION,
   HaiConnectorService,
+  parseHaiRemoteJobSearchQuery,
 } from "./haiConnector";
 
 const maxBodyBytes = 16 * 1024;
@@ -104,9 +105,28 @@ export function registerHaiConnectorRoutes(
       rpcError(res, parsed.data.id, -32602, "Task text must be at most 4096 characters.");
       return;
     }
+    const searchQuery = parseHaiRemoteJobSearchQuery(text);
+    if (searchQuery !== null && Array.from(searchQuery).length > 200) {
+      rpcError(res, parsed.data.id, -32602, "Remote job search queries must be at most 200 characters.");
+      return;
+    }
 
     try {
-      const snapshot = await service.snapshot();
+      const artifact = searchQuery === null
+        ? {
+            name: "hire-ai-read-only-status",
+            description: "Aggregate status only. No Hire.AI action was executed or approved.",
+            data: await service.snapshot(),
+          }
+        : {
+            name: "hire-ai-remote-job-results",
+            description: "At most 10 current, deduplicated, remote-only jobs with clear listing-safety status. No candidate data or job descriptions are included.",
+            data: {
+              query: searchQuery,
+              remoteOnly: true,
+              results: await service.searchRemoteJobs(searchQuery),
+            },
+          };
       res.setHeader("Cache-Control", "no-store");
       res.json({
         jsonrpc: "2.0",
@@ -118,15 +138,15 @@ export function registerHaiConnectorRoutes(
             status: { state: "TASK_STATE_COMPLETED", timestamp: new Date().toISOString() },
             artifacts: [{
               artifactId: randomUUID(),
-              name: "hire-ai-read-only-status",
-              description: "Aggregate status only. No Hire.AI action was executed or approved.",
-              parts: [{ data: snapshot, mediaType: "application/json" }],
+              name: artifact.name,
+              description: artifact.description,
+              parts: [{ data: artifact.data, mediaType: "application/json" }],
             }],
           },
         },
       });
     } catch {
-      rpcError(res, parsed.data.id, -32603, "Hire.AI could not produce a read-only status snapshot.");
+      rpcError(res, parsed.data.id, -32603, "Hire.AI could not produce a read-only response.");
     }
   });
 }

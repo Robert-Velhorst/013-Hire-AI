@@ -93,7 +93,7 @@ Express + Node.js 22 API
         |-- source adapters, scheduler, deduplication and health records
         |-- consent-scoped OAuth connector routes and token policy
         |-- audit, admin, billing and privacy workflows
-        |-- optional read-only HAI status endpoint
+        |-- optional read-only HAI status and remote-job discovery endpoint
         | Drizzle ORM
 MySQL / TiDB
         | private document object storage (deployment integration)
@@ -230,7 +230,7 @@ Additional HTTP routes include hosted OAuth login/callback, connector OAuth call
 
 ## Security And Privacy
 
-Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
+Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status and remote-job search route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
 
 Repository settings were verified on 2026-10-13. The dependency graph, Dependabot alerts and security updates, malware alerts, private vulnerability reporting, provider-pattern secret scanning, push protection, and CodeQL default setup are enabled. CodeQL covers GitHub Actions, JavaScript/TypeScript, and Python. Copilot Autofix is enabled for supported CodeQL findings. AI Scan for pull requests is a preview feature and remains off. The `main` branch requires pull requests, all five CI jobs, resolved review conversations, and an up-to-date base; administrators are subject to the rule, and force pushes and branch deletion are disabled. No approving-review count is required because the repository is maintained by one person.
 

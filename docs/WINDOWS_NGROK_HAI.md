@@ -43,7 +43,7 @@ Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending
 
 ## HAI A2A connector
 
-Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status and remote-job discovery connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
@@ -60,6 +60,6 @@ Endpoints:
 - `GET /api/hai/status`: bearer-authenticated connector configuration status.
 - `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
 
-The response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. It cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
+An explicit request such as `Find remote jobs for a product designer` searches the canonical active-job query and returns at most ten deduplicated listings filtered to remote-only and clear listing-safety status. Results contain only the job ID, title, company, location, job type, disclosed salary, posted date, and HTTPS application/source links. Job descriptions, requirements, candidate records, email, and credentials are never returned. Search queries are limited to 200 characters. The separate aggregate status response contains campaign, application, approval, connector, success-fee-state, and scheduler totals for one configured numeric user ID; it excludes names, profile content, documents, messages, payment amounts, and raw audit records. The connector cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
 
 HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured.

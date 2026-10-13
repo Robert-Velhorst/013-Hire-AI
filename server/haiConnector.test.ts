@@ -3,7 +3,10 @@ import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as database from "./db";
 import {
+  buildHaiRemoteJobResults,
   HaiConnectorService,
+  parseHaiRemoteJobSearchQuery,
+  type HaiRemoteJob,
   type HaiJobSearchSnapshot,
 } from "./haiConnector";
 import { parseHaiConnectorUserId, validateHaiConnectorConfig } from "./haiConnectorConfig";
@@ -48,15 +51,19 @@ async function start(service: HaiConnectorService) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-function configuredService(provider = vi.fn(async () => snapshot)) {
+function configuredService(
+  provider = vi.fn(async () => snapshot),
+  jobSearchProvider = vi.fn(async () => [] as HaiRemoteJob[])
+) {
   return {
     provider,
+    jobSearchProvider,
     service: new HaiConnectorService({
       enabled: true,
       token,
       userId: ownerId,
       endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-    }, provider),
+    }, provider, jobSearchProvider),
   };
 }
 
@@ -107,6 +114,94 @@ describe("HAI connector configuration", () => {
   });
 });
 
+describe("HAI remote job search", () => {
+  it.each([
+    ["Find remote jobs for a product designer", "a product designer"],
+    ["search for remote jobs matching: senior accountant", "senior accountant"],
+    ["SEARCH ME REMOTE JOBS about support", "support"],
+    ["Find remote jobs", ""],
+  ])("parses explicit read-only search requests", (message, expected) => {
+    expect(parseHaiRemoteJobSearchQuery(message)).toBe(expected);
+  });
+
+  it.each([
+    "Summarize current Hire.AI status.",
+    "Find hybrid jobs for a product designer",
+    "Submit an application for a remote role",
+  ])("does not interpret unrelated or action requests as searches", (message) => {
+    expect(parseHaiRemoteJobSearchQuery(message)).toBeNull();
+  });
+
+  it("queries the canonical active listing path with remote-only and clear-safety filters", async () => {
+    const query = "senior designer";
+    const databasePage = {
+      items: [{
+        id: 42,
+        title: "Senior Designer",
+        company: "Example Co",
+        location: "Remote - Europe",
+        jobType: "full-time",
+        salaryMin: 90_000,
+        salaryMax: 120_000,
+        salaryCurrency: "EUR",
+        applicationUrl: "https://jobs.example/apply",
+        sourceUrl: "https://jobs.example/listing",
+        postedDate: new Date("2026-10-01T00:00:00.000Z"),
+        description: "PRIVATE DESCRIPTION MUST NOT BE RETURNED",
+      }],
+      nextCursor: null,
+    } as any;
+    const getPage = vi.spyOn(database, "getActiveJobPage").mockResolvedValue(databasePage);
+
+    const results = await buildHaiRemoteJobResults(query);
+
+    expect(getPage).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 10,
+      filters: expect.objectContaining({ query, remoteOnly: true, listingSafety: "clear" }),
+    }));
+    expect(results).toEqual([{
+      id: 42,
+      title: "Senior Designer",
+      company: "Example Co",
+      location: "Remote - Europe",
+      jobType: "full-time",
+      salaryMin: 90_000,
+      salaryMax: 120_000,
+      salaryCurrency: "EUR",
+      applicationUrl: "https://jobs.example/apply",
+      sourceUrl: "https://jobs.example/listing",
+      postedAt: "2026-10-01T00:00:00.000Z",
+    }]);
+    expect(JSON.stringify(results)).not.toContain("PRIVATE DESCRIPTION");
+  });
+
+  it("excludes unsafe or credential-bearing links from public results", async () => {
+    const databasePage = {
+      items: [{
+        id: 43,
+        title: "Designer",
+        company: "Example Co",
+        location: null,
+        jobType: null,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+        applicationUrl: "javascript:alert(1)",
+        sourceUrl: "https://user:password@example.test/job",
+        postedDate: null,
+      }],
+      nextCursor: null,
+    } as any;
+    vi.spyOn(database, "getActiveJobPage").mockResolvedValue(databasePage);
+
+    const [job] = await buildHaiRemoteJobResults("designer");
+
+    expect(job.applicationUrl).toBeNull();
+    expect(job.sourceUrl).toBeNull();
+    expect(job.postedAt).toBeNull();
+  });
+});
+
 describe("HAI A2A route", () => {
   it("rate-limits HAI authorization attempts before evaluating the bearer", async () => {
     const { service, provider } = configuredService();
@@ -145,6 +240,7 @@ describe("HAI A2A route", () => {
     const card = await cardResponse.json() as any;
     expect(cardResponse.status).toBe(200);
     expect(card.skills[0].id).toBe("hire_ai_read_only_status");
+    expect(card.skills[1].id).toBe("hire_ai_remote_job_search");
     expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false, extendedAgentCard: false });
 
     const response = await fetch(`${base}/api/hai/a2a`, {
@@ -163,6 +259,93 @@ describe("HAI A2A route", () => {
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(ownerId);
+  });
+
+  it("returns bounded, deduplicated remote job results without exposing candidate or listing text", async () => {
+    const job: HaiRemoteJob = {
+      id: 91,
+      title: "Remote Engineer",
+      company: "Example Co",
+      location: "Remote - EU",
+      jobType: "full-time",
+      salaryMin: null,
+      salaryMax: null,
+      salaryCurrency: null,
+      applicationUrl: "https://jobs.example/apply",
+      sourceUrl: "https://jobs.example/listing",
+      postedAt: null,
+    };
+    const { service, provider, jobSearchProvider } = configuredService(undefined, vi.fn(async () => [job]));
+    const base = await start(service);
+    const response = await fetch(`${base}/api/hai/a2a`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "A2A-Version": "1.0",
+      },
+      body: JSON.stringify(sendMessage({
+        parts: [{ text: "Find remote jobs matching backend engineer" }],
+      })),
+    });
+    const body = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(body.result.task.artifacts[0].name).toBe("hire-ai-remote-job-results");
+    expect(body.result.task.artifacts[0].parts[0].data).toEqual({
+      query: "backend engineer",
+      remoteOnly: true,
+      results: [job],
+    });
+    expect(jobSearchProvider).toHaveBeenCalledWith("backend engineer");
+    expect(provider).not.toHaveBeenCalled();
+    expect(body.result.task.artifacts[0].parts[0].data.results[0]).not.toHaveProperty("description");
+    expect(body.result.task.artifacts[0].parts[0].data.results[0]).not.toHaveProperty("email");
+  });
+
+  it("rejects remote queries over 200 characters before accessing either provider", async () => {
+    const { service, provider, jobSearchProvider } = configuredService();
+    const base = await start(service);
+    const response = await fetch(`${base}/api/hai/a2a`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "A2A-Version": "1.0",
+      },
+      body: JSON.stringify(sendMessage({
+        parts: [{ text: `Find remote jobs for ${"x".repeat(201)}` }],
+      })),
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json() as any).error.message).toContain("200 characters");
+    expect(jobSearchProvider).not.toHaveBeenCalled();
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  it("caps results returned by an injected provider", async () => {
+    const jobs = Array.from({ length: 12 }, (_, index) => ({
+      id: index + 1,
+      title: "Remote role",
+      company: "Example Co",
+      location: null,
+      jobType: null,
+      salaryMin: null,
+      salaryMax: null,
+      salaryCurrency: null,
+      applicationUrl: null,
+      sourceUrl: null,
+      postedAt: null,
+    } satisfies HaiRemoteJob));
+    const service = new HaiConnectorService({
+      enabled: true,
+      token,
+      userId: ownerId,
+      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+    }, vi.fn(async () => snapshot), vi.fn(async () => jobs));
+
+    expect(await service.searchRemoteJobs("engineer")).toHaveLength(10);
   });
 
   it("rejects mutation-shaped metadata and oversized input before building a job-search snapshot", async () => {
