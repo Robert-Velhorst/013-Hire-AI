@@ -571,7 +571,9 @@ export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
       .limit(boundedLimit),
   ]);
   return {
-    processStartedAt: summaryRows[0]?.firstOccurredAt?.toISOString() ?? new Date().toISOString(),
+    processStartedAt: summaryRows[0]?.firstOccurredAt
+      ? new Date(summaryRows[0].firstOccurredAt).toISOString()
+      : new Date().toISOString(),
     totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
     uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
     signals: rows.map((signal) => ({
