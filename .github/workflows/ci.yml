@@ -136,6 +136,7 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: mysql://hire_ai_acceptance:isolated-acceptance-not-production@127.0.0.1:3306/hire_ai_acceptance
       HIRE_AI_DATABASE_ACCEPTANCE: "true"
+      HIRE_AI_DATABASE_ACCEPTANCE_REPORT: database-acceptance-report.json
       PRIVACY_ERASURE_INTEGRATION: "true"
       AUTONOMOUS_SCHEDULER_ENABLED: "false"
       JOB_SCRAPING_SCHEDULER_ENABLED: "false"
@@ -155,7 +156,19 @@ jobs:
       - name: Apply migrations to isolated acceptance database
         run: pnpm db:migrate
       - name: Verify persistence, isolation and privacy cleanup on MySQL
-        run: pnpm test:database
+        run: |
+          set -o pipefail
+          pnpm test:database 2>&1 | tee database-acceptance.log
+
+      - name: Upload database acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: database-acceptance-evidence
+          path: |
+            database-acceptance.log
+            database-acceptance-report.json
+          if-no-files-found: warn
 
   container-runtime:
     runs-on: ubuntu-latest

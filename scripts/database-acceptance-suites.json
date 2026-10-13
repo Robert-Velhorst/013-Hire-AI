@@ -1,0 +1,8 @@
+{
+  "suites": [
+    "server/_core/trpcHttp.integration.test.ts",
+    "server/interviewLifecycle.integration.test.ts",
+    "server/privacyErasurePlanning.integration.test.ts",
+    "server/productionData.integration.test.ts"
+  ]
+}
