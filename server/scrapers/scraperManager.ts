@@ -29,6 +29,16 @@ const SOURCE_IDENTITY_BATCH_SIZE = 200;
 export const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 export const SCRAPER_INITIALIZATION_FAILURE_MESSAGE = "Source initialization could not complete.";
 
+function boundedInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
+}
+
 function sanitizeScrapeError(error: unknown): string {
   const message = error instanceof Error ? error.message.trim() : "";
 
@@ -139,8 +149,8 @@ export class ScraperManager {
   private readonly platformLastAttemptedAt = new Map<string, Date>();
 
   constructor(options: ScraperManagerOptions = {}) {
-    this.scrapeTimeoutMs = Math.min(300_000, Math.max(1, Math.floor(options.scrapeTimeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS)));
-    this.maxConcurrentScrapes = Math.min(10, Math.max(1, Math.floor(options.maxConcurrentScrapes ?? DEFAULT_MAX_CONCURRENT_SCRAPES)));
+    this.scrapeTimeoutMs = boundedInteger(options.scrapeTimeoutMs, DEFAULT_SCRAPE_TIMEOUT_MS, 1, 300_000);
+    this.maxConcurrentScrapes = boundedInteger(options.maxConcurrentScrapes, DEFAULT_MAX_CONCURRENT_SCRAPES, 1, 10);
   }
 
   /**

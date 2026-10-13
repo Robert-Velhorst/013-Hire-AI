@@ -404,6 +404,27 @@ describe("scraper manager platform restrictions", () => {
     });
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "uses safe execution defaults for non-finite configuration value %s",
+    (value) => {
+      const manager = new ScraperManager({ scrapeTimeoutMs: value, maxConcurrentScrapes: value });
+      expect(manager.getExecutionPolicy()).toEqual({
+        scrapeTimeoutMs: 90_000,
+        maxConcurrentScrapes: 3,
+        serializedPerPlatform: true,
+      });
+    },
+  );
+
+  it("keeps execution settings within their configured resource bounds", () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 900_000, maxConcurrentScrapes: 100 });
+    expect(manager.getExecutionPolicy()).toEqual({
+      scrapeTimeoutMs: 300_000,
+      maxConcurrentScrapes: 10,
+      serializedPerPlatform: true,
+    });
+  });
+
   it("records a partial outcome when a source returns jobs alongside errors", async () => {
     const manager = new ScraperManager();
     const partial = {
