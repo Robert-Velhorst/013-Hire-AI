@@ -1080,6 +1080,7 @@ export const successFees = mysqlTable("success_fees", {
   stripePriceId: varchar("stripe_price_id", { length: 255 }),
   stripeCheckoutSessionId: varchar("stripe_checkout_session_id", { length: 255 }),
   status: mysqlEnum("status", ["pending_verification", "active", "paused", "ended", "suspended", "disputed"]).default("pending_verification").notNull(),
+  lifecycleStatus: mysqlEnum("lifecycle_status", ["pending_verification", "active", "paused", "ended"]).default("pending_verification").notNull(),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   nextVerificationDue: timestamp("next_verification_due"),
@@ -1099,6 +1100,24 @@ export const successFees = mysqlTable("success_fees", {
   index("success_fees_user_application_created_idx").on(table.userId, table.applicationId, table.createdAt, table.id),
   index("success_fees_user_status_due_id_idx").on(table.userId, table.status, table.nextVerificationDue, table.id),
   index("success_fees_status_due_id_idx").on(table.status, table.nextVerificationDue, table.id),
+]);
+
+/** Independent, auditable reasons that prevent a success fee from resuming. */
+export const successFeeHolds = mysqlTable("success_fee_holds", {
+  id: int("id").autoincrement().primaryKey(),
+  successFeeId: int("success_fee_id").notNull().references(() => successFees.id, { onDelete: "cascade" }),
+  holdType: mysqlEnum("hold_type", ["payment", "account", "administrator", "legal", "verification", "dispute", "legacy_review"]).notNull(),
+  reason: text("reason").notNull(),
+  sourceKey: varchar("source_key", { length: 255 }),
+  createdByUserId: int("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdByActor: mysqlEnum("created_by_actor", ["system", "user", "admin"]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: int("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolutionEvidence: text("resolution_evidence"),
+}, (table) => [
+  index("success_fee_holds_fee_active_idx").on(table.successFeeId, table.resolvedAt, table.id),
+  index("success_fee_holds_type_active_idx").on(table.holdType, table.resolvedAt, table.id),
 ]);
 
 /**

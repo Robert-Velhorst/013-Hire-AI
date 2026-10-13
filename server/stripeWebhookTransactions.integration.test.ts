@@ -7,6 +7,7 @@ import {
   auditEvents,
   feePayments,
   stripeWebhookEvents,
+  successFeeHolds,
   successFees,
   users,
 } from "../drizzle/schema";
@@ -55,14 +56,15 @@ describe
 
     function failedInvoiceEvent(
       eventId: string,
-      type: "invoice.payment_failed" | "invoice.paid"
+      type: "invoice.payment_failed" | "invoice.paid",
+      invoiceId = `${marker}-invoice`
     ) {
       return {
         id: eventId,
         type,
         data: {
           object: {
-            id: `${marker}-invoice`,
+            id: invoiceId,
             subscription: `${marker}-subscription`,
             customer: `${marker}-customer`,
             amount_due: 25000,
@@ -133,6 +135,7 @@ describe
         stripeSubscriptionId: `${marker}-subscription`,
         stripePriceId: `${marker}-price`,
         status: "active",
+        lifecycleStatus: "active",
         startDate: new Date(),
       });
       feeId = Number(fee[0].insertId);
@@ -234,10 +237,75 @@ describe
       expect(paymentAfterRecovery[0].status).toBe("paid");
       expect(
         await db
+          .select({ status: successFees.status })
+          .from(successFees)
+          .where(eq(successFees.id, feeId))
+      ).toMatchObject([{ status: "active" }]);
+      expect(
+        await db
           .select()
           .from(stripeWebhookEvents)
           .where(eq(stripeWebhookEvents.stripeEventId, `evt_${marker}_paid`))
       ).toMatchObject([{ status: "processed" }]);
+    }, 30000);
+
+    it("clears only the payment hold while preserving a separate legal hold", async () => {
+      await db.insert(successFeeHolds).values({
+        successFeeId: feeId,
+        holdType: "legal",
+        reason: "Synthetic unresolved legal review hold.",
+        createdByActor: "admin",
+      });
+      await db
+        .update(successFees)
+        .set({ status: "disputed" })
+        .where(eq(successFees.id, feeId));
+
+      const failed = await postEvent(
+        failedInvoiceEvent(
+          `evt_${marker}_legal_failure`,
+          "invoice.payment_failed",
+          `${marker}-legal-invoice`
+        )
+      );
+      expect(failed.status).toBe(200);
+      const failedStatus = await db
+        .select({ status: successFees.status })
+        .from(successFees)
+        .where(eq(successFees.id, feeId));
+      expect(failedStatus).toMatchObject([{ status: "disputed" }]);
+
+      const paid = await postEvent(
+        failedInvoiceEvent(
+          `evt_${marker}_legal_paid`,
+          "invoice.paid",
+          `${marker}-legal-invoice`
+        )
+      );
+      expect(paid.status).toBe(200);
+      expect(
+        await db
+          .select({ status: successFees.status })
+          .from(successFees)
+          .where(eq(successFees.id, feeId))
+      ).toMatchObject([{ status: "disputed" }]);
+      expect(
+        await db
+          .select({
+            holdType: successFeeHolds.holdType,
+            resolvedAt: successFeeHolds.resolvedAt,
+          })
+          .from(successFeeHolds)
+          .where(eq(successFeeHolds.successFeeId, feeId))
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ holdType: "legal", resolvedAt: null }),
+          expect.objectContaining({
+            holdType: "payment",
+            resolvedAt: expect.any(Date),
+          }),
+        ])
+      );
     }, 30000);
 
     async function assertRolledBack(eventId: string) {

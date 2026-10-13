@@ -18,6 +18,11 @@ import {
   quarantineStripeWebhookEvent,
 } from "./stripeWebhookLedger";
 import { canTransitionSuccessFeeStatus } from "./successFeeStateMachine";
+import {
+  addSuccessFeeHold,
+  refreshSuccessFeeEffectiveStatus,
+  resolveSuccessFeeHolds,
+} from "./successFeeHolds";
 import { logOperationalFailure } from "./operationalFailureLog";
 import {
   transitionStripeInvoicePaymentStatus,
@@ -421,20 +426,40 @@ export function registerStripeWebhook(app: Express) {
               }
 
               if (event.type === "invoice.paid") {
-                if (
-                  fee.status === "pending_verification" &&
+                await resolveSuccessFeeHolds(tx, {
+                  feeId: fee.id,
+                  holdType: "payment",
+                  sourceKey: `invoice:${invoice.id}`,
+                  evidence: `Paid Stripe invoice ${invoice.id} in event ${event.id}.`,
+                });
+                const lifecycleStatus =
+                  fee.lifecycleStatus === "pending_verification" &&
                   canTransitionSuccessFeeStatus(fee.status, "active")
-                ) {
-                  await tx
-                    .update(successFees)
-                    .set({ status: "active" })
-                    .where(eq(successFees.id, fee.id));
+                    ? "active"
+                    : fee.lifecycleStatus;
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
+                  tx,
+                  {
+                    feeId: fee.id,
+                    lifecycleStatus,
+                    currentStatus: fee.status,
+                    currentLifecycleStatus: fee.lifecycleStatus,
+                  }
+                );
+                if (effectiveStatus !== fee.status) {
                   await addAudit(tx, {
                     fee,
-                    action: "success_fee_activated_from_stripe_payment",
+                    action: "success_fee_payment_hold_reconciled",
                     event,
-                    beforeState: { status: fee.status },
-                    afterState: { status: "active", stripeEventId: event.id },
+                    beforeState: {
+                      status: fee.status,
+                      lifecycleStatus: fee.lifecycleStatus,
+                    },
+                    afterState: {
+                      status: effectiveStatus,
+                      lifecycleStatus,
+                      stripeEventId: event.id,
+                    },
                     riskLevel: "high",
                   });
                 }
@@ -451,22 +476,33 @@ export function registerStripeWebhook(app: Express) {
                     riskLevel: "high",
                   });
               } else if (changed) {
-                if (
-                  fee.status !== "suspended" &&
-                  canTransitionSuccessFeeStatus(fee.status, "suspended")
-                ) {
-                  await tx
-                    .update(successFees)
-                    .set({ status: "suspended" })
-                    .where(eq(successFees.id, fee.id));
-                }
+                await addSuccessFeeHold(tx, {
+                  feeId: fee.id,
+                  holdType: "payment",
+                  sourceKey: `invoice:${invoice.id}`,
+                  reason: `Stripe invoice ${invoice.id} payment failed.`,
+                  actor: "system",
+                });
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
+                  tx,
+                  {
+                    feeId: fee.id,
+                    lifecycleStatus: fee.lifecycleStatus,
+                    currentStatus: fee.status,
+                    currentLifecycleStatus: fee.lifecycleStatus,
+                  }
+                );
                 await addAudit(tx, {
                   fee,
                   action: "stripe_payment_failed",
                   event,
-                  beforeState: { status: fee.status },
+                  beforeState: {
+                    status: fee.status,
+                    lifecycleStatus: fee.lifecycleStatus,
+                  },
                   afterState: {
-                    status: "suspended",
+                    status: effectiveStatus,
+                    lifecycleStatus: fee.lifecycleStatus,
                     stripeEventId: event.id,
                     stripeInvoiceId: invoice.id,
                   },
@@ -508,7 +544,11 @@ export function registerStripeWebhook(app: Express) {
                 ) {
                   await tx
                     .update(successFees)
-                    .set({ status: "ended", endDate: new Date() })
+                    .set({
+                      status: "ended",
+                      lifecycleStatus: "ended",
+                      endDate: new Date(),
+                    })
                     .where(eq(successFees.id, fee.id));
                   await addAudit(tx, {
                     fee,
@@ -521,41 +561,79 @@ export function registerStripeWebhook(app: Express) {
                 }
               } else if (
                 subscription.status === "active" &&
-                fee.status === "pending_verification" &&
-                canTransitionSuccessFeeStatus(fee.status, "active")
+                fee.lifecycleStatus !== "ended"
               ) {
-                await tx
-                  .update(successFees)
-                  .set({ status: "active" })
-                  .where(eq(successFees.id, fee.id));
-                await addAudit(tx, {
-                  fee,
-                  action: "stripe_subscription_status_updated",
-                  event,
-                  beforeState: { status: fee.status },
-                  afterState: {
-                    status: "active",
-                    stripeEventId: event.id,
-                    stripeStatus: subscription.status,
-                  },
-                  riskLevel: "high",
+                await resolveSuccessFeeHolds(tx, {
+                  feeId: fee.id,
+                  holdType: "payment",
+                  sourceKey: `subscription:${subscription.id}`,
+                  evidence: `Stripe subscription ${subscription.id} became active in event ${event.id}.`,
                 });
+                const lifecycleStatus =
+                  fee.lifecycleStatus === "pending_verification"
+                    ? "active"
+                    : fee.lifecycleStatus;
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
+                  tx,
+                  {
+                    feeId: fee.id,
+                    lifecycleStatus,
+                    currentStatus: fee.status,
+                    currentLifecycleStatus: fee.lifecycleStatus,
+                  }
+                );
+                if (
+                  effectiveStatus !== fee.status ||
+                  lifecycleStatus !== fee.lifecycleStatus
+                ) {
+                  await addAudit(tx, {
+                    fee,
+                    action: "stripe_subscription_status_updated",
+                    event,
+                    beforeState: {
+                      status: fee.status,
+                      lifecycleStatus: fee.lifecycleStatus,
+                    },
+                    afterState: {
+                      status: effectiveStatus,
+                      lifecycleStatus,
+                      stripeEventId: event.id,
+                      stripeStatus: subscription.status,
+                    },
+                    riskLevel: "high",
+                  });
+                }
               } else if (
                 subscription.status === "past_due" &&
-                fee.status !== "suspended" &&
-                canTransitionSuccessFeeStatus(fee.status, "suspended")
+                fee.lifecycleStatus !== "ended"
               ) {
-                await tx
-                  .update(successFees)
-                  .set({ status: "suspended" })
-                  .where(eq(successFees.id, fee.id));
+                await addSuccessFeeHold(tx, {
+                  feeId: fee.id,
+                  holdType: "payment",
+                  sourceKey: `subscription:${subscription.id}`,
+                  reason: `Stripe subscription ${subscription.id} is past due.`,
+                  actor: "system",
+                });
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
+                  tx,
+                  {
+                    feeId: fee.id,
+                    lifecycleStatus: fee.lifecycleStatus,
+                    currentStatus: fee.status,
+                    currentLifecycleStatus: fee.lifecycleStatus,
+                  }
+                );
                 await addAudit(tx, {
                   fee,
                   action: "stripe_subscription_status_updated",
                   event,
-                  beforeState: { status: fee.status },
+                  beforeState: {
+                    status: fee.status,
+                    lifecycleStatus: fee.lifecycleStatus,
+                  },
                   afterState: {
-                    status: "suspended",
+                    status: effectiveStatus,
+                    lifecycleStatus: fee.lifecycleStatus,
                     stripeEventId: event.id,
                     stripeStatus: subscription.status,
                   },

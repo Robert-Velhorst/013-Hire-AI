@@ -1,6 +1,27 @@
 import type { SuccessFee } from "../drizzle/schema";
 
 export type SuccessFeeStatus = NonNullable<SuccessFee["status"]>;
+export type SuccessFeeLifecycleStatus = NonNullable<SuccessFee["lifecycleStatus"]>;
+export type SuccessFeeHoldType =
+  | "payment"
+  | "account"
+  | "administrator"
+  | "legal"
+  | "verification"
+  | "dispute"
+  | "legacy_review";
+
+const DISPUTING_HOLDS = new Set<SuccessFeeHoldType>(["legal", "dispute", "legacy_review"]);
+
+export function deriveEffectiveSuccessFeeStatus(
+  lifecycleStatus: SuccessFeeLifecycleStatus,
+  activeHolds: readonly SuccessFeeHoldType[],
+): SuccessFeeStatus {
+  if (lifecycleStatus === "ended") return "ended";
+  if (activeHolds.some((hold) => DISPUTING_HOLDS.has(hold))) return "disputed";
+  if (activeHolds.length > 0) return "suspended";
+  return lifecycleStatus;
+}
 
 const ALLOWED_TRANSITIONS: Record<SuccessFeeStatus, ReadonlySet<SuccessFeeStatus>> = {
   pending_verification: new Set<SuccessFeeStatus>(["active", "paused", "ended", "suspended", "disputed"]),

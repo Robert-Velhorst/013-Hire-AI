@@ -5,9 +5,11 @@ const mocks = vi.hoisted(() => {
   const feeSelectLimit = vi.fn();
   const userSelectLimit = vi.fn();
   const paymentSelectLimit = vi.fn();
+  const holdSelectLimit = vi.fn();
   const insertValues = vi.fn();
   const feeUpdateWhere = vi.fn();
   const paymentUpdateWhere = vi.fn();
+  const holdUpdateWhere = vi.fn();
   const eventUpdateWhere = vi.fn();
   const transactionRollback = vi.fn();
   const mockDb: Record<string, any> = {};
@@ -19,10 +21,18 @@ const mocks = vi.hoisted(() => {
           ? userSelectLimit
           : name === "fee_payments"
             ? paymentSelectLimit
-            : feeSelectLimit;
-      return {
-        where: vi.fn(() => ({ limit: vi.fn(() => ({ for: vi.fn(limit) })) })),
-      };
+            : name === "success_fee_holds"
+              ? holdSelectLimit
+              : feeSelectLimit;
+      const query: Record<string, any> = {};
+      query.where = vi.fn(() => query);
+      query.limit = vi.fn(() => query);
+      query.for = vi.fn(() => Promise.resolve(limit()));
+      query.then = (
+        resolve: (value: unknown) => unknown,
+        reject: (error: unknown) => unknown
+      ) => Promise.resolve(limit()).then(resolve, reject);
+      return query;
     }),
   }));
   mockDb.insert = vi.fn(() => ({ values: insertValues }));
@@ -33,7 +43,9 @@ const mocks = vi.hoisted(() => {
         ? feeUpdateWhere
         : name === "fee_payments"
           ? paymentUpdateWhere
-          : eventUpdateWhere;
+          : name === "success_fee_holds"
+            ? holdUpdateWhere
+            : eventUpdateWhere;
     return { set: vi.fn(() => ({ where })) };
   });
   mockDb.transaction = vi.fn(
@@ -52,9 +64,11 @@ const mocks = vi.hoisted(() => {
     feeSelectLimit,
     userSelectLimit,
     paymentSelectLimit,
+    holdSelectLimit,
     insertValues,
     feeUpdateWhere,
     paymentUpdateWhere,
+    holdUpdateWhere,
     eventUpdateWhere,
     transactionRollback,
     getDb: vi.fn(),
@@ -87,6 +101,7 @@ const fee = {
   employerName: "Example Employer",
   jobTitle: "Remote Engineer",
   status: "active",
+  lifecycleStatus: "active",
   stripeSubscriptionId: "sub_failed_701",
   stripePriceId: "price_failed_701",
   monthlyFeeAmount: 25000,
@@ -177,9 +192,11 @@ describe("Stripe payment webhook transaction", () => {
       { stripeCustomerId: "cus_failed_701" },
     ]);
     mocks.paymentSelectLimit.mockResolvedValue([]);
+    mocks.holdSelectLimit.mockResolvedValue([]);
     mocks.insertValues.mockResolvedValue([{ insertId: 1 }]);
     mocks.feeUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
     mocks.paymentUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.holdUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
     mocks.eventUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
     mocks.mockDb.transaction.mockImplementation(
       async (callback: (tx: typeof mocks.mockDb) => Promise<void>) => {
@@ -367,9 +384,12 @@ describe("Stripe payment webhook transaction", () => {
   });
 
   it.each(["suspended", "disputed"] as const)(
-    "does not let invoice recovery clear an existing %s hold",
+    "does not let invoice recovery clear an independent %s hold",
     async status => {
       mocks.feeSelectLimit.mockResolvedValueOnce([{ ...fee, status }]);
+      const holdType = status === "suspended" ? "administrator" : "legal";
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 41, holdType }]);
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 41, holdType }]);
       const response = await postWebhook({
         id: `evt_recovered_invoice_${status}_701`,
         type: "invoice.paid",
@@ -381,9 +401,12 @@ describe("Stripe payment webhook transaction", () => {
   );
 
   it.each(["suspended", "disputed"] as const)(
-    "does not let an active subscription update clear an existing %s hold",
+    "does not let an active subscription update clear an independent %s hold",
     async status => {
       mocks.feeSelectLimit.mockResolvedValueOnce([{ ...fee, status }]);
+      const holdType = status === "suspended" ? "account" : "dispute";
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 42, holdType }]);
+      mocks.holdSelectLimit.mockResolvedValueOnce([{ id: 42, holdType }]);
       const response = await postWebhook({
         id: `evt_active_subscription_${status}_701`,
         type: "customer.subscription.updated",

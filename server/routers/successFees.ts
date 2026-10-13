@@ -988,7 +988,7 @@ export const successFeesRouter = router({
 
       // Update fee status
       await db.update(successFees)
-        .set({ status: "ended", endDate })
+        .set({ status: "ended", lifecycleStatus: "ended", endDate })
         .where(eq(successFees.id, input.successFeeId));
 
       await createAuditEvent({

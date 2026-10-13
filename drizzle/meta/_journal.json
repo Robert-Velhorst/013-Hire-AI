@@ -547,6 +547,13 @@
       "when": 1791856930957,
       "tag": "0077_stripe_webhook_quarantine",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "5",
+      "when": 1791910000000,
+      "tag": "0078_success_fee_independent_holds",
+      "breakpoints": true
     }
   ]
 }

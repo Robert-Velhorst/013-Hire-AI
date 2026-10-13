@@ -166,6 +166,7 @@ export default function AdminPanel() {
   const [statusDialog, setStatusDialog] = useState<{ open: boolean; feeId: number | null; currentStatus: string }>({ open: false, feeId: null, currentStatus: "" });
   const [newStatus, setNewStatus] = useState("");
   const [statusNote, setStatusNote] = useState("");
+  const [holdResolutionEvidence, setHoldResolutionEvidence] = useState<Record<number, string>>({});
   const [reviewDialog, setReviewDialog] = useState<{ open: boolean; itemId: number | null; status: "resolved" | "dismissed" }>({ open: false, itemId: null, status: "resolved" });
   const [reviewResolution, setReviewResolution] = useState("");
   const [erasureCleanupConfirmation, setErasureCleanupConfirmation] = useState("");
@@ -187,6 +188,10 @@ export default function AdminPanel() {
   });
   const { data: stripeWebhookIssues, refetch: refetchStripeWebhookIssues } = trpc.admin.getStripeWebhookIssues.useQuery(
     { limit: 50 },
+    { enabled: isAdmin, refetchInterval: 30_000 }
+  );
+  const { data: successFeeHolds, refetch: refetchSuccessFeeHolds } = trpc.admin.getSuccessFeeHolds.useQuery(
+    { limit: 100 },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
@@ -284,6 +289,15 @@ export default function AdminPanel() {
     onSuccess: async () => {
       toast.success(fc("stripeWebhookReopened"));
       await refetchStripeWebhookIssues();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const resolveSuccessFeeHold = trpc.admin.resolveSuccessFeeHold.useMutation({
+    onSuccess: async () => {
+      toast.success(fc("successFeeHoldResolved"));
+      setHoldResolutionEvidence({});
+      await Promise.all([refetchSuccessFeeHolds(), refetchFees(), refetchStripeReconciliation()]);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -817,6 +831,66 @@ export default function AdminPanel() {
                     {stripeWebhookIssues?.length === 0 && (
                       <tr><td colSpan={6} className="py-6 text-center text-xs text-slate-500">{fc("stripeWebhookEmpty")}</td></tr>
                     )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section aria-labelledby="success-fee-holds-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 id="success-fee-holds-heading" className="text-sm font-semibold text-white">{fc("successFeeHolds")}</h2>
+                  <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("successFeeHoldsDetail")}</p>
+                </div>
+                <Badge variant="outline" className="w-fit border-red-500/30 text-red-300">{successFeeHolds?.length ?? 0}</Badge>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400">
+                      <th className="py-2 pr-4">{fc("employerRole")}</th>
+                      <th className="py-2 pr-4">{fc("successFeeHoldReason")}</th>
+                      <th className="py-2 pr-4">{fc("status")}</th>
+                      <th className="py-2 pr-4">{fc("successFeeHoldCreated")}</th>
+                      <th className="py-2">{fc("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {successFeeHolds?.map((hold) => {
+                      const requiresDedicatedWorkflow = hold.holdType === "payment" || hold.holdType === "account";
+                      const evidence = holdResolutionEvidence[hold.id] ?? "";
+                      return (
+                        <tr key={hold.id} className="border-b border-slate-800/50 align-top">
+                          <td className="py-3 pr-4 text-slate-300">{hold.employerName} / {hold.jobTitle}<span className="block text-xs text-slate-500">#{hold.successFeeId}</span></td>
+                          <td className="py-3 pr-4 text-xs text-slate-300"><StatusBadge status={hold.holdType} label={getAdminFinancialStatusCopy(locale, hold.holdType)} /><p className="mt-2 max-w-lg whitespace-pre-wrap text-slate-400">{hold.reason}</p></td>
+                          <td className="py-3 pr-4"><StatusBadge status={hold.effectiveStatus} label={getAdminFinancialStatusCopy(locale, hold.effectiveStatus)} /></td>
+                          <td className="py-3 pr-4 text-xs text-slate-400">{dateTimeFormatter.format(new Date(hold.createdAt))} · {fc(hold.createdByActor === "admin" ? "adminActor" : hold.createdByActor === "system" ? "systemActor" : "userActor")}</td>
+                          <td className="py-3">
+                            {requiresDedicatedWorkflow ? <span className="text-xs text-slate-500">{fc(hold.holdType === "payment" ? "successFeeHoldPaymentWorkflow" : "successFeeHoldAccountWorkflow")}</span> : (
+                              <div className="flex min-w-64 flex-col gap-2">
+                                <Textarea
+                                  value={evidence}
+                                  onChange={(event) => setHoldResolutionEvidence((current) => ({ ...current, [hold.id]: event.target.value }))}
+                                  placeholder={fc("successFeeHoldEvidencePlaceholder")}
+                                  rows={2}
+                                  maxLength={5000}
+                                  aria-label={fc("successFeeHoldEvidenceLabel")}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resolveSuccessFeeHold.isPending || evidence.trim().length < 10}
+                                  onClick={() => resolveSuccessFeeHold.mutate({ holdId: hold.id, evidence: evidence.trim() })}
+                                >
+                                  {fc("resolve")}
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {successFeeHolds?.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-500">{fc("successFeeHoldsEmpty")}</td></tr>}
                   </tbody>
                 </table>
               </div>

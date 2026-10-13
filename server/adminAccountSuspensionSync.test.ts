@@ -102,9 +102,12 @@ describe("admin account suspension Stripe synchronization", () => {
         id: 211,
         userId: 88,
         status: "active",
+        lifecycleStatus: "active",
         stripeSubscriptionId: "sub_account_211",
         notes: null,
-      }]
+      }],
+      [],
+      [{ holdType: "account" }],
     );
     mocks.getDb.mockResolvedValue(mocks.mockDb);
     mocks.getAdminMemoryFallback.mockResolvedValue(null);
