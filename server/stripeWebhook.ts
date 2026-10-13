@@ -139,8 +139,10 @@ export function registerStripeWebhook(app: Express) {
               periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null,
             });
 
-            // Activate fee if it was pending
-            if (fee.status !== "active" && canTransitionSuccessFeeStatus(fee.status, "active")) {
+            // Payment recovery must not erase a suspension whose cause is not
+            // represented by the payment event. Existing suspended fees require
+            // an explicit, audited administrative resolution.
+            if (fee.status === "pending_verification" && canTransitionSuccessFeeStatus(fee.status, "active")) {
               await db.update(successFees)
                 .set({ status: "active" })
                 .where(eq(successFees.id, fee.id));
@@ -265,7 +267,9 @@ export function registerStripeWebhook(app: Express) {
 
             if (!fee) break;
 
-            if (subscription.status === "active" && fee.status !== "active" && canTransitionSuccessFeeStatus(fee.status, "active")) {
+            // A provider status describes billing only; it is not authority to
+            // clear an unrelated local suspension or dispute.
+            if (subscription.status === "active" && fee.status === "pending_verification" && canTransitionSuccessFeeStatus(fee.status, "active")) {
               await db.update(successFees)
                 .set({ status: "active" })
                 .where(eq(successFees.id, fee.id));

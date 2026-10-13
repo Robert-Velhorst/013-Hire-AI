@@ -170,6 +170,73 @@ describe("Stripe payment failure webhook", () => {
     expect(mocks.completeStripeWebhookEvent).toHaveBeenCalledWith("evt_subscription_past_due_701");
   });
 
+  it.each(["suspended", "disputed"] as const)(
+    "does not let invoice recovery clear an existing %s hold",
+    async status => {
+      mocks.selectLimit.mockResolvedValueOnce([{
+        id: 701,
+        userId: 81,
+        employerName: "Example Employer",
+        jobTitle: "Remote Engineer",
+        status,
+        stripeSubscriptionId: "sub_failed_701",
+      }]);
+
+      const response = await postWebhook({
+        id: `evt_recovered_invoice_${status}_701`,
+        type: "invoice.paid",
+        data: {
+          object: {
+            id: `in_recovered_${status}_701`,
+            subscription: "sub_failed_701",
+            amount_paid: 25000,
+            currency: "usd",
+            status_transitions: { paid_at: 1_784_217_600 },
+            period_start: 1_784_217_600,
+            period_end: 1_786_809_600,
+          },
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(mocks.insertValues).toHaveBeenCalledWith(expect.objectContaining({
+        successFeeId: 701,
+        status: "paid",
+        stripeInvoiceId: `in_recovered_${status}_701`,
+      }));
+      expect(mocks.updateWhere).not.toHaveBeenCalled();
+      expect(mocks.createAuditEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+        action: "success_fee_activated_from_stripe_payment",
+      }));
+    }
+  );
+
+  it.each(["suspended", "disputed"] as const)(
+    "does not let an active subscription update clear an existing %s hold",
+    async status => {
+      mocks.selectLimit.mockResolvedValueOnce([{
+        id: 701,
+        userId: 81,
+        employerName: "Example Employer",
+        jobTitle: "Remote Engineer",
+        status,
+        stripeSubscriptionId: "sub_failed_701",
+      }]);
+
+      const response = await postWebhook({
+        id: `evt_recovered_subscription_${status}_701`,
+        type: "customer.subscription.updated",
+        data: { object: { id: "sub_failed_701", status: "active" } },
+      });
+
+      expect(response.status).toBe(200);
+      expect(mocks.updateWhere).not.toHaveBeenCalled();
+      expect(mocks.createAuditEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+        action: "stripe_subscription_status_updated",
+      }));
+    }
+  );
+
   it("links a hosted Checkout subscription to the existing success-fee ledger", async () => {
     mocks.selectLimit.mockResolvedValueOnce([{
       id: 701,
