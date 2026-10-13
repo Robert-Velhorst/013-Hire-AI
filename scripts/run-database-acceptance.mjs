@@ -28,6 +28,7 @@ if (!allowed) {
       ),
       "run",
       "server/productionData.integration.test.ts",
+      "server/interviewLifecycle.integration.test.ts",
       "server/privacyErasurePlanning.integration.test.ts",
       "--maxWorkers=1",
     ],

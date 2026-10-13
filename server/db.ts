@@ -151,6 +151,7 @@ const memoryApplicationCampaigns: (InsertApplicationCampaign & { id: number; cre
 const memoryInterviewPreparations: (InsertInterviewPreparation & { id: number; createdAt: Date })[] = [];
 const memoryJobMatches: (InsertJobMatch & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memorySuccessFees: (InsertSuccessFee & { id: number; createdAt: Date; updatedAt: Date })[] = [];
+const memoryApplicationTransactionTails = new Map<number, Promise<void>>();
 const memoryAutonomousRuns = new Map<number, {
   leaseToken: string | null;
   leaseExpiresAt: number;
@@ -167,6 +168,81 @@ let memoryJobDiscoveryLease: {
   lastStartedAt: number | null;
   lastCompletedAt: number | null;
 } | null = null;
+
+type MemoryRow = { id: number };
+
+function captureMemoryRows<T extends MemoryRow>(rows: T[], matches: (row: T) => boolean) {
+  return rows.filter(matches).map((row) => ({ row, values: structuredClone(row) }));
+}
+
+function restoreMemoryRows<T extends MemoryRow>(
+  rows: T[],
+  matches: (row: T) => boolean,
+  snapshot: Array<{ row: T; values: T }>
+) {
+  const snapshotIds = new Set(snapshot.map(({ row }) => row.id));
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (matches(row) && !snapshotIds.has(row.id)) rows.splice(index, 1);
+  }
+  for (const { row, values } of snapshot) {
+    Object.assign(row, structuredClone(values));
+    if (!rows.some((current) => current.id === row.id)) rows.push(row);
+  }
+}
+
+/** Snapshot and roll back the memory-backed evidence belonging to one application. */
+export async function withMemoryApplicationTransaction<T>(
+  applicationId: number,
+  userId: number,
+  operation: () => Promise<T>,
+  captureLocalRollback: () => () => void = () => () => undefined
+): Promise<T> {
+  const previous = memoryApplicationTransactionTails.get(applicationId) || Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  memoryApplicationTransactionTails.set(applicationId, current);
+  await previous;
+
+  const rollbackLocalState = captureLocalRollback();
+  const application = memoryApplications.find((row) => row.id === applicationId && row.userId === userId);
+  const applicationBefore = application ? structuredClone(application) : null;
+  const auditMatches = (row: (typeof memoryAuditEvents)[number]) =>
+    row.userId === userId && row.entityType === "application" && row.entityId === applicationId;
+  const responseMatches = (row: (typeof memoryEmployerResponses)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const notificationMatches = (row: (typeof memoryApplicationNotifications)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const approvalMatches = (row: (typeof memoryApplicationApprovals)[number]) =>
+    row.userId === userId && row.applicationId === applicationId;
+  const reviewMatches = (row: AdminReviewItem) =>
+    row.userId === userId && row.entityType === "application" && row.entityId === applicationId;
+  const snapshots = {
+    responses: captureMemoryRows(memoryEmployerResponses, responseMatches),
+    notifications: captureMemoryRows(memoryApplicationNotifications, notificationMatches),
+    audits: captureMemoryRows(memoryAuditEvents, auditMatches),
+    approvals: captureMemoryRows(memoryApplicationApprovals, approvalMatches),
+    reviews: captureMemoryRows(memoryAdminReviewItems, reviewMatches),
+  };
+
+  try {
+    return await operation();
+  } catch (error) {
+    if (application && applicationBefore) Object.assign(application, applicationBefore);
+    restoreMemoryRows(memoryEmployerResponses, responseMatches, snapshots.responses);
+    restoreMemoryRows(memoryApplicationNotifications, notificationMatches, snapshots.notifications);
+    restoreMemoryRows(memoryAuditEvents, auditMatches, snapshots.audits);
+    restoreMemoryRows(memoryApplicationApprovals, approvalMatches, snapshots.approvals);
+    restoreMemoryRows(memoryAdminReviewItems, reviewMatches, snapshots.reviews);
+    rollbackLocalState();
+    throw error;
+  } finally {
+    release();
+    if (memoryApplicationTransactionTails.get(applicationId) === current) {
+      memoryApplicationTransactionTails.delete(applicationId);
+    }
+  }
+}
 
 const JOB_DISCOVERY_LEASE_NAME = "global";
 const JOB_DISCOVERY_LEASE_MS = 2 * 60 * 1000;

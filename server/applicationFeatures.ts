@@ -33,6 +33,7 @@ import {
   touchApplicationActivity,
   updateApplicationStatus,
   upsertInterviewPreparation,
+  withMemoryApplicationTransaction,
 } from "./db";
 import { savedJobs, applicationNotes, interviewSchedules, interviewPreparation, followUps, applications, applicationAttempts, employerResponses, applicationNotifications, auditEvents, adminReviewItems, applicationApprovals, jobs, jobAlerts, jobDuplicates, jobPlatforms, users, type Application, type ApplicationApproval, type EmployerResponse, type FollowUp, type InterviewSchedule, type JobAlertConfig } from "../drizzle/schema";
 import { matchesJobAlert } from "../shared/jobAlertMatching";
@@ -1555,6 +1556,41 @@ async function findOwnedMemoryInterview(interviewId: number, userId: number) {
   return interview;
 }
 
+async function withMemoryInterviewTransaction<T>(
+  interviewId: number,
+  userId: number,
+  operation: (interview: (typeof memoryInterviewSchedules)[number]) => Promise<T>
+) {
+  const initial = await findOwnedMemoryInterview(interviewId, userId);
+  return withMemoryApplicationTransaction(
+    initial.applicationId,
+    userId,
+    async () => operation(await findOwnedMemoryInterview(interviewId, userId)),
+    () => {
+      const before = structuredClone(initial);
+      const applicationInterviews = memoryInterviewSchedules
+        .filter((interview) => interview.applicationId === initial.applicationId)
+        .map((interview) => ({ interview, values: structuredClone(interview) }));
+      return () => {
+        Object.assign(initial, before);
+        const originalIds = new Set(applicationInterviews.map(({ interview }) => interview.id));
+        for (let index = memoryInterviewSchedules.length - 1; index >= 0; index -= 1) {
+          const interview = memoryInterviewSchedules[index];
+          if (interview.applicationId === initial.applicationId && !originalIds.has(interview.id)) {
+            memoryInterviewSchedules.splice(index, 1);
+          }
+        }
+        for (const { interview, values } of applicationInterviews) {
+          Object.assign(interview, structuredClone(values));
+          if (!memoryInterviewSchedules.some((current) => current.id === interview.id)) {
+            memoryInterviewSchedules.push(interview);
+          }
+        }
+      };
+    }
+  );
+}
+
 async function acknowledgeInterviewNotificationsAfterScheduling(applicationId: number, userId: number) {
   const { notificationIds } = await markUnreadInterviewNotificationsReadForApplication(applicationId, userId);
   if (notificationIds.length > 0) {
@@ -2993,31 +3029,32 @@ export async function updateInterviewStatus(
 ) {
   const db = await getDb();
   if (!db) {
-    const interview = await findOwnedMemoryInterview(interviewId, userId);
-    const currentStatus = interview.status || "scheduled";
-    if (!canTransitionInterviewStatus(currentStatus, status)) {
-      throw new Error(`Interview cannot move from ${currentStatus} to ${status}.`);
-    }
-    if (currentStatus === status) return { success: true };
+    return withMemoryInterviewTransaction(interviewId, userId, async (interview) => {
+      const currentStatus = interview.status || "scheduled";
+      if (!canTransitionInterviewStatus(currentStatus, status)) {
+        throw new Error(`Interview cannot move from ${currentStatus} to ${status}.`);
+      }
+      if (currentStatus === status) return { success: true };
 
-    interview.status = status;
-    interview.updatedAt = new Date();
-    if (status === "completed") {
-      await touchApplicationActivity(interview.applicationId, userId);
-    }
-    await createAuditEvent({
-      userId,
-      entityType: "application",
-      entityId: interview.applicationId,
-      action: "interview_status_updated",
-      actor: "user",
-      source: "applications.updateInterviewStatus",
-      beforeState: JSON.stringify({ status: currentStatus }),
-      afterState: JSON.stringify({ status, interviewId }),
-      riskLevel: status === "cancelled" ? "medium" : "low",
+      interview.status = status;
+      interview.updatedAt = new Date();
+      if (status === "completed") {
+        await touchApplicationActivity(interview.applicationId, userId);
+      }
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId: interview.applicationId,
+        action: "interview_status_updated",
+        actor: "user",
+        source: "applications.updateInterviewStatus",
+        beforeState: JSON.stringify({ status: currentStatus }),
+        afterState: JSON.stringify({ status, interviewId }),
+        riskLevel: status === "cancelled" ? "medium" : "low",
+      });
+
+      return { success: true };
     });
-
-    return { success: true };
   }
 
   return await db.transaction(async (tx) => {
@@ -3147,8 +3184,7 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
   const db = await getDb();
   const receivedAt = input.receivedAt || new Date();
 
-  if (!db) {
-    const interview = await findOwnedMemoryInterview(input.interviewId, userId);
+  if (!db) return withMemoryInterviewTransaction(input.interviewId, userId, async (interview) => {
     const currentInterviewStatus = interview.status || "scheduled";
     if (currentInterviewStatus === "cancelled") {
       throw new Error("Cancelled interviews cannot receive outcomes.");
@@ -3166,7 +3202,20 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
     normalizeEmployerResponse(responseInput, application.status || "pending", receivedAt);
 
     if (currentInterviewStatus !== "completed") {
-      await updateInterviewStatus(input.interviewId, "completed", userId);
+      interview.status = "completed";
+      interview.updatedAt = receivedAt;
+      await touchApplicationActivity(interview.applicationId, userId, receivedAt);
+      await createAuditEvent({
+        userId,
+        entityType: "application",
+        entityId: interview.applicationId,
+        action: "interview_status_updated",
+        actor: "user",
+        source: "applications.updateInterviewStatus",
+        beforeState: JSON.stringify({ status: currentInterviewStatus }),
+        afterState: JSON.stringify({ status: "completed", interviewId: input.interviewId }),
+        riskLevel: "low",
+      });
     }
     const response = await recordEmployerResponse(responseInput, userId);
 
@@ -3190,7 +3239,7 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
     }
 
     return { ...response, interviewStatus: "completed", outcome: input.outcome };
-  }
+  });
 
   return await db.transaction(async (tx) => {
     const interview = await tx
@@ -3273,18 +3322,41 @@ export async function recordInterviewOutcome(input: RecordInterviewOutcomeInput,
   });
 }
 
+function isSameInterviewRescheduleApproval(
+  approval: Pick<ApplicationApproval, "approvalType" | "status" | "payload">,
+  interviewId: number,
+  scheduledAt: Date
+) {
+  if (approval.approvalType !== "interview_schedule" || approval.status !== "approved") return false;
+  try {
+    const payload = JSON.parse(approval.payload || "{}") as {
+      interviewId?: number;
+      scheduledAt?: string;
+    };
+    return payload.interviewId === interviewId && payload.scheduledAt === scheduledAt.toISOString();
+  } catch {
+    return false;
+  }
+}
+
 export async function rescheduleInterview(interviewId: number, newDate: Date, userId: number) {
   const db = await getDb();
   if (newDate.getTime() <= Date.now()) {
     throw new Error("Interview must be rescheduled in the future.");
   }
 
-  if (!db) {
-    const interview = await findOwnedMemoryInterview(interviewId, userId);
+  if (!db) return withMemoryInterviewTransaction(interviewId, userId, async (interview) => {
     const currentStatus = interview.status || "scheduled";
     if (!canTransitionInterviewStatus(currentStatus, "rescheduled")) {
       throw new Error(`Interview cannot move from ${currentStatus} to rescheduled.`);
     }
+
+    const priorDecision = currentStatus === "rescheduled" &&
+      interview.scheduledAt.getTime() === newDate.getTime()
+      ? (await listUserApplicationApprovalsForApplication(userId, interview.applicationId))
+        .find((approval) => isSameInterviewRescheduleApproval(approval, interviewId, newDate))
+      : undefined;
+    if (priorDecision) return { success: true, approvalId: priorDecision.id, existing: true };
 
     interview.scheduledAt = newDate;
     interview.status = "rescheduled";
@@ -3312,6 +3384,7 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     });
     const approvalId = Number(approval.insertId);
 
+    await touchApplicationActivity(interview.applicationId, userId, newDate);
     await createAuditEvent({
       userId,
       entityType: "application",
@@ -3330,13 +3403,14 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     });
 
     return { success: true, approvalId };
-  }
+  });
 
   return await db.transaction(async (tx) => {
     const interview = await tx
       .select({
         applicationId: interviewSchedules.applicationId,
         status: interviewSchedules.status,
+        scheduledAt: interviewSchedules.scheduledAt,
       })
       .from(interviewSchedules)
       .innerJoin(applications, eq(interviewSchedules.applicationId, applications.id))
@@ -3351,6 +3425,25 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
     if (!canTransitionInterviewStatus(currentStatus, "rescheduled")) {
       throw new Error(`Interview cannot move from ${currentStatus} to rescheduled.`);
     }
+
+    const priorDecision = currentStatus === "rescheduled" &&
+      interview[0].scheduledAt.getTime() === newDate.getTime()
+      ? (await tx
+        .select({ id: applicationApprovals.id, payload: applicationApprovals.payload })
+        .from(applicationApprovals)
+        .where(and(
+          eq(applicationApprovals.userId, userId),
+          eq(applicationApprovals.applicationId, interview[0].applicationId),
+          eq(applicationApprovals.approvalType, "interview_schedule"),
+          eq(applicationApprovals.status, "approved")
+        )))
+        .find((approval) => isSameInterviewRescheduleApproval({
+          ...approval,
+          approvalType: "interview_schedule",
+          status: "approved",
+        }, interviewId, newDate))
+      : undefined;
+    if (priorDecision) return { success: true, approvalId: priorDecision.id, existing: true };
 
     const result = await tx
       .update(interviewSchedules)
