@@ -29,16 +29,15 @@
 4. Run external penetration, browser accessibility, and deployment tests.
 5. Approve periods and legal bases for the checked-in retention map, then perform controlled live-provider acceptance of the review-gated erasure executor before production use.
 
-## GitHub repository controls
+## GitHub repository settings
 
-Verified on 2026-10-13 through the repository API and Security tab:
+Verified against the live repository APIs on 2026-10-13:
 
-- Secret scanning for provider patterns and push protection are enabled.
-- The dependency graph, Dependabot alerts and security updates, malware alerts, and private vulnerability reporting are enabled.
-- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python.
-- Copilot Autofix is enabled for supported CodeQL findings. AI Scan for pull requests is a preview feature and remains disabled.
-- `main` requires pull requests, the five named CI checks, resolved review conversations, and an up-to-date base. Admins are included; force pushes and branch deletion are disabled. No approving-review count is set for this single-maintainer repository.
-- Generic/non-provider scanning and automatic secret-validity checks are unavailable for this user-owned repository under current GitHub eligibility. Validity checking, where offered, sends credentials to their issuer.
-- The Security tab showed 45 open CodeQL alerts on `main` on 2026-10-13: 7 critical, 34 high, and 4 medium. No open Dependabot alerts were returned by the repository API at that check. The CodeQL queue remains a security-review task; enabling scanning does not resolve findings.
+- Provider-pattern secret scanning and push protection are enabled. Generic non-provider patterns and secret validity checks remain disabled. An authenticated attempt to enable non-provider scanning did not change the repository setting. Validity checks, where available, disclose detected credentials to their issuing provider.
+- Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot alerts were returned at the time of the check.
+- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 45 open CodeQL alerts: 7 critical, 34 high, and 4 medium. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
+- Private vulnerability reporting is enabled.
+- The `main` branch requires pull requests, an up-to-date base, all five named CI checks, and resolved review conversations. Administrators are included; force pushes and branch deletion are disabled. The required approving-review count is zero, which allows a single maintainer to merge after checks pass.
+- GitHub Actions workflow token permissions default to read-only and workflows cannot approve pull requests. Actions are restricted to the eight dependencies used by repository workflows: `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `docker/build-push-action`, `docker/login-action`, `docker/metadata-action`, `docker/setup-buildx-action`, and `github/codeql-action`. Full-SHA pinning is not required; workflow references use version tags.
 
-These settings are a point-in-time snapshot, not a claim that the application has no vulnerabilities or has passed independent security review. Recheck the live [repository Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) before release decisions.
+This is a dated configuration snapshot, not a guarantee that alerts or settings remain unchanged. Recheck the [live Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and repository settings before publishing or deploying.
