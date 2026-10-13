@@ -79,6 +79,27 @@ describe("OAuth endpoint production policy", () => {
     expect(createOAuthHttpClient().defaults.maxRedirects).toBe(0);
   });
 
+  it("pins the OAuth HTTP client to an explicitly trusted service origin", () => {
+    const client = createOAuthHttpClient({
+      serverUrl: "https://oauth.example.test/auth",
+      allowedOrigins: ["https://oauth.example.test"],
+      production: true,
+    });
+    expect(client.defaults.baseURL).toBe("https://oauth.example.test/auth");
+    expect(client.defaults.maxRedirects).toBe(0);
+
+    expect(() => createOAuthHttpClient({
+      serverUrl: "https://internal.example.test",
+      allowedOrigins: ["https://oauth.example.test"],
+      production: true,
+    })).toThrow("not in OAUTH_SERVER_ALLOWED_ORIGINS");
+    expect(() => createOAuthHttpClient({
+      serverUrl: "http://oauth.example.test",
+      allowedOrigins: ["http://oauth.example.test"],
+      production: true,
+    })).toThrow("must use HTTPS or loopback HTTP");
+  });
+
   it("accepts a runtime HTTPS portal", () => {
     const result = runDoctor("https://auth.example.test");
     expect(result.status).toBe(0);
