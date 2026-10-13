@@ -4690,6 +4690,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "source_key": {
+          "name": "source_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_by_user_id": {
           "name": "created_by_user_id",
           "type": "int",

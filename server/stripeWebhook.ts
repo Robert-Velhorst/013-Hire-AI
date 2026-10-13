@@ -18,11 +18,7 @@ import {
   quarantineStripeWebhookEvent,
 } from "./stripeWebhookLedger";
 import { canTransitionSuccessFeeStatus } from "./successFeeStateMachine";
-import {
-  addSuccessFeeHold,
-  refreshSuccessFeeEffectiveStatus,
-  resolveSuccessFeeHolds,
-} from "./successFeeHolds";
+import { addSuccessFeeHold, refreshSuccessFeeEffectiveStatus, resolveSuccessFeeHolds } from "./successFeeHolds";
 import { logOperationalFailure } from "./operationalFailureLog";
 import {
   transitionStripeInvoicePaymentStatus,
@@ -432,34 +428,23 @@ export function registerStripeWebhook(app: Express) {
                   sourceKey: `invoice:${invoice.id}`,
                   evidence: `Paid Stripe invoice ${invoice.id} in event ${event.id}.`,
                 });
-                const lifecycleStatus =
-                  fee.lifecycleStatus === "pending_verification" &&
+                const lifecycleStatus = fee.lifecycleStatus === "pending_verification" &&
                   canTransitionSuccessFeeStatus(fee.status, "active")
-                    ? "active"
-                    : fee.lifecycleStatus;
-                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
-                  tx,
-                  {
-                    feeId: fee.id,
-                    lifecycleStatus,
-                    currentStatus: fee.status,
-                    currentLifecycleStatus: fee.lifecycleStatus,
-                  }
-                );
+                  ? "active"
+                  : fee.lifecycleStatus;
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(tx, {
+                  feeId: fee.id,
+                  lifecycleStatus,
+                  currentStatus: fee.status,
+                  currentLifecycleStatus: fee.lifecycleStatus,
+                });
                 if (effectiveStatus !== fee.status) {
                   await addAudit(tx, {
                     fee,
                     action: "success_fee_payment_hold_reconciled",
                     event,
-                    beforeState: {
-                      status: fee.status,
-                      lifecycleStatus: fee.lifecycleStatus,
-                    },
-                    afterState: {
-                      status: effectiveStatus,
-                      lifecycleStatus,
-                      stripeEventId: event.id,
-                    },
+                    beforeState: { status: fee.status, lifecycleStatus: fee.lifecycleStatus },
+                    afterState: { status: effectiveStatus, lifecycleStatus, stripeEventId: event.id },
                     riskLevel: "high",
                   });
                 }
@@ -483,23 +468,17 @@ export function registerStripeWebhook(app: Express) {
                   reason: `Stripe invoice ${invoice.id} payment failed.`,
                   actor: "system",
                 });
-                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
-                  tx,
-                  {
-                    feeId: fee.id,
-                    lifecycleStatus: fee.lifecycleStatus,
-                    currentStatus: fee.status,
-                    currentLifecycleStatus: fee.lifecycleStatus,
-                  }
-                );
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(tx, {
+                  feeId: fee.id,
+                  lifecycleStatus: fee.lifecycleStatus,
+                  currentStatus: fee.status,
+                  currentLifecycleStatus: fee.lifecycleStatus,
+                });
                 await addAudit(tx, {
                   fee,
                   action: "stripe_payment_failed",
                   event,
-                  beforeState: {
-                    status: fee.status,
-                    lifecycleStatus: fee.lifecycleStatus,
-                  },
+                  beforeState: { status: fee.status, lifecycleStatus: fee.lifecycleStatus },
                   afterState: {
                     status: effectiveStatus,
                     lifecycleStatus: fee.lifecycleStatus,
@@ -544,11 +523,7 @@ export function registerStripeWebhook(app: Express) {
                 ) {
                   await tx
                     .update(successFees)
-                    .set({
-                      status: "ended",
-                      lifecycleStatus: "ended",
-                      endDate: new Date(),
-                    })
+                    .set({ status: "ended", lifecycleStatus: "ended", endDate: new Date() })
                     .where(eq(successFees.id, fee.id));
                   await addAudit(tx, {
                     fee,
@@ -569,31 +544,19 @@ export function registerStripeWebhook(app: Express) {
                   sourceKey: `subscription:${subscription.id}`,
                   evidence: `Stripe subscription ${subscription.id} became active in event ${event.id}.`,
                 });
-                const lifecycleStatus =
-                  fee.lifecycleStatus === "pending_verification"
-                    ? "active"
-                    : fee.lifecycleStatus;
-                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
-                  tx,
-                  {
-                    feeId: fee.id,
-                    lifecycleStatus,
-                    currentStatus: fee.status,
-                    currentLifecycleStatus: fee.lifecycleStatus,
-                  }
-                );
-                if (
-                  effectiveStatus !== fee.status ||
-                  lifecycleStatus !== fee.lifecycleStatus
-                ) {
+                const lifecycleStatus = fee.lifecycleStatus === "pending_verification" ? "active" : fee.lifecycleStatus;
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(tx, {
+                  feeId: fee.id,
+                  lifecycleStatus,
+                  currentStatus: fee.status,
+                  currentLifecycleStatus: fee.lifecycleStatus,
+                });
+                if (effectiveStatus !== fee.status || lifecycleStatus !== fee.lifecycleStatus) {
                   await addAudit(tx, {
                     fee,
                     action: "stripe_subscription_status_updated",
                     event,
-                    beforeState: {
-                      status: fee.status,
-                      lifecycleStatus: fee.lifecycleStatus,
-                    },
+                    beforeState: { status: fee.status, lifecycleStatus: fee.lifecycleStatus },
                     afterState: {
                       status: effectiveStatus,
                       lifecycleStatus,
@@ -614,23 +577,17 @@ export function registerStripeWebhook(app: Express) {
                   reason: `Stripe subscription ${subscription.id} is past due.`,
                   actor: "system",
                 });
-                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(
-                  tx,
-                  {
-                    feeId: fee.id,
-                    lifecycleStatus: fee.lifecycleStatus,
-                    currentStatus: fee.status,
-                    currentLifecycleStatus: fee.lifecycleStatus,
-                  }
-                );
+                const effectiveStatus = await refreshSuccessFeeEffectiveStatus(tx, {
+                  feeId: fee.id,
+                  lifecycleStatus: fee.lifecycleStatus,
+                  currentStatus: fee.status,
+                  currentLifecycleStatus: fee.lifecycleStatus,
+                });
                 await addAudit(tx, {
                   fee,
                   action: "stripe_subscription_status_updated",
                   event,
-                  beforeState: {
-                    status: fee.status,
-                    lifecycleStatus: fee.lifecycleStatus,
-                  },
+                  beforeState: { status: fee.status, lifecycleStatus: fee.lifecycleStatus },
                   afterState: {
                     status: effectiveStatus,
                     lifecycleStatus: fee.lifecycleStatus,

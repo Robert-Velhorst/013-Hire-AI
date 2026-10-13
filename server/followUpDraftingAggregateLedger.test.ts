@@ -27,7 +27,7 @@ describe("follow-up drafting aggregate ledger wiring", () => {
     const ledger = campaigns.slice(campaigns.indexOf("export async function getUserOperatingLedger"));
     expect(ledger).not.toContain("loadOperatingApplicationEvidence(applications, userId)");
     expect(ledger).not.toContain("getAutonomousFollowUpReadiness({");
-    expect(ledger).toContain("getUserOperatingApplicationApprovals(\n    userId,\n    [],\n    5");
+    expect(ledger).toMatch(/getUserOperatingApplicationApprovals\(\s*userId,\s*\[\],\s*5\s*\)/);
   });
 
   it("keeps the active-draft lookup index aligned with migration 0053", () => {

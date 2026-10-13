@@ -16,22 +16,19 @@ const mocks = vi.hoisted(() => {
   mockDb.select = vi.fn(() => ({
     from: vi.fn((table: Record<PropertyKey, unknown>) => {
       const name = table[Symbol.for("drizzle:Name")];
-      const limit =
-        name === "users"
-          ? userSelectLimit
-          : name === "fee_payments"
-            ? paymentSelectLimit
-            : name === "success_fee_holds"
-              ? holdSelectLimit
-              : feeSelectLimit;
+      const limit = name === "users"
+        ? userSelectLimit
+        : name === "fee_payments"
+          ? paymentSelectLimit
+          : name === "success_fee_holds"
+            ? holdSelectLimit
+            : feeSelectLimit;
       const query: Record<string, any> = {};
       query.where = vi.fn(() => query);
       query.limit = vi.fn(() => query);
       query.for = vi.fn(() => Promise.resolve(limit()));
-      query.then = (
-        resolve: (value: unknown) => unknown,
-        reject: (error: unknown) => unknown
-      ) => Promise.resolve(limit()).then(resolve, reject);
+      query.then = (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+        Promise.resolve(limit()).then(resolve, reject);
       return query;
     }),
   }));

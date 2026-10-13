@@ -4,9 +4,7 @@ import type { TrpcContext } from "./_core/context";
 const mocks = vi.hoisted(() => {
   const insertedRows: Record<string, unknown>[] = [];
   const selectResults: unknown[][] = [];
-  const updateSet = vi.fn(() => ({
-    where: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
-  }));
+  const updateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) }));
   const makeSelect = () => {
     const value = selectResults.shift() ?? [];
     const chain: any = {
@@ -14,10 +12,7 @@ const mocks = vi.hoisted(() => {
       where: vi.fn(() => chain),
       limit: vi.fn(() => chain),
       for: vi.fn(() => chain),
-      then: (
-        resolve: (value: unknown) => unknown,
-        reject: (error: unknown) => unknown
-      ) => Promise.resolve(value).then(resolve, reject),
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve(value).then(resolve, reject),
     };
     return chain;
   };
@@ -30,9 +25,7 @@ const mocks = vi.hoisted(() => {
     update: vi.fn(() => ({ set: updateSet })),
     insert: vi.fn(() => ({ values: insertValues })),
   };
-  const transaction = vi.fn(
-    async (operation: (value: typeof tx) => Promise<unknown>) => operation(tx)
-  );
+  const transaction = vi.fn(async (operation: (value: typeof tx) => Promise<unknown>) => operation(tx));
   const mockDb = {
     select: vi.fn(makeSelect),
     transaction,
@@ -95,25 +88,13 @@ function createAdminContext(userId: number): TrpcContext {
 }
 
 function seedFee(status = "active") {
-  mocks.selectResults.splice(
-    0,
-    mocks.selectResults.length,
+  mocks.selectResults.splice(0, mocks.selectResults.length,
     [{ userId: 77 }],
     [{ id: 77, accountStatus: "active" }],
-    [
-      {
-        id: 441,
-        userId: 77,
-        status,
-        lifecycleStatus: "active",
-        stripeSubscriptionId: "sub_fee_441",
-        notes: "Existing note",
-        endDate: null,
-      },
-    ],
+    [{ id: 441, userId: 77, status, lifecycleStatus: "active", stripeSubscriptionId: "sub_fee_441", notes: "Existing note", endDate: null }],
     status === "suspended" ? [{ id: 330, holdType: "administrator" }] : [],
     status === "suspended" ? [{ id: 330, holdType: "administrator" }] : [],
-    status === "suspended" ? [{ holdType: "administrator" }] : []
+    status === "suspended" ? [{ holdType: "administrator" }] : [],
   );
 }
 
@@ -130,48 +111,36 @@ describe("admin success-fee Stripe reconciliation", () => {
     ["suspended", "pause"],
     ["disputed", "pause"],
     ["ended", "cancel"],
-  ] as const)(
-    "commits %s locally and queues %s billing synchronization",
-    async (status, action) => {
-      mocks.stripeUpdate.mockRejectedValue(new Error("provider unavailable"));
-      mocks.stripeCancel.mockRejectedValue(new Error("provider unavailable"));
-      const caller = adminRouter.createCaller(createAdminContext(17));
+  ] as const)("commits %s locally and queues %s billing synchronization", async (status, action) => {
+    mocks.stripeUpdate.mockRejectedValue(new Error("provider unavailable"));
+    mocks.stripeCancel.mockRejectedValue(new Error("provider unavailable"));
+    const caller = adminRouter.createCaller(createAdminContext(17));
 
-      await expect(
-        caller.updateFeeStatus({ feeId: 441, status, notes: "Reviewed." })
-      ).resolves.toEqual({ success: true, billingSynchronization: "queued" });
+    await expect(caller.updateFeeStatus({ feeId: 441, status, notes: "Reviewed." }))
+      .resolves.toEqual({ success: true, billingSynchronization: "queued" });
 
-      expect(mocks.transaction).toHaveBeenCalledTimes(1);
-      expect(mocks.stripeUpdate).not.toHaveBeenCalled();
-      expect(mocks.stripeCancel).not.toHaveBeenCalled();
-      expect(mocks.insertedRows).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            successFeeId: 441,
-            stripeSubscriptionId: "sub_fee_441",
-            action,
-            status: "pending",
-            commandKey: expect.any(String),
-          }),
-          expect.objectContaining({ action: "success_fee_status_updated" }),
-        ])
-      );
-    }
-  );
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.stripeUpdate).not.toHaveBeenCalled();
+    expect(mocks.stripeCancel).not.toHaveBeenCalled();
+    expect(mocks.insertedRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        successFeeId: 441,
+        stripeSubscriptionId: "sub_fee_441",
+        action,
+        status: "pending",
+        commandKey: expect.any(String),
+      }),
+      expect.objectContaining({ action: "success_fee_status_updated" }),
+    ]));
+  });
 
   it("does not enqueue duplicate provider work when the status is unchanged", async () => {
     seedFee("suspended");
     const caller = adminRouter.createCaller(createAdminContext(17));
 
-    await expect(
-      caller.updateFeeStatus({ feeId: 441, status: "suspended" })
-    ).resolves.toEqual({
-      success: true,
-      billingSynchronization: "not_required",
-    });
+    await expect(caller.updateFeeStatus({ feeId: 441, status: "suspended" }))
+      .resolves.toEqual({ success: true, billingSynchronization: "not_required" });
 
-    expect(mocks.insertedRows.some(row => row.successFeeId === 441)).toBe(
-      false
-    );
+    expect(mocks.insertedRows.some(row => row.successFeeId === 441)).toBe(false);
   });
 });
