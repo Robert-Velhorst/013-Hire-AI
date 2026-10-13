@@ -95,7 +95,9 @@ try {
     && !parsed.username
     && !parsed.password
     && !parsed.search
-    && !parsed.hash;
+    && !parsed.hash
+    && !parsed.href.includes("?")
+    && !parsed.href.includes("#");
 } catch { oauthPortalValid = false; }
 check(
   "OAuth portal",
@@ -105,6 +107,30 @@ check(
     : oauthPortalValid
       ? "trusted runtime URL configured"
       : "OAUTH_PORTAL_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+);
+
+const oauthServerUrl = String(process.env.OAUTH_SERVER_URL || "").trim();
+let oauthServerValid = false;
+try {
+  const parsed = new URL(oauthServerUrl);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const loopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
+  oauthServerValid = (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+    && !parsed.username
+    && !parsed.password
+    && !parsed.search
+    && !parsed.hash
+    && !parsed.href.includes("?")
+    && !parsed.href.includes("#");
+} catch { oauthServerValid = false; }
+check(
+  "OAuth server",
+  !oauthServerUrl && !isProduction ? "warn" : oauthServerValid ? "pass" : "fail",
+  !oauthServerUrl && !isProduction
+    ? "not configured outside production"
+    : oauthServerValid
+      ? "trusted runtime URL configured"
+      : "OAUTH_SERVER_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
 );
 
 const publicAppOrigin = String(process.env.PUBLIC_APP_ORIGIN || "");

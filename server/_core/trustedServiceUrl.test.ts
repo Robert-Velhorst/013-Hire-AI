@@ -20,7 +20,9 @@ describe("trusted internal service URL policy", () => {
     "ftp://forge.example/api",
     "https://user:secret@forge.example/api",
     "https://forge.example/api?token=secret",
+    "https://forge.example/api?",
     "https://forge.example/api#fragment",
+    "https://forge.example/api#",
   ])("rejects an unsafe credential-bearing service base: %s", (value) => {
     expect(() => requireTrustedServiceBaseUrl(value)).toThrow(/trusted service url/i);
   });

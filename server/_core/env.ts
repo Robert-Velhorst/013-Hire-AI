@@ -158,6 +158,7 @@ export function validateProductionEnv() {
   if (!ENV.oAuthPortalUrl.trim()) {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
+  requireTrustedServiceBaseUrl(ENV.oAuthServerUrl);
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
   if (!normalizePublicAppOrigin(ENV.publicAppOrigin, true)) {
     throw new Error("PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without a path, query, or fragment.");

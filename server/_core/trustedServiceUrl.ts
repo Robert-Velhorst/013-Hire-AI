@@ -13,7 +13,14 @@ export function requireTrustedServiceBaseUrl(value: string) {
   if (!secureTransport && !loopbackDevelopment) {
     throw new Error("Trusted service URL must use HTTPS or loopback HTTP.");
   }
-  if (url.username || url.password || url.search || url.hash) {
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.href.includes("?") ||
+    url.href.includes("#")
+  ) {
     throw new Error("Trusted service URL must not contain credentials, query parameters, or fragments.");
   }
   return url;
