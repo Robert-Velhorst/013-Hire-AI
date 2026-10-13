@@ -328,6 +328,9 @@ export class ScraperManager {
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), sanitizedResult);
       return sanitizedResult;
     } catch (error) {
+      if (options?.signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
+        throw cancelledError();
+      }
       const result = { jobs: [], errors: [sanitizeScrapeError(error)], scrapedAt: new Date() };
       console.error(`[ScraperManager] Failed to scrape ${platformName}.`);
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), result);

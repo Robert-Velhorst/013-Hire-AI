@@ -241,6 +241,7 @@ describe("scraper manager platform restrictions", () => {
     expect(activeSignal?.aborted).toBe(true);
     expect(queued.scrape).not.toHaveBeenCalled();
     expect(saveJobs).not.toHaveBeenCalled();
+    expect(mocks.recordPlatformScrapeOutcome).not.toHaveBeenCalled();
   });
 
   it("serializes overlapping runs for the same platform", async () => {
