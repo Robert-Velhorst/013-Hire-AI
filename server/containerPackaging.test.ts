@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveProductionClientBundlePath } from "./_core/static";
 
 describe("production container packaging", () => {
   it("uses the repository package manager and carries its frozen-install configuration", () => {
@@ -47,7 +48,10 @@ describe("production container packaging", () => {
     expect(dockerfile).toContain("/readyz");
     expect(dockerfile).toContain("AbortSignal.timeout(4000)");
     expect(dockerfile).toContain("USER node");
-    const ignored = readFileSync(resolve(process.cwd(), ".dockerignore"), "utf8");
+    const ignored = readFileSync(
+      resolve(process.cwd(), ".dockerignore"),
+      "utf8"
+    );
     expect(ignored).toContain(".playwright-cli");
     expect(ignored).toContain("backups");
 
@@ -75,5 +79,13 @@ describe("production container packaging", () => {
     };
 
     expect(packageJson.scripts?.build).toContain("--external:./vite");
+  });
+
+  it("serves the Vite client output beside the runtime bundle", () => {
+    expect(
+      resolveProductionClientBundlePath(
+        resolve(process.cwd(), "dist", "runtime")
+      )
+    ).toBe(resolve(process.cwd(), "dist", "public"));
   });
 });

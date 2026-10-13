@@ -112,11 +112,11 @@ jobs:
         shell: pwsh
         run: ./scripts/check-windows-runtime.ps1
 
-      - name: Test Windows and HAI runtime contracts
-        run: pnpm exec vitest run server/_core/network.test.ts server/haiConnector.test.ts server/windowsCiWorkflow.test.ts server/windowsLauncher.test.ts server/_core/runtimeInstance.test.ts server/_core/runtimeLaunchIdentity.test.ts
-
       - name: Build
         run: pnpm build
+
+      - name: Test Windows and HAI runtime contracts
+        run: pnpm exec vitest run server/_core/network.test.ts server/haiConnector.test.ts server/windowsCiWorkflow.test.ts server/windowsLauncher.test.ts server/_core/runtimeInstance.test.ts server/_core/runtimeLaunchIdentity.test.ts
 
   database-acceptance:
     runs-on: ubuntu-latest
