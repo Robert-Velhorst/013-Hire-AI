@@ -1,5 +1,5 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
-import { requireOAuthServerUrl, requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { requireMalwareScannerUrl, requireOAuthServerUrl, requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { normalizePublicAppOrigin } from "./publicAppOrigin";
@@ -103,6 +103,8 @@ export const ENV = {
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthServerAllowedOrigins: readOptionalCsv("OAUTH_SERVER_ALLOWED_ORIGINS") ?? [],
+  malwareScanUrl: readEnv("FILE_MALWARE_SCAN_URL"),
+  malwareScanAllowedOrigins: readOptionalCsv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS") ?? [],
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   publicAppOrigin: readEnv("PUBLIC_APP_ORIGIN"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
@@ -150,6 +152,13 @@ export function validateProductionEnv() {
         false
       );
     }
+    if (ENV.malwareScanUrl.trim()) {
+      requireMalwareScannerUrl(
+        ENV.malwareScanUrl,
+        ENV.malwareScanAllowedOrigins,
+        false
+      );
+    }
     return;
   }
 
@@ -170,6 +179,13 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireOAuthServerUrl(ENV.oAuthServerUrl, ENV.oAuthServerAllowedOrigins, true);
+  if (ENV.malwareScanUrl.trim()) {
+    requireMalwareScannerUrl(
+      ENV.malwareScanUrl,
+      ENV.malwareScanAllowedOrigins,
+      true
+    );
+  }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
   if (!normalizePublicAppOrigin(ENV.publicAppOrigin, true)) {
     throw new Error("PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without a path, query, or fragment.");

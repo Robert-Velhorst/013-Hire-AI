@@ -241,6 +241,7 @@ jobs:
             -e STRIPE_SECRET_KEY='sk_test_container_ci' \
             -e STRIPE_WEBHOOK_SECRET='whsec_container_ci' \
             -e FILE_MALWARE_SCAN_URL='http://127.0.0.1:39999/scan' \
+            -e FILE_MALWARE_SCAN_ALLOWED_ORIGINS='http://127.0.0.1:39999' \
             -e AUTONOMOUS_SCHEDULER_ENABLED=false \
             -e JOB_SCRAPING_SCHEDULER_ENABLED=false \
             hire-ai:ci

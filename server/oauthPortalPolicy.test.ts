@@ -19,6 +19,7 @@ const productionEnv = {
   STRIPE_WEBHOOK_SECRET: "whsec_doctor",
   FILE_MALWARE_SCAN_MODE: "http",
   FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+  FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
   JOB_SCRAPING_SCHEDULER_ENABLED: "false",
   HAI_CONNECTOR_ENABLED: "false",
   VITE_OAUTH_PORTAL_URL: "",
@@ -46,7 +47,9 @@ function runDoctor(
 function runProductionValidation(
   oauthServerUrl: string,
   oauthServerAllowedOrigins = productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
-  nodeEnv = "production"
+  nodeEnv = "production",
+  malwareScanUrl = productionEnv.FILE_MALWARE_SCAN_URL,
+  malwareScanAllowedOrigins = productionEnv.FILE_MALWARE_SCAN_ALLOWED_ORIGINS
 ) {
   return spawnSync(
     process.execPath,
@@ -62,6 +65,8 @@ function runProductionValidation(
         NODE_ENV: nodeEnv,
         OAUTH_SERVER_URL: oauthServerUrl,
         OAUTH_SERVER_ALLOWED_ORIGINS: oauthServerAllowedOrigins,
+        FILE_MALWARE_SCAN_URL: malwareScanUrl,
+        FILE_MALWARE_SCAN_ALLOWED_ORIGINS: malwareScanAllowedOrigins,
         OAUTH_PORTAL_URL: "https://auth.example.test",
       },
       encoding: "utf8",
@@ -120,6 +125,37 @@ describe("OAuth endpoint production policy", () => {
     const missingAllowlist = runDoctor("https://auth.example.test", "https://oauth.example.test", "");
     expect(missingAllowlist.status).toBe(1);
     expect(missingAllowlist.stdout).toContain("FAIL production configuration");
+  });
+
+  it("requires an explicitly allowlisted secure malware scanner in production", () => {
+    expect(runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      "https://scanner.example.test/scan",
+      "https://scanner.example.test"
+    ).status).toBe(0);
+    expect(runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      "https://other.example.test/scan",
+      "https://scanner.example.test"
+    ).status).not.toBe(0);
+    expect(runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      "http://scanner.example.test/scan",
+      "http://scanner.example.test"
+    ).status).not.toBe(0);
+    expect(runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      "http://127.0.0.1:39999/scan",
+      "http://127.0.0.1:39999"
+    ).status).toBe(0);
   });
 
   it("enforces a configured OAuth allowlist during development startup", () => {

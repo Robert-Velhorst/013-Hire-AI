@@ -19,6 +19,7 @@ const productionEnv = {
   STRIPE_WEBHOOK_SECRET: "whsec_doctor",
   FILE_MALWARE_SCAN_MODE: "http",
   FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+  FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
   JOB_SCRAPING_SCHEDULER_ENABLED: "false",
   CONNECTOR_OAUTH_REDIRECT_URI: "",
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "",

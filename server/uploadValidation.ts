@@ -1,5 +1,6 @@
 import { ENV } from "./_core/env";
 import { readBoundedResponseJson } from "./_core/outboundRequest";
+import { requireMalwareScannerUrl } from "./_core/trustedServiceUrl";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -181,14 +182,11 @@ async function scanWithHttp(input: {
   const endpoint = process.env.FILE_MALWARE_SCAN_URL?.trim();
   if (!endpoint)
     throw new Error("The malware scanner endpoint is unavailable.");
-  const parsedEndpoint = new URL(endpoint);
-  if (
-    !["http:", "https:"].includes(parsedEndpoint.protocol) ||
-    parsedEndpoint.username ||
-    parsedEndpoint.password
-  ) {
-    throw new Error("The malware scanner endpoint is invalid.");
-  }
+  const parsedEndpoint = requireMalwareScannerUrl(
+    endpoint,
+    ENV.malwareScanAllowedOrigins,
+    ENV.isProduction
+  );
   const token = process.env.FILE_MALWARE_SCAN_TOKEN?.trim();
   try {
     const response = await fetch(parsedEndpoint, {

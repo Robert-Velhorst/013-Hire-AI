@@ -67,6 +67,8 @@ function windowsDefenderAvailable() {
 
 const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto").trim().toLowerCase();
 const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
+const malwareScanAllowedOrigins = String(process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS || "")
+  .split(",").map((origin) => origin.trim()).filter(Boolean);
 const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
 const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
 const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
@@ -76,7 +78,23 @@ let malwareScanUrlValid = !malwareScanUrl;
 try {
   if (malwareScanUrl) {
     const parsed = new URL(malwareScanUrl);
-    malwareScanUrlValid = ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const loopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
+    const allowedOrigins = malwareScanAllowedOrigins.map((origin) => new URL(origin));
+    const allowedOriginsValid = malwareScanAllowedOrigins.every((origin, index) => {
+      const allowed = allowedOrigins[index];
+      const allowedHost = allowed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+      const allowedLoopback = ["localhost", "127.0.0.1", "::1"].includes(allowedHost);
+      return !allowed.username && !allowed.password && allowed.pathname === "/"
+        && !allowed.search && !allowed.hash
+        && !allowed.href.includes("?") && !allowed.href.includes("#")
+        && (allowed.protocol === "https:" || (allowed.protocol === "http:" && allowedLoopback));
+    });
+    malwareScanUrlValid = !parsed.username && !parsed.password && !parsed.search && !parsed.hash
+      && !parsed.href.includes("?") && !parsed.href.includes("#")
+      && (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+      && allowedOriginsValid
+      && (!isProduction || (malwareScanAllowedOrigins.length > 0 && allowedOrigins.some((origin) => origin.origin === parsed.origin)));
   }
 } catch { malwareScanUrlValid = false; }
 const defenderAvailable = windowsDefenderAvailable();
@@ -299,7 +317,7 @@ check(
   "document malware scanning",
   !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",
   !malwareModeValid ? "mode must be auto, http, or windows_defender"
-    : !malwareScanUrlValid ? "scanner URL must be HTTP(S) without embedded credentials"
+    : !malwareScanUrlValid ? "scanner URL must use HTTPS (or loopback HTTP) and match a valid configured origin allowlist in production"
       : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
         : !malwareConcurrencyValid ? "concurrency must be 1-8"
           : malwareScanUrl && malwareScanMode !== "windows_defender" ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`

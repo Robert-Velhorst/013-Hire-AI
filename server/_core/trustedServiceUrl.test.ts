@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTrustedServiceUrl,
+  requireMalwareScannerUrl,
   requireOAuthServerUrl,
   requireTrustedServiceBaseUrl,
 } from "./trustedServiceUrl";
@@ -55,5 +56,34 @@ describe("OAuth server origin policy", () => {
     expect(requireOAuthServerUrl("http://localhost:3000", [], false).origin)
       .toBe("http://localhost:3000");
     expect(() => requireOAuthServerUrl("http://oauth.example.test", [], false)).toThrow();
+  });
+});
+
+describe("malware scanner origin policy", () => {
+  it("requires an explicitly allowlisted HTTPS origin in production", () => {
+    expect(requireMalwareScannerUrl(
+      "https://scanner.example.test/scan",
+      ["https://scanner.example.test"],
+      true
+    ).href).toBe("https://scanner.example.test/scan");
+  });
+
+  it("permits an allowlisted loopback HTTP scanner for same-host deployments", () => {
+    expect(requireMalwareScannerUrl(
+      "http://127.0.0.1:39999/scan",
+      ["http://127.0.0.1:39999"],
+      true
+    ).origin).toBe("http://127.0.0.1:39999");
+  });
+
+  it.each([
+    { url: "https://other.example.test/scan", allowed: ["https://scanner.example.test"] },
+    { url: "https://scanner.example.test/scan", allowed: [] },
+    { url: "http://scanner.example.test/scan", allowed: ["http://scanner.example.test"] },
+    { url: "http://127.0.0.1:39999/scan", allowed: ["http://127.0.0.1:39998"] },
+    { url: "https://scanner.example.test/scan", allowed: ["https://scanner.example.test/path"] },
+    { url: "https://scanner.example.test/scan", allowed: ["https://scanner.example.test/?"] },
+  ])("rejects an untrusted production malware scanner", ({ url, allowed }) => {
+    expect(() => requireMalwareScannerUrl(url, allowed, true)).toThrow();
   });
 });

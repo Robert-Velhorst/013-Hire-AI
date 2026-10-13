@@ -55,6 +55,14 @@ updates unstarted. Production rejects an unavailable scanner; development retain
 its existing explicitly unconfigured-scanner behavior. A successful scan is not
 a guarantee that a document is harmless or that extracted statements are true.
 
+When an HTTP scanner is configured, production requires its exact origin in
+`FILE_MALWARE_SCAN_ALLOWED_ORIGINS`. Use HTTPS for remote scanners. HTTP is
+accepted only for a loopback scanner on the same host, and that origin must also
+be explicitly allowlisted. Origin entries contain only scheme, hostname and
+optional port, with no path, query, fragment or credentials. The production
+doctor and application startup both enforce this policy before uploads are
+accepted.
+
 The storage boundary still independently scans sensitive uploads. This protects
 direct upload callers as well as imports, but means a successful imported resume
 is currently scanned twice. There is no caller-provided bypass flag or reusable

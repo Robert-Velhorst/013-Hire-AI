@@ -200,7 +200,7 @@ The complete current example is `.env.example`; validate names and constraints i
 | `STRIPE_*`                                                                            | Legacy checkout and webhook integration; not authorization to charge users.                                   |
 | `AUTONOMOUS_SCHEDULER_ENABLED`                                                        | Review-first candidate workflow automation.                                                                   |
 | `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                    | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off. |
-| Storage and malware-scanner variables                                                 | Private resume storage and production upload scanning. Production fails closed without required scanning.     |
+| `FILE_MALWARE_SCAN_*` and storage variables                                            | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner. |
 
 See [`.env.example`](.env.example), [security policy](SECURITY.md), [detailed security controls](docs/SECURITY.md), and [private Hetzner runbook](deploy/hetzner/README.md). Deployment secrets are not required for ordinary documentation or unit-test work.
 

@@ -40,6 +40,51 @@ export function requireOAuthServerUrl(
   return url;
 }
 
+export function requireMalwareScannerUrl(
+  value: string,
+  allowedOrigins: string[],
+  production: boolean
+) {
+  const url = requireTrustedServiceBaseUrl(value);
+  const allowed = allowedOrigins.map((origin) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error("Malware scanner allowlist contains an invalid origin.");
+    }
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const secureTransport = parsed.protocol === "https:";
+    const loopbackDevelopment = parsed.protocol === "http:" && LOOPBACK_HOSTS.has(hostname);
+    if (
+      (!secureTransport && !loopbackDevelopment) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.href.includes("?") ||
+      parsed.href.includes("#")
+    ) {
+      throw new Error("Malware scanner allowlist entries must be HTTPS origins or loopback HTTP origins.");
+    }
+    return parsed.origin;
+  });
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const loopbackHttp = url.protocol === "http:" && LOOPBACK_HOSTS.has(hostname);
+
+  if (production && url.protocol !== "https:" && !loopbackHttp) {
+    throw new Error("Malware scanner URL must use HTTPS in production unless it is loopback.");
+  }
+  if (production && allowed.length === 0) {
+    throw new Error("FILE_MALWARE_SCAN_ALLOWED_ORIGINS must be configured in production.");
+  }
+  if (allowed.length > 0 && !allowed.includes(url.origin)) {
+    throw new Error("Malware scanner URL origin is not in FILE_MALWARE_SCAN_ALLOWED_ORIGINS.");
+  }
+  return url;
+}
+
 export function requireTrustedServiceBaseUrl(value: string) {
   let url: URL;
   try {
