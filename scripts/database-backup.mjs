@@ -15,7 +15,6 @@ try {
   } else {
     const result = await createDatabaseBackup({
       outputRoot: valueAfter("--output") || path.resolve("backups"),
-      executable: valueAfter("--mysqldump") || "mysqldump",
       dockerContainer: valueAfter("--docker-container") || process.env.DATABASE_RECOVERY_DOCKER_CONTAINER,
     });
     console.log(`Created verified backup at ${result.directory}.`);
