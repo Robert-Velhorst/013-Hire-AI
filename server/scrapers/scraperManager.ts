@@ -29,6 +29,22 @@ const SOURCE_IDENTITY_BATCH_SIZE = 200;
 export const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 export const SCRAPER_INITIALIZATION_FAILURE_MESSAGE = "Source initialization could not complete.";
 
+let jobPersistenceTail = Promise.resolve();
+
+async function withJobPersistenceLock<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = jobPersistenceTail;
+  let release!: () => void;
+  jobPersistenceTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
+
 function sanitizeScrapeError(error: unknown): string {
   const message = error instanceof Error ? error.message.trim() : "";
 
@@ -479,6 +495,15 @@ export class ScraperManager {
    * Save scraped jobs to database with deduplication
    */
   async saveJobs(scrapedJobs: any[]): Promise<{
+    saved: number;
+    refreshed: number;
+    duplicates: number;
+    errors: number;
+  }> {
+    return withJobPersistenceLock(() => this.saveJobsLocked(scrapedJobs));
+  }
+
+  private async saveJobsLocked(scrapedJobs: any[]): Promise<{
     saved: number;
     refreshed: number;
     duplicates: number;
