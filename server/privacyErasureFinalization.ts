@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminReviewItems,
   applicationApprovals,
@@ -23,6 +24,7 @@ import {
   jobMatches,
   privacyErasureRuns,
   privacyErasureTasks,
+  erasedOAuthIdentities,
   savedJobs,
   socialMediaProfiles,
   userConnectorAccounts,
@@ -36,7 +38,8 @@ import {
   workspaceMembers,
   workspaces,
 } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, withOAuthIdentitySerialization } from "./db";
+import { getCurrentOAuthIdentityDigest } from "./erasedOAuthIdentity";
 import {
   PRIVACY_RETENTION_POLICY_VERSION,
   privacyRetentionPolicyTables,
@@ -76,6 +79,7 @@ export const privacyFinalizerPolicyTables = [
   "job_alerts",
   "privacy_erasure_runs",
   "privacy_erasure_tasks",
+  "erased_oauth_identities",
   "success_fees",
   "employment_verifications",
   "fee_payments",
@@ -202,6 +206,17 @@ export async function finalizePrivacyErasure(
     );
   }
 
+  const targetIdentity = (
+    await db
+      .select({ openId: users.openId })
+      .from(users)
+      .where(eq(users.id, run.userId))
+      .limit(1)
+  )[0];
+  if (!targetIdentity) {
+    throw new Error("The account identity is unavailable for erasure finalization.");
+  }
+
   const leaseId = randomUUID();
   const claimed = await db
     .update(privacyErasureRuns)
@@ -231,8 +246,15 @@ export async function finalizePrivacyErasure(
   }
 
   try {
-    const result = await db.transaction(async tx => {
-      const userIdentity = (await tx.select({ email: users.email }).from(users).where(eq(users.id, run.userId)).limit(1))[0];
+    const result = await withOAuthIdentitySerialization(
+      targetIdentity.openId,
+      async connection => drizzle(connection).transaction(async tx => {
+      const userIdentity = (await tx.select({ openId: users.openId, email: users.email }).from(users).where(eq(users.id, run.userId)).limit(1))[0];
+      if (!userIdentity || userIdentity.openId !== targetIdentity.openId) {
+        throw new Error("The account identity changed before erasure finalization.");
+      }
+      const identityDigest = getCurrentOAuthIdentityDigest(userIdentity.openId);
+      await tx.insert(erasedOAuthIdentities).values(identityDigest);
       const applicationRows = await tx
         .select({ id: applications.id })
         .from(applications)
@@ -437,6 +459,7 @@ export async function finalizePrivacyErasure(
             loginMethod: null,
             stripeCustomerId: null,
             accountStatus: "suspended",
+            sessionVersion: sql`${users.sessionVersion} + 1`,
           })
           .where(eq(users.id, run.userId))
       );
@@ -482,7 +505,8 @@ export async function finalizePrivacyErasure(
           )
         );
       return { deleted, scrubbed };
-    });
+      })
+    );
     return {
       success: true,
       existing: false,

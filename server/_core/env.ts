@@ -23,6 +23,20 @@ export function isValidJwtSecret(value: string | undefined): boolean {
   if (value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value)) return false;
   return !JWT_SECRET_PLACEHOLDERS.has(value);
 }
+export function parseErasureIdentityHmacKeys(value: string | undefined): string[] {
+  return value ? value.split(",") : [];
+}
+export function areValidErasureIdentityHmacKeys(keys: unknown): keys is string[] {
+  return Array.isArray(keys) && keys.length > 0 && keys.length <= 64 && keys.every(key =>
+    typeof key === "string" &&
+    key.length >= 32 &&
+    key.length <= 4096 &&
+    key === key.trim() &&
+    !key.startsWith("replace-with-") &&
+    !key.startsWith("hire-ai-local-dev-") &&
+    !/[\u0000-\u001f\u007f,]/.test(key)
+  );
+}
 export function readBooleanFeatureFlag(value: string | undefined, fallback: boolean): boolean {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "true") return true;
@@ -68,6 +82,12 @@ const readEnvWithLocalFallback = (name: string, fallback: string) => {
 export const ENV = {
   appId: readEnvWithLocalFallback("VITE_APP_ID", "hire-ai-local-dev"),
   cookieSecret: readEnvWithLocalFallback("JWT_SECRET", "hire-ai-local-dev-cookie-secret"),
+  erasureIdentityHmacKeys: parseErasureIdentityHmacKeys(
+    readEnvWithLocalFallback(
+      "ERASURE_IDENTITY_HMAC_KEYS",
+      "hire-ai-local-dev-erasure-identity-hmac-key"
+    )
+  ),
   sessionTtlMs: readBoundedInteger(
     "SESSION_TTL_MS",
     DEFAULT_SESSION_TTL_MS,
@@ -122,6 +142,7 @@ export function validateProductionEnv() {
   assertRequiredEnv([
     "DATABASE_URL",
     "JWT_SECRET",
+    "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
     "OWNER_OPEN_ID",
@@ -136,6 +157,11 @@ export function validateProductionEnv() {
   if (!isValidJwtSecret(readEnv("JWT_SECRET"))) {
     throw new Error(
       "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
+    );
+  }
+  if (!areValidErasureIdentityHmacKeys(ENV.erasureIdentityHmacKeys)) {
+    throw new Error(
+      "ERASURE_IDENTITY_HMAC_KEYS must contain comma-separated 32-4096 character secrets without whitespace or control characters"
     );
   }
   if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {

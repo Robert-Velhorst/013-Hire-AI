@@ -45,6 +45,7 @@ const expectedUserOwnedTables = [
   "job_alerts",
   "privacy_erasure_runs",
   "privacy_erasure_tasks",
+  "erased_oauth_identities",
   "success_fees",
   "employment_verifications",
   "fee_payments",

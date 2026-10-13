@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
-import { createPool, type Pool } from "mysql2/promise";
+import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import {
   InsertUser,
   users,
@@ -94,6 +94,11 @@ import {
   logOperationalFailure,
   type OperationalFailureSignal,
 } from "./operationalFailureLog";
+import {
+  ErasedOAuthIdentityError,
+  getOAuthIdentityDigests,
+  getOAuthIdentityLockName,
+} from "./erasedOAuthIdentity";
 
 type InsertJob = InferInsertModel<typeof jobs>;
 type InsertUserProfile = InferInsertModel<typeof userProfiles>;
@@ -433,6 +438,76 @@ export async function getDb() {
   return _db;
 }
 
+async function isOAuthIdentityErasedOnConnection(
+  connection: PoolConnection,
+  openId: string
+) {
+  const digests = getOAuthIdentityDigests(openId);
+  if (digests.length === 0) {
+    throw new Error("OAuth identity erasure keys are not configured.");
+  }
+  const predicates = digests.map(() => "(key_version = ? AND identity_hash = ?)");
+  const values = digests.flatMap(digest => [digest.keyVersion, digest.identityHash]);
+  const [rows] = await connection.query(
+    `SELECT id FROM erased_oauth_identities WHERE ${predicates.join(" OR ")} LIMIT 1`,
+    values
+  );
+  return (rows as Array<{ id: number }>).length > 0;
+}
+
+export async function isOAuthIdentityErased(openId: string): Promise<boolean> {
+  const database = await getDb();
+  if (!database || !_pool) return false;
+  const connection = await _pool.getConnection();
+  try {
+    return await isOAuthIdentityErasedOnConnection(connection, openId);
+  } finally {
+    connection.release();
+  }
+}
+
+/** Serialize account provisioning and erasure finalization for one OAuth subject. */
+export async function withOAuthIdentitySerialization<T>(
+  openId: string,
+  operation: (connection: PoolConnection) => Promise<T>
+): Promise<T> {
+  await getDb();
+  if (!_pool) throw new Error("A persistent database is required for OAuth identity protection.");
+  const lockName = getOAuthIdentityLockName(openId);
+  const connection = await _pool.getConnection();
+  let lockAcquired = false;
+  let connectionUsable = true;
+  try {
+    const [rows] = await connection.query(
+      "SELECT GET_LOCK(?, 10) AS acquired",
+      [lockName]
+    );
+    lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
+    if (!lockAcquired) {
+      throw new Error("Could not acquire the OAuth identity serialization lock.");
+    }
+    return await operation(connection);
+  } finally {
+    try {
+      if (lockAcquired) {
+        const [rows] = await connection.query(
+          "SELECT RELEASE_LOCK(?) AS released",
+          [lockName]
+        );
+        if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
+          throw new Error("OAuth identity serialization lock cleanup failed.");
+        }
+      }
+    } catch (error) {
+      connection.destroy();
+      connectionUsable = false;
+      throw error;
+    } finally {
+      if (connectionUsable) connection.release();
+    }
+  }
+}
+
 /** Drain the explicit SQL pool after HTTP requests and workers have stopped. */
 export async function closeDatabaseConnection(): Promise<void> {
   if (_poolClose) return _poolClose;
@@ -626,8 +701,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
+    await withOAuthIdentitySerialization(user.openId, async connection => {
+      const identityDb = drizzle(connection);
+      await identityDb.transaction(async tx => {
+        if (await isOAuthIdentityErasedOnConnection(connection, user.openId)) {
+          throw new ErasedOAuthIdentityError();
+        }
+        await tx.insert(users).values(values).onDuplicateKeyUpdate({
+          set: updateSet,
+        });
+      });
     });
   } catch (error) {
     logOperationalFailure("Database", "User upsert");

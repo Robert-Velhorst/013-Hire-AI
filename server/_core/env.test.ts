@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isOptionalBoundedIntegerValue,
   isValidJwtSecret,
+  parseErasureIdentityHmacKeys,
+  areValidErasureIdentityHmacKeys,
   readBooleanFeatureFlag,
   readBoundedIntegerValue,
   resolveProductionRuntime,
@@ -80,4 +82,27 @@ describe("isValidJwtSecret", () => {
   ])("rejects unsafe signing secret configuration", (value) => {
     expect(isValidJwtSecret(value)).toBe(false);
   });
+});
+
+describe("erasure identity HMAC keys", () => {
+  it("preserves ordered keys to support durable, append-only rotation", () => {
+    expect(parseErasureIdentityHmacKeys(`${"a".repeat(32)},${"b".repeat(32)}`)).toEqual([
+      "a".repeat(32),
+      "b".repeat(32),
+    ]);
+    expect(areValidErasureIdentityHmacKeys(["a".repeat(32), "b".repeat(32)])).toBe(true);
+  });
+
+  it.each([
+    { keys: [] },
+    { keys: ["short"] },
+    { keys: ["replace-with-a-separate-random-secret-at-least-32-characters"] },
+    { keys: ["hire-ai-local-dev-erasure-identity-hmac-key"] },
+    { keys: Array.from({ length: 65 }, () => "a".repeat(32)) },
+    { keys: [`${"a".repeat(32)},${"b".repeat(32)}`] },
+    { keys: [` ${"a".repeat(32)}`] },
+  ])(
+    "rejects invalid key sets",
+    ({ keys }) => expect(areValidErasureIdentityHmacKeys(keys)).toBe(false)
+  );
 });

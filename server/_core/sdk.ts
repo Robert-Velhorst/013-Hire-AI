@@ -14,6 +14,7 @@ import {
 } from "../devReviewQueueSeed";
 import { ENV } from "./env";
 import { logOperationalFailure } from "../operationalFailureLog";
+import { ErasedOAuthIdentityError } from "../erasedOAuthIdentity";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -171,6 +172,9 @@ class SDKServer {
     openId: string,
     options: { expiresInMs?: number; name?: string } = {}
   ): Promise<string> {
+    if (await db.isOAuthIdentityErased(openId)) {
+      throw ForbiddenError("This account cannot be recreated after erasure.");
+    }
     const user = await db.getUserByOpenId(openId);
     return this.signSession(
       {
@@ -304,6 +308,12 @@ class SDKServer {
       }
     }
 
+    if (!user) {
+      if (await db.isOAuthIdentityErased(sessionUserId)) {
+        throw ForbiddenError("This account cannot be recreated after erasure.");
+      }
+    }
+
     if (!user && !ENV.oAuthServerUrl) {
       throw ForbiddenError("No local development user exists for this session");
     }
@@ -321,13 +331,23 @@ class SDKServer {
         throw ServiceUnavailableError("Authentication service unavailable");
       }
 
-      await db.upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-        lastSignedIn: signedInAt,
-      });
+      if (userInfo.openId !== sessionUserId) {
+        throw ForbiddenError("OAuth identity does not match the active session.");
+      }
+      try {
+        await db.upsertUser({
+          openId: userInfo.openId,
+          name: userInfo.name || null,
+          email: userInfo.email ?? null,
+          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+          lastSignedIn: signedInAt,
+        });
+      } catch (error) {
+        if (error instanceof ErasedOAuthIdentityError) {
+          throw ForbiddenError("This account cannot be recreated after erasure.");
+        }
+        throw error;
+      }
       user = await db.getUserByOpenId(userInfo.openId);
     }
 

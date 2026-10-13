@@ -12,6 +12,7 @@ import {
   auditEvents,
   autonomousRunStates,
   connectorAuthorizations,
+  erasedOAuthIdentities,
   educationEntries,
   employerResponses,
   employmentVerifications,
@@ -147,6 +148,17 @@ export const indirectPrivacyRetentionPolicy: IndirectPolicyEntry[] = [
 export const privacyRetentionPolicyTables = [
   ...directPrivacyRetentionPolicy.map((entry) => entry.table),
   ...indirectPrivacyRetentionPolicy.map((entry) => entry.table),
+  "erased_oauth_identities",
+];
+
+export const globallyRetainedPrivacyRecords = [
+  {
+    table: "erased_oauth_identities",
+    action: "retain" as const,
+    reason:
+      "Keyed, non-reversible OAuth identity hashes prevent account recreation after erasure; the table stores no source identifier or user link.",
+    tableRef: erasedOAuthIdentities,
+  },
 ];
 
 export async function buildPrivacyErasurePreview(userId: number) {

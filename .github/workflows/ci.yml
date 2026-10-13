@@ -227,6 +227,7 @@ jobs:
             -e PORT=33050 \
             -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
             -e JWT_SECRET='container-ci-jwt-secret-at-least-32-characters' \
+            -e ERASURE_IDENTITY_HMAC_KEYS='container-ci-erasure-identity-hmac-key-at-least-32-characters' \
             -e VITE_APP_ID='hire-ai-container-ci' \
             -e OAUTH_SERVER_URL='https://oauth.example.test' \
             -e OAUTH_PORTAL_URL='https://auth.example.test' \

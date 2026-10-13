@@ -256,6 +256,7 @@ This describes legacy implementation, not activation of the commercial targets a
 - Users can export metadata.
 - Users can request account deletion review.
 - Admins can preview policy-classified erasure impact before execution.
+- Finalization stores a keyed, non-reversible OAuth-subject tombstone so authentication cannot silently recreate an erased account. Keep `ERASURE_IDENTITY_HMAC_KEYS` stable; rotate by appending a new key, retaining all earlier keys in order.
 - Provider cleanup, private-object cleanup, database scrubbing, and retained regulated ledgers are explicit, audited steps.
 
 ## Source Coverage
@@ -485,6 +486,7 @@ Secrets must be injected through the deployment environment. Do not commit `.env
 | `DATABASE_POOL_QUEUE_LIMIT`     | Optional queued DB requests, 1-1000                                   |
 | `DATABASE_POOL_IDLE_TIMEOUT_MS` | Optional idle timeout                                                 |
 | `JWT_SECRET`                    | Production session secret; 32-4096 non-control chars; no placeholders |
+| `ERASURE_IDENTITY_HMAC_KEYS`    | Up to 64 ordered comma-separated HMAC keys (32-4096 chars each); append on rotation and retain older keys |
 | `SESSION_TTL_MS`                | Absolute session lifetime; 15 minutes to 30 days                      |
 | `VITE_APP_ID`                   | Application ID bound into sessions                                    |
 | `OAUTH_SERVER_URL`              | OAuth backend base URL                                                |

@@ -577,6 +577,19 @@ export const privacyErasureTasks = mysqlTable("privacy_erasure_tasks", {
   index("privacy_erasure_tasks_user_status_idx").on(table.userId, table.status),
 ]);
 
+/** Minimal keyed tombstones prevent erased OAuth subjects from being reprovisioned. */
+export const erasedOAuthIdentities = mysqlTable("erased_oauth_identities", {
+  id: int("id").autoincrement().primaryKey(),
+  keyVersion: int("key_version", { unsigned: true }).notNull(),
+  identityHash: varchar("identity_hash", { length: 64 }).notNull(),
+  erasedAt: timestamp("erased_at").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("erased_oauth_identities_key_hash_unique").on(
+    table.keyVersion,
+    table.identityHash
+  ),
+]);
+
 /**
  * Application Approvals
  * Captures explicit user/admin approval for consequential job-search actions.
