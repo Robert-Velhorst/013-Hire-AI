@@ -19,4 +19,29 @@ describe("database migration ordering", () => {
     const migrations = [{ hash: "known", folderMillis: 10, sql: [] }];
     expect(planPendingMigrations(migrations, ["known"], 50, 20)).toEqual([]);
   });
+
+  it("fails closed when the database ledger contains a hash outside this journal", () => {
+    expect(() =>
+      planPendingMigrations(
+        [{ hash: "current", folderMillis: 10, sql: [] }],
+        ["unknown-from-another-branch"],
+        50,
+        20
+      )
+    ).toThrow("Database migration ledger contains hashes absent from this journal");
+  });
+
+  it("rejects duplicate migration hashes in the journal", () => {
+    expect(() =>
+      planPendingMigrations(
+        [
+          { hash: "duplicate", folderMillis: 10, sql: [] },
+          { hash: "duplicate", folderMillis: 20, sql: [] },
+        ],
+        [],
+        0,
+        30
+      )
+    ).toThrow("Migration journal contains a duplicate content hash");
+  });
 });
