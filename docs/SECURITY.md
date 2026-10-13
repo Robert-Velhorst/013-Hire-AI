@@ -30,7 +30,7 @@
 
 ## GitHub repository settings
 
-Verified against the live repository APIs on 2026-10-13:
+Verified against the live repository APIs on 2026-10-14:
 
 - Provider-pattern secret scanning and push protection are enabled. Generic non-provider patterns and secret validity checks remain disabled. An authenticated attempt to enable non-provider scanning did not change the repository setting. Validity checks, where available, disclose detected credentials to their issuing provider.
 - Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot alerts were returned at the time of the check.
