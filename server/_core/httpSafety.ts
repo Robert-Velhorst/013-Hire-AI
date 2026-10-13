@@ -27,10 +27,40 @@ export const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "script-src 'self'",
   "script-src-attr 'none'",
   "style-src 'self'",
-  "style-src-attr 'none'",
+  "style-src-attr 'unsafe-inline'",
   "style-src-elem 'self' 'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY=' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
   "worker-src 'none'",
 ].join("; ");
+
+export function normalizeApprovedAnalyticsOrigin(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+
+  try {
+    const url = new URL(value.trim());
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return undefined;
+    }
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createProductionContentSecurityPolicy(analyticsOrigin?: string) {
+  const approvedOrigin = normalizeApprovedAnalyticsOrigin(analyticsOrigin);
+  if (!approvedOrigin) return PRODUCTION_CONTENT_SECURITY_POLICY;
+
+  return PRODUCTION_CONTENT_SECURITY_POLICY
+    .replace("connect-src 'self'", `connect-src 'self' ${approvedOrigin}`)
+    .replace("script-src 'self'", `script-src 'self' ${approvedOrigin}`);
+}
 
 /**
  * Apply baseline response protections without depending on a middleware package.
@@ -38,7 +68,8 @@ export const PRODUCTION_CONTENT_SECURITY_POLICY = [
  */
 export function applyHttpSafetyHeaders(
   response: Pick<Response, "setHeader">,
-  isProduction: boolean
+  isProduction: boolean,
+  analyticsAllowedOrigin?: string
 ) {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("X-Frame-Options", "DENY");
@@ -57,7 +88,7 @@ export function applyHttpSafetyHeaders(
     );
     response.setHeader(
       "Content-Security-Policy",
-      PRODUCTION_CONTENT_SECURITY_POLICY
+      createProductionContentSecurityPolicy(analyticsAllowedOrigin)
     );
   }
 }

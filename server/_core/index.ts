@@ -60,7 +60,7 @@ async function startServer() {
   const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });
   app.disable("x-powered-by");
   app.use((_req, res, next) => {
-    applyHttpSafetyHeaders(res, ENV.isProduction);
+    applyHttpSafetyHeaders(res, ENV.isProduction, ENV.analyticsAllowedOrigin);
     next();
   });
   app.get("/healthz", (_req, res) => {

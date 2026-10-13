@@ -1,6 +1,7 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
+import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -98,6 +99,7 @@ export const ENV = {
   databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
   databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
+  analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
@@ -154,6 +156,21 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
+    ENV.analyticsAllowedOrigin
+  );
+  const analyticsBuildOrigin = normalizeApprovedAnalyticsOrigin(
+    readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN")
+  );
+  if (
+    (ENV.analyticsAllowedOrigin.trim() && !analyticsRuntimeOrigin) ||
+    (readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN").trim() && !analyticsBuildOrigin) ||
+    analyticsRuntimeOrigin !== analyticsBuildOrigin
+  ) {
+    throw new Error(
+      "ANALYTICS_ALLOWED_ORIGIN and VITE_ANALYTICS_ALLOWED_ORIGIN must be the same valid HTTPS origin"
+    );
+  }
   if (!isValidJwtSecret(readEnv("JWT_SECRET"))) {
     throw new Error(
       "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"

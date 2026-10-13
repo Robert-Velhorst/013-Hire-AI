@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import { reportApiMutationFailure, reportApiQueryFailure } from "./lib/apiErrorReporting";
+import { resolveAnalyticsScriptUrl } from "./lib/analyticsConfig";
 import { createHireTrpcClient } from "./lib/trpcClient";
 import "./index.css";
 
@@ -13,19 +14,15 @@ const queryClient = new QueryClient();
 
 const loadAnalytics = () => {
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
+  const allowedOrigin = import.meta.env.VITE_ANALYTICS_ALLOWED_ORIGIN;
   const websiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
-  if (!endpoint || !websiteId) return;
-
-  let scriptUrl: URL;
-  try {
-    scriptUrl = new URL("/umami", endpoint);
-  } catch {
-    return;
-  }
+  if (!websiteId) return;
+  const scriptUrl = resolveAnalyticsScriptUrl(endpoint, allowedOrigin);
+  if (!scriptUrl) return;
 
   const script = document.createElement("script");
   script.defer = true;
-  script.src = scriptUrl.toString();
+  script.src = scriptUrl;
   script.dataset.websiteId = websiteId;
   document.head.appendChild(script);
 };
