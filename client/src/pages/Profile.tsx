@@ -33,6 +33,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { PROFILE_EVIDENCE_LIMITS } from "@shared/profileEvidenceLimits";
 import { trpc } from "@/lib/trpc";
+import { uploadDocument } from "@/lib/documentUpload";
 import { openExternalUrl } from "@/lib/externalUrl";
 import {
   getProfileEvidenceControlSummary,
@@ -315,18 +316,6 @@ export default function Profile() {
     },
     onError: (error) => toast.error(error.message || t("unableDismissInboxResponse")),
   });
-  const parseResumeFile = trpc.resume.parseFile.useMutation({
-    onSuccess: async ({ resume }) => {
-      toast.success(t("resumeImported", { version: resume.version }));
-      await Promise.all([
-        profileQuery.refetch(),
-        evidenceReadinessQuery.refetch(),
-        activeResumeQuery.refetch(),
-        resumeVersionsQuery.refetch(),
-      ]);
-    },
-    onError: (error) => toast.error(error.message || t("unableImportResume")),
-  });
   const setActiveResume = trpc.resume.setActiveVersion.useMutation({
     onSuccess: async ({ success }) => {
       if (!success) {
@@ -482,11 +471,23 @@ export default function Profile() {
 
     setIsUploading(true);
     try {
-      await parseResumeFile.mutateAsync({
-        fileData: await fileToBase64(file),
-        mimeType,
-        filename: file.name,
+      const result = await uploadDocument<{ resume: { version: number } }>({
+        file,
+        kind: "resume-parse",
+        metadata: {
+          mimeType,
+          filename: file.name,
+        },
       });
+      toast.success(t("resumeImported", { version: result.resume.version }));
+      await Promise.all([
+        profileQuery.refetch(),
+        evidenceReadinessQuery.refetch(),
+        activeResumeQuery.refetch(),
+        resumeVersionsQuery.refetch(),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("unableImportResume"));
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -2116,21 +2117,6 @@ function getResumeMimeType(file: File): string | null {
   return file.type || null;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Unable to read the selected file"));
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Unable to read the selected file"));
-        return;
-      }
-      resolve(result.split(",", 2)[1] || "");
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function WorkExperienceCard({ experience, locale, t, onEdit, onDelete }: {
   experience: any;

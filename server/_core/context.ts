@@ -8,6 +8,8 @@ export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: User | null;
+  uploadScanPermit?: () => void;
+  documentUploadBytes?: Buffer;
 };
 
 export async function createContext(

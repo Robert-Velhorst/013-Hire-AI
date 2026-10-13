@@ -39,6 +39,15 @@ Compiled validators use a 64-entry least-recently-used cache keyed by schema con
 
 ## Resume imports and scanning
 
+Browser document uploads use `POST /api/document-uploads/:kind` with raw
+`application/octet-stream` bytes and a bounded `X-Hire-Upload-Metadata` header.
+The endpoint authenticates the tenant, reserves one of two process-wide upload slots
+and scanner capacity before reading the body, enforces the 10 MiB file budget while
+streaming (including chunked requests without `Content-Length`), and releases both
+reservations on completion or disconnect. This avoids the former base64 JSON envelope
+for the first-party browser flows. Legacy protected tRPC upload procedures remain
+bounded for compatibility; new integrations should use the dedicated route.
+
 Local `resume.parseFile` uploads and `profile.importCloudResume` imports validate
 size, type and file signature, then await `scanSensitiveUpload` before invoking a
 document parser or AI. A failed scan leaves parsing, versioned storage and profile

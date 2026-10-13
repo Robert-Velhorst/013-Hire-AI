@@ -2888,7 +2888,7 @@ export const appRouter = router({
     // Parse resume from file (base64 encoded PDF/DOCX)
     parseFile: protectedProcedure
       .input(z.object({
-        fileData: boundedUploadBase64,
+        fileData: boundedUploadBase64.optional(),
         mimeType: boundedMimeType,
         filename: boundedFileName,
       }))
@@ -2897,7 +2897,8 @@ export const appRouter = router({
         const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
         
         // Decode base64 to buffer
-        const buffer = Buffer.from(input.fileData, "base64");
+        const buffer = ctx.documentUploadBytes ?? Buffer.from(input.fileData ?? "", "base64");
+        if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Resume bytes are required." });
         const validation = validateUploadedFile({
           data: buffer,
           fileName: input.filename,
@@ -2910,7 +2911,7 @@ export const appRouter = router({
           data: buffer,
           fileName: validation.fileName,
           mimeType: input.mimeType,
-        });
+        }, ctx.uploadScanPermit);
         const parsed = await parseResumeFromFile(buffer, input.mimeType);
         
         // Convert to profile format
@@ -2944,12 +2945,13 @@ export const appRouter = router({
     // Upload resume with version history
     uploadWithHistory: protectedProcedure
       .input(z.object({
-        fileData: boundedUploadBase64,
+        fileData: boundedUploadBase64.optional(),
         fileName: boundedFileName,
         mimeType: boundedMimeType.optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const buffer = Buffer.from(input.fileData, "base64");
+        const buffer = ctx.documentUploadBytes ?? Buffer.from(input.fileData ?? "", "base64");
+        if (buffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Resume bytes are required." });
         const mimeType = input.mimeType || getMimeTypeFromExtension(input.fileName);
         const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
         const validation = validateUploadedFile({
@@ -2962,7 +2964,7 @@ export const appRouter = router({
           data: buffer,
           fileName: validation.fileName,
           mimeType,
-        });
+        }, ctx.uploadScanPermit);
         const resume = await uploadResume(
           ctx.user.id,
           buffer,

@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { registerApiRateLimit } from "./apiRateLimit";
 import { registerApplicationBodyParsers } from "./bodyParsers";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
+import { registerDocumentUploadRoutes } from "../documentUploadRoutes";
 import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 
@@ -25,6 +26,7 @@ async function startApi() {
   applyTrustedProxyPolicy(app);
   registerApiRateLimit(app);
   registerCookieOriginProtection(app);
+  registerDocumentUploadRoutes(app);
   registerApplicationBodyParsers(app);
   app.use("/api/trpc", createExpressMiddleware({
     router: appRouter,
@@ -77,6 +79,25 @@ describe("frontend tRPC client over the Express API", () => {
         origin: "https://attacker.example",
       },
       body: "{}",
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "The request origin is not allowed.",
+    });
+  });
+
+  it("rejects cross-origin cookie uploads before the streaming route", async () => {
+    const baseUrl = await startApi();
+    const response = await fetch(`${baseUrl}/api/document-uploads/resume-history`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-hire-upload-metadata": JSON.stringify({ fileName: "resume.txt", mimeType: "text/plain" }),
+        cookie: `${COOKIE_NAME}=invalid-session`,
+        origin: "https://attacker.example",
+      },
+      body: new Blob(["must not reach upload route"]),
     });
 
     expect(response.status).toBe(403);

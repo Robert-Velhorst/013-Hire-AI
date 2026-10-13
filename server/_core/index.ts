@@ -32,6 +32,7 @@ import { createDatabaseReadinessProbe } from "./databaseReadiness";
 import { writeStartupFailureStage, type StartupStage } from "./startupDiagnostics";
 import { applyHttpRuntimePolicy } from "./httpRuntimePolicy";
 import { registerApplicationBodyParsers } from "./bodyParsers";
+import { registerDocumentUploadRoutes } from "../documentUploadRoutes";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 import { registerCookieOriginProtection } from "./cookieOriginProtection";
 import { registerApiRateLimit } from "./apiRateLimit";
@@ -95,8 +96,9 @@ async function startServer() {
   // Browser session writes must prove that their Origin matches the direct or
   // trusted-proxy request origin. Stripe and HAI use separate earlier routes.
   registerCookieOriginProtection(app);
-  // Ordinary JSON stays small; only authenticated document procedures receive
-  // the larger base64 envelope under bounded upload admission.
+  registerDocumentUploadRoutes(app);
+  // Ordinary JSON stays small; the raw-byte document routes above own the
+  // authenticated, bounded streaming upload path.
   registerApplicationBodyParsers(app);
   // Development-only authenticated QA routes for protected operating-ledger pages.
   registerDevAuthRoutes(app);

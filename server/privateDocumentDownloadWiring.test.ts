@@ -31,7 +31,7 @@ describe("private document download wiring", () => {
     expect(billing).not.toContain("href={fee.offerLetterUrl}");
     expect(adminPanel).not.toContain("href={v.documentUrl}");
     expect(billing).not.toContain("window.open(data.checkoutUrl");
-    expect(source("client/src/components/ReportHireDialog.tsx")).toContain("openExternalUrl(data.checkoutUrl)");
+    expect(source("client/src/components/ReportHireDialog.tsx")).toContain("openExternalUrl(result.checkoutUrl)");
     expect(source("client/src/pages/Profile.tsx")).toContain("openExternalUrl(result.data?.url)");
   });
 });

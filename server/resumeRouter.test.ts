@@ -146,7 +146,7 @@ describe("resume router synchronization", () => {
 
     await expect(importResume(caller, source)).rejects.toThrow();
 
-    expect(mocks.scanSensitiveUpload).toHaveBeenCalledWith({
+    expect(mocks.scanSensitiveUpload.mock.calls[0]?.[0]).toEqual({
       data: Buffer.from("Candidate resume"), fileName: "candidate_resume.txt", mimeType: "text/plain",
     });
     expect(mocks.parseResumeFromFile).not.toHaveBeenCalled();
@@ -270,6 +270,17 @@ describe("resume router synchronization", () => {
       fileName: "resume.txt",
       mimeType: "text/plain",
     })).rejects.toThrow();
+    expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
+    expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing resume payload on the legacy tRPC path", async () => {
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.resume.parseFile({
+      filename: "resume.txt",
+      mimeType: "text/plain",
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(mocks.scanSensitiveUpload).not.toHaveBeenCalled();
     expect(mocks.uploadResume).not.toHaveBeenCalled();
   });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MAX_DOCUMENT_UPLOAD_BYTES,
   MAX_DOCUMENT_UPLOAD_BASE64_LENGTH,
@@ -8,6 +8,7 @@ import {
   validateVerificationUpload,
   VERIFICATION_UPLOAD_ACCEPT,
 } from "@shared/documentUploads";
+import { uploadDocument } from "./documentUpload";
 
 describe("document upload contract", () => {
   it("accepts every format exposed by the file picker", () => {
@@ -83,5 +84,58 @@ describe("document upload contract", () => {
     expect(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH).toBe(
       4 * Math.ceil(MAX_DOCUMENT_UPLOAD_BYTES / 3)
     );
+  });
+
+  it("sends file bytes directly to the bounded upload route", async () => {
+    const file = new Blob(["resume bytes"], { type: "text/plain" }) as File;
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ success: true }), { status: 200 })
+    );
+
+    await expect(
+      uploadDocument<{ success: boolean }>({
+        file,
+        kind: "resume-parse",
+        metadata: { filename: "resume.txt", mimeType: "text/plain" },
+        fetchImplementation: fetchMock,
+      })
+    ).resolves.toEqual({ success: true });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/document-uploads/resume-parse");
+    expect(init?.credentials).toBe("include");
+    expect(init?.headers).toMatchObject({
+      "content-type": "application/octet-stream",
+    });
+    expect(init?.body).toBe(file);
+  });
+
+  it("surfaces bounded upload errors and enforces the browser-side byte ceiling", async () => {
+    const file = new Blob(["resume bytes"]) as File;
+    const failedFetch = async () =>
+      new Response(JSON.stringify({ error: "scanner busy" }), { status: 503 });
+    await expect(
+      uploadDocument({
+        file,
+        kind: "resume-history",
+        metadata: { fileName: "resume.txt" },
+        fetchImplementation: failedFetch,
+      })
+    ).rejects.toThrow("scanner busy");
+
+    const oversized = new Blob([
+      new Uint8Array(MAX_DOCUMENT_UPLOAD_BYTES + 1),
+    ]) as File;
+    const fetchMock = vi.fn();
+    await expect(
+      uploadDocument({
+        file: oversized,
+        kind: "resume-history",
+        metadata: { fileName: "resume.txt" },
+        fetchImplementation: fetchMock,
+      })
+    ).rejects.toThrow("10 MiB");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

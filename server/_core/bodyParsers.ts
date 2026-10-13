@@ -3,7 +3,6 @@ import { HttpError } from "../../shared/_core/errors";
 import {
   APPLICATION_FORM_LIMIT,
   APPLICATION_JSON_LIMIT,
-  DOCUMENT_UPLOAD_JSON_LIMIT,
   RESUME_TEXT_JSON_LIMIT,
 } from "./httpRuntimePolicy";
 import { sdk } from "./sdk";
@@ -13,10 +12,6 @@ const MAX_DOCUMENT_REQUESTS_PER_USER = 1;
 
 const DOCUMENT_ROUTES = new Map<string, string>([
   ["/api/trpc/resume.parse", RESUME_TEXT_JSON_LIMIT],
-  ["/api/trpc/resume.parseFile", DOCUMENT_UPLOAD_JSON_LIMIT],
-  ["/api/trpc/resume.uploadWithHistory", DOCUMENT_UPLOAD_JSON_LIMIT],
-  ["/api/trpc/successFees.reportHire", DOCUMENT_UPLOAD_JSON_LIMIT],
-  ["/api/trpc/successFees.submitVerification", DOCUMENT_UPLOAD_JSON_LIMIT],
 ]);
 
 export interface ApplicationBodyParserLimits {

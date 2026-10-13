@@ -43,7 +43,7 @@ describe("application body parsers", () => {
     }
   });
 
-  it("keeps the larger JSON budget on authenticated document routes only", async () => {
+  it("keeps the larger JSON budget on the bounded resume-text route only", async () => {
     const app = express();
     registerApplicationBodyParsers(app, {
       json: 1_024,
@@ -53,7 +53,7 @@ describe("application body parsers", () => {
         req.get("x-test-user") === "21" ? { id: 21 } : null,
     });
     let documentCalls = 0;
-    app.post("/api/trpc/resume.uploadWithHistory", (_req, res) => {
+    app.post("/api/trpc/resume.parse", (_req, res) => {
       documentCalls += 1;
       res.sendStatus(204);
     });
@@ -66,7 +66,7 @@ describe("application body parsers", () => {
     const url = `http://127.0.0.1:${address.port}`;
 
     try {
-      const document = await fetch(`${url}/api/trpc/resume.uploadWithHistory`, {
+      const document = await fetch(`${url}/api/trpc/resume.parse`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -80,7 +80,7 @@ describe("application body parsers", () => {
         body: JSON.stringify({ value: "x".repeat(1_200) }),
       });
       const declaredOversize = await fetch(
-        `${url}/api/trpc/resume.uploadWithHistory`,
+        `${url}/api/trpc/resume.parse`,
         {
           method: "POST",
           headers: {
@@ -95,7 +95,7 @@ describe("application body parsers", () => {
         connection: string | undefined;
       }>((resolve, reject) => {
         const request = httpRequest(
-          `${url}/api/trpc/resume.parseFile`,
+          `${url}/api/trpc/resume.parse`,
           {
             method: "POST",
             headers: {
@@ -156,13 +156,13 @@ describe("application body parsers", () => {
       authenticateDocumentUpload: async req =>
         req.get("x-test-user") === "34" ? { id: 34 } : null,
     });
-    app.post("/api/trpc/resume.parseFile", (_req, res) => res.sendStatus(204));
+    app.post("/api/trpc/resume.parse", (_req, res) => res.sendStatus(204));
     const server = createServer(app);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (!address || typeof address === "string")
       throw new Error("Test server did not bind to TCP.");
-    const url = `http://127.0.0.1:${address.port}/api/trpc/resume.parseFile`;
+    const url = `http://127.0.0.1:${address.port}/api/trpc/resume.parse`;
     const slowRequest = httpRequest(url, {
       method: "POST",
       headers: {

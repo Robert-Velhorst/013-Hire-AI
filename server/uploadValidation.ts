@@ -80,17 +80,26 @@ function releaseScanPermit() {
   waiter.resolve(releaseScanPermit);
 }
 
+function createScanPermitRelease() {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    releaseScanPermit();
+  };
+}
+
 async function acquireScanPermit() {
   if (activeScans < scannerConcurrency()) {
     activeScans += 1;
-    return releaseScanPermit;
+    return createScanPermitRelease();
   }
   if (scanWaiters.length >= scannerConcurrency()) {
     throw new Error("The malware scanner is busy; retry the upload.");
   }
   return await new Promise<() => void>((resolve, reject) => {
     const waiter = {
-      resolve,
+      resolve: () => resolve(createScanPermitRelease()),
       reject,
       timer: setTimeout(() => {
         const index = scanWaiters.indexOf(waiter);
@@ -279,9 +288,10 @@ export async function scanSensitiveUpload(input: {
   data: Buffer | Uint8Array;
   fileName: string;
   mimeType: string;
-}): Promise<SensitiveUploadScanResult> {
+}, reservedPermit?: (() => void) | null): Promise<SensitiveUploadScanResult> {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
+    reservedPermit?.();
     if (ENV.isProduction) {
       throw new Error(
         "Sensitive uploads require an available malware scanner in production."
@@ -289,7 +299,7 @@ export async function scanSensitiveUpload(input: {
     }
     return { scanned: false, provider: "not_configured" };
   }
-  const release = await acquireScanPermit();
+  const release = reservedPermit ?? await acquireScanPermit();
   try {
     return mode === "windows_defender"
       ? await scanWithWindowsDefender(input)
@@ -297,6 +307,17 @@ export async function scanSensitiveUpload(input: {
   } finally {
     release();
   }
+}
+
+export async function reserveSensitiveUploadScanPermit() {
+  const mode = resolveMalwareScanMode();
+  if (mode === "unavailable") {
+    if (ENV.isProduction) {
+      throw new Error("Sensitive uploads require an available malware scanner in production.");
+    }
+    return null;
+  }
+  return acquireScanPermit();
 }
 
 function hasExpectedSignature(data: Buffer, mimeType: string): boolean {

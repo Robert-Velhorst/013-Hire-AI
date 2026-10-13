@@ -19,7 +19,7 @@ import { applicationApprovals, applications, successFees, employmentVerification
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { isAcceptedOfferApplicationStatus } from "@shared/offerEligibility";
 import { storageDelete, storageGet, storagePut } from "../storage";
-import { validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
+import { scanSensitiveUpload, validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
 import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
 import { nanoid } from "nanoid";
@@ -188,7 +188,7 @@ export const successFeesRouter = router({
       currency: billingCurrency.default("USD"),
       startDate: calendarDate,
       applicationId: z.number().int().positive().optional(),
-      offerLetterBase64: boundedDocumentBase64,
+      offerLetterBase64: boundedDocumentBase64.optional(),
       offerLetterMimeType: boundedDocumentMimeType.default("application/pdf"),
       offerLetterFileName: boundedDocumentFileName.default("offer_letter.pdf"),
       termsAccepted: z.boolean().refine(v => v === true, "You must accept the terms"),
@@ -263,13 +263,19 @@ export const successFeesRouter = router({
       }
 
       // Upload offer letter to S3
-      const fileBuffer = Buffer.from(input.offerLetterBase64, "base64");
+      const fileBuffer = ctx.documentUploadBytes ?? Buffer.from(input.offerLetterBase64 ?? "", "base64");
+      if (fileBuffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Offer proof bytes are required." });
       const validation = validateUploadedFile({
         data: fileBuffer,
         fileName: input.offerLetterFileName,
         mimeType: input.offerLetterMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
+      await scanSensitiveUpload({
+        data: fileBuffer,
+        fileName: validation.fileName,
+        mimeType: input.offerLetterMimeType,
+      }, ctx.uploadScanPermit);
       const fileKey = `offer-letters/${userId}-${nanoid(12)}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.offerLetterMimeType);
       const offerLetterUrl = `private://${fileKey}`;
@@ -803,7 +809,7 @@ export const successFeesRouter = router({
   submitVerification: protectedProcedure
     .input(z.object({
       successFeeId: z.number().int().positive(),
-      documentBase64: boundedDocumentBase64,
+      documentBase64: boundedDocumentBase64.optional(),
       documentMimeType: boundedDocumentMimeType.default("application/pdf"),
       documentFileName: boundedDocumentFileName.default("verification.pdf"),
       documentType: z.enum(["paystub", "employment_letter", "bank_statement", "other"]),
@@ -826,13 +832,19 @@ export const successFeesRouter = router({
       }
 
       // Upload document
-      const fileBuffer = Buffer.from(input.documentBase64, "base64");
+      const fileBuffer = ctx.documentUploadBytes ?? Buffer.from(input.documentBase64 ?? "", "base64");
+      if (fileBuffer.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Verification document bytes are required." });
       const validation = validateUploadedFile({
         data: fileBuffer,
         fileName: input.documentFileName,
         mimeType: input.documentMimeType,
         allowedMimeTypes: VERIFICATION_MIME_TYPES,
       });
+      await scanSensitiveUpload({
+        data: fileBuffer,
+        fileName: validation.fileName,
+        mimeType: input.documentMimeType,
+      }, ctx.uploadScanPermit);
       const fileKey = `verifications/${userId}-${nanoid(12)}-${validation.fileName}`;
       await storagePut(fileKey, fileBuffer, input.documentMimeType);
       const documentUrl = `private://${fileKey}`;

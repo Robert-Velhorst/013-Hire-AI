@@ -8,7 +8,7 @@ import {
 } from "./httpRuntimePolicy";
 
 describe("HTTP runtime resource policy", () => {
-  it("keeps the JSON envelope just above the bounded 10 MiB document transport", () => {
+  it("keeps ordinary JSON and form requests on a conservative body budget", () => {
     expect(APPLICATION_JSON_LIMIT).toBe("1mb");
     expect(APPLICATION_FORM_LIMIT).toBe("1mb");
   });
