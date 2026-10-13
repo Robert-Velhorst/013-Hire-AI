@@ -83,6 +83,28 @@ describe("HAI connector configuration", () => {
     expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
   });
 
+  it("accepts only private IP ranges and rejects public IPv6 addresses containing fc or fd", () => {
+    const config = { enabled: true, token, userId: 41, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a" };
+    for (const endpointUrl of [
+      "http://[2001:db8:fc00::1]:3000/api/hai/a2a",
+      "http://[2001:db8:fd00::1]:3000/api/hai/a2a",
+    ]) {
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("local");
+    }
+
+    for (const endpointUrl of [
+      "http://[fc00::1]:3000/api/hai/a2a",
+      "http://[fd12:3456::1]:3000/api/hai/a2a",
+      "http://10.2.3.4:3000/api/hai/a2a",
+      "http://172.31.2.3:3000/api/hai/a2a",
+      "http://192.168.2.3:3000/api/hai/a2a",
+    ]) {
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toBeNull();
+    }
+
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("local");
+  });
+
   it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {
     expect(parseHaiConnectorUserId("41")).toBe(41);
     expect(parseHaiConnectorUserId("41junk")).toBeNull();
