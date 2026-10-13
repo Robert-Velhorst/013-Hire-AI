@@ -1,5 +1,45 @@
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
+export function requireOAuthServerUrl(
+  value: string,
+  allowedOrigins: string[],
+  production: boolean
+) {
+  const url = requireTrustedServiceBaseUrl(value);
+  const allowed = allowedOrigins.map((origin) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error("OAuth server allowlist contains an invalid origin.");
+    }
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.href.includes("?") ||
+      parsed.href.includes("#")
+    ) {
+      throw new Error("OAuth server allowlist entries must be canonical HTTPS origins.");
+    }
+    return parsed.origin;
+  });
+
+  if (production && url.protocol !== "https:") {
+    throw new Error("OAuth server URL must use HTTPS in production.");
+  }
+  if (production && allowed.length === 0) {
+    throw new Error("OAUTH_SERVER_ALLOWED_ORIGINS must be configured in production.");
+  }
+  if (allowed.length > 0 && !allowed.includes(url.origin)) {
+    throw new Error("OAuth server URL origin is not in OAUTH_SERVER_ALLOWED_ORIGINS.");
+  }
+  return url;
+}
+
 export function requireTrustedServiceBaseUrl(value: string) {
   let url: URL;
   try {

@@ -193,7 +193,7 @@ The complete current example is `.env.example`; validate names and constraints i
 | `DATABASE_URL`, `DATABASE_POOL_*`                                                     | MySQL/TiDB connection and bounded pool settings.                                                              |
 | `PUBLIC_APP_ORIGIN`                                                                   | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                |
 | `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                         | Signed session configuration and application binding.                                                         |
-| `OAUTH_SERVER_URL`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID`                               | Hosted identity and administrator bootstrap.                                                                  |
+| `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` | Hosted identity and administrator bootstrap. Production requires the OAuth API origin to be explicitly allowlisted over HTTPS. |
 | `ERASURE_IDENTITY_HMAC_KEYS`                                                          | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.       |
 | `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                    | Optional server-side AI/provider integration.                                                                 |
 | `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*` | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed. |

@@ -11,6 +11,7 @@ const productionEnv = {
   JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
+  OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
   PUBLIC_APP_ORIGIN: "https://hire.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -23,19 +24,30 @@ const productionEnv = {
   VITE_OAUTH_PORTAL_URL: "",
 };
 
-function runDoctor(portalUrl: string, oauthServerUrl = productionEnv.OAUTH_SERVER_URL) {
+function runDoctor(
+  portalUrl: string,
+  oauthServerUrl = productionEnv.OAUTH_SERVER_URL,
+  oauthServerAllowedOrigins = productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+  nodeEnv = "production"
+) {
   return spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
     cwd: process.cwd(),
     env: {
       ...productionEnv,
+      NODE_ENV: nodeEnv,
       OAUTH_PORTAL_URL: portalUrl,
       OAUTH_SERVER_URL: oauthServerUrl,
+      OAUTH_SERVER_ALLOWED_ORIGINS: oauthServerAllowedOrigins,
     },
     encoding: "utf8",
   });
 }
 
-function runProductionValidation(oauthServerUrl: string) {
+function runProductionValidation(
+  oauthServerUrl: string,
+  oauthServerAllowedOrigins = productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+  nodeEnv = "production"
+) {
   return spawnSync(
     process.execPath,
     [
@@ -47,7 +59,9 @@ function runProductionValidation(oauthServerUrl: string) {
       cwd: process.cwd(),
       env: {
         ...productionEnv,
+        NODE_ENV: nodeEnv,
         OAUTH_SERVER_URL: oauthServerUrl,
+        OAUTH_SERVER_ALLOWED_ORIGINS: oauthServerAllowedOrigins,
         OAUTH_PORTAL_URL: "https://auth.example.test",
       },
       encoding: "utf8",
@@ -83,9 +97,39 @@ describe("OAuth endpoint production policy", () => {
   );
 
   it("accepts an HTTPS OAuth server and local loopback HTTP for standalone use", () => {
-    const result = runDoctor("https://auth.example.test", "http://localhost:3000");
+    const result = runDoctor("https://auth.example.test", "http://localhost:3000", "", "development");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("PASS OAuth server: trusted runtime URL configured");
+  });
+
+  it("rejects a production OAuth server outside its configured allowlist in the doctor", () => {
+    const result = runDoctor(
+      "https://auth.example.test",
+      "https://other.example.test",
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("FAIL OAuth server");
+  });
+
+  it("requires an explicitly allowlisted HTTPS origin for production OAuth", () => {
+    expect(runProductionValidation("https://oauth.example.test").status).toBe(0);
+    expect(runProductionValidation("https://other.example.test").status).not.toBe(0);
+    expect(runProductionValidation("http://localhost:3000").status).not.toBe(0);
+    expect(runProductionValidation("https://oauth.example.test", "").status).not.toBe(0);
+  });
+
+  it("enforces a configured OAuth allowlist during development startup", () => {
+    expect(runProductionValidation(
+      "https://oauth.example.test",
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "development"
+    ).status).toBe(0);
+    expect(runProductionValidation(
+      "https://other.example.test",
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "development"
+    ).status).not.toBe(0);
   });
 
   it.each([

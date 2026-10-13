@@ -9,6 +9,7 @@ const productionEnv = {
   ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
+  OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
   OAUTH_PORTAL_URL: "https://auth.example.test",
   PUBLIC_APP_ORIGIN: "https://hire.example.test",
   OWNER_OPEN_ID: "doctor-owner",

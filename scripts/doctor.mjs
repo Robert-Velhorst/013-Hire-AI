@@ -110,12 +110,27 @@ check(
 );
 
 const oauthServerUrl = String(process.env.OAUTH_SERVER_URL || "").trim();
+const oauthServerAllowedOrigins = String(process.env.OAUTH_SERVER_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(value => value.trim())
+  .filter(Boolean);
 let oauthServerValid = false;
 try {
   const parsed = new URL(oauthServerUrl);
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   const loopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
-  oauthServerValid = (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+  const allowedOrigins = oauthServerAllowedOrigins.map(value => {
+    const origin = new URL(value);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/"
+      || origin.search || origin.hash || origin.href.includes("?") || origin.href.includes("#")) {
+      throw new Error("Invalid OAuth server allowlist origin");
+    }
+    return origin.origin;
+  });
+  oauthServerValid = (isProduction
+    ? parsed.protocol === "https:" && allowedOrigins.length > 0 && allowedOrigins.includes(parsed.origin)
+    : (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
+      && (allowedOrigins.length === 0 || allowedOrigins.includes(parsed.origin)))
     && !parsed.username
     && !parsed.password
     && !parsed.search
@@ -130,7 +145,7 @@ check(
     ? "not configured outside production"
     : oauthServerValid
       ? "trusted runtime URL configured"
-      : "OAUTH_SERVER_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+      : "OAUTH_SERVER_URL must be HTTPS and match a canonical OAUTH_SERVER_ALLOWED_ORIGINS entry in production; loopback HTTP is allowed only outside production"
 );
 
 const publicAppOrigin = String(process.env.PUBLIC_APP_ORIGIN || "");
