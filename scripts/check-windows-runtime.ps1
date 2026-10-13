@@ -32,7 +32,7 @@ foreach ($launcherPath in $launcherPaths) {
 $windowsLauncher = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'start-windows.ps1') -Raw
 $ngrokLauncher = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'start-ngrok.ps1') -Raw
 $migrationPosition = $windowsLauncher.IndexOf("'scripts/database-migrate.mjs'")
-$schemaAuditPosition = $windowsLauncher.IndexOf("'dist/runtime/schema-audit.js'")
+$schemaAuditPosition = $windowsLauncher.IndexOf('& $node.Source $schemaAuditEntrypoint')
 $serverStartPosition = $windowsLauncher.IndexOf('Start-Process -FilePath $node.Source')
 $serverEntrypointConfigured = $windowsLauncher.Contains("'dist/runtime/server.js'")
 if ($migrationPosition -lt 0 -or $schemaAuditPosition -lt 0 -or -not $serverEntrypointConfigured -or $serverStartPosition -lt 0) {

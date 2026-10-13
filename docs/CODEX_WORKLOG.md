@@ -1,5 +1,11 @@
 # Codex Worklog
 
+## 2026-10-13 - Pair legacy Windows runtime and schema-audit artifacts
+
+- Fixed the Windows `-NoBuild` compatibility path so a legacy `dist/index.js` server is only paired with its legacy `dist/database-schema-audit.js`; current `dist/runtime` builds use the matching `dist/runtime/schema-audit.js`. Missing audit bundles now stop startup before database migration.
+- Added native PowerShell-harness coverage for legacy artifact selection and retained current Windows/ngrok readiness coverage.
+- Verification: 24 focused Windows launcher/workflow tests passed; one Windows-only legacy-path case was skipped in the ngrok matrix by design. Full suite and GitHub CI have not been rerun for this incremental fix.
+
 ## 2026-10-13 - Durable connector revocation and migration ordering
 
 - Addressed the open provider-revocation gap: manual provider-side cleanup is now persisted as a token-free, owner-scoped obligation before local grants are deleted. Retryable provider failures retain encrypted grants and store only bounded error codes. The user can retry or explicitly attest that access was removed; admin evidence is a fixed attestation, not free text.

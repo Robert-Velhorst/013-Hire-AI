@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s launcher readiness binding", launcher => {
   let results: Array<{
     scenario: string; announced: boolean; error: string | null; launchId: string;
-    restoredId: string; stopped: number[]; startCalls: number;
+    restoredId: string; stopped: number[]; startCalls: number; nodeCommands: string[];
   }>;
   beforeAll(() => {
     const result = spawnSync("powershell.exe", [
@@ -17,7 +17,7 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     results = JSON.parse(result.stdout.trim());
-    expect(results).toHaveLength(launcher === "windows" ? 7 : 12);
+    expect(results).toHaveLength(launcher === "windows" ? 8 : 12);
   }, 40_000);
   function run(scenario: string) {
     const result = results.find(item => item.scenario === scenario);
@@ -32,6 +32,13 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
     expect(result.launchId).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
     expect(result.launchId).not.toBe("parent-value-must-be-restored");
     expect(result.restoredId).toBe("parent-value-must-be-restored");
+  });
+
+  it.skipIf(launcher !== "windows")("pairs a legacy server bundle with its legacy schema audit in no-build mode", () => {
+    const result = run("legacy-artifacts");
+    expect(result.error).toBeNull();
+    expect(result.announced).toBe(true);
+    expect(result.nodeCommands).toContain("dist/database-schema-audit.js");
   });
 
   const rejected = ["foreign", "case-mismatch", "missing", "string-ready", "exited", "start-failure"];

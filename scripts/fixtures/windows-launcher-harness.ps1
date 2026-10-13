@@ -14,6 +14,7 @@ function Get-Command {
 }
 function Invoke-FixtureNode {
     $global:LASTEXITCODE = 0
+    $global:fixture.nodeCommands += ,($args -join ' ')
     if ($args -contains '--input-type=module') {
         return (@{
             publicAppOrigin = $env:PUBLIC_APP_ORIGIN
@@ -22,10 +23,33 @@ function Invoke-FixtureNode {
     }
 }
 function Invoke-FixtureNpm { $global:LASTEXITCODE = 0 }
+function Test-Path {
+    param(
+        [Parameter(Position = 0)][string]$Path,
+        [string]$LiteralPath,
+        [ValidateSet('Any', 'Container', 'Leaf')][string]$PathType
+    )
+    $candidate = if ($LiteralPath) { $LiteralPath } else { $Path }
+    $normalized = $candidate.Replace('\', '/').ToLowerInvariant()
+    if ($global:fixture.artifactMode -eq 'legacy') {
+        if ($normalized.EndsWith('/dist/runtime/server.js') -or $normalized.EndsWith('/dist/runtime/schema-audit.js')) { return $false }
+        if ($normalized.EndsWith('/dist/index.js') -or $normalized.EndsWith('/dist/database-schema-audit.js')) { return $true }
+    }
+    if ($LiteralPath) {
+        $parameters = @{ LiteralPath = $LiteralPath }
+        if ($PathType) { $parameters.PathType = $PathType }
+        return Microsoft.PowerShell.Management\Test-Path @parameters
+    }
+    $parameters = @{ Path = $Path }
+    if ($PathType) { $parameters.PathType = $PathType }
+    return Microsoft.PowerShell.Management\Test-Path @parameters
+}
 function Start-Process {
     param($FilePath, $ArgumentList, $WorkingDirectory, $RedirectStandardOutput,
         $RedirectStandardError, $WindowStyle, [switch]$PassThru)
-    $expectedCommand = if ($global:fixture.launcher -eq 'windows') { 'dist/runtime/server.js' } else { 'http' }
+    $expectedCommand = if ($global:fixture.launcher -eq 'windows') {
+        if ($global:fixture.artifactMode -eq 'legacy') { 'dist/index.js' } else { 'dist/runtime/server.js' }
+    } else { 'http' }
     if ($ArgumentList[0] -ne $expectedCommand -or $WindowStyle -ne 'Hidden') {
         throw 'Unexpected startup command'
     }
@@ -60,6 +84,7 @@ function Invoke-RestMethod {
         'matching' { return @{ ready = $true; instanceId = $global:fixture.launchId } }
         'local-string-ready' { return @{ ready = $true; instanceId = $global:fixture.launchId } }
         'local-newline-id' { return @{ ready = $true; instanceId = $global:fixture.launchId } }
+        'legacy-artifacts' { return @{ ready = $true; instanceId = $global:fixture.launchId } }
         'foreign' { return @{ ready = $true; instanceId = ('x' * 32) } }
         'case-mismatch' { return @{ ready = $true; instanceId = $global:fixture.launchId.ToUpperInvariant() } }
         'missing' { return @{ ready = $true } }
@@ -80,6 +105,7 @@ function Stop-Process {
 }
 
 $scenarios = @('matching', 'foreign', 'case-mismatch', 'missing', 'string-ready', 'exited', 'start-failure')
+if ($Launcher -eq 'windows') { $scenarios += 'legacy-artifacts' }
 if ($Launcher -eq 'ngrok') { $scenarios += @('local-string-ready', 'local-newline-id', 'origin-mismatch', 'origin-missing', 'callback-mismatch') }
 $results = foreach ($scenario in $scenarios) {
     $global:fixture = @{
@@ -88,6 +114,8 @@ $results = foreach ($scenario in $scenarios) {
         child = [pscustomobject]@{ Id = 424242; HasExited = $false; ExitCode = 0 }
         messages = @(); stopped = @(); launchId = ('local-' + ('a' * 32)); probes = 0; clock = 0
         startCalls = 0
+        artifactMode = if ($scenario -eq 'legacy-artifacts') { 'legacy' } else { 'current' }
+        nodeCommands = @()
     }
     $env:PUBLIC_APP_ORIGIN = if ($scenario -eq 'origin-mismatch') {
         'https://other.example.ngrok.app'
@@ -121,6 +149,7 @@ $results = foreach ($scenario in $scenarios) {
         restoredId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
         stopped = @($global:fixture.stopped)
         startCalls = $global:fixture.startCalls
+        nodeCommands = @($global:fixture.nodeCommands)
     }
 }
 $results | ConvertTo-Json -Compress

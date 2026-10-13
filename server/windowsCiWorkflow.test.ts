@@ -59,7 +59,7 @@ describe("Windows runtime CI contract", () => {
       "utf8"
     );
     const migration = windowsLauncher.indexOf("'scripts/database-migrate.mjs'");
-    const schemaAudit = windowsLauncher.indexOf("'dist/runtime/schema-audit.js'");
+    const schemaAudit = windowsLauncher.indexOf("& $node.Source $schemaAuditEntrypoint");
     const serverStart = windowsLauncher.indexOf(
       "Start-Process -FilePath $node.Source"
     );

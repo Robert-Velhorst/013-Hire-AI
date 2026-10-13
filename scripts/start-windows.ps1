@@ -34,6 +34,18 @@ try {
         }
     }
     if (-not $runtimeEntrypoint) { throw 'Production server entrypoint is missing after build.' }
+    $schemaAuditEntrypoint = if ($runtimeEntrypoint -eq 'dist/runtime/server.js') {
+        if (Test-Path (Join-Path $repoRoot 'dist\runtime\schema-audit.js')) {
+            'dist/runtime/schema-audit.js'
+        } else {
+            $null
+        }
+    } elseif (Test-Path (Join-Path $repoRoot 'dist\database-schema-audit.js')) {
+        'dist/database-schema-audit.js'
+    } else {
+        $null
+    }
+    if (-not $schemaAuditEntrypoint) { throw 'Production schema-audit entrypoint is missing.' }
 
     $env:NODE_ENV = 'production'
     $env:PORT = [string]$Port
@@ -50,7 +62,7 @@ try {
         }
     }
 
-    & $node.Source 'dist/runtime/schema-audit.js'
+    & $node.Source $schemaAuditEntrypoint
     if ($LASTEXITCODE -ne 0) {
         throw 'Database schema audit failed. Apply the required migrations before startup.'
     }
