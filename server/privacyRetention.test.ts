@@ -19,6 +19,7 @@ const expectedUserOwnedTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_revocation_obligations",
   "applications",
   "application_decisions",
   "application_materials",
@@ -133,6 +134,7 @@ describe("privacy retention inventory", () => {
     ]);
     expect(directPrivacyRetentionPolicy.filter((entry) => entry.providerRevocationRequired).map((entry) => entry.table).sort()).toEqual([
       "connector_authorizations",
+      "connector_revocation_obligations",
       "user_connector_accounts",
     ]);
   });

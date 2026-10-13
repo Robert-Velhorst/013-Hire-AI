@@ -8,6 +8,7 @@ import {
   userResumes,
 } from "../drizzle/schema";
 import { disconnectConnectorAccess } from "./connectorDisconnect";
+import { completeConnectorRevocationObligation, type ConnectorRevocationEvidence } from "./connectorRevocationObligations";
 import { getDb } from "./db";
 import { PRIVACY_RETENTION_POLICY_VERSION } from "./privacyRetention";
 import { normalizeOwnedStorageKey, storageDelete } from "./storage";
@@ -294,14 +295,8 @@ export async function executePrivacyErasureCleanup(
 export async function confirmManualPrivacyCleanup(
   runId: number,
   taskId: number,
-  evidence: string
+  evidence: Extract<ConnectorRevocationEvidence, "operator_attested_manual_removal">
 ) {
-  const normalizedEvidence = evidence.trim();
-  if (normalizedEvidence.length < 20 || normalizedEvidence.length > 2000) {
-    throw new Error(
-      "Manual cleanup evidence must be between 20 and 2,000 characters."
-    );
-  }
   const db = await getDb();
   if (!db)
     throw new Error(
@@ -322,44 +317,12 @@ export async function confirmManualPrivacyCleanup(
       .limit(1)
   )[0];
   if (!task) throw new Error("A blocked manual provider task was not found.");
-  await db
-    .update(privacyErasureTasks)
-    .set({
-      status: "completed",
-      completionEvidence: normalizedEvidence,
-      lastErrorCode: null,
-      completedAt: new Date(),
-    })
-    .where(eq(privacyErasureTasks.id, taskId));
-  const remaining = await db
-    .select({ id: privacyErasureTasks.id })
-    .from(privacyErasureTasks)
-    .where(
-      and(
-        eq(privacyErasureTasks.runId, runId),
-        inArray(privacyErasureTasks.kind, [
-          "provider_revoke",
-          "private_object_delete",
-        ]),
-        inArray(privacyErasureTasks.status, [
-          "pending",
-          "blocked",
-          "in_progress",
-          "failed",
-        ])
-      )
-    )
-    .limit(1);
-  if (remaining.length === 0) {
-    await db
-      .update(privacyErasureRuns)
-      .set({ status: "ready_for_database" })
-      .where(
-        and(
-          eq(privacyErasureRuns.id, runId),
-          eq(privacyErasureRuns.status, "manual_action_required")
-        )
-      );
-  }
+  if (!task.provider) throw new Error("provider_revocation_task_missing_provider");
+  const result = await completeConnectorRevocationObligation(
+    task.userId,
+    task.provider,
+    evidence
+  );
+  if (!result.completed) throw new Error("provider_revocation_obligation_not_open");
   return { success: true, userId: task.userId };
 }

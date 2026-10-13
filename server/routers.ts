@@ -335,6 +335,57 @@ export const appRouter = router({
       }),
   }),
   privacy: router({
+    getConnectorRevocationObligations: protectedProcedure.query(async ({ ctx }) => {
+      const { listOpenConnectorRevocationObligations } = await import("./connectorRevocationObligations");
+      return listOpenConnectorRevocationObligations(ctx.user.id);
+    }),
+    retryConnectorRevocation: protectedProcedure
+      .input(z.object({ provider: z.enum(["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]) }))
+      .mutation(async ({ ctx, input }) => {
+        const { getOpenConnectorRevocationObligation } = await import("./connectorRevocationObligations");
+        const obligation = await getOpenConnectorRevocationObligation(ctx.user.id, input.provider);
+        if (!obligation) throw new TRPCError({ code: "NOT_FOUND", message: "No open provider cleanup action exists." });
+        const { disconnectConnectorAccess } = await import("./connectorDisconnect");
+        const result = await disconnectConnectorAccess(ctx.user.id, input.provider);
+        const { createAuditEvent } = await import("./db");
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "connector_revocation_retried",
+          actor: "user",
+          source: "privacy.retryConnectorRevocation",
+          afterState: JSON.stringify({ provider: input.provider, status: result.providerRevocation.status }),
+          riskLevel: result.providerRevocation.status === "failed" ? "high" : "medium",
+        });
+        return { status: result.providerRevocation.status };
+      }),
+    confirmConnectorRevocation: protectedProcedure
+      .input(z.object({ obligationId: z.number().int().positive(), confirmed: z.literal(true) }))
+      .mutation(async ({ ctx, input }) => {
+        const { listOpenConnectorRevocationObligations, completeConnectorRevocationObligation } = await import("./connectorRevocationObligations");
+        const obligation = (await listOpenConnectorRevocationObligations(ctx.user.id))
+          .find(item => item.id === input.obligationId);
+        if (!obligation) throw new TRPCError({ code: "NOT_FOUND", message: "Provider cleanup action not found." });
+        const completion = await completeConnectorRevocationObligation(
+          ctx.user.id,
+          obligation.provider,
+          "user_attested_manual_removal"
+        );
+        if (!completion.completed) throw new TRPCError({ code: "CONFLICT", message: "Provider cleanup status changed. Refresh and try again." });
+        const { createAuditEvent } = await import("./db");
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "connector_revocation_user_confirmed",
+          actor: "user",
+          source: "privacy.confirmConnectorRevocation",
+          afterState: JSON.stringify({ provider: obligation.provider, evidence: "user_attested_manual_removal" }),
+          riskLevel: "high",
+        });
+        return { success: true };
+      }),
     getDeletionRequest: protectedProcedure.query(async ({ ctx }) => {
       const { getLatestPrivacyDeletionReview } = await import("./db");
       return toPrivacyDeletionRequestView(await getLatestPrivacyDeletionReview(ctx.user.id));

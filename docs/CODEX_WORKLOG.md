@@ -1,5 +1,12 @@
 # Codex Worklog
 
+## 2026-10-13 - Durable connector revocation and migration ordering
+
+- Addressed the open provider-revocation gap: manual provider-side cleanup is now persisted as a token-free, owner-scoped obligation before local grants are deleted. Retryable provider failures retain encrypted grants and store only bounded error codes. The user can retry or explicitly attest that access was removed; admin evidence is a fixed attestation, not free text.
+- Wired obligations into data export, retention policy, privacy erasure planning, and finalization. Unresolved external cleanup blocks erasure even if a task is otherwise marked complete. Added bilingual settings controls and admin confirmation.
+- Fixed the custom migration runner to select unapplied migrations by exact SQL hash in journal order and normalize ledger timestamps monotonically. This addresses existing non-monotonic timestamps that the stock max-timestamp cursor could silently skip. Added plan and migration-journal regression tests.
+- Verification: all 83 migrations applied to a fresh isolated MySQL 8.4 database; schema audit had no missing or mismatched objects; all 10 approved database suites / 34 tests passed with no skipped suite. Full regular tests passed 299 files / 1,712 tests (9 opt-in files / 31 tests skipped); TypeScript passed. Vite client build and shell/bundle checks passed, and server/database-audit bundles built in a temporary directory. The normal build could not overwrite an existing `dist/index.js` on Windows (access denied), so `pnpm build` is not claimed as fully passing. No live provider cleanup or production deployment was exercised.
+
 ## 2026-10-13 - Database-enforced active approval and review identities
 
 - Added generated nullable identity columns and unique indexes for pending application approvals and open/in-progress admin reviews. Resolved records keep their audit history and no longer occupy the active identity, so a later approval/review cycle can be created.

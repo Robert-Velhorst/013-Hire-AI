@@ -128,6 +128,7 @@ if (!allowed) {
           NODE_ENV: "test",
           HIRE_AI_DATABASE_ACCEPTANCE: "true",
           PRIVACY_ERASURE_INTEGRATION: "true",
+          CONNECTOR_REVOCATION_INTEGRATION: "true",
         },
       }
     );

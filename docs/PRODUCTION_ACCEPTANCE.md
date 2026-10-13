@@ -6,11 +6,10 @@ Updated: 2026-10-13. Target confirmed by Robert: online, multi-user Hire.AI host
 
 ## Current Verification (2026-10-13)
 
-- `pnpm check` passed.
-- `pnpm test` passed 298 files / 1,708 tests; 8 opt-in files / 29 tests were skipped by the regular test command.
-- `pnpm build` passed. The production shell is 653 bytes, 87 JavaScript chunks remain within the 350 KiB per-chunk budget, and startup JavaScript totals 582,227 bytes within the 614,400-byte budget.
-- Isolated MySQL 8.4 acceptance applied the complete migration history through `0081_mighty_oracle.sql`; all 9 approved suites and 32 tests passed. The connector-lifetime and active-review-identity suites execute the migrations' actual legacy backfill/deduplication SQL against synthetic rows. Concurrent requests across all approval types and admin-review categories leave one active row per identity, preserve resolved history, and permit a later cycle.
-- The production build, Drizzle generation, migrated-MySQL schema audit, and rollback-only 5,000-row query-plan audit passed. Schema audit found no missing or mismatched tables, columns, indexes, or foreign keys; the one additional physical table is the Drizzle migration ledger.
+- `tsc --noEmit` passed. The full regular suite passed 299 files / 1,712 tests; 9 opt-in files / 31 tests were skipped by the regular test command.
+- The Vite production client build and production-shell/bundle-budget check passed: 87 JavaScript chunks and 584,561 startup JavaScript bytes, below the 614,400-byte limit. The standard build could not overwrite the existing `dist/index.js` on Windows (access denied); the server and both database-audit bundles then built successfully into a fresh temporary directory. The full in-repository `pnpm build` therefore remains unverified.
+- Fresh isolated MySQL 8.4 acceptance applied all 83 journal migrations, including `0082_material_stardust.sql`; all 10 approved suites and 34 tests passed with no suite skipped. This includes provider-revocation obligation persistence, retry/attestation, owner isolation, and erasure-finalization blocking. The schema audit reported no missing or mismatched tables, columns, indexes, or foreign keys.
+- The migration runner now applies missing entries by exact SQL hash in journal order and assigns monotonic ledger timestamps, avoiding Drizzle's max-timestamp cursor skipping older journal entries. Regression tests cover the out-of-order plan. The clean-database migration and schema audit passed; the separate rollback-only 5,000-row query-plan audit was not rerun in this increment.
 - Connector OAuth and delivery regression tests passed 85 tests across 11 files. Token lifetimes are persisted as expiring, non-expiring, or unknown; ambiguous legacy grants remain unknown except GitHub grants with the recorded current `read:user` scope and no expiry/refresh token. 403 responses only require reauthorization when the bearer challenge explicitly says `invalid_token`; ordinary insufficient-scope responses do not revoke the local account state.
 - Gmail inbox discovery no longer sends the unsupported `q` search parameter with `gmail.metadata`; it uses the `INBOX` label and the provider's `internalDate` field within its bounded 50-message scan. It does not use message snippets/body data under metadata-only consent, so body-dependent response classifications remain limited. Seventeen focused discovery/data-minimization tests pass. Google OAuth and live account/API acceptance are not claimed.
 - These are local and isolated-database checks, not live OAuth-provider acceptance. Public deployment, HTTPS, real connector credentials and provider responses, legal/privacy approval, billing, and employer submission remain unverified.
@@ -93,7 +92,7 @@ pnpm db:migrate
 pnpm run test:database
 ```
 
-The command enables the privacy integration test and runs both suites serially. It does not create a database or approve a production migration. Tests insert synthetic fixtures and clean up their own records. The source catalog is intentionally retained in the acceptance database. CI provisions an isolated service per job.
+The command enables the privacy-erasure and connector-revocation integration suites and runs all 10 approved suites serially. It does not create a database or approve a production migration. Tests insert synthetic fixtures and clean up their own records. The source catalog is intentionally retained in the acceptance database. CI provisions an isolated service per job.
 
 ## Public Release Gates
 

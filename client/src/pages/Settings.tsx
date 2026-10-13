@@ -44,6 +44,27 @@ export default function Settings() {
   const { data: deletionRequest } = trpc.privacy.getDeletionRequest.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: revocationObligations } = trpc.privacy.getConnectorRevocationObligations.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const retryConnectorRevocation = trpc.privacy.retryConnectorRevocation.useMutation({
+    onSuccess: async (result) => {
+      await utils.privacy.getConnectorRevocationObligations.invalidate();
+      if (result.status === "revoked" || result.status === "not_needed") {
+        toast.success(t("providerCleanupResolved"));
+      } else {
+        toast.error(t("providerCleanupStillOpen"));
+      }
+    },
+    onError: (error) => toast.error(error.message || t("providerCleanupRetryFailed")),
+  });
+  const confirmConnectorRevocation = trpc.privacy.confirmConnectorRevocation.useMutation({
+    onSuccess: async () => {
+      await utils.privacy.getConnectorRevocationObligations.invalidate();
+      toast.success(t("providerCleanupConfirmed"));
+    },
+    onError: (error) => toast.error(error.message || t("providerCleanupConfirmFailed")),
+  });
   const requestDeletion = trpc.privacy.requestDeletion.useMutation({
     onSuccess: () => {
       toast.success(t("deletionReviewRequested"));
@@ -304,6 +325,54 @@ export default function Settings() {
                   {t("export")}
                 </Button>
               </div>
+              {revocationObligations?.map((obligation) => (
+                <div key={obligation.id} className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4" data-testid="connector-revocation-obligation">
+                  <div>
+                    <p className="font-medium text-amber-100">{t("providerCleanupTitle", { provider: obligation.provider })}</p>
+                    <p className="mt-1 text-sm text-slate-300">
+                      {obligation.status === "manual_required" ? t("providerCleanupManual") : t("providerCleanupRetryPending")}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-400">{obligation.instruction}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {obligation.status === "retry_required" && (
+                      <Button
+                        variant="outline"
+                        className="border-amber-500/40 text-amber-100"
+                        disabled={retryConnectorRevocation.isPending}
+                        onClick={() => retryConnectorRevocation.mutate({ provider: obligation.provider })}
+                      >
+                        {retryConnectorRevocation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {t("retryProviderCleanup")}
+                      </Button>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="border-slate-700 text-slate-300" disabled={confirmConnectorRevocation.isPending}>
+                          {t("confirmProviderAccessRemoved")}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="border-slate-800 bg-slate-900 text-white">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t("confirmProviderAccessRemovedTitle")}</AlertDialogTitle>
+                          <AlertDialogDescription className="text-slate-400">
+                            {t("confirmProviderAccessRemovedDescription", { provider: obligation.provider })}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300">{t("cancel")}</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-amber-700 text-white hover:bg-amber-800"
+                            onClick={() => confirmConnectorRevocation.mutate({ obligationId: obligation.id, confirmed: true })}
+                          >
+                            {t("confirmProviderAccessRemoved")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              ))}
               <div className="flex flex-col gap-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="font-medium text-white">{t("accountDeletionReview")}</p>

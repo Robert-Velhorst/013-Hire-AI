@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 import { createApplication, getAuditEventsForUser, getEmployerResponses, listPendingInboxResponseCandidates, listUnreadInterviewNotifications, listUserConnectorAccounts, upsertInboxResponseCandidate, upsertUserConnectorAccount, upsertUserProfile } from "./db";
 import { appRouter } from "./routers";
+
+vi.mock("./connectorRevocationObligations", async importOriginal => {
+  const actual = await importOriginal<typeof import("./connectorRevocationObligations")>();
+  return {
+    ...actual,
+    getOpenConnectorRevocationObligation: vi.fn().mockResolvedValue(null),
+  };
+});
 
 function createContext(userId: number): TrpcContext {
   return {

@@ -15,6 +15,7 @@ import {
   autonomousRunStates,
   cloudResumeCandidates,
   connectorAuthorizations,
+  connectorRevocationObligations,
   educationEntries,
   employerResponses,
   followUps,
@@ -55,6 +56,7 @@ export const privacyFinalizerPolicyTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_revocation_obligations",
   "applications",
   "application_decisions",
   "application_materials",
@@ -210,6 +212,18 @@ export async function finalizePrivacyErasure(
     );
   }
 
+  const unresolvedProviderObligations = await db
+    .select({ id: connectorRevocationObligations.id })
+    .from(connectorRevocationObligations)
+    .where(and(
+      eq(connectorRevocationObligations.userId, run.userId),
+      inArray(connectorRevocationObligations.status, ["manual_required", "retry_required"])
+    ))
+    .limit(1);
+  if (unresolvedProviderObligations.length > 0) {
+    throw new Error("Provider revocation obligations must be completed before account erasure.");
+  }
+
   const targetIdentity = (
     await db
       .select({ openId: users.openId })
@@ -259,6 +273,18 @@ export async function finalizePrivacyErasure(
       }
       const identityDigest = getCurrentOAuthIdentityDigest(userIdentity.openId);
       await tx.insert(erasedOAuthIdentities).values(identityDigest);
+      const unresolvedProviderObligations = await tx
+        .select({ id: connectorRevocationObligations.id })
+        .from(connectorRevocationObligations)
+        .where(and(
+          eq(connectorRevocationObligations.userId, run.userId),
+          inArray(connectorRevocationObligations.status, ["manual_required", "retry_required"])
+        ))
+        .limit(1)
+        .for("update");
+      if (unresolvedProviderObligations.length > 0) {
+        throw new Error("Provider revocation obligations must be completed before account erasure.");
+      }
       const applicationRows = await tx
         .select({ id: applications.id })
         .from(applications)
@@ -363,6 +389,11 @@ export async function finalizePrivacyErasure(
           "connector_authorizations",
           connectorAuthorizations,
           connectorAuthorizations.userId,
+        ],
+        [
+          "connector_revocation_obligations",
+          connectorRevocationObligations,
+          connectorRevocationObligations.userId,
         ],
         [
           "user_connector_accounts",

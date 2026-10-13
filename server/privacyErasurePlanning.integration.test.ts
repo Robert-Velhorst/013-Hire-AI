@@ -7,6 +7,7 @@ import {
   applicationMaterials,
   applications,
   connectorAuthorizations,
+  connectorRevocationObligations,
   cloudResumeCandidates,
   erasedOAuthIdentities,
   followUps,
@@ -280,10 +281,17 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     );
     expect(manualTask).toBeDefined();
 
+    await db.insert(connectorRevocationObligations).values({
+      userId,
+      provider: "dropbox",
+      status: "manual_required",
+      instructionVersion: "2026-10-13.v1",
+    });
+
     await confirmManualPrivacyCleanup(
       first.run.id,
       manualTask!.id,
-      "Provider account permissions were removed and independently verified."
+      "operator_attested_manual_removal"
     );
     const readyRun = (
       await db

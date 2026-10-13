@@ -259,6 +259,28 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   index("connector_authorizations_refresh_lease_idx").on(table.refreshLeaseExpiresAt),
 ]);
 
+/** Provider-side access cleanup survives deletion of the encrypted local grant. */
+export const connectorRevocationObligations = mysqlTable("connector_revocation_obligations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]).notNull(),
+  status: mysqlEnum("status", ["manual_required", "retry_required", "completed"]).default("retry_required").notNull(),
+  activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
+    WHEN status IN ('manual_required', 'retry_required')
+    THEN CONCAT(user_id, ':', provider)
+    ELSE NULL
+  END`),
+  instructionVersion: varchar("instruction_version", { length: 32 }).notNull(),
+  lastErrorCode: mysqlEnum("last_error_code", ["provider_rejected", "network_failure", "credential_unavailable"]),
+  completionEvidence: mysqlEnum("completion_evidence", ["provider_api_confirmed", "user_attested_manual_removal", "operator_attested_manual_removal"]),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("connector_revocation_obligations_active_identity_unique").on(table.activeIdentity),
+  index("connector_revocation_obligations_user_status_idx").on(table.userId, table.status, table.updatedAt),
+]);
+
 /** Short-lived, user-owned cloud resume selections; provider IDs never come from import requests. */
 export const cloudResumeCandidates = mysqlTable("cloud_resume_candidates", {
   candidateId: varchar("candidate_id", { length: 64 }).primaryKey(),

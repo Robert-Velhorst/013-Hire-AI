@@ -8,12 +8,21 @@ export type ConnectorRevocationResult = {
   detail: string;
 };
 
+export const CONNECTOR_REVOCATION_INSTRUCTION_VERSION = "2026-10-13.v1";
+
 const MANUAL_REVOCATION: Partial<Record<OAuthConnectorProvider, string>> = {
   outlook:
     "Remove Hire.AI from Microsoft account permissions. Microsoft does not provide an app-scoped token revocation endpoint for this delegated connection.",
   linkedin:
     "Remove Hire.AI from LinkedIn permitted services. LinkedIn does not document an app-scoped token revocation endpoint for this connection.",
 };
+
+export function getConnectorRevocationInstruction(
+  provider: OAuthConnectorProvider
+) {
+  return MANUAL_REVOCATION[provider] ??
+    "Hire.AI will retry provider-side revocation while the encrypted grant remains available. If it cannot be revoked automatically, remove Hire.AI from this provider's connected-app permissions and confirm only after doing so.";
+}
 
 function basicAuthorization(clientId: string, clientSecret: string) {
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`, "utf8").toString("base64")}`;

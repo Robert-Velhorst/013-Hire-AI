@@ -575,6 +575,13 @@
       "when": 1791869478934,
       "tag": "0081_mighty_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1791873014302,
+      "tag": "0082_material_stardust",
+      "breakpoints": true
     }
   ]
 }

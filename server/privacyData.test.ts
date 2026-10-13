@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getJobAlerts: vi.fn(),
   getSavedJobs: vi.fn(),
   getResumeVersions: vi.fn(),
+  listConnectorRevocationHistory: vi.fn(),
 }));
 
 vi.mock("./db", () => ({
@@ -28,6 +29,7 @@ vi.mock("./db", () => ({
 }));
 vi.mock("./applicationFeatures", () => ({ getJobAlerts: mocks.getJobAlerts, getSavedJobs: mocks.getSavedJobs }));
 vi.mock("./resumeStorage", () => ({ getResumeVersions: mocks.getResumeVersions }));
+vi.mock("./connectorRevocationObligations", () => ({ listConnectorRevocationHistory: mocks.listConnectorRevocationHistory }));
 
 import { buildPrivacyDataExport } from "./privacyData";
 
@@ -55,9 +57,16 @@ describe("privacy data export", () => {
       isActive: true,
       uploadedAt: new Date("2026-01-01"),
     }]);
+    mocks.listConnectorRevocationHistory.mockResolvedValue([{
+      provider: "linkedin",
+      status: "completed",
+      completionEvidence: "user_attested_manual_removal",
+    }]);
 
     const result = await buildPrivacyDataExport(17);
 
+    expect(result.schemaVersion).toBe(2);
+    expect(result.connectorRevocationHistory).toEqual([expect.objectContaining({ provider: "linkedin" })]);
     expect(result.connectorAccounts[0]).not.toHaveProperty("encryptedAccessToken");
     expect(result.resumes[0]).not.toHaveProperty("fileUrl");
     expect(result.excluded).toHaveLength(2);

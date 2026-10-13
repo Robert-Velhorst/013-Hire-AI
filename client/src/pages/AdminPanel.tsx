@@ -201,7 +201,7 @@ export default function AdminPanel() {
   const [reviewResolution, setReviewResolution] = useState("");
   const [erasureCleanupConfirmation, setErasureCleanupConfirmation] = useState("");
   const [databaseErasureConfirmation, setDatabaseErasureConfirmation] = useState("");
-  const [manualCleanupEvidence, setManualCleanupEvidence] = useState<Record<number, string>>({});
+  const [manualCleanupAttestation, setManualCleanupAttestation] = useState<Record<number, boolean>>({});
   const [evidenceDialog, setEvidenceDialog] = useState<{ open: boolean; itemId: number | null }>({ open: false, itemId: null });
   const [scrapingIntervalMinutes, setScrapingIntervalMinutes] = useState("60");
   const [scrapingMaxJobsPerRun, setScrapingMaxJobsPerRun] = useState("100");
@@ -432,7 +432,7 @@ export default function AdminPanel() {
   const confirmManualPrivacyCleanup = trpc.admin.confirmManualPrivacyCleanup.useMutation({
     onSuccess: async (_result, variables) => {
       toast.success(fc("manualCleanupRecorded"));
-      setManualCleanupEvidence((current) => ({ ...current, [variables.taskId]: "" }));
+      setManualCleanupAttestation((current) => ({ ...current, [variables.taskId]: false }));
       await refetchPrivacyErasurePlan();
     },
     onError: (err) => toast.error(err.message),
@@ -1973,19 +1973,21 @@ export default function AdminPanel() {
                           {privacyErasurePlan.tasks.filter((task) => task.kind === "provider_revoke" && task.status === "blocked").map((task) => (
                             <div key={`manual-${task.id}`} className="space-y-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
                               <Label className="text-amber-100">{ff("manualCleanupEvidence", { provider: task.provider ?? "provider" })}</Label>
-                              <Textarea
-                                value={manualCleanupEvidence[task.id] ?? ""}
-                                onChange={(event) => setManualCleanupEvidence((current) => ({ ...current, [task.id]: event.target.value }))}
-                                className="border-slate-700 bg-slate-950 text-white"
-                                rows={3}
-                              />
+                              <div className="flex items-start gap-2">
+                                <Checkbox
+                                  checked={manualCleanupAttestation[task.id] ?? false}
+                                  onCheckedChange={(checked) => setManualCleanupAttestation((current) => ({ ...current, [task.id]: checked === true }))}
+                                  aria-label={fc("manualCleanupAttestation")}
+                                />
+                                <span className="text-xs text-slate-300">{fc("manualCleanupAttestation")}</span>
+                              </div>
                               <Button
                                 variant="outline"
-                                disabled={confirmManualPrivacyCleanup.isPending || (manualCleanupEvidence[task.id]?.trim().length ?? 0) < 20}
+                                disabled={confirmManualPrivacyCleanup.isPending || !manualCleanupAttestation[task.id]}
                                 onClick={() => confirmManualPrivacyCleanup.mutate({
                                   runId: privacyErasurePlan.run.id,
                                   taskId: task.id,
-                                  evidence: manualCleanupEvidence[task.id] ?? "",
+                                  evidence: "operator_attested_manual_removal",
                                 })}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />

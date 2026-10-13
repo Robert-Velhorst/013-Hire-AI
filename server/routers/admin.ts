@@ -336,7 +336,7 @@ export const adminRouter = router({
     .input(z.object({
       runId: z.number().int().positive(),
       taskId: z.number().int().positive(),
-      evidence: z.string().trim().min(20).max(2000),
+      evidence: z.literal("operator_attested_manual_removal"),
     }))
     .mutation(async ({ ctx, input }) => {
       const { confirmManualPrivacyCleanup } = await import("../privacyErasureExecution");
