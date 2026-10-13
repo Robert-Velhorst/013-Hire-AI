@@ -7,6 +7,12 @@ export const STRIPE_WEBHOOK_FAILURE_MESSAGE = "Webhook processing failed.";
 
 const memoryEvents = new Map<string, { eventType: string; status: WebhookStatus; errorMessage: string | null }>();
 
+function isDuplicateEventError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; errno?: unknown };
+  return candidate.code === "ER_DUP_ENTRY" || candidate.errno === 1062;
+}
+
 export async function claimStripeWebhookEvent(eventId: string, eventType: string) {
   const db = await getDb();
   if (!db) {
@@ -36,9 +42,12 @@ export async function claimStripeWebhookEvent(eventId: string, eventType: string
   try {
     await db.insert(stripeWebhookEvents).values({ stripeEventId: eventId, eventType, status: "processing" });
     return { claimed: true, duplicate: false };
-  } catch {
+  } catch (error) {
     // A concurrent delivery may have inserted the unique event id after the read.
-    return { claimed: false, duplicate: true };
+    if (isDuplicateEventError(error)) {
+      return { claimed: false, duplicate: true };
+    }
+    throw error;
   }
 }
 
