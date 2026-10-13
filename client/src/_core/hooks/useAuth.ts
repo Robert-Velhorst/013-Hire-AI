@@ -1,4 +1,5 @@
 import { getLoginUrl } from "@/const";
+import { authMeQueryPolicy } from "@/lib/authQueryPolicy";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
@@ -13,10 +14,7 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
   const utils = trpc.useUtils();
 
-  const meQuery = trpc.auth.me.useQuery(undefined, {
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
+  const meQuery = trpc.auth.me.useQuery(undefined, authMeQueryPolicy);
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -67,7 +65,7 @@ export function useAuth(options?: UseAuthOptions) {
     if (typeof window === "undefined") return;
     if (window.location.pathname === redirectPath) return;
 
-    window.location.href = redirectPath
+    window.location.href = redirectPath;
   }, [
     redirectOnUnauthenticated,
     redirectPath,
