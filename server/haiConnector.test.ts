@@ -108,6 +108,21 @@ describe("HAI connector configuration", () => {
 });
 
 describe("HAI A2A route", () => {
+  it("rate-limits HAI authorization attempts before evaluating the bearer", async () => {
+    const { service, provider } = configuredService();
+    const authorize = vi.spyOn(service, "authorize").mockResolvedValue(false);
+    const base = await start(service);
+
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      expect((await fetch(`${base}/api/hai/status`)).status).toBe(404);
+    }
+    const blocked = await fetch(`${base}/api/hai/status`);
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(authorize).toHaveBeenCalledTimes(120);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
   it("hides disabled and unauthorized connector endpoints", async () => {
     const disabledBase = await start(new HaiConnectorService({ enabled: false, token: "", userId: null, endpointUrl: "" }));
     expect((await fetch(`${disabledBase}/.well-known/agent-card.json`)).status).toBe(404);

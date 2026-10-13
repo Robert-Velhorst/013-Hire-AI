@@ -12,6 +12,7 @@ import {
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
+import { createSensitiveRouteRateLimiter } from "./_core/apiRateLimit";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -91,7 +92,10 @@ function completeRedirect(provider: string, status: "connected" | "denied" | "fa
 }
 
 export function registerConnectorOAuthRoutes(app: Express) {
-  app.get("/api/connectors/oauth/callback", async (req: Request, res: Response) => {
+  app.get(
+    "/api/connectors/oauth/callback",
+    createSensitiveRouteRateLimiter("connectorOAuthCallback"),
+    async (req: Request, res: Response) => {
     const state = getQueryParam(req, "state");
     const code = getQueryParam(req, "code");
     const providerError = getQueryParam(req, "error");
@@ -211,5 +215,6 @@ export function registerConnectorOAuthRoutes(app: Express) {
       });
       res.redirect(302, completeRedirect(provider, "failed"));
     }
-  });
+    }
+  );
 }

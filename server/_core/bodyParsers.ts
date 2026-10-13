@@ -6,6 +6,7 @@ import {
   RESUME_TEXT_JSON_LIMIT,
 } from "./httpRuntimePolicy";
 import { sdk } from "./sdk";
+import { createSensitiveRouteRateLimiter } from "./apiRateLimit";
 
 const MAX_CONCURRENT_DOCUMENT_REQUESTS = 2;
 const MAX_DOCUMENT_REQUESTS_PER_USER = 1;
@@ -99,6 +100,11 @@ export function registerApplicationBodyParsers(
   const authenticate =
     limits.authenticateDocumentUpload ??
     (async (req: Request) => sdk.authenticateRequest(req));
+
+  app.post(
+    "/api/trpc/resume.parse",
+    createSensitiveRouteRateLimiter("resumeParse")
+  );
 
   app.use((req, res, next) => {
     const configuredDocumentLimit = DOCUMENT_ROUTES.get(req.path);

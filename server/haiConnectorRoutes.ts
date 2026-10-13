@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { createSensitiveRouteRateLimiter } from "./_core/apiRateLimit";
 import {
   HAI_CONNECTOR_AGENT_VERSION,
   HAI_CONNECTOR_PROTOCOL_VERSION,
@@ -54,6 +55,7 @@ export function registerHaiConnectorRoutes(
   app: Express,
   service = new HaiConnectorService()
 ) {
+  const connectorRateLimit = createSensitiveRouteRateLimiter("haiConnector");
   app.get("/.well-known/agent-card.json", (_req, res) => {
     const card = service.agentCard();
     if (!card) {
@@ -79,11 +81,11 @@ export function registerHaiConnectorRoutes(
     next();
   };
 
-  app.get("/api/hai/status", requireHaiAuth, (_req, res) => {
+  app.get("/api/hai/status", connectorRateLimit, requireHaiAuth, (_req, res) => {
     res.json(service.status());
   });
 
-  app.post("/api/hai/a2a", requireHaiAuth, boundedJsonParser, async (req, res) => {
+  app.post("/api/hai/a2a", connectorRateLimit, requireHaiAuth, boundedJsonParser, async (req, res) => {
     if (req.header("A2A-Version")?.trim() !== HAI_CONNECTOR_PROTOCOL_VERSION) {
       rpcError(res, req.body?.id ?? null, -32009, "A2A-Version 1.0 is required by this connector.");
       return;

@@ -7,6 +7,17 @@ export const API_RATE_LIMIT_POLICY = Object.freeze({
   maxClients: 10_000,
 });
 
+export const SENSITIVE_ROUTE_RATE_LIMIT_POLICIES = Object.freeze({
+  oauthLogin: { windowMs: 15 * 60_000, maxRequests: 12, maxClients: 10_000 },
+  oauthCallback: { windowMs: 15 * 60_000, maxRequests: 30, maxClients: 10_000 },
+  connectorOAuthCallback: { windowMs: 15 * 60_000, maxRequests: 30, maxClients: 10_000 },
+  documentUpload: { windowMs: 15 * 60_000, maxRequests: 12, maxClients: 10_000 },
+  resumeParse: { windowMs: 15 * 60_000, maxRequests: 10, maxClients: 10_000 },
+  haiConnector: { windowMs: 60_000, maxRequests: 120, maxClients: 10_000 },
+});
+
+export type SensitiveRouteRateLimitName = keyof typeof SENSITIVE_ROUTE_RATE_LIMIT_POLICIES;
+
 type ClientWindow = {
   count: number;
   resetAt: number;
@@ -44,7 +55,7 @@ export function createRateLimitMiddleware(
   const now = options.now ?? (() => performance.now());
   const clientKey =
     options.clientKey ??
-    ((req: Request) => req.ip || req.socket.remoteAddress || "unknown");
+    ((req: Request) => req.ip || req.socket?.remoteAddress || "unknown");
   const clients = new Map<string, ClientWindow>();
   let nextSweepAt = now() + options.windowMs;
 
@@ -118,6 +129,16 @@ export function createRateLimitMiddleware(
 
   middleware.activeClientCount = () => clients.size;
   return middleware;
+}
+
+export function createSensitiveRouteRateLimiter(
+  name: SensitiveRouteRateLimitName,
+  now?: () => number
+) {
+  return createRateLimitMiddleware({
+    ...SENSITIVE_ROUTE_RATE_LIMIT_POLICIES[name],
+    ...(now ? { now } : {}),
+  });
 }
 
 export function registerApiRateLimit(app: Express) {

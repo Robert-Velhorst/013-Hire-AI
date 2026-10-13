@@ -8,8 +8,11 @@ import { logOperationalFailure } from "../operationalFailureLog";
 import { ENV } from "./env";
 import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { createSensitiveRouteRateLimiter } from "./apiRateLimit";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
+const oauthLoginRateLimit = createSensitiveRouteRateLimiter("oauthLogin");
+const oauthCallbackRateLimit = createSensitiveRouteRateLimiter("oauthCallback");
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -17,7 +20,7 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
-  app.get("/api/oauth/login", (req: Request, res: Response) => {
+  app.get("/api/oauth/login", oauthLoginRateLimit, (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
         if (!ENV.isProduction) {
@@ -52,7 +55,7 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/oauth/callback", async (req: Request, res: Response) => {
+  app.get("/api/oauth/callback", oauthCallbackRateLimit, async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 

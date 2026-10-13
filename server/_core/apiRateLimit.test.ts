@@ -1,7 +1,10 @@
 import express from "express";
 import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
-import { createRateLimitMiddleware } from "./apiRateLimit";
+import {
+  createRateLimitMiddleware,
+  SENSITIVE_ROUTE_RATE_LIMIT_POLICIES,
+} from "./apiRateLimit";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
 
 async function withLimitedServer(
@@ -42,6 +45,17 @@ async function withLimitedServer(
 }
 
 describe("bounded API rate limiting", () => {
+  it("defines bounded budgets for sensitive routes", () => {
+    expect(SENSITIVE_ROUTE_RATE_LIMIT_POLICIES).toEqual({
+      oauthLogin: { windowMs: 900_000, maxRequests: 12, maxClients: 10_000 },
+      oauthCallback: { windowMs: 900_000, maxRequests: 30, maxClients: 10_000 },
+      connectorOAuthCallback: { windowMs: 900_000, maxRequests: 30, maxClients: 10_000 },
+      documentUpload: { windowMs: 900_000, maxRequests: 12, maxClients: 10_000 },
+      resumeParse: { windowMs: 900_000, maxRequests: 10, maxClients: 10_000 },
+      haiConnector: { windowMs: 60_000, maxRequests: 120, maxClients: 10_000 },
+    });
+  });
+
   it("returns deterministic limits and retry guidance after the client budget", async () => {
     await withLimitedServer(async baseUrl => {
       const headers = { "x-forwarded-for": "198.51.100.1" };
