@@ -3,6 +3,7 @@ import { requireMalwareScannerUrl, requireOAuthServerUrl, requireTrustedServiceB
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { normalizePublicAppOrigin } from "./publicAppOrigin";
+import { parseTrustedProxyIps } from "./proxyPolicy";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -107,6 +108,7 @@ export const ENV = {
   malwareScanAllowedOrigins: readOptionalCsv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS") ?? [],
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   publicAppOrigin: readEnv("PUBLIC_APP_ORIGIN"),
+  trustedProxyIps: parseTrustedProxyIps(readEnv("TRUSTED_PROXY_IPS"), isProduction),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),
@@ -170,6 +172,7 @@ export function validateProductionEnv() {
     "OAUTH_SERVER_URL",
     "OAUTH_SERVER_ALLOWED_ORIGINS",
     "PUBLIC_APP_ORIGIN",
+    "TRUSTED_PROXY_IPS",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
     "STRIPE_SECRET_KEY",
@@ -189,6 +192,9 @@ export function validateProductionEnv() {
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
   if (!normalizePublicAppOrigin(ENV.publicAppOrigin, true)) {
     throw new Error("PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without a path, query, or fragment.");
+  }
+  if (ENV.trustedProxyIps.length === 0) {
+    throw new Error("TRUSTED_PROXY_IPS must include the exact IP address of each trusted reverse proxy in production.");
   }
   const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
     ENV.analyticsAllowedOrigin

@@ -51,7 +51,7 @@ Run migrations explicitly against the intended database, never automatically on 
 
 ## Application Acceptance
 
-Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, `PUBLIC_APP_ORIGIN` as the exact public HTTPS origin, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. Configure `FILE_MALWARE_SCAN_ALLOWED_ORIGINS` to the scanner's exact origin; remote scanners must use HTTPS. OAuth callbacks use the configured Hire.AI origin and never reflect the inbound Host header in production. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, DNS, TLS, callback registration and external provider acceptance are separate requirements.
+Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, `PUBLIC_APP_ORIGIN` as the exact public HTTPS origin, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. Configure `FILE_MALWARE_SCAN_ALLOWED_ORIGINS` to the scanner's exact origin; remote scanners must use HTTPS. OAuth callbacks use the configured Hire.AI origin and never reflect the inbound Host header in production. Set `TRUSTED_PROXY_IPS` in `release.env` to the exact IP address observed by the app container for the host Caddy proxy. Determine it from the running app's Docker network inspection; do not guess it, trust a whole Docker subnet, or use an unrestricted hop count. Keep `loopback` only if the actual proxy connection arrives from loopback. The Compose file refuses to start without this setting. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, DNS, TLS, callback registration and external provider acceptance are separate requirements.
 
 The initializer already supplies `.env.database` and `.env.session`; the application loads these after the provider file. A missing `.env.production` deliberately prevents the combined deployment from starting. The production doctor also rejects incomplete settings.
 
@@ -64,7 +64,7 @@ docker compose --env-file release.env -f compose.yaml -f compose.app.yaml up -d 
 curl --fail http://127.0.0.1:3000/readyz
 ```
 
-Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. The current server trusts loopback proxies only; a Docker bridge proxy needs an explicitly reviewed configuration. Do not use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
+Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. The server trusts only configured exact proxy IPs (loopback by default outside production). Verify that Caddy's observed peer IP matches `TRUSTED_PROXY_IPS` and that an unrelated Docker peer is not trusted. Do not use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
 
 ## Recovery And Remaining Work
 

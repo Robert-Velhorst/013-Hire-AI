@@ -69,6 +69,13 @@ describe("production container packaging", () => {
     expect(ciWorkflow).toContain(
       "-e PUBLIC_APP_ORIGIN='https://hire-ai.example.test'"
     );
+    expect(ciWorkflow).toContain("-e TRUSTED_PROXY_IPS='127.0.0.1'");
+
+    const hetznerCompose = readFileSync(
+      resolve(process.cwd(), "deploy", "hetzner", "compose.app.yaml"),
+      "utf8"
+    );
+    expect(hetznerCompose).toContain("TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:?");
   });
 
   it("excludes the development-only Vite server from the production server bundle", () => {

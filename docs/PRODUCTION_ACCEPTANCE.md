@@ -4,6 +4,10 @@ Updated: 2026-10-13. Target confirmed by Robert: online, multi-user Hire.AI host
 
 **Release decision: not ready for public production use.** This document separates verified technical work from the remaining product and operator requirements. Passing tests or a successful image build is not acceptance of live providers or autonomous employer submission.
 
+## Current Proxy Acceptance
+
+Production startup now requires `TRUSTED_PROXY_IPS` to list exact reverse-proxy peer IPs. The Hetzner host-Caddy-to-Docker peer address has not been observed from the running app container, so it must be set in the private `release.env` from live network evidence before the Compose app can start. Do not substitute a subnet, hop count, or guessed address. HTTPS detection, secure cookies, origin checks, and per-client rate limiting remain unaccepted on that host until tested through Caddy.
+
 ## Current Verification (2026-10-13)
 
 - `npm.cmd run check` passed. The full regular suite passed 302 files / 1,748 tests; 9 opt-in files / 31 tests were skipped by the regular test command.

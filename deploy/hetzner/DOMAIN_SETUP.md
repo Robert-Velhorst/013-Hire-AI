@@ -27,10 +27,12 @@ ports 80/443, add the hostname there instead of replacing it or launching a seco
 proxy. Preserve other sites and inspect a recoverable configuration copy first.
 
 Verify the actual application port and readiness before using this fragment.
-The current application trusts loopback proxy peers only; Docker port forwarding
-can make the peer appear as a bridge address. Prove HTTPS origin checks, Secure
-cookies and client-IP handling in the actual topology. Do not set unrestricted
-proxy trust or trust all private networks to silence the mismatch.
+Production requires `TRUSTED_PROXY_IPS` to name exact proxy peer addresses.
+Docker port forwarding can make the host proxy appear as a bridge address, so
+inspect the running network and configure the actual peer in `release.env`.
+Prove HTTPS origin checks, Secure cookies and client-IP handling in the actual
+topology. Do not set unrestricted proxy trust or trust all private networks to
+silence the mismatch.
 
 The public identity callback is
 `https://013-hire.ai.noodzakelijkonline.de/api/oauth/callback`.

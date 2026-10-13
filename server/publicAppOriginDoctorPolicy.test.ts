@@ -13,6 +13,7 @@ const productionEnv = {
   OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
   OAUTH_PORTAL_URL: "https://auth.example.test",
   PUBLIC_APP_ORIGIN: "https://hire.example.test",
+  TRUSTED_PROXY_IPS: "127.0.0.1",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
   STRIPE_SECRET_KEY: "sk_test_doctor",

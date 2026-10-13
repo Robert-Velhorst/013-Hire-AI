@@ -13,6 +13,7 @@ const productionEnv = {
   OAUTH_SERVER_URL: "https://oauth.example.test",
   OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
   PUBLIC_APP_ORIGIN: "https://hire.example.test",
+  TRUSTED_PROXY_IPS: "127.0.0.1",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
   STRIPE_SECRET_KEY: "sk_test_doctor",
@@ -49,7 +50,8 @@ function runProductionValidation(
   oauthServerAllowedOrigins = productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
   nodeEnv = "production",
   malwareScanUrl = productionEnv.FILE_MALWARE_SCAN_URL,
-  malwareScanAllowedOrigins = productionEnv.FILE_MALWARE_SCAN_ALLOWED_ORIGINS
+  malwareScanAllowedOrigins = productionEnv.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+  trustedProxyIps = productionEnv.TRUSTED_PROXY_IPS
 ) {
   return spawnSync(
     process.execPath,
@@ -67,6 +69,7 @@ function runProductionValidation(
         OAUTH_SERVER_ALLOWED_ORIGINS: oauthServerAllowedOrigins,
         FILE_MALWARE_SCAN_URL: malwareScanUrl,
         FILE_MALWARE_SCAN_ALLOWED_ORIGINS: malwareScanAllowedOrigins,
+        TRUSTED_PROXY_IPS: trustedProxyIps,
         OAUTH_PORTAL_URL: "https://auth.example.test",
       },
       encoding: "utf8",
@@ -146,6 +149,30 @@ describe("OAuth endpoint production policy", () => {
     const missingAllowlist = runDoctor("https://auth.example.test", "https://oauth.example.test", "");
     expect(missingAllowlist.status).toBe(1);
     expect(missingAllowlist.stdout).toContain("FAIL production configuration");
+  });
+
+  it("rejects broad or missing production proxy trust", () => {
+    const broad = runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      productionEnv.FILE_MALWARE_SCAN_URL,
+      productionEnv.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+      "172.22.0.0/16"
+    );
+    expect(broad.status).not.toBe(0);
+    expect(broad.stderr).toContain("exact IP addresses");
+
+    const missing = runProductionValidation(
+      productionEnv.OAUTH_SERVER_URL,
+      productionEnv.OAUTH_SERVER_ALLOWED_ORIGINS,
+      "production",
+      productionEnv.FILE_MALWARE_SCAN_URL,
+      productionEnv.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+      ""
+    );
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain("TRUSTED_PROXY_IPS");
   });
 
   it("requires an explicitly allowlisted secure malware scanner in production", () => {

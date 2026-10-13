@@ -38,6 +38,7 @@ const requiredProductionEnv = [
   "OAUTH_SERVER_URL",
   "OAUTH_SERVER_ALLOWED_ORIGINS",
   "PUBLIC_APP_ORIGIN",
+  "TRUSTED_PROXY_IPS",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
   "STRIPE_SECRET_KEY",
@@ -48,6 +49,22 @@ check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
   missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+);
+
+const trustedProxyIps = String(process.env.TRUSTED_PROXY_IPS || (isProduction ? "" : "loopback"))
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const trustedProxyIpsValid = trustedProxyIps.length > 0
+  && trustedProxyIps.length <= 16
+  && trustedProxyIps.every((value) => value === "loopback"
+    || (net.isIP(value) > 0 && !["0.0.0.0", "255.255.255.255", "::"].includes(value)));
+check(
+  "trusted reverse proxies",
+  trustedProxyIpsValid ? "pass" : "fail",
+  trustedProxyIpsValid
+    ? `${trustedProxyIps.length} exact proxy address(es) configured`
+    : "TRUSTED_PROXY_IPS must contain exact IP addresses or loopback; CIDRs, hostnames, and wildcard addresses are not allowed"
 );
 
 function windowsDefenderAvailable() {

@@ -236,6 +236,7 @@ jobs:
             -e OAUTH_SERVER_ALLOWED_ORIGINS='https://oauth.example.test' \
             -e OAUTH_PORTAL_URL='https://auth.example.test' \
             -e PUBLIC_APP_ORIGIN='https://hire-ai.example.test' \
+            -e TRUSTED_PROXY_IPS='127.0.0.1' \
             -e OWNER_OPEN_ID='container-ci-owner' \
             -e BUILT_IN_FORGE_API_KEY='container-ci-forge-key' \
             -e STRIPE_SECRET_KEY='sk_test_container_ci' \
