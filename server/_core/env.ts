@@ -8,7 +8,7 @@ export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl:
   if (nodeEnv === "production") return true;
   if (nodeEnv === "development" || nodeEnv === "test") return false;
 
-  return /\/dist\/index\.js(?:$|[?#])/.test(moduleUrl.replace(/\\/g, "/"));
+  return /\/dist\/(?:runtime\/server|index)\.js(?:$|[?#])/.test(moduleUrl.replace(/\\/g, "/"));
 }
 
 const isProduction = resolveProductionRuntime(process.env.NODE_ENV, import.meta.url);

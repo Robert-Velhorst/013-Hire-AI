@@ -25,7 +25,7 @@ function Invoke-FixtureNpm { $global:LASTEXITCODE = 0 }
 function Start-Process {
     param($FilePath, $ArgumentList, $WorkingDirectory, $RedirectStandardOutput,
         $RedirectStandardError, $WindowStyle, [switch]$PassThru)
-    $expectedCommand = if ($global:fixture.launcher -eq 'windows') { 'dist/index.js' } else { 'http' }
+    $expectedCommand = if ($global:fixture.launcher -eq 'windows') { 'dist/runtime/server.js' } else { 'http' }
     if ($ArgumentList[0] -ne $expectedCommand -or $WindowStyle -ne 'Hidden') {
         throw 'Unexpected startup command'
     }

@@ -15,10 +15,25 @@ $npm = Get-Command npm.cmd -ErrorAction Stop
 
 Push-Location $repoRoot
 try {
-    if (-not $NoBuild -or -not (Test-Path (Join-Path $repoRoot 'dist\index.js'))) {
+    $runtimeEntrypoint = if (Test-Path (Join-Path $repoRoot 'dist\runtime\server.js')) {
+        'dist/runtime/server.js'
+    } elseif (Test-Path (Join-Path $repoRoot 'dist\index.js')) {
+        'dist/index.js'
+    } else {
+        $null
+    }
+    if (-not $NoBuild -or -not $runtimeEntrypoint) {
         & $npm.Source run build
         if ($LASTEXITCODE -ne 0) { throw 'Production build failed.' }
+        $runtimeEntrypoint = if (Test-Path (Join-Path $repoRoot 'dist\runtime\server.js')) {
+            'dist/runtime/server.js'
+        } elseif (Test-Path (Join-Path $repoRoot 'dist\index.js')) {
+            'dist/index.js'
+        } else {
+            $null
+        }
     }
+    if (-not $runtimeEntrypoint) { throw 'Production server entrypoint is missing after build.' }
 
     $env:NODE_ENV = 'production'
     $env:PORT = [string]$Port
@@ -35,7 +50,7 @@ try {
         }
     }
 
-    & $node.Source 'dist/database-schema-audit.js'
+    & $node.Source 'dist/runtime/schema-audit.js'
     if ($LASTEXITCODE -ne 0) {
         throw 'Database schema audit failed. Apply the required migrations before startup.'
     }
@@ -48,7 +63,7 @@ try {
         # Bind readiness to this child, not an older service already using the port.
         $env:HIRE_AI_RUNTIME_INSTANCE_ID = $launchId
         $process = Start-Process -FilePath $node.Source `
-            -ArgumentList @('dist/index.js') `
+            -ArgumentList @($runtimeEntrypoint) `
             -WorkingDirectory $repoRoot `
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath `

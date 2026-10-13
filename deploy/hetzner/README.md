@@ -44,7 +44,7 @@ set +a
 docker run --rm --network hire-ai_backend --memory=384m \
   --env-file .env.database "$HIRE_AI_IMAGE" node scripts/database-migrate.mjs
 docker run --rm --network hire-ai_backend --memory=384m \
-  --env-file .env.database "$HIRE_AI_IMAGE" node dist/database-schema-audit.js
+  --env-file .env.database "$HIRE_AI_IMAGE" node dist/runtime/schema-audit.js
 ```
 
 Run migrations explicitly against the intended database, never automatically on application startup. Do not run `docker compose down -v`: the named volume contains the persistent database. Do not regenerate passwords to repair an initialized database; MySQL initialization variables do not rotate existing database accounts.

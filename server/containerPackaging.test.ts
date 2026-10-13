@@ -41,7 +41,7 @@ describe("production container packaging", () => {
       "COPY --from=build /app/scripts/database-migration-plan.mjs ./scripts/database-migration-plan.mjs"
     );
     expect(dockerfile).toContain(
-      "node scripts/doctor.mjs && exec node dist/index.js"
+      "node scripts/doctor.mjs && exec node dist/runtime/server.js"
     );
     expect(dockerfile).toContain("HEALTHCHECK");
     expect(dockerfile).toContain("/readyz");

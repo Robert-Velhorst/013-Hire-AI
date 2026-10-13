@@ -15,7 +15,11 @@ function hasFile(relativePath) {
   return fs.existsSync(path.join(root, relativePath));
 }
 
-const runtimeEntrypoint = hasFile("dist/index.js") ? "dist/index.js" : "server/_core/index.ts";
+const runtimeEntrypoint = hasFile("dist/runtime/server.js")
+  ? "dist/runtime/server.js"
+  : hasFile("dist/index.js")
+    ? "dist/index.js"
+    : "server/_core/index.ts";
 const runtimeFiles = ["package.json", "pnpm-lock.yaml", "drizzle/meta/_journal.json", runtimeEntrypoint];
 for (const file of runtimeFiles) {
   check(file, hasFile(file) ? "pass" : "fail", hasFile(file) ? "found" : "missing");
