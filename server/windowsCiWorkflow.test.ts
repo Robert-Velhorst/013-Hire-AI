@@ -53,6 +53,7 @@ describe("Windows runtime CI contract", () => {
     expect(ngrokLauncher).toContain(
       "$configuredAppOrigin.GetLeftPart([UriPartial]::Authority) -ine $publicOrigin"
     );
+    expect(ngrokLauncher).toContain("import 'dotenv/config'");
     expect(ngrokLauncher.indexOf("PUBLIC_APP_ORIGIN")).toBeLessThan(
       ngrokLauncher.indexOf("Start-Process -FilePath $ngrok.Source")
     );

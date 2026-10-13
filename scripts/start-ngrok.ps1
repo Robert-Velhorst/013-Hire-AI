@@ -17,7 +17,7 @@ $node = Get-Command node.exe -ErrorAction Stop
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 try {
-    $runtimeConfigJson = & $node.Source --input-type=commonjs -e "require('dotenv').config({ quiet: true }); process.stdout.write(JSON.stringify({ publicAppOrigin: process.env.PUBLIC_APP_ORIGIN || '', connectorRedirectUri: process.env.CONNECTOR_OAUTH_REDIRECT_URI || '' }));"
+    $runtimeConfigJson = & $node.Source --input-type=module -e "import 'dotenv/config'; process.stdout.write(JSON.stringify({ publicAppOrigin: process.env.PUBLIC_APP_ORIGIN || '', connectorRedirectUri: process.env.CONNECTOR_OAUTH_REDIRECT_URI || '' }));"
     if ($LASTEXITCODE -ne 0) {
         throw 'Hire.AI runtime configuration could not be read.'
     }

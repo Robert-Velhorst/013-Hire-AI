@@ -14,7 +14,7 @@ function Get-Command {
 }
 function Invoke-FixtureNode {
     $global:LASTEXITCODE = 0
-    if ($args -contains '--input-type=commonjs') {
+    if ($args -contains '--input-type=module') {
         return (@{
             publicAppOrigin = $env:PUBLIC_APP_ORIGIN
             connectorRedirectUri = $env:CONNECTOR_OAUTH_REDIRECT_URI
