@@ -233,6 +233,7 @@ jobs:
             -e ERASURE_IDENTITY_HMAC_KEYS='container-ci-erasure-identity-hmac-key-at-least-32-characters' \
             -e VITE_APP_ID='hire-ai-container-ci' \
             -e OAUTH_SERVER_URL='https://oauth.example.test' \
+            -e OAUTH_SERVER_ALLOWED_ORIGINS='https://oauth.example.test' \
             -e OAUTH_PORTAL_URL='https://auth.example.test' \
             -e PUBLIC_APP_ORIGIN='https://hire-ai.example.test' \
             -e OWNER_OPEN_ID='container-ci-owner' \

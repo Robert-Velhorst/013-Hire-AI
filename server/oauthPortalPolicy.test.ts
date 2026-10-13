@@ -117,6 +117,9 @@ describe("OAuth endpoint production policy", () => {
     expect(runProductionValidation("https://other.example.test").status).not.toBe(0);
     expect(runProductionValidation("http://localhost:3000").status).not.toBe(0);
     expect(runProductionValidation("https://oauth.example.test", "").status).not.toBe(0);
+    const missingAllowlist = runDoctor("https://auth.example.test", "https://oauth.example.test", "");
+    expect(missingAllowlist.status).toBe(1);
+    expect(missingAllowlist.stdout).toContain("FAIL production configuration");
   });
 
   it("enforces a configured OAuth allowlist during development startup", () => {
