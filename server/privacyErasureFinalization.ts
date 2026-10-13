@@ -13,6 +13,7 @@ import {
   applications,
   auditEvents,
   autonomousRunStates,
+  cloudResumeCandidates,
   connectorAuthorizations,
   educationEntries,
   employerResponses,
@@ -65,6 +66,7 @@ export const privacyFinalizerPolicyTables = [
   "application_approvals",
   "application_campaigns",
   "autonomous_run_states",
+  "cloud_resume_candidates",
   "job_matches",
   "interview_preparation",
   "follow_ups",
@@ -328,6 +330,11 @@ export async function finalizePrivacyErasure(
           "autonomous_run_states",
           autonomousRunStates,
           autonomousRunStates.userId,
+        ],
+        [
+          "cloud_resume_candidates",
+          cloudResumeCandidates,
+          cloudResumeCandidates.userId,
         ],
         ["job_matches", jobMatches, jobMatches.userId],
         [

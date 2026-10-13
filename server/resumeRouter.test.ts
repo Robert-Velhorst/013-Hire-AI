@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   uploadResume: vi.fn(),
   scanSensitiveUpload: vi.fn(),
   downloadCloudResumeDocument: vi.fn(),
+  completeCloudResumeCandidate: vi.fn().mockResolvedValue(undefined),
+  releaseCloudResumeCandidate: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./uploadValidation", async (importOriginal) => ({
@@ -21,6 +23,8 @@ vi.mock("./uploadValidation", async (importOriginal) => ({
 
 vi.mock("./cloudDocumentDiscovery", () => ({
   downloadCloudResumeDocument: mocks.downloadCloudResumeDocument,
+  completeCloudResumeCandidate: mocks.completeCloudResumeCandidate,
+  releaseCloudResumeCandidate: mocks.releaseCloudResumeCandidate,
 }));
 
 vi.mock("./resumeStorage", () => ({
@@ -79,6 +83,7 @@ describe("resume router synchronization", () => {
     for (const mock of Object.values(mocks)) mock.mockReset();
     mocks.scanSensitiveUpload.mockResolvedValue({ scanned: true, provider: "synthetic-scanner" });
     mocks.downloadCloudResumeDocument.mockResolvedValue({
+      candidateId: "C".repeat(43), provider: "google_drive",
       data: Buffer.from("Candidate resume"), fileName: "candidate resume.txt", mimeType: "text/plain",
     });
     mocks.parseResumeFromFile.mockResolvedValue({ skills: [], experience: [], education: [], certifications: [], languages: [] });
@@ -133,10 +138,7 @@ describe("resume router synchronization", () => {
     source === "local" ? caller.resume.parseFile({
       filename: "candidate resume.txt", mimeType: "text/plain",
       fileData: Buffer.from("Candidate resume").toString("base64"),
-    }) : caller.profile.importCloudResume({
-      provider: "google_drive", sourceId: "synthetic-document", name: "candidate resume.txt",
-      mimeType: "text/plain", size: 16, modifiedAt: null,
-    });
+    }) : caller.profile.importCloudResume({ candidateId: "C".repeat(43) });
 
   it.each(["local", "cloud"] as const)("blocks %s resume parsing and changes when scanning fails", async (source) => {
     const blockedUser = source === "local" ? 190080 : 190081;
@@ -151,6 +153,9 @@ describe("resume router synchronization", () => {
     });
     expect(mocks.parseResumeFromFile).not.toHaveBeenCalled();
     expect(mocks.uploadResume).not.toHaveBeenCalled();
+    if (source === "cloud") {
+      expect(mocks.releaseCloudResumeCandidate).toHaveBeenCalledWith(blockedUser, "C".repeat(43));
+    }
     expect(await getUserProfile(blockedUser)).toMatchObject({ skills: "Existing skills" });
   });
 
@@ -175,6 +180,7 @@ describe("resume router synchronization", () => {
 
   it.each(["local", "cloud"] as const)("rejects mismatched %s file bytes before scanning or parsing", async (source) => {
     mocks.downloadCloudResumeDocument.mockResolvedValueOnce({
+      candidateId: "C".repeat(43), provider: "google_drive",
       data: Buffer.from("not a PDF"), fileName: "resume.pdf", mimeType: "application/pdf",
     });
     const caller = appRouter.createCaller(createContext(source === "local" ? 190084 : 190085));
@@ -196,6 +202,9 @@ describe("resume router synchronization", () => {
     expect(mocks.uploadResume).toHaveBeenCalledWith(userId, expect.any(Buffer), "candidate_resume.txt", "text/plain", {
       skills: "TypeScript, React", experience: "Built job-search tooling", education: "BSc Computer Science",
     });
+    if (source === "cloud") {
+      expect(mocks.completeCloudResumeCandidate).toHaveBeenCalledWith(userId, "C".repeat(43));
+    }
     expect(result.resume).toEqual(versionOne);
 
     const profile = await getUserProfile(userId);
@@ -329,6 +338,32 @@ describe("resume router synchronization", () => {
 
     expect(await getUserProfile(metadataOnlyUserId)).toBeUndefined();
     expect(mocks.uploadResume).not.toHaveBeenCalled();
+  });
+
+  it("does not accept browser-supplied cloud object metadata as import authority", async () => {
+    const caller = appRouter.createCaller(createContext(190074));
+
+    await expect(caller.profile.importCloudResume({
+      candidateId: "forged-provider-id",
+      provider: "google_drive",
+      sourceId: "someone-elses-resume",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: 100,
+      modifiedAt: null,
+    } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(mocks.downloadCloudResumeDocument).not.toHaveBeenCalled();
+  });
+
+  it("keeps the candidate lease when resume storage has an uncertain outcome", async () => {
+    const caller = appRouter.createCaller(createContext(190075));
+    mocks.uploadResume.mockRejectedValueOnce(new Error("Storage response was lost."));
+
+    await expect(importResume(caller, "cloud")).rejects.toThrow();
+
+    expect(mocks.uploadResume).toHaveBeenCalledOnce();
+    expect(mocks.releaseCloudResumeCandidate).not.toHaveBeenCalled();
   });
 
   it.each([

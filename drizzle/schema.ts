@@ -257,6 +257,24 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   index("connector_authorizations_refresh_lease_idx").on(table.refreshLeaseExpiresAt),
 ]);
 
+/** Short-lived, user-owned cloud resume selections; provider IDs never come from import requests. */
+export const cloudResumeCandidates = mysqlTable("cloud_resume_candidates", {
+  candidateId: varchar("candidate_id", { length: 64 }).primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["google_drive", "dropbox"]).notNull(),
+  sourceId: varchar("source_id", { length: 1000 }).notNull(),
+  name: varchar("name", { length: 500 }).notNull(),
+  mimeType: varchar("mime_type", { length: 255 }).notNull(),
+  size: int("size", { unsigned: true }),
+  modifiedAt: timestamp("modified_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  importLeaseUntil: timestamp("import_lease_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("cloud_resume_candidates_user_expiry_idx").on(table.userId, table.expiresAt),
+  index("cloud_resume_candidates_expiry_idx").on(table.expiresAt),
+]);
+
 /**
  * Applications
  * Tracks job applications submitted through the platform

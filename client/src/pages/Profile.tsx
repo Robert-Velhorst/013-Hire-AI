@@ -62,12 +62,11 @@ import {
 } from "@/components/ui/dialog";
 
 type CloudResumeDocument = {
+  candidateId: string;
   provider: "google_drive" | "dropbox";
-  sourceId: string;
   name: string;
   mimeType: string;
   size: number | null;
-  modifiedAt: string | null;
 };
 
 type InboxResponseCandidate = {
@@ -137,6 +136,7 @@ export default function Profile() {
   const [salaryCurrency, setSalaryCurrency] = useState("USD");
   const [needsVisaSponsorship, setNeedsVisaSponsorship] = useState(false);
   const [cloudResumeDocuments, setCloudResumeDocuments] = useState<CloudResumeDocument[]>([]);
+  const [cloudResumeDiscoveryTruncated, setCloudResumeDiscoveryTruncated] = useState(false);
   const [inboxResponseTypeOverrides, setInboxResponseTypeOverrides] = useState<Record<number, InboxResponseType>>({});
   const [githubProfileCandidate, setGitHubProfileCandidate] = useState<GitHubProfileCandidate | null>(null);
   const [linkedInIdentityCandidate, setLinkedInIdentityCandidate] = useState<LinkedInIdentityCandidate | null>(null);
@@ -239,6 +239,7 @@ export default function Profile() {
   const discoverCloudDocuments = trpc.profile.discoverCloudDocuments.useMutation({
     onSuccess: (result) => {
       setCloudResumeDocuments(result.documents);
+      setCloudResumeDiscoveryTruncated(result.truncated);
       toast.success(
         result.documents.length === 1
           ? t("foundCloudResume")
@@ -251,6 +252,7 @@ export default function Profile() {
     onSuccess: async ({ resume }) => {
       toast.success(t("cloudResumeImported", { version: resume.version }));
       setCloudResumeDocuments([]);
+      setCloudResumeDiscoveryTruncated(false);
       await Promise.all([
         profileQuery.refetch(),
         evidenceReadinessQuery.refetch(),
@@ -551,7 +553,7 @@ export default function Profile() {
   };
 
   const handleCloudResumeImport = (document: CloudResumeDocument) => {
-    importCloudResume.mutate(document);
+    importCloudResume.mutate({ candidateId: document.candidateId });
   };
 
   const handleInboxDiscovery = (provider: InboxResponseCandidate["provider"]) => {
@@ -818,11 +820,16 @@ export default function Profile() {
                 />
               </label>
             </div>
-            {cloudResumeDocuments.length > 0 ? (
+            {cloudResumeDocuments.length > 0 || cloudResumeDiscoveryTruncated ? (
               <div className="mt-4 space-y-2 rounded-md border border-slate-700/60 bg-slate-950/40 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t("cloudResumeCandidates")}</p>
+                {cloudResumeDiscoveryTruncated ? (
+                  <p className="text-xs text-amber-300" role="status">
+                    {t("cloudResumeSearchTruncated")}
+                  </p>
+                ) : null}
                 {cloudResumeDocuments.map((document) => (
-                  <div key={`${document.provider}:${document.sourceId}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
+                  <div key={document.candidateId} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-2 first:border-t-0 first:pt-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-white">{document.name}</p>
                       <p className="mt-1 text-xs text-slate-400">

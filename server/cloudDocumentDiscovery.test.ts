@@ -17,6 +17,9 @@ const mocks = {
   getConnectorOAuthConfig: vi.fn(),
   refreshConnectorAccessToken: vi.fn(),
   releaseConnectorRefreshLease: vi.fn().mockResolvedValue(true),
+  storeCloudResumeCandidates: vi.fn(),
+  claimCloudResumeCandidate: vi.fn(),
+  releaseCloudResumeCandidate: vi.fn().mockResolvedValue(undefined),
 };
 
 const dependencies = mocks as unknown as CloudDocumentDiscoveryDependencies;
@@ -42,9 +45,33 @@ function discoveryOptions(fetcher: typeof fetch) {
   return { fetcher, now, dependencies };
 }
 
+const candidateId = "C".repeat(43);
+
+function claimCandidate(document: {
+  provider: "google_drive" | "dropbox";
+  sourceId: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+  modifiedAt: string | null;
+}) {
+  mocks.claimCloudResumeCandidate.mockResolvedValueOnce({
+    candidateId,
+    userId: 501,
+    ...document,
+    modifiedAt: document.modifiedAt ? new Date(document.modifiedAt) : null,
+    expiresAt: new Date(now.getTime() + 60_000),
+    importLeaseUntil: null,
+    createdAt: now,
+  });
+}
+
 describe("cloud resume discovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.storeCloudResumeCandidates.mockImplementation(async (_userId, _provider, documents) =>
+      documents.map((document, index) => ({ ...document, candidateId: `${"C".repeat(42)}${index}` }))
+    );
     mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("google_drive"));
     mocks.getConnectorAuthorization.mockResolvedValue({
       userId: 501,
@@ -69,16 +96,19 @@ describe("cloud resume discovery", () => {
       ],
     }), { status: 200 }));
 
-    const documents = await discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher));
+    const result = await discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher));
 
-    expect(documents).toEqual([{
-      provider: "google_drive",
-      sourceId: "resume-pdf",
-      name: "Resume.pdf",
-      mimeType: "application/pdf",
-      size: 124,
-      modifiedAt: "2026-07-12T10:00:00Z",
-    }]);
+    expect(result).toMatchObject({
+      scannedCount: 4,
+      truncated: false,
+      documents: [expect.objectContaining({
+        candidateId: expect.any(String),
+        provider: "google_drive",
+        name: "Resume.pdf",
+        mimeType: "application/pdf",
+        size: 124,
+      })],
+    });
     expect(fetcher).toHaveBeenCalledWith(
       expect.stringContaining("www.googleapis.com/drive/v3/files"),
       expect.objectContaining({
@@ -113,17 +143,17 @@ describe("cloud resume discovery", () => {
       ],
     }), { status: 200 }));
 
-    const documents = await discoverCloudResumeDocuments(501, "dropbox", discoveryOptions(fetcher));
+    const result = await discoverCloudResumeDocuments(501, "dropbox", discoveryOptions(fetcher));
 
-    expect(documents).toEqual([
+    expect(result.documents).toEqual([
       expect.objectContaining({
+        candidateId: expect.any(String),
         provider: "dropbox",
-        sourceId: "/cv.docx",
         mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       }),
       expect.objectContaining({
+        candidateId: expect.any(String),
         provider: "dropbox",
-        sourceId: "/resume.rtf",
         mimeType: "text/rtf",
       }),
     ]);
@@ -131,6 +161,59 @@ describe("cloud resume discovery", () => {
       "https://api.dropboxapi.com/2/files/list_folder",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("pages through unrelated Google Drive entries and reports the bounded scan cutoff", async () => {
+    const unrelated = Array.from({ length: 100 }, (_, index) => ({
+      id: `other-${index}`, name: `portfolio-${index}.pdf`, mimeType: "application/pdf", size: "100",
+    }));
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ files: unrelated, nextPageToken: "page-2" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        files: [{ id: "resume-found", name: "Resume.pdf", mimeType: "application/pdf", size: "100" }],
+      }), { status: 200 }));
+
+    const result = await discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher));
+
+    expect(result).toMatchObject({ scannedCount: 101, truncated: false });
+    expect(result.documents).toHaveLength(1);
+    expect(fetcher).toHaveBeenNthCalledWith(2,
+      expect.stringContaining("pageToken=page-2"),
+      expect.any(Object),
+    );
+  });
+
+  it("reports truncation when the provider scan budget is exhausted", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const url = new URL(String(input));
+      const page = Number(url.searchParams.get("pageToken")?.replace("p", "") ?? 0);
+      return new Response(JSON.stringify({
+        files: Array.from({ length: 100 }, (_, index) => ({
+          id: `other-${page}-${index}`, name: `portfolio-${page}-${index}.pdf`, mimeType: "application/pdf", size: "100",
+        })),
+        nextPageToken: `p${page + 1}`,
+      }), { status: 200 });
+    });
+
+    const result = await discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher));
+
+    expect(result).toMatchObject({ scannedCount: 500, truncated: true, documents: [] });
+    expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it("reports truncation when a single provider page exceeds the supported-candidate cap", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      files: Array.from({ length: 75 }, (_, index) => ({
+        id: `resume-${index}`, name: `Resume ${index}.pdf`, mimeType: "application/pdf", size: "100",
+      })),
+    }), { status: 200 }));
+
+    const result = await discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher));
+
+    expect(result.documents).toHaveLength(50);
+    expect(result).toMatchObject({ scannedCount: 75, truncated: true });
+    expect(mocks.storeCloudResumeCandidates).toHaveBeenCalledWith(501, "google_drive", expect.any(Array), now);
+    expect(mocks.storeCloudResumeCandidates.mock.calls[0]?.[2]).toHaveLength(50);
   });
 
   it("recognizes common resume and CV file names without surfacing unrelated documents", () => {
@@ -144,57 +227,101 @@ describe("cloud resume discovery", () => {
   it("rejects an unrelated document name before downloading provider content", async () => {
     const fetcher = vi.fn<typeof fetch>();
 
-    await expect(downloadCloudResumeDocument(501, {
+    claimCandidate({
       provider: "google_drive",
       sourceId: "employment-letter",
       name: "employment-letter.pdf",
       mimeType: "application/pdf",
       size: 220,
       modifiedAt: null,
-    }, discoveryOptions(fetcher))).rejects.toThrow("selected cloud document is not a supported resume file");
+    });
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher)))
+      .rejects.toThrow("selected cloud document is not a supported resume file");
 
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("downloads a bounded resume with provider redirects disabled", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("resume-bytes", {
-      status: 200,
-      headers: { "content-type": "application/pdf" },
-    }));
+  it("rejects forged, expired, and other-user candidate handles before provider access", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    mocks.claimCloudResumeCandidate.mockResolvedValueOnce(null);
 
-    await expect(downloadCloudResumeDocument(501, {
-      provider: "google_drive",
-      sourceId: "resume-pdf",
-      name: "Resume.pdf",
-      mimeType: "application/pdf",
-      size: 12,
-      modifiedAt: null,
-    }, discoveryOptions(fetcher))).resolves.toMatchObject({
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher)))
+      .rejects.toThrow("invalid, expired, already importing, or already used");
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(mocks.getConnectorAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("downloads a bounded resume with provider redirects disabled", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "resume-pdf", name: "Resume.pdf", mimeType: "application/pdf", size: "12", modifiedTime: null,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("resume-bytes", { status: 200 }));
+    claimCandidate({
+      provider: "google_drive", sourceId: "resume-pdf", name: "Resume.pdf",
+      mimeType: "application/pdf", size: 12, modifiedAt: null,
+    });
+
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher))).resolves.toMatchObject({
+      candidateId,
       fileName: "Resume.pdf",
       mimeType: "application/pdf",
       data: Buffer.from("resume-bytes"),
     });
-    expect(fetcher).toHaveBeenCalledWith(
+    expect(fetcher).toHaveBeenLastCalledWith(
       expect.stringContaining("resume-pdf?alt=media"),
       expect.objectContaining({ redirect: "error", signal: expect.any(AbortSignal) })
     );
   });
 
   it("rejects an oversized declared resume before buffering provider content", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("not-read", {
-      status: 200,
-      headers: { "content-length": String(10 * 1024 * 1024 + 1) },
-    }));
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "resume-pdf", name: "Resume.pdf", mimeType: "application/pdf", size: null, modifiedTime: null,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("not-read", {
+        status: 200,
+        headers: { "content-length": String(10 * 1024 * 1024 + 1) },
+      }));
+    claimCandidate({
+      provider: "google_drive", sourceId: "resume-pdf", name: "Resume.pdf",
+      mimeType: "application/pdf", size: null, modifiedAt: null,
+    });
 
-    await expect(downloadCloudResumeDocument(501, {
-      provider: "google_drive",
-      sourceId: "resume-pdf",
-      name: "Resume.pdf",
-      mimeType: "application/pdf",
-      size: null,
-      modifiedAt: null,
-    }, discoveryOptions(fetcher))).rejects.toThrow("between 1 byte and 10MB");
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher)))
+      .rejects.toThrow("between 1 byte and 10MB");
     expect(mocks.upsertUserConnectorAccount).not.toHaveBeenCalled();
+  });
+
+  it("requires provider metadata to remain unchanged after candidate discovery", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      id: "resume-pdf", name: "Resume-updated.pdf", mimeType: "application/pdf", size: "12", modifiedTime: null,
+    }), { status: 200 }));
+    claimCandidate({
+      provider: "google_drive", sourceId: "resume-pdf", name: "Resume.pdf",
+      mimeType: "application/pdf", size: 12, modifiedAt: null,
+    });
+
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher)))
+      .rejects.toThrow("changed since discovery");
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(mocks.releaseCloudResumeCandidate).toHaveBeenCalledWith(501, candidateId);
+  });
+
+  it("invalidates an imported candidate when its provider object has been deleted", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 }));
+    claimCandidate({
+      provider: "google_drive", sourceId: "resume-pdf", name: "Resume.pdf",
+      mimeType: "application/pdf", size: 12, modifiedAt: null,
+    });
+
+    await expect(downloadCloudResumeDocument(501, candidateId, discoveryOptions(fetcher)))
+      .rejects.toThrow("document discovery is temporarily unavailable");
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(mocks.releaseCloudResumeCandidate).toHaveBeenCalledWith(501, candidateId);
   });
 
   it("rejects oversized discovery metadata without verifying the connector", async () => {
@@ -267,7 +394,8 @@ describe("cloud resume discovery", () => {
     mocks.encryptConnectorToken.mockReturnValue("renewed-encrypted-token");
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ files: [] }), { status: 200 }));
 
-    await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher))).resolves.toEqual([]);
+    await expect(discoverCloudResumeDocuments(501, "google_drive", discoveryOptions(fetcher)))
+      .resolves.toMatchObject({ documents: [], scannedCount: 0, truncated: false });
 
     expect(mocks.refreshConnectorAccessToken).toHaveBeenCalled();
     expect(mocks.upsertConnectorAuthorization).toHaveBeenCalledWith(expect.objectContaining({

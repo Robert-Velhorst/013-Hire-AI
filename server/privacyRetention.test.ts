@@ -30,6 +30,7 @@ const expectedUserOwnedTables = [
   "application_approvals",
   "application_campaigns",
   "autonomous_run_states",
+  "cloud_resume_candidates",
   "job_matches",
   "interview_preparation",
   "follow_ups",

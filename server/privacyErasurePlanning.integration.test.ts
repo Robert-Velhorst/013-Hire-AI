@@ -7,6 +7,7 @@ import {
   applicationMaterials,
   applications,
   connectorAuthorizations,
+  cloudResumeCandidates,
   erasedOAuthIdentities,
   followUps,
   jobPlatforms,
@@ -102,6 +103,16 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
       userId,
       provider: "dropbox",
       encryptedAccessToken: "encrypted-provider-secret",
+    });
+    await db.insert(cloudResumeCandidates).values({
+      candidateId: `privacy-candidate-${userId}`,
+      userId,
+      provider: "google_drive",
+      sourceId: "private-provider-object-id",
+      name: "Resume.pdf",
+      mimeType: "application/pdf",
+      size: 1024,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
     await db.insert(successFees).values({
       userId,
@@ -405,6 +416,8 @@ describe.skipIf(!runIntegration)("privacy erasure planning on MySQL", () => {
     const erasedUser = (
       await db.select().from(users).where(eq(users.id, userId))
     )[0];
+    expect(await db.select().from(cloudResumeCandidates).where(eq(cloudResumeCandidates.userId, userId)))
+      .toHaveLength(0);
     expect(erasedUser).toMatchObject({
       name: null,
       email: null,

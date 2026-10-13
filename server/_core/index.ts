@@ -38,6 +38,7 @@ import { registerCookieOriginProtection } from "./cookieOriginProtection";
 import { registerApiRateLimit } from "./apiRateLimit";
 import { createRuntimeInstanceId } from "./runtimeInstance";
 import { assertProductionDatabaseSchema } from "../databaseSchemaValidation";
+import { startCloudResumeCandidateCleanup } from "../cloudResumeCandidateStore";
 
 let startupStage: StartupStage = "configuration validation";
 
@@ -165,6 +166,7 @@ async function startServer() {
   autonomousScheduler?.start();
   jobScrapingScheduler?.start();
   stripeReconciliationWorker.start();
+  const stopCloudResumeCandidateCleanup = startCloudResumeCandidateCleanup();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -183,6 +185,7 @@ async function startServer() {
         () => autonomousScheduler?.stop(),
         () => jobScrapingScheduler?.stop(),
         () => stripeReconciliationWorker.stop(),
+        stopCloudResumeCandidateCleanup,
       ], [closeOperationalResources]);
       clearTimeout(forceExit);
       process.exit(0);

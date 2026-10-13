@@ -11,6 +11,7 @@ import {
   applications,
   auditEvents,
   autonomousRunStates,
+  cloudResumeCandidates,
   connectorAuthorizations,
   erasedOAuthIdentities,
   stripeReconciliationCommands,
@@ -42,7 +43,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 
-export const PRIVACY_RETENTION_POLICY_VERSION = "2026-08-09.v2";
+export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-13.v1";
 
 export type PrivacyRetentionAction = "erase" | "scrub_and_retain" | "retain";
 
@@ -83,6 +84,7 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "application_approvals", action: "scrub_and_retain", reason: ledgerReason, tableRef: applicationApprovals, userColumn: applicationApprovals.userId },
   { table: "application_campaigns", action: "erase", reason: erasableReason, tableRef: applicationCampaigns, userColumn: applicationCampaigns.userId },
   { table: "autonomous_run_states", action: "erase", reason: erasableReason, tableRef: autonomousRunStates, userColumn: autonomousRunStates.userId },
+  { table: "cloud_resume_candidates", action: "erase", reason: "Ephemeral cloud object selectors are deleted after import, expiry, or account erasure.", tableRef: cloudResumeCandidates, userColumn: cloudResumeCandidates.userId },
   { table: "job_matches", action: "erase", reason: erasableReason, tableRef: jobMatches, userColumn: jobMatches.userId },
   { table: "interview_preparation", action: "erase", reason: erasableReason, tableRef: interviewPreparation, userColumn: interviewPreparation.userId },
   { table: "inbox_response_candidates", action: "erase", reason: erasableReason, tableRef: inboxResponseCandidates, userColumn: inboxResponseCandidates.userId },

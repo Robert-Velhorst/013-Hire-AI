@@ -1005,7 +1005,7 @@ export const appRouter = router({
         const { discoverCloudResumeDocuments } = await import("./cloudDocumentDiscovery");
         const { createAuditEvent } = await import("./db");
         try {
-          const documents = await discoverCloudResumeDocuments(ctx.user.id, input.provider);
+          const result = await discoverCloudResumeDocuments(ctx.user.id, input.provider);
           await createAuditEvent({
             userId: ctx.user.id,
             entityType: "user",
@@ -1013,10 +1013,15 @@ export const appRouter = router({
             action: "cloud_resume_documents_discovered",
             actor: "user",
             source: "profile.discoverCloudDocuments",
-            afterState: JSON.stringify({ provider: input.provider, documentCount: documents.length }),
+            afterState: JSON.stringify({
+              provider: input.provider,
+              documentCount: result.documents.length,
+              scannedCount: result.scannedCount,
+              truncated: result.truncated,
+            }),
             riskLevel: "low",
           });
-          return { provider: input.provider, documents };
+          return { provider: input.provider, ...result };
         } catch (error) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
@@ -1030,20 +1035,22 @@ export const appRouter = router({
 
     importCloudResume: protectedProcedure
       .input(z.object({
-        provider: z.enum(["google_drive", "dropbox"]),
-        sourceId: z.string().trim().min(1).max(1000),
-        name: z.string().trim().min(1).max(500),
-        mimeType: z.string().trim().min(1).max(255),
-        size: z.number().int().min(0).max(10 * 1024 * 1024).nullable(),
-        modifiedAt: z.string().datetime().nullable(),
+        candidateId: z.string().min(40).max(64).regex(/^[A-Za-z0-9_-]+$/),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { downloadCloudResumeDocument } = await import("./cloudDocumentDiscovery");
+        const {
+          completeCloudResumeCandidate,
+          downloadCloudResumeDocument,
+          releaseCloudResumeCandidate,
+        } = await import("./cloudDocumentDiscovery");
         const { parseResumeFromFile, resumeToProfileData } = await import("./resumeParser");
         const { createAuditEvent } = await import("./db");
         const { RESUME_MIME_TYPES, validateUploadedFile, scanSensitiveUpload } = await import("./uploadValidation");
+        let claimedCandidateId: string | null = null;
+        let resumeStoreAttempted = false;
         try {
-          const document = await downloadCloudResumeDocument(ctx.user.id, input);
+          const document = await downloadCloudResumeDocument(ctx.user.id, input.candidateId);
+          claimedCandidateId = document.candidateId;
           const validation = validateUploadedFile({
             data: document.data,
             fileName: document.fileName,
@@ -1057,6 +1064,7 @@ export const appRouter = router({
           });
           const parsed = await parseResumeFromFile(document.data, document.mimeType);
           const profileData = resumeToProfileData(parsed);
+          resumeStoreAttempted = true;
           const resume = await uploadResume(
             ctx.user.id,
             document.data,
@@ -1064,6 +1072,8 @@ export const appRouter = router({
             document.mimeType,
             profileData
           );
+          await completeCloudResumeCandidate(ctx.user.id, document.candidateId);
+          claimedCandidateId = null;
           const matchRefresh = await (await import("./profileMatchLedger")).refreshProfileMatchLedger({
             userId: ctx.user.id,
             source: "profile.importCloudResume",
@@ -1076,7 +1086,7 @@ export const appRouter = router({
             actor: "user",
             source: "profile.importCloudResume",
             afterState: JSON.stringify({
-              provider: input.provider,
+              provider: document.provider,
               resumeId: resume.id,
               resumeVersion: resume.version,
               matchRefresh,
@@ -1085,6 +1095,10 @@ export const appRouter = router({
           });
           return { success: true, parsed, profileData, resume, matchRefresh };
         } catch (error) {
+          // Storage may have committed before an upstream response failed; keep the lease to prevent duplicate resume versions.
+          if (claimedCandidateId && !resumeStoreAttempted) {
+            await releaseCloudResumeCandidate(ctx.user.id, claimedCandidateId).catch(() => undefined);
+          }
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
             message: safeExternalConnectorErrorMessage(
