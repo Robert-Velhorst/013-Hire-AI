@@ -2,6 +2,7 @@ param([ValidateSet('windows', 'ngrok')][string]$Launcher = 'windows')
 
 $ErrorActionPreference = 'Stop'
 $env:CONNECTOR_OAUTH_REDIRECT_URI = ''
+$env:PUBLIC_APP_ORIGIN = 'https://hire-ai.example.ngrok.app'
 
 # Execute the real launcher without builds, database changes, network or child processes.
 function Get-Command {
@@ -11,7 +12,15 @@ function Get-Command {
     if ($Name -eq 'ngrok.exe') { return @{ Source = 'fixture-ngrok.exe' } }
     throw "Unexpected command: $Name"
 }
-function Invoke-FixtureNode { $global:LASTEXITCODE = 0 }
+function Invoke-FixtureNode {
+    $global:LASTEXITCODE = 0
+    if ($args -contains '--input-type=commonjs') {
+        return (@{
+            publicAppOrigin = $env:PUBLIC_APP_ORIGIN
+            connectorRedirectUri = $env:CONNECTOR_OAUTH_REDIRECT_URI
+        } | ConvertTo-Json -Compress)
+    }
+}
 function Invoke-FixtureNpm { $global:LASTEXITCODE = 0 }
 function Start-Process {
     param($FilePath, $ArgumentList, $WorkingDirectory, $RedirectStandardOutput,
@@ -20,6 +29,7 @@ function Start-Process {
     if ($ArgumentList[0] -ne $expectedCommand -or $WindowStyle -ne 'Hidden') {
         throw 'Unexpected startup command'
     }
+    $global:fixture.startCalls++
     if ($global:fixture.launcher -eq 'windows') {
         $global:fixture.launchId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
     }
@@ -70,13 +80,26 @@ function Stop-Process {
 }
 
 $scenarios = @('matching', 'foreign', 'case-mismatch', 'missing', 'string-ready', 'exited', 'start-failure')
-if ($Launcher -eq 'ngrok') { $scenarios += @('local-string-ready', 'local-newline-id') }
+if ($Launcher -eq 'ngrok') { $scenarios += @('local-string-ready', 'local-newline-id', 'origin-mismatch', 'origin-missing', 'callback-mismatch') }
 $results = foreach ($scenario in $scenarios) {
     $global:fixture = @{
         scenario = $scenario
         launcher = $Launcher
         child = [pscustomobject]@{ Id = 424242; HasExited = $false; ExitCode = 0 }
         messages = @(); stopped = @(); launchId = ('local-' + ('a' * 32)); probes = 0; clock = 0
+        startCalls = 0
+    }
+    $env:PUBLIC_APP_ORIGIN = if ($scenario -eq 'origin-mismatch') {
+        'https://other.example.ngrok.app'
+    } elseif ($scenario -eq 'origin-missing') {
+        ''
+    } else {
+        'https://hire-ai.example.ngrok.app'
+    }
+    $env:CONNECTOR_OAUTH_REDIRECT_URI = if ($scenario -eq 'callback-mismatch') {
+        'https://other.example.ngrok.app/api/connectors/oauth/callback'
+    } else {
+        ''
     }
     if ($scenario -eq 'local-newline-id') { $global:fixture.launchId += "`n" }
     $env:HIRE_AI_RUNTIME_INSTANCE_ID = 'parent-value-must-be-restored'
@@ -97,6 +120,7 @@ $results = foreach ($scenario in $scenarios) {
         launchId = $global:fixture.launchId
         restoredId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
         stopped = @($global:fixture.stopped)
+        startCalls = $global:fixture.startCalls
     }
 }
 $results | ConvertTo-Json -Compress

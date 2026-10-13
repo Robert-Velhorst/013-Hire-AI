@@ -21,7 +21,7 @@ The service binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only whe
 
 ## ngrok tunnel
 
-Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Start the Windows runtime first, then open a second PowerShell terminal:
+Use a reserved HTTPS ngrok origin so OAuth callbacks remain stable. Before exposing the runtime, set `PUBLIC_APP_ORIGIN` in `.env` to that exact canonical HTTPS origin (for example, `https://hire-ai.example.ngrok.app`, with no path, query, or fragment). The ngrok launcher reads the effective callback values with the same dotenv parser as the Node server and rejects a missing or mismatched origin before starting the public tunnel; it also checks the connector callback when configured. This prevents an externally reachable service from generating callbacks for a different host. Start the Windows runtime first, then open a second PowerShell terminal:
 
 ```powershell
 npm.cmd run start:ngrok -- -PublicUrl https://hire-ai.example.ngrok.app/ -Port 3000
