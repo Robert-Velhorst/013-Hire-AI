@@ -34,10 +34,11 @@
 Verified on 2026-10-13 through the repository API and Security tab:
 
 - Secret scanning for provider patterns and push protection are enabled.
-- Dependabot alerts, automatic security fixes, and private vulnerability reporting are enabled.
+- The dependency graph, Dependabot alerts and security updates, malware alerts, and private vulnerability reporting are enabled.
 - CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python.
+- Copilot Autofix is enabled for supported CodeQL findings. AI Scan for pull requests is a preview feature and remains disabled.
 - `main` requires pull requests, the five named CI checks, resolved review conversations, and an up-to-date base. Admins are included; force pushes and branch deletion are disabled. No approving-review count is set for this single-maintainer repository.
 - Generic/non-provider scanning and automatic secret-validity checks are unavailable for this user-owned repository under current GitHub eligibility. Validity checking, where offered, sends credentials to their issuer.
-- The Security tab showed 30 open CodeQL alerts on 2026-10-13: 3 critical, 23 high, and 4 medium. The alert queue is not resolved by enabling scanning and remains a security-review task.
+- The Security tab showed 45 open CodeQL alerts on `main` on 2026-10-13: 7 critical, 34 high, and 4 medium. No open Dependabot alerts were returned by the repository API at that check. The CodeQL queue remains a security-review task; enabling scanning does not resolve findings.
 
 These settings are a point-in-time snapshot, not a claim that the application has no vulnerabilities or has passed independent security review. Recheck the live [repository Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) before release decisions.
