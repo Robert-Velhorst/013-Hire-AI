@@ -49,6 +49,25 @@ describe("scraper manager platform restrictions", () => {
     expect(manager.getInitializedPlatforms()).toContain("RemoteOK");
   });
 
+  it("serializes concurrent persistence calls across manager instances", async () => {
+    let activeLookups = 0;
+    let maxConcurrentLookups = 0;
+    mocks.getDb.mockImplementation(async () => {
+      activeLookups += 1;
+      maxConcurrentLookups = Math.max(maxConcurrentLookups, activeLookups);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeLookups -= 1;
+      return null;
+    });
+
+    await Promise.all([
+      new ScraperManager().saveJobs([]),
+      new ScraperManager().saveJobs([]),
+    ]);
+
+    expect(maxConcurrentLookups).toBe(1);
+  });
+
   it("tracks account-only sources without initializing a scraper for them", async () => {
     const manager = new ScraperManager();
 
