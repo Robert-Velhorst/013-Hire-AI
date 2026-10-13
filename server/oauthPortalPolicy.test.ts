@@ -10,6 +10,7 @@ const productionEnv = {
   JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
+  PUBLIC_APP_ORIGIN: "https://hire.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
   STRIPE_SECRET_KEY: "sk_test_doctor",
