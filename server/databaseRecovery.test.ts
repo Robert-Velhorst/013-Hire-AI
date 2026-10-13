@@ -58,6 +58,8 @@ describe("database recovery tooling", () => {
       });
     expect(() => recoveryCommand("mysql", [], "unsafe container name"))
       .toThrow("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid");
+    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined))
+      .toThrow("Database recovery executable is invalid");
   });
 
   it.each([
