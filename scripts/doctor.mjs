@@ -32,6 +32,7 @@ const requiredProductionEnv = [
   "ERASURE_IDENTITY_HMAC_KEYS",
   "VITE_APP_ID",
   "OAUTH_SERVER_URL",
+  "PUBLIC_APP_ORIGIN",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
   "STRIPE_SECRET_KEY",
@@ -100,6 +101,28 @@ check(
     : oauthPortalValid
       ? "trusted runtime URL configured"
       : "OAUTH_PORTAL_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+);
+
+const publicAppOrigin = String(process.env.PUBLIC_APP_ORIGIN || "");
+let publicAppOriginValid = false;
+try {
+  const parsed = new URL(publicAppOrigin);
+  publicAppOriginValid = parsed.protocol === "https:"
+    && !parsed.username
+    && !parsed.password
+    && parsed.pathname === "/"
+    && !parsed.search
+    && !parsed.hash
+    && publicAppOrigin === publicAppOrigin.trim();
+} catch { publicAppOriginValid = false; }
+check(
+  "public application origin",
+  !publicAppOrigin && !isProduction ? "warn" : publicAppOriginValid ? "pass" : "fail",
+  !publicAppOrigin && !isProduction
+    ? "not required outside production"
+    : publicAppOriginValid
+      ? "canonical HTTPS origin configured"
+      : "PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without credentials, path, query, or fragment"
 );
 
 const jwtSecret = String(process.env.JWT_SECRET || "");

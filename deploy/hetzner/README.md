@@ -51,7 +51,7 @@ Run migrations explicitly against the intended database, never automatically on 
 
 ## Application Acceptance
 
-Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, TLS, callback origins and external provider acceptance are separate requirements.
+Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, `PUBLIC_APP_ORIGIN` as the exact public HTTPS origin, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. OAuth callbacks use that configured origin and never reflect the inbound Host header in production. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, DNS, TLS, callback registration and external provider acceptance are separate requirements.
 
 The initializer already supplies `.env.database` and `.env.session`; the application loads these after the provider file. A missing `.env.production` deliberately prevents the combined deployment from starting. The production doctor also rejects incomplete settings.
 

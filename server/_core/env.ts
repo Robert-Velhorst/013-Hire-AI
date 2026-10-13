@@ -2,6 +2,7 @@ import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiCon
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
+import { normalizePublicAppOrigin } from "./publicAppOrigin";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -102,6 +103,7 @@ export const ENV = {
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
+  publicAppOrigin: readEnv("PUBLIC_APP_ORIGIN"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),
@@ -147,6 +149,7 @@ export function validateProductionEnv() {
     "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
+    "PUBLIC_APP_ORIGIN",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
     "STRIPE_SECRET_KEY",
@@ -156,6 +159,9 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  if (!normalizePublicAppOrigin(ENV.publicAppOrigin, true)) {
+    throw new Error("PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without a path, query, or fragment.");
+  }
   const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
     ENV.analyticsAllowedOrigin
   );

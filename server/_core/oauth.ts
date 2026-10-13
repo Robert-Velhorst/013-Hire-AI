@@ -9,6 +9,7 @@ import { ENV } from "./env";
 import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { createSensitiveRouteRateLimiter } from "./apiRateLimit";
+import { resolveOAuthCallbackUri } from "./publicAppOrigin";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
 const oauthLoginRateLimit = createSensitiveRouteRateLimiter("oauthLogin");
@@ -30,12 +31,12 @@ export function registerOAuthRoutes(app: Express) {
         res.status(503).json({ error: "OAuth login is not configured" });
         return;
       }
-      const host = req.get("host");
-      if (!host) {
-        res.status(400).json({ error: "OAuth callback origin is invalid" });
-        return;
-      }
-      const redirectUri = `${req.protocol}://${host}/api/oauth/callback`;
+      const redirectUri = resolveOAuthCallbackUri({
+        publicAppOrigin: ENV.publicAppOrigin,
+        isProduction: ENV.isProduction,
+        requestProtocol: req.protocol,
+        requestHost: req.get("host"),
+      });
       const issued = createOAuthLoginState(redirectUri, ENV.cookieSecret);
       const portalUrl = requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
       portalUrl.pathname = "/app-auth";
