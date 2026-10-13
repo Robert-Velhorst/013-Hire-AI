@@ -33,6 +33,10 @@ function linePrice(line: StripeLine): StripePrice | null {
   return value && typeof value === "object" ? value : null;
 }
 
+function linePriceId(line: StripeLine): string | null {
+  return stripeObjectId(line.price ?? line.pricing?.price_details?.price);
+}
+
 export function validateStripeCustomerIdentity(
   expectedCustomerId: string | null,
   providerCustomer: unknown
@@ -51,17 +55,17 @@ export function validateStripePriceLine(
   }
   if (!lines || !Array.isArray(lines.data) || lines.has_more) return "incomplete_invoice_lines";
 
-  const matches = lines.data.filter(line => stripeObjectId(line.price) === fee.stripePriceId ||
-    stripeObjectId(line.pricing?.price_details?.price) === fee.stripePriceId);
+  const matches = lines.data.filter(line => linePriceId(line) === fee.stripePriceId);
   if (matches.length !== 1) return "invoice_price_mismatch";
 
   const line = matches[0];
   const price = linePrice(line);
-  if (!price || price.id !== fee.stripePriceId) return "invoice_price_mismatch";
-  if ((line.currency ?? price.currency ?? "").toUpperCase() !== fee.currency.toUpperCase()) {
+  if (linePriceId(line) !== fee.stripePriceId) return "invoice_price_mismatch";
+  if ((line.currency ?? price?.currency ?? "").toUpperCase() !== fee.currency.toUpperCase()) {
     return "currency_mismatch";
   }
-  if (line.quantity !== 1 || line.amount !== fee.monthlyFeeAmount || price.unit_amount !== fee.monthlyFeeAmount) {
+  if (line.quantity !== 1 || line.amount !== fee.monthlyFeeAmount ||
+    (price?.unit_amount != null && price.unit_amount !== fee.monthlyFeeAmount)) {
     return "amount_mismatch";
   }
   return null;

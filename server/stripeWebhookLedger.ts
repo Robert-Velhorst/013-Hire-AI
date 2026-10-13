@@ -4,8 +4,14 @@ import { stripeWebhookEvents } from "../drizzle/schema";
 
 type WebhookStatus = "processing" | "processed" | "failed";
 export const STRIPE_WEBHOOK_FAILURE_MESSAGE = "Webhook processing failed.";
+const STALE_PROCESSING_MS = 10 * 60 * 1000;
 
-const memoryEvents = new Map<string, { eventType: string; status: WebhookStatus; errorMessage: string | null }>();
+const memoryEvents = new Map<string, {
+  eventType: string;
+  status: WebhookStatus;
+  errorMessage: string | null;
+  updatedAt: number;
+}>();
 
 function isDuplicateEventError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -17,36 +23,50 @@ export async function claimStripeWebhookEvent(eventId: string, eventType: string
   const db = await getDb();
   if (!db) {
     const existing = memoryEvents.get(eventId);
-    if (existing?.status === "processed" || existing?.status === "processing") {
+    if (existing?.eventType !== undefined && existing.eventType !== eventType) {
+      throw new Error("Stripe event ID was received with conflicting event types.");
+    }
+    if (existing?.status === "processed" || (existing?.status === "processing" &&
+      Date.now() - existing.updatedAt <= STALE_PROCESSING_MS)) {
       return { claimed: false, duplicate: true };
     }
-    memoryEvents.set(eventId, { eventType, status: "processing", errorMessage: null });
+    memoryEvents.set(eventId, { eventType, status: "processing", errorMessage: null, updatedAt: Date.now() });
     return { claimed: true, duplicate: false };
-  }
-
-  const existing = await db
-    .select()
-    .from(stripeWebhookEvents)
-    .where(eq(stripeWebhookEvents.stripeEventId, eventId))
-    .limit(1);
-  if (existing[0]) {
-    if (existing[0].status === "failed") {
-      await db.update(stripeWebhookEvents)
-        .set({ status: "processing", errorMessage: null, processedAt: null })
-        .where(eq(stripeWebhookEvents.id, existing[0].id));
-      return { claimed: true, duplicate: false };
-    }
-    return { claimed: false, duplicate: true };
   }
 
   try {
-    await db.insert(stripeWebhookEvents).values({ stripeEventId: eventId, eventType, status: "processing" });
-    return { claimed: true, duplicate: false };
+    return await db.transaction(async tx => {
+      const [existing] = await tx.select()
+        .from(stripeWebhookEvents)
+        .where(eq(stripeWebhookEvents.stripeEventId, eventId))
+        .limit(1)
+        .for("update");
+
+      if (existing) {
+        if (existing.eventType !== eventType) {
+          throw new Error("Stripe event ID was received with conflicting event types.");
+        }
+        const staleProcessing = existing.status === "processing" && existing.updatedAt &&
+          Date.now() - existing.updatedAt.getTime() > STALE_PROCESSING_MS;
+        if (existing.status !== "failed" && !staleProcessing) {
+          return { claimed: false, duplicate: true };
+        }
+        await tx.update(stripeWebhookEvents)
+          .set({ status: "processing", errorMessage: null, processedAt: null })
+          .where(eq(stripeWebhookEvents.id, existing.id));
+        return { claimed: true, duplicate: false };
+      }
+
+      try {
+        await tx.insert(stripeWebhookEvents).values({ stripeEventId: eventId, eventType, status: "processing" });
+        return { claimed: true, duplicate: false };
+      } catch (error) {
+        if (isDuplicateEventError(error)) return { claimed: false, duplicate: true };
+        throw error;
+      }
+    });
   } catch (error) {
-    // A concurrent delivery may have inserted the unique event id after the read.
-    if (isDuplicateEventError(error)) {
-      return { claimed: false, duplicate: true };
-    }
+    if (isDuplicateEventError(error)) return { claimed: false, duplicate: true };
     throw error;
   }
 }
@@ -55,7 +75,10 @@ export async function completeStripeWebhookEvent(eventId: string) {
   const db = await getDb();
   if (!db) {
     const event = memoryEvents.get(eventId);
-    if (event) event.status = "processed";
+    if (event) {
+      event.status = "processed";
+      event.updatedAt = Date.now();
+    }
     return;
   }
   await db.update(stripeWebhookEvents)
@@ -71,6 +94,7 @@ export async function failStripeWebhookEvent(eventId: string, _error: unknown) {
     if (event) {
       event.status = "failed";
       event.errorMessage = errorMessage;
+      event.updatedAt = Date.now();
     }
     return;
   }

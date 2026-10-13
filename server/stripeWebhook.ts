@@ -1,323 +1,374 @@
 import express, { type Express } from "express";
 import Stripe from "stripe";
-import { createAdminReviewItem, createAuditEvent, getDb } from "./db";
-import { successFees, feePayments, type SuccessFee } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { getDb } from "./db";
+import {
+  adminReviewItems,
+  auditEvents,
+  feePayments,
+  stripeWebhookEvents,
+  successFees,
+  users,
+  type SuccessFee,
+} from "../drizzle/schema";
+import { and, eq } from "drizzle-orm";
 import { getStripeClient } from "./stripeClient";
-import { claimStripeWebhookEvent, completeStripeWebhookEvent, failStripeWebhookEvent } from "./stripeWebhookLedger";
+import { claimStripeWebhookEvent, failStripeWebhookEvent } from "./stripeWebhookLedger";
 import { canTransitionSuccessFeeStatus } from "./successFeeStateMachine";
 import { logOperationalFailure } from "./operationalFailureLog";
+import {
+  transitionStripeInvoicePaymentStatus,
+  validateStripeCustomerIdentity,
+  validateStripeInvoiceIdentity,
+  validateStripeSubscriptionIdentity,
+  type StripeFeeIdentity,
+} from "./stripeBillingIdentity";
 
-async function createPaymentFailureReview(
-  fee: Pick<SuccessFee, "id" | "userId" | "employerName" | "jobTitle">,
-  description: string
+const failedResponse = "Webhook processing failed";
+
+function idOf(value: string | { id?: string | null } | null | undefined) {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (!value || typeof value !== "object") return null;
+  return typeof value.id === "string" && value.id.length > 0 ? value.id : null;
+}
+
+function invoiceSubscriptionId(invoice: Stripe.Invoice) {
+  const expanded = invoice as Stripe.Invoice & {
+    subscription?: string | Stripe.Subscription | null;
+    parent?: { subscription_details?: { subscription?: string | Stripe.Subscription | null } } | null;
+  };
+  return idOf(expanded.subscription) ?? idOf(expanded.parent?.subscription_details?.subscription);
+}
+
+function identityForFee(fee: SuccessFee, customerId: string | null): StripeFeeIdentity {
+  return {
+    stripeCustomerId: customerId,
+    stripePriceId: fee.stripePriceId,
+    monthlyFeeAmount: fee.monthlyFeeAmount,
+    currency: fee.currency,
+  };
+}
+
+function requireIdentity(error: string | null) {
+  if (error) throw new Error(`Stripe billing identity validation failed: ${error}`);
+}
+
+async function addAudit(
+  tx: Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0],
+  input: {
+    fee: Pick<SuccessFee, "userId" | "id">;
+    action: string;
+    event: Stripe.Event;
+    beforeState?: unknown;
+    afterState: unknown;
+    riskLevel: "high" | "critical";
+  }
 ) {
-  await createAdminReviewItem({
-    userId: fee.userId,
+  await tx.insert(auditEvents).values({
+    userId: input.fee.userId,
     entityType: "success_fee",
-    entityId: fee.id,
-    category: "payment_failed",
-    priority: "high",
-    title: "Stripe payment failed",
-    description,
+    entityId: input.fee.id,
+    action: input.action,
+    actor: "system",
+    source: `stripe:${input.event.type}`,
+    beforeState: input.beforeState === undefined ? null : JSON.stringify(input.beforeState),
+    afterState: JSON.stringify(input.afterState),
+    riskLevel: input.riskLevel,
   });
 }
 
 export function registerStripeWebhook(app: Express) {
-  app.post(
-    "/api/stripe/webhook",
-    express.raw({ type: "application/json" }),
-    async (req, res) => {
-      const sig = req.headers["stripe-signature"] as string;
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    const signature = req.headers["stripe-signature"] as string | undefined;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event: Stripe.Event;
 
-      let event: Stripe.Event;
-
-      try {
-        if (webhookSecret && sig) {
-          event = getStripeClient().webhooks.constructEvent(req.body, sig, webhookSecret);
-        } else {
-          // For development without webhook secret
-          event = JSON.parse(req.body.toString()) as Stripe.Event;
-        }
-      } catch {
-        logOperationalFailure("Stripe Webhook", "Signature verification");
-        res.status(400).send("Webhook signature verification failed.");
-        return;
+    try {
+      if (webhookSecret && signature) {
+        event = getStripeClient().webhooks.constructEvent(req.body, signature, webhookSecret);
+      } else if (process.env.NODE_ENV !== "production" && !webhookSecret && !signature) {
+        event = JSON.parse(req.body.toString()) as Stripe.Event;
+      } else {
+        throw new Error("Stripe webhook signature verification is required.");
       }
+    } catch {
+      logOperationalFailure("Stripe Webhook", "Signature verification");
+      res.status(400).send("Webhook signature verification failed.");
+      return;
+    }
 
-      // Handle test events
-      if (event.id.startsWith("evt_test_")) {
-        console.log("[Stripe Webhook] Test event detected, returning verification response");
-        res.json({ verified: true });
-        return;
-      }
+    if (event.id.startsWith("evt_test_")) {
+      res.json({ verified: true });
+      return;
+    }
 
-      console.log(`[Stripe Webhook] Received event: ${event.type} (${event.id})`);
+    let db: Awaited<ReturnType<typeof getDb>>;
+    try {
+      db = await getDb();
+    } catch {
+      logOperationalFailure("Stripe Webhook", "Database initialization");
+      res.status(500).json({ error: "Database unavailable" });
+      return;
+    }
+    if (!db) {
+      res.status(500).json({ error: "Database unavailable" });
+      return;
+    }
 
-      const db = await getDb();
-      if (!db) {
-        console.error("[Stripe Webhook] Database unavailable");
-        res.status(500).json({ error: "Database unavailable" });
-        return;
-      }
-
+    try {
       const claim = await claimStripeWebhookEvent(event.id, event.type);
       if (!claim.claimed) {
         res.json({ received: true, duplicate: true });
         return;
       }
 
-      try {
+      let checkoutSubscription: Stripe.Subscription | null = null;
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const subscriptionId = idOf(session.subscription);
+        if (!subscriptionId) throw new Error("Checkout session has no subscription mapping.");
+        checkoutSubscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+      }
+
+      await db.transaction(async tx => {
+        const feeForSubscription = async (subscriptionId: string) => {
+          const [fee] = await tx.select().from(successFees)
+            .where(eq(successFees.stripeSubscriptionId, subscriptionId))
+            .limit(1)
+            .for("update");
+          if (!fee) throw new Error("Stripe subscription is not mapped to a success fee.");
+          const [user] = await tx.select({ stripeCustomerId: users.stripeCustomerId })
+            .from(users)
+            .where(eq(users.id, fee.userId))
+            .limit(1)
+            .for("update");
+          if (!user) throw new Error("Success-fee owner is missing.");
+          return { fee, customerId: user.stripeCustomerId };
+        };
+
         switch (event.type) {
           case "checkout.session.completed": {
             const session = event.data.object as Stripe.Checkout.Session;
             const feeId = Number(session.metadata?.successFeeId || session.client_reference_id);
-            const subscriptionId = typeof session.subscription === "string"
-              ? session.subscription
-              : session.subscription?.id;
-            if (!Number.isInteger(feeId) || feeId <= 0 || !subscriptionId) break;
+            const subscriptionId = idOf(session.subscription);
+            if (!Number.isSafeInteger(feeId) || feeId <= 0 || !subscriptionId || session.status !== "complete") {
+              throw new Error("Checkout session is incomplete or has no success-fee mapping.");
+            }
 
-            const [fee] = await db
-              .select()
-              .from(successFees)
+            const [fee] = await tx.select().from(successFees)
               .where(eq(successFees.id, feeId))
-              .limit(1);
-            if (!fee) break;
-
+              .limit(1)
+              .for("update");
+            if (!fee) throw new Error("Checkout session references an unknown success fee.");
+            const [user] = await tx.select({ stripeCustomerId: users.stripeCustomerId })
+              .from(users)
+              .where(eq(users.id, fee.userId))
+              .limit(1)
+              .for("update");
+            if (!user) throw new Error("Success-fee owner is missing.");
+            requireIdentity(validateStripeCustomerIdentity(user.stripeCustomerId, session.customer));
+            if (!checkoutSubscription || checkoutSubscription.id !== subscriptionId) {
+              throw new Error("Checkout subscription could not be verified.");
+            }
+            requireIdentity(validateStripeSubscriptionIdentity(identityForFee(fee, user.stripeCustomerId), {
+              customer: checkoutSubscription.customer,
+              items: checkoutSubscription.items,
+            }));
             if (fee.stripeSubscriptionId && fee.stripeSubscriptionId !== subscriptionId) {
               throw new Error("Checkout subscription does not match the existing success-fee ledger record.");
             }
+            if (fee.stripeCheckoutSessionId && fee.stripeCheckoutSessionId !== session.id) {
+              throw new Error("Checkout session does not match the existing success-fee ledger record.");
+            }
 
-            if (!fee.stripeSubscriptionId) {
-              await db.update(successFees)
-                .set({ stripeSubscriptionId: subscriptionId })
-                .where(eq(successFees.id, fee.id));
-              await createAuditEvent({
-                userId: fee.userId,
-                entityType: "success_fee",
-                entityId: fee.id,
+            if (!fee.stripeSubscriptionId || !fee.stripeCheckoutSessionId) {
+              await tx.update(successFees).set({
+                stripeSubscriptionId: subscriptionId,
+                stripeCheckoutSessionId: session.id,
+              }).where(eq(successFees.id, fee.id));
+              await addAudit(tx, {
+                fee,
                 action: "stripe_checkout_subscription_linked",
-                actor: "system",
-                source: `stripe:${event.type}`,
-                afterState: JSON.stringify({
+                event,
+                afterState: {
                   stripeEventId: event.id,
                   checkoutSessionId: session.id,
                   stripeSubscriptionId: subscriptionId,
-                  checkoutStatus: session.status,
-                }),
+                },
                 riskLevel: "critical",
               });
             }
             break;
           }
 
-          case "invoice.paid": {
-            const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
-            const subscriptionId = invoice.subscription as string;
-            if (!subscriptionId) break;
-
-            // Find the success fee for this subscription
-            const [fee] = await db
-              .select()
-              .from(successFees)
-              .where(eq(successFees.stripeSubscriptionId, subscriptionId))
-              .limit(1);
-
-            if (!fee) break;
-
-            // Record payment
-            await db.insert(feePayments).values({
-              successFeeId: fee.id,
-              userId: fee.userId,
-              amount: invoice.amount_paid,
-              currency: invoice.currency.toUpperCase(),
-              stripeInvoiceId: invoice.id,
-              status: "paid",
-              paidAt: new Date(invoice.status_transitions.paid_at! * 1000),
-              periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : null,
-              periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null,
-            });
-
-            // Payment recovery must not erase a suspension whose cause is not
-            // represented by the payment event. Existing suspended fees require
-            // an explicit, audited administrative resolution.
-            if (fee.status === "pending_verification" && canTransitionSuccessFeeStatus(fee.status, "active")) {
-              await db.update(successFees)
-                .set({ status: "active" })
-                .where(eq(successFees.id, fee.id));
-              await createAuditEvent({
-                userId: fee.userId,
-                entityType: "success_fee",
-                entityId: fee.id,
-                action: "success_fee_activated_from_stripe_payment",
-                actor: "system",
-                source: `stripe:${event.type}`,
-                beforeState: JSON.stringify({ status: fee.status }),
-                afterState: JSON.stringify({ status: "active", stripeEventId: event.id }),
-                riskLevel: "high",
-              });
-            }
-
-            await createAuditEvent({
-              userId: fee.userId,
-              entityType: "success_fee",
-              entityId: fee.id,
-              action: "stripe_payment_recorded",
-              actor: "system",
-              source: `stripe:${event.type}`,
-              afterState: JSON.stringify({ stripeEventId: event.id, stripeInvoiceId: invoice.id, status: "paid" }),
-              riskLevel: "high",
-            });
-
-            console.log(`[Stripe Webhook] Payment recorded for fee ${fee.id}: ${invoice.amount_paid} ${invoice.currency}`);
-            break;
-          }
-
+          case "invoice.paid":
           case "invoice.payment_failed": {
-            const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
-            const subscriptionId = invoice.subscription as string;
-            if (!subscriptionId) break;
+            const invoice = event.data.object as Stripe.Invoice;
+            const subscriptionId = invoiceSubscriptionId(invoice);
+            if (!subscriptionId) throw new Error("Invoice has no subscription mapping.");
+            const { fee, customerId } = await feeForSubscription(subscriptionId);
+            const amount = event.type === "invoice.paid" ? invoice.amount_paid : invoice.amount_due;
+            const currency = (invoice.currency ?? "").toUpperCase();
+            const lines = invoice.lines as unknown as { data?: Array<{
+              amount?: number | null;
+              currency?: string | null;
+              quantity?: number | null;
+              price?: string | { id?: string | null; currency?: string | null; unit_amount?: number | null } | null;
+              pricing?: { price_details?: { price?: string | { id?: string | null; currency?: string | null; unit_amount?: number | null } | null } } | null;
+            }>; has_more?: boolean };
+            requireIdentity(validateStripeInvoiceIdentity(identityForFee(fee, customerId), {
+              customer: invoice.customer,
+              currency,
+              amount,
+              lines,
+            }));
 
-            const [fee] = await db
-              .select()
-              .from(successFees)
-              .where(eq(successFees.stripeSubscriptionId, subscriptionId))
-              .limit(1);
-
-            if (!fee) break;
-
-            // Record failed payment
-            await db.insert(feePayments).values({
+            const incomingStatus = event.type === "invoice.paid" ? "paid" as const : "failed" as const;
+            const [existingPayment] = await tx.select().from(feePayments)
+              .where(eq(feePayments.stripeInvoiceId, invoice.id))
+              .limit(1)
+              .for("update");
+            if (existingPayment && (existingPayment.successFeeId !== fee.id || existingPayment.userId !== fee.userId)) {
+              throw new Error("Invoice is already linked to a different success-fee ledger record.");
+            }
+            const nextStatus = transitionStripeInvoicePaymentStatus(existingPayment?.status ?? null, incomingStatus);
+            const changed = !existingPayment || existingPayment.status !== nextStatus;
+            const paidAt = event.type === "invoice.paid" && invoice.status_transitions?.paid_at
+              ? new Date(invoice.status_transitions.paid_at * 1000)
+              : null;
+            const paymentValues = {
               successFeeId: fee.id,
               userId: fee.userId,
-              amount: invoice.amount_due,
-              currency: invoice.currency.toUpperCase(),
+              amount,
+              currency,
               stripeInvoiceId: invoice.id,
-              status: "failed",
+              status: nextStatus,
+              paidAt: nextStatus === "paid" ? (existingPayment?.paidAt ?? paidAt) : null,
               periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : null,
               periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null,
-            });
-
-            if (fee.status !== "suspended" && canTransitionSuccessFeeStatus(fee.status, "suspended")) {
-              await db.update(successFees)
-                .set({ status: "suspended" })
-                .where(eq(successFees.id, fee.id));
+            };
+            if (existingPayment) {
+              if (changed) await tx.update(feePayments).set(paymentValues)
+                .where(eq(feePayments.id, existingPayment.id));
+            } else {
+              await tx.insert(feePayments).values(paymentValues);
             }
-            await createAuditEvent({
-              userId: fee.userId,
-              entityType: "success_fee",
-              entityId: fee.id,
-              action: "stripe_payment_failed",
-              actor: "system",
-              source: `stripe:${event.type}`,
-              beforeState: JSON.stringify({ status: fee.status }),
-              afterState: JSON.stringify({ status: "suspended", stripeEventId: event.id, stripeInvoiceId: invoice.id }),
-              riskLevel: "high",
-            });
-            await createPaymentFailureReview(
-              fee,
-              `Stripe could not collect ${invoice.amount_due} ${invoice.currency.toUpperCase()} for ${fee.employerName} (${fee.jobTitle}). Review billing recovery before any escalation.`
-            );
 
-            console.log(`[Stripe Webhook] Payment failed for fee ${fee.id}`);
-            break;
-          }
-
-          case "customer.subscription.deleted": {
-            const subscription = event.data.object as Stripe.Subscription;
-
-            const [fee] = await db
-              .select()
-              .from(successFees)
-              .where(eq(successFees.stripeSubscriptionId, subscription.id))
-              .limit(1);
-
-            if (!fee) break;
-
-            if (fee.status !== "ended" && canTransitionSuccessFeeStatus(fee.status, "ended")) {
-              await db.update(successFees)
-                .set({ status: "ended", endDate: new Date() })
-                .where(eq(successFees.id, fee.id));
-              await createAuditEvent({
+            if (event.type === "invoice.paid") {
+              if (fee.status === "pending_verification" && canTransitionSuccessFeeStatus(fee.status, "active")) {
+                await tx.update(successFees).set({ status: "active" }).where(eq(successFees.id, fee.id));
+                await addAudit(tx, {
+                  fee,
+                  action: "success_fee_activated_from_stripe_payment",
+                  event,
+                  beforeState: { status: fee.status },
+                  afterState: { status: "active", stripeEventId: event.id },
+                  riskLevel: "high",
+                });
+              }
+              if (changed) await addAudit(tx, {
+                fee,
+                action: "stripe_payment_recorded",
+                event,
+                afterState: { stripeEventId: event.id, stripeInvoiceId: invoice.id, status: nextStatus },
+                riskLevel: "high",
+              });
+            } else if (changed) {
+              if (fee.status !== "suspended" && canTransitionSuccessFeeStatus(fee.status, "suspended")) {
+                await tx.update(successFees).set({ status: "suspended" }).where(eq(successFees.id, fee.id));
+              }
+              await addAudit(tx, {
+                fee,
+                action: "stripe_payment_failed",
+                event,
+                beforeState: { status: fee.status },
+                afterState: { status: "suspended", stripeEventId: event.id, stripeInvoiceId: invoice.id },
+                riskLevel: "high",
+              });
+              await tx.insert(adminReviewItems).values({
                 userId: fee.userId,
                 entityType: "success_fee",
                 entityId: fee.id,
-                action: "stripe_subscription_ended",
-                actor: "system",
-                source: `stripe:${event.type}`,
-                beforeState: JSON.stringify({ status: fee.status }),
-                afterState: JSON.stringify({ status: "ended", stripeEventId: event.id }),
-                riskLevel: "high",
+                category: "payment_failed",
+                priority: "high",
+                title: "Stripe payment failed",
+                description: `Stripe could not collect ${amount} ${currency} for ${fee.employerName} (${fee.jobTitle}). Review billing recovery before any escalation.`,
               });
             }
-
-            console.log(`[Stripe Webhook] Subscription cancelled for fee ${fee.id}`);
             break;
           }
 
+          case "customer.subscription.deleted":
           case "customer.subscription.updated": {
             const subscription = event.data.object as Stripe.Subscription;
+            const { fee, customerId } = await feeForSubscription(subscription.id);
+            requireIdentity(validateStripeSubscriptionIdentity(identityForFee(fee, customerId), {
+              customer: subscription.customer,
+              items: subscription.items,
+            }));
 
-            const [fee] = await db
-              .select()
-              .from(successFees)
-              .where(eq(successFees.stripeSubscriptionId, subscription.id))
-              .limit(1);
-
-            if (!fee) break;
-
-            // A provider status describes billing only; it is not authority to
-            // clear an unrelated local suspension or dispute.
-            if (subscription.status === "active" && fee.status === "pending_verification" && canTransitionSuccessFeeStatus(fee.status, "active")) {
-              await db.update(successFees)
-                .set({ status: "active" })
-                .where(eq(successFees.id, fee.id));
-              await createAuditEvent({
-                userId: fee.userId,
-                entityType: "success_fee",
-                entityId: fee.id,
-                action: "stripe_subscription_status_updated",
-                actor: "system",
-                source: `stripe:${event.type}`,
-                beforeState: JSON.stringify({ status: fee.status }),
-                afterState: JSON.stringify({ status: "active", stripeEventId: event.id, stripeStatus: subscription.status }),
-                riskLevel: "high",
-              });
-            } else if (subscription.status === "past_due" && fee.status !== "suspended" && canTransitionSuccessFeeStatus(fee.status, "suspended")) {
-              await db.update(successFees)
-                .set({ status: "suspended" })
-                .where(eq(successFees.id, fee.id));
-              await createAuditEvent({
-                userId: fee.userId,
-                entityType: "success_fee",
-                entityId: fee.id,
-                action: "stripe_subscription_status_updated",
-                actor: "system",
-                source: `stripe:${event.type}`,
-                beforeState: JSON.stringify({ status: fee.status }),
-                afterState: JSON.stringify({ status: "suspended", stripeEventId: event.id, stripeStatus: subscription.status }),
-                riskLevel: "high",
-              });
-              await createPaymentFailureReview(
+            if (event.type === "customer.subscription.deleted") {
+              if (fee.status !== "ended" && canTransitionSuccessFeeStatus(fee.status, "ended")) {
+                await tx.update(successFees).set({ status: "ended", endDate: new Date() })
+                  .where(eq(successFees.id, fee.id));
+                await addAudit(tx, {
+                  fee,
+                  action: "stripe_subscription_ended",
+                  event,
+                  beforeState: { status: fee.status },
+                  afterState: { status: "ended", stripeEventId: event.id },
+                  riskLevel: "high",
+                });
+              }
+            } else if (subscription.status === "active" && fee.status === "pending_verification" &&
+              canTransitionSuccessFeeStatus(fee.status, "active")) {
+              await tx.update(successFees).set({ status: "active" }).where(eq(successFees.id, fee.id));
+              await addAudit(tx, {
                 fee,
-                `Stripe marked the subscription for ${fee.employerName} (${fee.jobTitle}) as past due. Review billing recovery before any escalation.`
-              );
+                action: "stripe_subscription_status_updated",
+                event,
+                beforeState: { status: fee.status },
+                afterState: { status: "active", stripeEventId: event.id, stripeStatus: subscription.status },
+                riskLevel: "high",
+              });
+            } else if (subscription.status === "past_due" && fee.status !== "suspended" &&
+              canTransitionSuccessFeeStatus(fee.status, "suspended")) {
+              await tx.update(successFees).set({ status: "suspended" }).where(eq(successFees.id, fee.id));
+              await addAudit(tx, {
+                fee,
+                action: "stripe_subscription_status_updated",
+                event,
+                beforeState: { status: fee.status },
+                afterState: { status: "suspended", stripeEventId: event.id, stripeStatus: subscription.status },
+                riskLevel: "high",
+              });
+              await tx.insert(adminReviewItems).values({
+                userId: fee.userId,
+                entityType: "success_fee",
+                entityId: fee.id,
+                category: "payment_failed",
+                priority: "high",
+                title: "Stripe payment failed",
+                description: `Stripe marked the subscription for ${fee.employerName} (${fee.jobTitle}) as past due. Review billing recovery before any escalation.`,
+              });
             }
             break;
           }
-
-          default:
-            console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
         }
 
-        await completeStripeWebhookEvent(event.id);
-        res.json({ received: true });
-      } catch (err) {
-        await failStripeWebhookEvent(event.id, err);
-        logOperationalFailure("Stripe Webhook", "Event processing");
-        res.status(500).json({ error: "Webhook processing failed" });
+        await tx.update(stripeWebhookEvents)
+          .set({ status: "processed", processedAt: new Date(), errorMessage: null })
+          .where(eq(stripeWebhookEvents.stripeEventId, event.id));
+      });
+
+      res.json({ received: true });
+    } catch {
+      try {
+        await failStripeWebhookEvent(event.id, new Error(failedResponse));
+      } catch {
+        logOperationalFailure("Stripe Webhook", "Ledger failure update");
       }
+      logOperationalFailure("Stripe Webhook", "Event processing");
+      res.status(500).json({ error: failedResponse });
     }
-  );
+  });
 }
