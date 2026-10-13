@@ -13,6 +13,7 @@ import {
   autonomousRunStates,
   connectorAuthorizations,
   erasedOAuthIdentities,
+  stripeReconciliationCommands,
   educationEntries,
   employerResponses,
   employmentVerifications,
@@ -149,6 +150,7 @@ export const privacyRetentionPolicyTables = [
   ...directPrivacyRetentionPolicy.map((entry) => entry.table),
   ...indirectPrivacyRetentionPolicy.map((entry) => entry.table),
   "erased_oauth_identities",
+  "stripe_reconciliation_commands",
 ];
 
 export const globallyRetainedPrivacyRecords = [
@@ -158,6 +160,13 @@ export const globallyRetainedPrivacyRecords = [
     reason:
       "Keyed, non-reversible OAuth identity hashes prevent account recreation after erasure; the table stores no source identifier or user link.",
     tableRef: erasedOAuthIdentities,
+  },
+  {
+    table: "stripe_reconciliation_commands",
+    action: "retain" as const,
+    reason:
+      "Durable provider pause, resume, and cancellation outcomes are required to reconcile billing authority; rows reference a fee record and external subscription and need an approved retention schedule.",
+    tableRef: stripeReconciliationCommands,
   },
 ];
 

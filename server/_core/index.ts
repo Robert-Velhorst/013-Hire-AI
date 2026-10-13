@@ -136,6 +136,8 @@ async function startServer() {
 
   let autonomousScheduler: { start(): void; stop(): Promise<void> } | null = null;
   let jobScrapingScheduler: { start(): void; stop(): Promise<void> } | null = null;
+  const { StripeReconciliationWorker } = await import("../stripeReconciliationWorker");
+  const stripeReconciliationWorker = new StripeReconciliationWorker();
   if (ENV.autonomousSchedulerEnabled) {
     const { getAutonomousScheduler } = await import("../autonomousScheduler");
     autonomousScheduler = getAutonomousScheduler();
@@ -160,6 +162,7 @@ async function startServer() {
 
   autonomousScheduler?.start();
   jobScrapingScheduler?.start();
+  stripeReconciliationWorker.start();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -177,6 +180,7 @@ async function startServer() {
       await drainRuntime(server, [
         () => autonomousScheduler?.stop(),
         () => jobScrapingScheduler?.stop(),
+        () => stripeReconciliationWorker.stop(),
       ], [closeOperationalResources]);
       clearTimeout(forceExit);
       process.exit(0);

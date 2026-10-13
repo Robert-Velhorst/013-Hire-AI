@@ -180,6 +180,10 @@ export default function AdminPanel() {
   // Data queries
   const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
   const { data: operatingCounts, refetch: refetchOperatingCounts } = trpc.admin.getOperatingCounts.useQuery(undefined, { enabled: isAdmin });
+  const { data: stripeReconciliation, refetch: refetchStripeReconciliation } = trpc.admin.getStripeReconciliationStatus.useQuery(undefined, {
+    enabled: isAdmin,
+    refetchInterval: 30_000,
+  });
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
     { limit: 8 },
     { enabled: isAdmin, refetchInterval: 30_000 }
@@ -263,6 +267,7 @@ export default function AdminPanel() {
       refetchFees();
       refetchStats();
       refetchOperatingCounts();
+      refetchStripeReconciliation();
       setStatusDialog({ open: false, feeId: null, currentStatus: "" });
       setNewStatus("");
       setStatusNote("");
@@ -278,6 +283,7 @@ export default function AdminPanel() {
       refetchStats();
       refetchReviewQueue();
       refetchOperatingCounts();
+      refetchStripeReconciliation();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -677,6 +683,14 @@ export default function AdminPanel() {
             <TabsTrigger value="payments" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400">
               {ac("paymentsTab")}
             </TabsTrigger>
+            <TabsTrigger value="stripe-reconciliation" className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-300">
+              {fc("stripeReconciliationTab")}
+              {((stripeReconciliation?.pending ?? 0) + (stripeReconciliation?.failed ?? 0)) > 0 && (
+                <Badge className="ml-1 bg-orange-500 text-white text-xs px-1.5">
+                  {(stripeReconciliation?.pending ?? 0) + (stripeReconciliation?.failed ?? 0)}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger
               value="discovery"
               data-testid="admin-job-discovery-tab"
@@ -685,6 +699,60 @@ export default function AdminPanel() {
               {ac("jobDiscovery")}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="stripe-reconciliation">
+            <Card className="bg-slate-900/60 border-slate-800/50">
+              <CardHeader>
+                <CardTitle className="text-white text-base">{fc("stripeReconciliationTitle")}</CardTitle>
+                <p className="text-xs text-slate-400">{fc("stripeReconciliationDetail")}</p>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    [fc("stripeSyncPending"), stripeReconciliation?.pending ?? 0],
+                    [fc("stripeSyncProcessing"), stripeReconciliation?.processing ?? 0],
+                    [fc("stripeSyncFailed"), stripeReconciliation?.failed ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={label} className="border border-slate-800 bg-slate-950/50 p-3">
+                      <div className="text-lg font-semibold text-white">{value}</div>
+                      <div className="text-xs text-slate-400">{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-left text-slate-400">
+                        <th className="py-2 pr-4">{fc("stripeSyncFee")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncSubscription")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncAction")}</th>
+                        <th className="py-2 pr-4">{fc("status")}</th>
+                        <th className="py-2 pr-4">{fc("stripeSyncAttempts")}</th>
+                        <th className="py-2">{fc("stripeSyncNextAttempt")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stripeReconciliation?.commands.map(command => (
+                        <tr key={command.id} className="border-b border-slate-800/50">
+                          <td className="py-3 pr-4 text-slate-300">#{command.successFeeId}</td>
+                          <td className="py-3 pr-4 font-mono text-xs text-slate-400">{command.stripeSubscriptionId}</td>
+                          <td className="py-3 pr-4 capitalize text-slate-300">{command.action}</td>
+                          <td className="py-3 pr-4"><StatusBadge status={command.status} /></td>
+                          <td className="py-3 pr-4 text-slate-300">
+                            {command.attemptCount}{command.lastErrorCode ? ` · ${command.lastErrorCode}` : ""}
+                          </td>
+                          <td className="py-3 text-slate-400">{dateTimeFormatter.format(new Date(command.nextAttemptAt))}</td>
+                        </tr>
+                      ))}
+                      {stripeReconciliation?.commands.length === 0 && (
+                        <tr><td colSpan={6} className="py-8 text-center text-slate-500">{fc("stripeSyncEmpty")}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="discovery" data-testid="admin-job-discovery-panel">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">

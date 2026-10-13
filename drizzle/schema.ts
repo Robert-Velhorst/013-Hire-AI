@@ -1146,6 +1146,29 @@ export const feePayments = mysqlTable("fee_payments", {
   index("fee_payments_created_id_idx").on(table.createdAt, table.id),
 ]);
 
+/** Durable provider commands follow committed local billing authority changes. */
+export const stripeReconciliationCommands = mysqlTable("stripe_reconciliation_commands", {
+  id: int("id").autoincrement().primaryKey(),
+  successFeeId: int("success_fee_id").notNull(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).notNull(),
+  commandKey: varchar("command_key", { length: 64 }).notNull(),
+  action: mysqlEnum("action", ["pause", "resume", "cancel"]).notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "succeeded", "failed", "superseded"]).default("pending").notNull(),
+  attemptCount: int("attempt_count").default(0).notNull(),
+  lastErrorCode: varchar("last_error_code", { length: 120 }),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  leaseId: varchar("lease_id", { length: 64 }),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("stripe_reconciliation_command_key_unique").on(table.commandKey),
+  index("stripe_reconciliation_status_next_id_idx").on(table.status, table.nextAttemptAt, table.id),
+  index("stripe_reconciliation_fee_created_idx").on(table.successFeeId, table.createdAt, table.id),
+]);
+
 /**
  * Stripe Webhook Events
  * A durable event ledger prevents duplicate delivery from repeating payment writes

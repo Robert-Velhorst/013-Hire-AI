@@ -46,6 +46,7 @@ const expectedUserOwnedTables = [
   "privacy_erasure_runs",
   "privacy_erasure_tasks",
   "erased_oauth_identities",
+  "stripe_reconciliation_commands",
   "success_fees",
   "employment_verifications",
   "fee_payments",

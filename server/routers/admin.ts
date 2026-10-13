@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, adminProcedure } from "../_core/trpc";
@@ -17,6 +18,8 @@ import {
   employmentVerifications,
   feePayments,
   adminReviewItems,
+  auditEvents,
+  stripeReconciliationCommands,
   users,
 } from "../../drizzle/schema";
 import {
@@ -24,85 +27,16 @@ import {
   calculateVerificationGraceExpiry,
 } from "../successFeeDates";
 import { eq, desc, and, lt, sql, isNotNull, or, inArray } from "drizzle-orm";
-import { getStripeClient } from "../stripeClient";
 import { buildPrivacyErasurePreview } from "../privacyRetention";
 import { storageGet } from "../storage";
+import { canTransitionSuccessFeeStatus } from "../successFeeStateMachine";
+type StripeReconciliationAction = "pause" | "resume" | "cancel";
 
-type StripeSynchronizedFeeStatus = "not_required" | "paused" | "resumed" | "cancelled";
-
-async function synchronizeStripeForFeeStatusChange(
-  fee: { status: string; stripeSubscriptionId: string | null },
-  requestedStatus: string
-): Promise<StripeSynchronizedFeeStatus> {
-  if (!fee.stripeSubscriptionId || fee.status === requestedStatus) return "not_required";
-
-  if (["suspended", "disputed"].includes(requestedStatus)) {
-    await getStripeClient().subscriptions.update(fee.stripeSubscriptionId, {
-      pause_collection: { behavior: "void" },
-    });
-    return "paused";
-  }
-
-  if (requestedStatus === "active" && ["suspended", "disputed"].includes(fee.status)) {
-    await getStripeClient().subscriptions.update(fee.stripeSubscriptionId, {
-      pause_collection: "",
-    } as any);
-    return "resumed";
-  }
-
-  if (requestedStatus === "ended") {
-    await getStripeClient().subscriptions.cancel(fee.stripeSubscriptionId);
-    return "cancelled";
-  }
-
-  return "not_required";
-}
-
-async function pauseStripeSubscriptions(
-  fees: Array<{ stripeSubscriptionId: string | null }>
-) {
-  for (const fee of fees) {
-    if (!fee.stripeSubscriptionId) continue;
-    await getStripeClient().subscriptions.update(fee.stripeSubscriptionId, {
-      pause_collection: { behavior: "void" },
-    });
-  }
-}
-
-async function recordBlockedBillingEnforcement(input: {
-  userId: number;
-  entityType: "user" | "success_fee";
-  entityId: number;
-  action: string;
-  source: string;
-  requestedAction: string;
-  adminUserId: number;
-  title: string;
-}) {
-  await createAuditEvent({
-    userId: input.userId,
-    entityType: input.entityType,
-    entityId: input.entityId,
-    action: input.action,
-    actor: "admin",
-    source: input.source,
-    afterState: JSON.stringify({
-      requestedAction: input.requestedAction,
-      stripeSynchronization: "failed",
-      adminUserId: input.adminUserId,
-      localStateChanged: false,
-    }),
-    riskLevel: "critical",
-  });
-  await createAdminReviewItem({
-    userId: input.userId,
-    entityType: input.entityType,
-    entityId: input.entityId,
-    category: "payment_failed",
-    priority: "critical",
-    title: input.title,
-    description: "Stripe did not confirm the requested billing pause. Local enforcement state was not changed; verify each affected provider subscription before retrying because some pauses may have succeeded.",
-  });
+function stripeActionForFeeStatus(currentStatus: string, requestedStatus: string): StripeReconciliationAction | null {
+  if (["paused", "suspended", "disputed"].includes(requestedStatus)) return "pause";
+  if (requestedStatus === "active" && ["paused", "suspended"].includes(currentStatus)) return "resume";
+  if (requestedStatus === "ended") return "cancel";
+  return null;
 }
 
 export const adminRouter = router({
@@ -180,6 +114,39 @@ export const adminRouter = router({
       failedPayments: Number(reviewRows[0]?.failedPayments ?? 0),
       feesTotal: Number(feeRows[0]?.feesTotal ?? 0),
       paymentsTotal: Number(paymentRows[0]?.paymentsTotal ?? 0),
+    };
+  }),
+
+  getStripeReconciliationStatus: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const [counts, commands] = await Promise.all([
+      db.select({
+        pending: sql<number>`SUM(CASE WHEN ${stripeReconciliationCommands.status} = 'pending' THEN 1 ELSE 0 END)`,
+        processing: sql<number>`SUM(CASE WHEN ${stripeReconciliationCommands.status} = 'processing' THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${stripeReconciliationCommands.status} = 'failed' THEN 1 ELSE 0 END)`,
+      }).from(stripeReconciliationCommands),
+      db.select({
+        id: stripeReconciliationCommands.id,
+        successFeeId: stripeReconciliationCommands.successFeeId,
+        stripeSubscriptionId: stripeReconciliationCommands.stripeSubscriptionId,
+        action: stripeReconciliationCommands.action,
+        status: stripeReconciliationCommands.status,
+        attemptCount: stripeReconciliationCommands.attemptCount,
+        lastErrorCode: stripeReconciliationCommands.lastErrorCode,
+        nextAttemptAt: stripeReconciliationCommands.nextAttemptAt,
+        lastAttemptAt: stripeReconciliationCommands.lastAttemptAt,
+        createdAt: stripeReconciliationCommands.createdAt,
+      }).from(stripeReconciliationCommands)
+        .where(inArray(stripeReconciliationCommands.status, ["pending", "processing", "failed"]))
+        .orderBy(desc(stripeReconciliationCommands.createdAt), desc(stripeReconciliationCommands.id))
+        .limit(50),
+    ]);
+    return {
+      pending: Number(counts[0]?.pending ?? 0),
+      processing: Number(counts[0]?.processing ?? 0),
+      failed: Number(counts[0]?.failed ?? 0),
+      commands,
     };
   }),
 
@@ -531,88 +498,72 @@ export const adminRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const [fee] = await db
-        .select()
-        .from(successFees)
-        .where(eq(successFees.id, input.feeId))
-        .limit(1);
+      const [feeOwner] = await db.select({ userId: successFees.userId })
+        .from(successFees).where(eq(successFees.id, input.feeId)).limit(1);
+      if (!feeOwner) throw new TRPCError({ code: "NOT_FOUND", message: "Success fee not found" });
+      return await db.transaction(async tx => {
+        const [user] = await tx.select({ id: users.id, accountStatus: users.accountStatus })
+          .from(users).where(eq(users.id, feeOwner.userId)).limit(1).for("update");
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        const [fee] = await tx.select().from(successFees)
+          .where(eq(successFees.id, input.feeId)).limit(1).for("update");
+        if (!fee) throw new TRPCError({ code: "NOT_FOUND", message: "Success fee not found" });
+        if (fee.userId !== user.id) throw new TRPCError({ code: "CONFLICT", message: "Success-fee ownership changed; reload and retry." });
+        if (input.status === "active" && user.accountStatus !== "active") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Reinstate the account before resuming billing." });
+        }
+        if (fee.status !== input.status && !canTransitionSuccessFeeStatus(fee.status, input.status)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "This success-fee status transition is not allowed." });
+        }
 
-      if (!fee) throw new TRPCError({ code: "NOT_FOUND", message: "Success fee not found" });
-
-      let stripeSynchronization: StripeSynchronizedFeeStatus;
-      try {
-        stripeSynchronization = await synchronizeStripeForFeeStatusChange(fee, input.status);
-      } catch {
-        console.error("[Admin] Stripe synchronization blocked fee status update.");
-        await createAuditEvent({
+        const now = new Date();
+        const action = fee.status === input.status ? null : stripeActionForFeeStatus(fee.status, input.status);
+        const queued = action && fee.stripeSubscriptionId;
+        await tx.update(successFees).set({
+          status: input.status,
+          notes: input.notes ?? fee.notes,
+          endDate: input.status === "ended" ? fee.endDate ?? now : fee.endDate,
+        }).where(eq(successFees.id, fee.id));
+        if (queued) {
+          await tx.insert(stripeReconciliationCommands).values({
+            successFeeId: fee.id,
+            stripeSubscriptionId: fee.stripeSubscriptionId!,
+            commandKey: randomUUID(),
+            action,
+            status: "pending",
+            nextAttemptAt: now,
+          });
+        }
+        await tx.insert(auditEvents).values({
           userId: fee.userId,
           entityType: "success_fee",
-          entityId: input.feeId,
-          action: "success_fee_status_update_blocked_stripe_sync",
+          entityId: fee.id,
+          action: "success_fee_status_updated",
           actor: "admin",
           source: "admin.updateFeeStatus",
           beforeState: JSON.stringify({ status: fee.status }),
           afterState: JSON.stringify({
-            requestedStatus: input.status,
-            stripeSynchronization: "failed",
+            status: input.status,
+            notes: input.notes ?? null,
+            stripeSynchronization: queued ? "queued" : "not_required",
+            stripeAction: queued ? action : null,
             adminUserId: ctx.user.id,
-            localStatusChanged: false,
           }),
-          riskLevel: "critical",
+          riskLevel: input.status === "suspended" || input.status === "disputed" ? "high" : "medium",
         });
-        await createAdminReviewItem({
-          userId: fee.userId,
-          entityType: "success_fee",
-          entityId: input.feeId,
-          category: "payment_failed",
-          priority: "critical",
-          title: "Success-fee status change blocked by Stripe",
-          description: "Stripe did not confirm the requested billing synchronization. The local fee status was not changed; verify the provider before retrying.",
-        });
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Stripe could not synchronize this billing change. The local fee status was not changed.",
-        });
-      }
-
-      await db
-        .update(successFees)
-        .set({
-          status: input.status,
-          notes: input.notes ?? fee.notes,
-          endDate: input.status === "ended" ? new Date() : fee.endDate,
-        })
-        .where(eq(successFees.id, input.feeId));
-
-      await createAuditEvent({
-        userId: fee.userId,
-        entityType: "success_fee",
-        entityId: input.feeId,
-        action: "success_fee_status_updated",
-        actor: "admin",
-        source: "admin.updateFeeStatus",
-        beforeState: JSON.stringify({ status: fee.status }),
-        afterState: JSON.stringify({
-          status: input.status,
-          notes: input.notes ?? null,
-          stripeSynchronization,
-          adminUserId: ctx.user.id,
-        }),
-        riskLevel: input.status === "suspended" || input.status === "disputed" ? "high" : "medium",
+        if (input.status === "suspended" || input.status === "disputed") {
+          await tx.insert(adminReviewItems).values({
+            userId: fee.userId,
+            entityType: "success_fee",
+            entityId: fee.id,
+            category: input.status === "disputed" ? "legal_escalation" : "verification_overdue",
+            priority: input.status === "disputed" ? "critical" : "high",
+            title: input.status === "disputed" ? "Disputed success fee requires admin follow-up" : "Suspended success fee requires admin review",
+            description: input.notes ?? `Status changed from ${fee.status} to ${input.status}.`,
+          });
+        }
+        return { success: true, billingSynchronization: queued ? "queued" as const : "not_required" as const };
       });
-      if (input.status === "suspended" || input.status === "disputed") {
-        await createAdminReviewItem({
-          userId: fee.userId,
-          entityType: "success_fee",
-          entityId: input.feeId,
-          category: input.status === "disputed" ? "legal_escalation" : "verification_overdue",
-          priority: input.status === "disputed" ? "critical" : "high",
-          title: input.status === "disputed" ? "Disputed success fee requires admin follow-up" : "Suspended success fee requires admin review",
-          description: input.notes ?? `Status changed from ${fee.status} to ${input.status}.`,
-        });
-      }
-
-      return { success: true };
     }),
 
   // ─── Approve / Reject Verification ──────────────────────────────────────────
@@ -723,65 +674,65 @@ export const adminRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Suspend all active fees for this user
-      const userFees = await db
-        .select()
-        .from(successFees)
-        .where(and(eq(successFees.userId, input.userId), eq(successFees.status, "active")));
+      return await db.transaction(async tx => {
+        const [target] = await tx.select({ id: users.id, accountStatus: users.accountStatus })
+          .from(users).where(eq(users.id, input.userId)).limit(1).for("update");
+        if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        if (target.accountStatus === "suspended") return { success: true, billingSynchronization: "not_required" as const };
 
-      try {
-        await pauseStripeSubscriptions(userFees);
-      } catch {
-        console.error("[Admin] Stripe synchronization blocked user suspension.");
-        await recordBlockedBillingEnforcement({
+        const userFees = await tx.select().from(successFees)
+          .where(and(eq(successFees.userId, input.userId), eq(successFees.status, "active")))
+          .for("update");
+        const now = new Date();
+        await tx.update(users).set({
+          accountStatus: "suspended",
+          sessionVersion: sql`${users.sessionVersion} + 1`,
+        }).where(eq(users.id, input.userId));
+        let queuedCommands = 0;
+        for (const fee of userFees) {
+          await tx.update(successFees).set({ status: "suspended", notes: `Suspended: ${input.reason}` })
+            .where(eq(successFees.id, fee.id));
+          if (fee.stripeSubscriptionId) {
+            await tx.insert(stripeReconciliationCommands).values({
+              successFeeId: fee.id,
+              stripeSubscriptionId: fee.stripeSubscriptionId,
+              commandKey: randomUUID(),
+              action: "pause",
+              status: "pending",
+              nextAttemptAt: now,
+            });
+            queuedCommands += 1;
+          }
+        }
+        await tx.insert(auditEvents).values({
           userId: input.userId,
           entityType: "user",
           entityId: input.userId,
-          action: "user_suspension_blocked_stripe_sync",
+          action: "user_suspended",
+          actor: "admin",
           source: "admin.suspendUser",
-          requestedAction: "suspend_user_and_active_success_fees",
-          adminUserId: ctx.user.id,
-          title: "User suspension blocked by Stripe",
+          afterState: JSON.stringify({
+            reason: input.reason,
+            adminUserId: ctx.user.id,
+            sessionVersionRevoked: true,
+            stripeCommandsQueued: queuedCommands,
+          }),
+          riskLevel: "critical",
         });
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Stripe could not synchronize this suspension. The local account and fee statuses were not changed.",
+        await tx.insert(adminReviewItems).values({
+          userId: input.userId,
+          entityType: "user",
+          entityId: input.userId,
+          category: "legal_escalation",
+          priority: "critical",
+          title: "Suspended user account requires admin follow-up",
+          description: input.reason,
         });
-      }
-
-      await db
-        .update(users)
-        .set({ accountStatus: "suspended" })
-        .where(eq(users.id, input.userId));
-
-      for (const fee of userFees) {
-        await db
-          .update(successFees)
-          .set({ status: "suspended", notes: `Suspended: ${input.reason}` })
-          .where(eq(successFees.id, fee.id));
-      }
-
-      await createAuditEvent({
-        userId: input.userId,
-        entityType: "user",
-        entityId: input.userId,
-        action: "user_suspended",
-        actor: "admin",
-        source: "admin.suspendUser",
-        afterState: JSON.stringify({ reason: input.reason, adminUserId: ctx.user.id }),
-        riskLevel: "critical",
+        return {
+          success: true,
+          billingSynchronization: queuedCommands > 0 ? "queued" as const : "not_required" as const,
+        };
       });
-      await createAdminReviewItem({
-        userId: input.userId,
-        entityType: "user",
-        entityId: input.userId,
-        category: "legal_escalation",
-        priority: "critical",
-        title: "Suspended user account requires admin follow-up",
-        description: input.reason,
-      });
-
-      return { success: true };
     }),
 
   // ─── Reinstate User Account ──────────────────────────────────────────────────
@@ -822,113 +773,100 @@ export const adminRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const [fee] = await db
-        .select()
-        .from(successFees)
-        .where(eq(successFees.id, input.feeId))
-        .limit(1);
+      const [feeOwner] = await db.select({ userId: successFees.userId })
+        .from(successFees).where(eq(successFees.id, input.feeId)).limit(1);
+      if (!feeOwner) throw new TRPCError({ code: "NOT_FOUND", message: "Success fee not found" });
+      return await db.transaction(async tx => {
+        const [user] = await tx.select({ id: users.id, accountStatus: users.accountStatus })
+          .from(users).where(eq(users.id, feeOwner.userId)).limit(1).for("update");
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        const [fee] = await tx.select().from(successFees)
+          .where(eq(successFees.id, input.feeId)).limit(1).for("update");
+        if (!fee || fee.userId !== user.id) throw new TRPCError({ code: "CONFLICT", message: "Success-fee ownership changed; reload and retry." });
 
-      if (!fee) throw new TRPCError({ code: "NOT_FOUND", message: "Success fee not found" });
+        const activeUserFees = await tx.select().from(successFees)
+          .where(and(eq(successFees.userId, fee.userId), eq(successFees.status, "active")))
+          .for("update");
+        const allAffectedFees = Array.from(new Map([...activeUserFees, fee].map(item => [item.id, item])).values());
+        const now = new Date();
+        const escalationNote = `[LEGAL ESCALATION ${now.toISOString()}] ${input.reason}`;
+        const updatedNotes = fee.notes ? `${fee.notes}\n${escalationNote}` : escalationNote;
+        const relatedSuspensionNote = `Suspended: legal escalation on success fee #${input.feeId}.`;
+        let queuedCommands = 0;
 
-      const escalationNote = `[LEGAL ESCALATION ${new Date().toISOString()}] ${input.reason}`;
-      const updatedNotes = fee.notes ? `${fee.notes}\n${escalationNote}` : escalationNote;
-      const activeUserFees = await db
-        .select()
-        .from(successFees)
-        .where(and(eq(successFees.userId, fee.userId), eq(successFees.status, "active")));
-      const feesToPause = Array.from(
-        new Map([...activeUserFees, fee].map((item) => [item.id, item])).values()
-      );
+        for (const affectedFee of allAffectedFees) {
+          const isEscalated = affectedFee.id === fee.id;
+          const status = isEscalated ? "disputed" : "suspended";
+          const notes = isEscalated
+            ? updatedNotes
+            : affectedFee.notes ? `${affectedFee.notes}\n${relatedSuspensionNote}` : relatedSuspensionNote;
+          if (affectedFee.status !== status && !canTransitionSuccessFeeStatus(affectedFee.status, status)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "A related success-fee status transition is not allowed." });
+          }
+          await tx.update(successFees).set({ status, notes }).where(eq(successFees.id, affectedFee.id));
+          if (affectedFee.stripeSubscriptionId && (affectedFee.status !== status || user.accountStatus !== "suspended")) {
+            await tx.insert(stripeReconciliationCommands).values({
+              successFeeId: affectedFee.id,
+              stripeSubscriptionId: affectedFee.stripeSubscriptionId,
+              commandKey: randomUUID(),
+              action: "pause",
+              status: "pending",
+              nextAttemptAt: now,
+            });
+            queuedCommands += 1;
+          }
+          if (!isEscalated) {
+            await tx.insert(auditEvents).values({
+              userId: fee.userId,
+              entityType: "success_fee",
+              entityId: affectedFee.id,
+              action: "success_fee_suspended_for_legal_escalation",
+              actor: "admin",
+              source: "admin.flagLegalEscalation",
+              beforeState: JSON.stringify({ status: affectedFee.status }),
+              afterState: JSON.stringify({ status, escalatedFeeId: fee.id, accountStatus: "suspended", adminUserId: ctx.user.id }),
+              riskLevel: "critical",
+            });
+          }
+        }
 
-      try {
-        await pauseStripeSubscriptions(feesToPause);
-      } catch {
-        console.error("[Admin] Stripe synchronization blocked legal escalation.");
-        await recordBlockedBillingEnforcement({
+        await tx.update(users).set({
+          accountStatus: "suspended",
+          sessionVersion: sql`${users.sessionVersion} + 1`,
+        }).where(eq(users.id, fee.userId));
+        await tx.insert(auditEvents).values({
           userId: fee.userId,
           entityType: "success_fee",
-          entityId: input.feeId,
-          action: "legal_escalation_blocked_stripe_sync",
-          source: "admin.flagLegalEscalation",
-          requestedAction: "flag_legal_escalation_and_suspend_related_fees",
-          adminUserId: ctx.user.id,
-          title: "Legal escalation blocked by Stripe",
-        });
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Stripe could not synchronize this legal escalation. The local account and fee statuses were not changed.",
-        });
-      }
-
-      await db
-        .update(successFees)
-        .set({
-          status: "disputed",
-          notes: updatedNotes,
-        })
-        .where(eq(successFees.id, input.feeId));
-
-      const relatedSuspensionNote = `Suspended: legal escalation on success fee #${input.feeId}.`;
-      const relatedActiveFees = activeUserFees.filter((activeFee) => activeFee.id !== input.feeId);
-      for (const relatedFee of relatedActiveFees) {
-        const relatedNotes = relatedFee.notes
-          ? `${relatedFee.notes}\n${relatedSuspensionNote}`
-          : relatedSuspensionNote;
-        await db
-          .update(successFees)
-          .set({ status: "suspended", notes: relatedNotes })
-          .where(eq(successFees.id, relatedFee.id));
-        await createAuditEvent({
-          userId: fee.userId,
-          entityType: "success_fee",
-          entityId: relatedFee.id,
-          action: "success_fee_suspended_for_legal_escalation",
+          entityId: fee.id,
+          action: "legal_escalation_flagged",
           actor: "admin",
           source: "admin.flagLegalEscalation",
-          beforeState: JSON.stringify({ status: relatedFee.status }),
+          beforeState: JSON.stringify({ status: fee.status, accountStatus: user.accountStatus }),
           afterState: JSON.stringify({
-            status: "suspended",
-            escalatedFeeId: input.feeId,
+            status: "disputed",
             accountStatus: "suspended",
+            reason: input.reason,
             adminUserId: ctx.user.id,
+            sessionVersionRevoked: true,
+            stripeCommandsQueued: queuedCommands,
           }),
           riskLevel: "critical",
         });
-      }
-
-      // Suspend user account
-      await db
-        .update(users)
-        .set({ accountStatus: "suspended" })
-        .where(eq(users.id, fee.userId));
-
-      await createAuditEvent({
-        userId: fee.userId,
-        entityType: "success_fee",
-        entityId: input.feeId,
-        action: "legal_escalation_flagged",
-        actor: "admin",
-        source: "admin.flagLegalEscalation",
-        beforeState: JSON.stringify({ status: fee.status }),
-        afterState: JSON.stringify({
-          status: "disputed",
-          accountStatus: "suspended",
-          reason: input.reason,
-          adminUserId: ctx.user.id,
-        }),
-        riskLevel: "critical",
+        await tx.insert(adminReviewItems).values({
+          userId: fee.userId,
+          entityType: "success_fee",
+          entityId: fee.id,
+          category: "legal_escalation",
+          priority: "critical",
+          title: "Legal escalation flagged",
+          description: input.reason,
+        });
+        return {
+          success: true,
+          escalationNote,
+          billingSynchronization: queuedCommands > 0 ? "queued" as const : "not_required" as const,
+        };
       });
-      await createAdminReviewItem({
-        userId: fee.userId,
-        entityType: "success_fee",
-        entityId: input.feeId,
-        category: "legal_escalation",
-        priority: "critical",
-        title: "Legal escalation flagged",
-        description: input.reason,
-      });
-
-      return { success: true, escalationNote };
     }),
 
   // ─── List Pending Verifications ──────────────────────────────────────────────
