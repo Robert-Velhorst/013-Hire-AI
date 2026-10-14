@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+import { isMalwareScannerEndpointAllowed } from "../shared/malwareScannerEndpointPolicy.mjs";
 import { resolveWindowsDefenderPaths } from "../shared/windowsDefenderPaths.mjs";
 
 const root = process.cwd();
@@ -17,16 +18,33 @@ function hasFile(relativePath) {
   return fs.existsSync(path.join(root, relativePath));
 }
 
-const runtimeEntrypoint = hasFile("dist/index.js") ? "dist/index.js" : "server/_core/index.ts";
-const runtimeFiles = ["package.json", "pnpm-lock.yaml", "drizzle/meta/_journal.json", runtimeEntrypoint];
+const runtimeEntrypoint = hasFile("dist/index.js")
+  ? "dist/index.js"
+  : "server/_core/index.ts";
+const runtimeFiles = [
+  "package.json",
+  "pnpm-lock.yaml",
+  "drizzle/meta/_journal.json",
+  runtimeEntrypoint,
+];
 for (const file of runtimeFiles) {
-  check(file, hasFile(file) ? "pass" : "fail", hasFile(file) ? "found" : "missing");
+  check(
+    file,
+    hasFile(file) ? "pass" : "fail",
+    hasFile(file) ? "found" : "missing"
+  );
 }
 
 const migrationFiles = hasFile("drizzle")
-  ? fs.readdirSync(path.join(root, "drizzle")).filter((file) => /^\d{4}_.+\.sql$/.test(file))
+  ? fs
+      .readdirSync(path.join(root, "drizzle"))
+      .filter(file => /^\d{4}_.+\.sql$/.test(file))
   : [];
-check("migration files", migrationFiles.length > 0 ? "pass" : "fail", `${migrationFiles.length} migration(s) found`);
+check(
+  "migration files",
+  migrationFiles.length > 0 ? "pass" : "fail",
+  `${migrationFiles.length} migration(s) found`
+);
 
 const requiredProductionEnv = [
   "DATABASE_URL",
@@ -39,11 +57,19 @@ const requiredProductionEnv = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
 ];
-const missing = requiredProductionEnv.filter((name) => !String(process.env[name] || "").trim());
+const missing = requiredProductionEnv.filter(
+  name => !String(process.env[name] || "").trim()
+);
 check(
   "production configuration",
-  isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
-  missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+  isProduction && missing.length > 0
+    ? "fail"
+    : missing.length > 0
+      ? "warn"
+      : "pass",
+  missing.length > 0
+    ? `${missing.length} required production variable(s) are not configured`
+    : "required variables configured"
 );
 
 function windowsDefenderAvailable() {
@@ -56,50 +82,92 @@ function windowsDefenderAvailable() {
   if (!paths) return false;
   const candidates = [];
   if (paths.platformRoot && fs.existsSync(paths.platformRoot)) {
-    const versions = fs.readdirSync(paths.platformRoot, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
-      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
-    candidates.push(...versions.map(version => path.join(paths.platformRoot, version, "MpCmdRun.exe")));
+    const versions = fs
+      .readdirSync(paths.platformRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort((left, right) =>
+        right.localeCompare(left, undefined, { numeric: true })
+      );
+    candidates.push(
+      ...versions.map(version =>
+        path.join(paths.platformRoot, version, "MpCmdRun.exe")
+      )
+    );
   }
   if (paths.legacyExecutable) candidates.push(paths.legacyExecutable);
   return candidates.some(candidate => fs.existsSync(candidate));
 }
 
-const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto").trim().toLowerCase();
+const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto")
+  .trim()
+  .toLowerCase();
 const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
-const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
-const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
-const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
-const malwareTimeoutValid = Number.isInteger(malwareScanTimeout) && malwareScanTimeout >= 1_000 && malwareScanTimeout <= 120_000;
-const malwareConcurrencyValid = Number.isInteger(malwareScanConcurrency) && malwareScanConcurrency >= 1 && malwareScanConcurrency <= 8;
-let malwareScanUrlValid = !malwareScanUrl;
-try {
-  if (malwareScanUrl) {
-    const parsed = new URL(malwareScanUrl);
-    malwareScanUrlValid = ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
-  }
-} catch { malwareScanUrlValid = false; }
-const defenderAvailable = windowsDefenderAvailable();
-const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcurrencyValid && malwareScanUrlValid && (
-  (malwareScanMode === "http" && Boolean(malwareScanUrl))
-  || (malwareScanMode === "windows_defender" && defenderAvailable)
-  || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
+const malwareScanAllowedOrigins = String(
+  process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS || ""
 );
+const malwareScanTimeout = Number.parseInt(
+  String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"),
+  10
+);
+const malwareScanConcurrency = Number.parseInt(
+  String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"),
+  10
+);
+const malwareModeValid = ["auto", "http", "windows_defender"].includes(
+  malwareScanMode
+);
+const malwareTimeoutValid =
+  Number.isInteger(malwareScanTimeout) &&
+  malwareScanTimeout >= 1_000 &&
+  malwareScanTimeout <= 120_000;
+const malwareConcurrencyValid =
+  Number.isInteger(malwareScanConcurrency) &&
+  malwareScanConcurrency >= 1 &&
+  malwareScanConcurrency <= 8;
+const malwareScanUrlValid =
+  !malwareScanUrl ||
+  isMalwareScannerEndpointAllowed(
+    malwareScanUrl,
+    malwareScanAllowedOrigins,
+    isProduction
+  );
+const defenderAvailable = windowsDefenderAvailable();
+const scannerAvailable =
+  malwareModeValid &&
+  malwareTimeoutValid &&
+  malwareConcurrencyValid &&
+  malwareScanUrlValid &&
+  ((malwareScanMode === "http" && Boolean(malwareScanUrl)) ||
+    (malwareScanMode === "windows_defender" && defenderAvailable) ||
+    (malwareScanMode === "auto" &&
+      (Boolean(malwareScanUrl) || defenderAvailable)));
 
-const oauthPortalUrl = String(process.env.OAUTH_PORTAL_URL || process.env.VITE_OAUTH_PORTAL_URL || "").trim();
+const oauthPortalUrl = String(
+  process.env.OAUTH_PORTAL_URL || process.env.VITE_OAUTH_PORTAL_URL || ""
+).trim();
 let oauthPortalValid = false;
 try {
   const parsed = new URL(oauthPortalUrl);
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   const loopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
-  oauthPortalValid = (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
-    && !parsed.username
-    && !parsed.password
-    && !parsed.search
-    && !parsed.hash;
-} catch { oauthPortalValid = false; }
+  oauthPortalValid =
+    (parsed.protocol === "https:" ||
+      (parsed.protocol === "http:" && loopback)) &&
+    !parsed.username &&
+    !parsed.password &&
+    !parsed.search &&
+    !parsed.hash;
+} catch {
+  oauthPortalValid = false;
+}
 check(
   "OAuth portal",
-  !oauthPortalUrl && !isProduction ? "warn" : oauthPortalValid ? "pass" : "fail",
+  !oauthPortalUrl && !isProduction
+    ? "warn"
+    : oauthPortalValid
+      ? "pass"
+      : "fail",
   !oauthPortalUrl && !isProduction
     ? "not configured outside production"
     : oauthPortalValid
@@ -112,11 +180,12 @@ const jwtSecretPlaceholders = new Set([
   "replace-with-a-long-random-secret",
   "hire-ai-local-dev-cookie-secret",
 ]);
-const jwtSecretValid = jwtSecret.length >= 32
-  && jwtSecret.length <= 4_096
-  && jwtSecret === jwtSecret.trim()
-  && !/[\u0000-\u001f\u007f]/.test(jwtSecret)
-  && !jwtSecretPlaceholders.has(jwtSecret);
+const jwtSecretValid =
+  jwtSecret.length >= 32 &&
+  jwtSecret.length <= 4_096 &&
+  jwtSecret === jwtSecret.trim() &&
+  !/[\u0000-\u001f\u007f]/.test(jwtSecret) &&
+  !jwtSecretPlaceholders.has(jwtSecret);
 check(
   "session signing secret",
   !jwtSecret && !isProduction ? "warn" : jwtSecretValid ? "pass" : "fail",
@@ -127,17 +196,28 @@ check(
       : "JWT_SECRET must contain 32-4096 non-control characters, have no surrounding whitespace, and not use a known placeholder"
 );
 
-const erasureIdentityKeys = String(process.env.ERASURE_IDENTITY_HMAC_KEYS || "").split(",");
-const erasureIdentityKeysValid = erasureIdentityKeys.length > 0
-  && erasureIdentityKeys.length <= 64
-  && erasureIdentityKeys.every(key => key.length >= 32 && key.length <= 4_096
-    && key === key.trim()
-    && !key.startsWith("replace-with-")
-    && !key.startsWith("hire-ai-local-dev-")
-    && !/[\u0000-\u001f\u007f,]/.test(key));
+const erasureIdentityKeys = String(
+  process.env.ERASURE_IDENTITY_HMAC_KEYS || ""
+).split(",");
+const erasureIdentityKeysValid =
+  erasureIdentityKeys.length > 0 &&
+  erasureIdentityKeys.length <= 64 &&
+  erasureIdentityKeys.every(
+    key =>
+      key.length >= 32 &&
+      key.length <= 4_096 &&
+      key === key.trim() &&
+      !key.startsWith("replace-with-") &&
+      !key.startsWith("hire-ai-local-dev-") &&
+      !/[\u0000-\u001f\u007f,]/.test(key)
+  );
 check(
   "erasure identity protection key",
-  !process.env.ERASURE_IDENTITY_HMAC_KEYS && !isProduction ? "warn" : erasureIdentityKeysValid ? "pass" : "fail",
+  !process.env.ERASURE_IDENTITY_HMAC_KEYS && !isProduction
+    ? "warn"
+    : erasureIdentityKeysValid
+      ? "pass"
+      : "fail",
   !process.env.ERASURE_IDENTITY_HMAC_KEYS && !isProduction
     ? "not configured outside production"
     : erasureIdentityKeysValid
@@ -147,9 +227,10 @@ check(
 
 const sessionTtlValue = String(process.env.SESSION_TTL_MS || "").trim();
 const sessionTtlMs = Number(sessionTtlValue || "604800000");
-const sessionTtlValid = Number.isSafeInteger(sessionTtlMs)
-  && sessionTtlMs >= 900_000
-  && sessionTtlMs <= 2_592_000_000;
+const sessionTtlValid =
+  Number.isSafeInteger(sessionTtlMs) &&
+  sessionTtlMs >= 900_000 &&
+  sessionTtlMs <= 2_592_000_000;
 check(
   "session lifetime policy",
   sessionTtlValid ? "pass" : "fail",
@@ -166,12 +247,22 @@ const connectorValues = {
 const connectorProviderGroups = [
   ["google", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", 2],
   ["dropbox", "DROPBOX_OAUTH_CLIENT_ID", "DROPBOX_OAUTH_CLIENT_SECRET", 1],
-  ["microsoft", "MICROSOFT_OAUTH_CLIENT_ID", "MICROSOFT_OAUTH_CLIENT_SECRET", 1],
+  [
+    "microsoft",
+    "MICROSOFT_OAUTH_CLIENT_ID",
+    "MICROSOFT_OAUTH_CLIENT_SECRET",
+    1,
+  ],
   ["linkedin", "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET", 1],
   ["github", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", 1],
 ];
-const connectorAnyConfigured = Object.values(connectorValues).some(value => value.length > 0)
-  || connectorProviderGroups.some(([, id, secret]) => String(process.env[id] || "").length > 0 || String(process.env[secret] || "").length > 0);
+const connectorAnyConfigured =
+  Object.values(connectorValues).some(value => value.length > 0) ||
+  connectorProviderGroups.some(
+    ([, id, secret]) =>
+      String(process.env[id] || "").length > 0 ||
+      String(process.env[secret] || "").length > 0
+  );
 const connectorIssues = [];
 let connectorCount = 0;
 if (connectorAnyConfigured) {
@@ -179,26 +270,53 @@ if (connectorAnyConfigured) {
     const parsed = new URL(connectorValues.redirectUri);
     const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
     const loopback = ["localhost", "127.0.0.1", "::1"].includes(host);
-    if (!((parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback))
-      && !parsed.username && !parsed.password && !parsed.search && !parsed.hash
-      && parsed.pathname === "/api/connectors/oauth/callback")) connectorIssues.push("redirect_uri");
-  } catch { connectorIssues.push("redirect_uri"); }
-  const keyPatternValid = /^[A-Za-z0-9+/]+={0,2}$/.test(connectorValues.encryptionKey)
-    && connectorValues.encryptionKey === connectorValues.encryptionKey.trim();
-  const decodedKey = keyPatternValid ? Buffer.from(connectorValues.encryptionKey, "base64") : null;
+    if (!(
+      (parsed.protocol === "https:" ||
+        (parsed.protocol === "http:" && loopback)) &&
+      !parsed.username &&
+      !parsed.password &&
+      !parsed.search &&
+      !parsed.hash &&
+      parsed.pathname === "/api/connectors/oauth/callback"
+    ))
+      connectorIssues.push("redirect_uri");
+  } catch {
+    connectorIssues.push("redirect_uri");
+  }
+  const keyPatternValid =
+    /^[A-Za-z0-9+/]+={0,2}$/.test(connectorValues.encryptionKey) &&
+    connectorValues.encryptionKey === connectorValues.encryptionKey.trim();
+  const decodedKey = keyPatternValid
+    ? Buffer.from(connectorValues.encryptionKey, "base64")
+    : null;
   const canonicalKey = decodedKey?.toString("base64") || "";
-  if (!decodedKey || decodedKey.length !== 32
-    || ![canonicalKey, canonicalKey.replace(/=+$/, "")].includes(connectorValues.encryptionKey)) connectorIssues.push("token_encryption_key");
-  if (connectorValues.stateSecret.length < 32 || connectorValues.stateSecret.length > 4_096
-    || connectorValues.stateSecret !== connectorValues.stateSecret.trim()
-    || /[\u0000-\u001f\u007f]/.test(connectorValues.stateSecret)
-    || connectorValues.stateSecret === "hire-ai-local-dev-connector-state-secret") connectorIssues.push("state_signing_secret");
+  if (
+    !decodedKey ||
+    decodedKey.length !== 32 ||
+    ![canonicalKey, canonicalKey.replace(/=+$/, "")].includes(
+      connectorValues.encryptionKey
+    )
+  )
+    connectorIssues.push("token_encryption_key");
+  if (
+    connectorValues.stateSecret.length < 32 ||
+    connectorValues.stateSecret.length > 4_096 ||
+    connectorValues.stateSecret !== connectorValues.stateSecret.trim() ||
+    /[\u0000-\u001f\u007f]/.test(connectorValues.stateSecret) ||
+    connectorValues.stateSecret === "hire-ai-local-dev-connector-state-secret"
+  )
+    connectorIssues.push("state_signing_secret");
   for (const [name, idName, secretName, count] of connectorProviderGroups) {
     const id = String(process.env[idName] || "");
     const secret = String(process.env[secretName] || "");
     if (!id && !secret) continue;
-    const valid = [id, secret].every(value => value.length > 0 && value.length <= 4_096
-      && value === value.trim() && !/[\u0000-\u001f\u007f]/.test(value));
+    const valid = [id, secret].every(
+      value =>
+        value.length > 0 &&
+        value.length <= 4_096 &&
+        value === value.trim() &&
+        !/[\u0000-\u001f\u007f]/.test(value)
+    );
     if (!valid) connectorIssues.push(`${name}_credentials`);
     else connectorCount += count;
   }
@@ -207,23 +325,30 @@ if (connectorAnyConfigured) {
 check(
   "connector OAuth",
   connectorIssues.length > 0 ? "fail" : "pass",
-  !connectorAnyConfigured ? "disabled"
-    : connectorIssues.length > 0 ? `incomplete or unsafe configuration: ${connectorIssues.join(", ")}`
+  !connectorAnyConfigured
+    ? "disabled"
+    : connectorIssues.length > 0
+      ? `incomplete or unsafe configuration: ${connectorIssues.join(", ")}`
       : `${connectorCount} connector(s) configured`
 );
 
 const databasePoolLimit = Number(process.env.DATABASE_POOL_LIMIT || "10");
-const databasePoolQueueLimit = Number(process.env.DATABASE_POOL_QUEUE_LIMIT || "100");
-const databasePoolIdleTimeoutMs = Number(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS || "60000");
-const databasePoolPolicyValid = Number.isSafeInteger(databasePoolLimit)
-  && databasePoolLimit >= 1
-  && databasePoolLimit <= 50
-  && Number.isSafeInteger(databasePoolQueueLimit)
-  && databasePoolQueueLimit >= 1
-  && databasePoolQueueLimit <= 1000
-  && Number.isSafeInteger(databasePoolIdleTimeoutMs)
-  && databasePoolIdleTimeoutMs >= 10_000
-  && databasePoolIdleTimeoutMs <= 600_000;
+const databasePoolQueueLimit = Number(
+  process.env.DATABASE_POOL_QUEUE_LIMIT || "100"
+);
+const databasePoolIdleTimeoutMs = Number(
+  process.env.DATABASE_POOL_IDLE_TIMEOUT_MS || "60000"
+);
+const databasePoolPolicyValid =
+  Number.isSafeInteger(databasePoolLimit) &&
+  databasePoolLimit >= 1 &&
+  databasePoolLimit <= 50 &&
+  Number.isSafeInteger(databasePoolQueueLimit) &&
+  databasePoolQueueLimit >= 1 &&
+  databasePoolQueueLimit <= 1000 &&
+  Number.isSafeInteger(databasePoolIdleTimeoutMs) &&
+  databasePoolIdleTimeoutMs >= 10_000 &&
+  databasePoolIdleTimeoutMs <= 600_000;
 check(
   "database pool policy",
   databasePoolPolicyValid ? "pass" : "fail",
@@ -233,29 +358,63 @@ check(
 );
 check(
   "document malware scanning",
-  !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",
-  !malwareModeValid ? "mode must be auto, http, or windows_defender"
-    : !malwareScanUrlValid ? "scanner URL must be HTTP(S) without embedded credentials"
-      : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
-        : !malwareConcurrencyValid ? "concurrency must be 1-8"
-          : malwareScanUrl && malwareScanMode !== "windows_defender" ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`
-            : defenderAvailable && malwareScanMode !== "http" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
+  !malwareModeValid ||
+    !malwareScanUrlValid ||
+    !malwareTimeoutValid ||
+    !malwareConcurrencyValid ||
+    (isProduction && !scannerAvailable)
+    ? "fail"
+    : scannerAvailable
+      ? "pass"
+      : "warn",
+  !malwareModeValid
+    ? "mode must be auto, http, or windows_defender"
+    : !malwareScanUrlValid
+      ? "scanner URL must be valid and, in production, use an allowlisted HTTPS origin (loopback HTTP only)"
+      : !malwareTimeoutValid
+        ? "timeout must be 1000-120000ms"
+        : !malwareConcurrencyValid
+          ? "concurrency must be 1-8"
+          : malwareScanUrl && malwareScanMode !== "windows_defender"
+            ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`
+            : defenderAvailable && malwareScanMode !== "http"
+              ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
               : "scanner required before production document uploads"
 );
 
-const scrapingEnabled = String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "").trim().toLowerCase() === "true";
-const scrapingAllowlist = String(process.env.JOB_SCRAPING_ENABLED_PLATFORMS || "").split(",").map(value => value.trim()).filter(Boolean);
-const scrapingConcurrency = Number.parseInt(String(process.env.JOB_SCRAPING_MAX_CONCURRENT_SOURCES || "3"), 10);
-const scrapingTimeout = Number.parseInt(String(process.env.JOB_SCRAPING_SOURCE_TIMEOUT_MS || "90000"), 10);
-const scrapingPolicyValid = Number.isInteger(scrapingConcurrency)
-  && scrapingConcurrency >= 1
-  && scrapingConcurrency <= 10
-  && Number.isInteger(scrapingTimeout)
-  && scrapingTimeout >= 5_000
-  && scrapingTimeout <= 300_000;
+const scrapingEnabled =
+  String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "")
+    .trim()
+    .toLowerCase() === "true";
+const scrapingAllowlist = String(
+  process.env.JOB_SCRAPING_ENABLED_PLATFORMS || ""
+)
+  .split(",")
+  .map(value => value.trim())
+  .filter(Boolean);
+const scrapingConcurrency = Number.parseInt(
+  String(process.env.JOB_SCRAPING_MAX_CONCURRENT_SOURCES || "3"),
+  10
+);
+const scrapingTimeout = Number.parseInt(
+  String(process.env.JOB_SCRAPING_SOURCE_TIMEOUT_MS || "90000"),
+  10
+);
+const scrapingPolicyValid =
+  Number.isInteger(scrapingConcurrency) &&
+  scrapingConcurrency >= 1 &&
+  scrapingConcurrency <= 10 &&
+  Number.isInteger(scrapingTimeout) &&
+  scrapingTimeout >= 5_000 &&
+  scrapingTimeout <= 300_000;
 check(
   "discovery traffic policy",
-  !scrapingPolicyValid || (isProduction && scrapingEnabled && scrapingAllowlist.length === 0) ? "fail" : scrapingEnabled && scrapingAllowlist.length === 0 ? "warn" : "pass",
+  !scrapingPolicyValid ||
+    (isProduction && scrapingEnabled && scrapingAllowlist.length === 0)
+    ? "fail"
+    : scrapingEnabled && scrapingAllowlist.length === 0
+      ? "warn"
+      : "pass",
   !scrapingPolicyValid
     ? "concurrency must be 1-10 and source timeout must be 5000-300000ms"
     : scrapingEnabled
@@ -263,33 +422,49 @@ check(
       : "scheduler disabled; bounded defaults configured"
 );
 
-const haiEnabled = String(process.env.HAI_CONNECTOR_ENABLED || "").trim().toLowerCase() === "true";
+const haiEnabled =
+  String(process.env.HAI_CONNECTOR_ENABLED || "")
+    .trim()
+    .toLowerCase() === "true";
 const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "");
 const haiUserIdValue = String(process.env.HAI_CONNECTOR_USER_ID || "");
-const haiUserId = /^[1-9]\d*$/.test(haiUserIdValue) ? Number(haiUserIdValue) : NaN;
+const haiUserId = /^[1-9]\d*$/.test(haiUserIdValue)
+  ? Number(haiUserIdValue)
+  : NaN;
 const haiUrl = String(process.env.HAI_CONNECTOR_URL || "");
 let haiDetail = "disabled";
 let haiStatus = "pass";
 if (haiEnabled) {
   const errors = [];
-  if (haiToken.length < 32 || haiToken.length > 4_096) errors.push("32-4096 character token");
-  else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken)) errors.push("token without whitespace or control characters");
-  else if (haiToken === "replace-with-at-least-32-random-characters") errors.push("non-placeholder token");
-  if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
+  if (haiToken.length < 32 || haiToken.length > 4_096)
+    errors.push("32-4096 character token");
+  else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken))
+    errors.push("token without whitespace or control characters");
+  else if (haiToken === "replace-with-at-least-32-random-characters")
+    errors.push("non-placeholder token");
+  if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0)
+    errors.push("positive user ID");
   const endpointError = validateHaiConnectorUrl(haiUrl);
   if (endpointError) {
-    if (endpointError.includes("/api/hai/a2a")) errors.push("exact /api/hai/a2a endpoint");
-    else if (endpointError.includes("valid local HTTP(S) URL")) errors.push("valid connector URL");
+    if (endpointError.includes("/api/hai/a2a"))
+      errors.push("exact /api/hai/a2a endpoint");
+    else if (endpointError.includes("valid local HTTP(S) URL"))
+      errors.push("valid connector URL");
     else errors.push("plain local/private connector URL");
   }
   haiStatus = errors.length > 0 ? "fail" : "pass";
-  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured read-only local bridge";
+  haiDetail =
+    errors.length > 0
+      ? `missing or invalid: ${errors.join(", ")}`
+      : "configured read-only local bridge";
 }
 check("HAI connector", haiStatus, haiDetail);
 
 for (const result of checks) {
-  console.log(`${result.status.toUpperCase().padEnd(4)} ${result.name}: ${result.detail}`);
+  console.log(
+    `${result.status.toUpperCase().padEnd(4)} ${result.name}: ${result.detail}`
+  );
 }
 
-const hasFailure = checks.some((result) => result.status === "fail");
+const hasFailure = checks.some(result => result.status === "fail");
 process.exitCode = hasFailure ? 1 : 0;

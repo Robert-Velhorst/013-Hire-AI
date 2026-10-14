@@ -6,15 +6,18 @@ import { describe, expect, it } from "vitest";
 describe("discovery traffic policy", () => {
   it("propagates cancellation and shared HTTP handling through every network scraper", () => {
     const directory = resolve(process.cwd(), "server", "scrapers");
-    const files = readdirSync(directory)
-      .filter(file => /Scraper\.ts$/.test(file) && !/^(base|index)/.test(file));
+    const files = readdirSync(directory).filter(
+      file => /Scraper\.ts$/.test(file) && !/^(base|index)/.test(file)
+    );
 
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
       const source = readFileSync(resolve(directory, file), "utf8");
       const fetches = source.match(/\bfetch\(/g)?.length ?? 0;
       if (fetches === 0) continue;
-      expect(source.match(/signal: options\?\.signal/g)?.length).toBe(fetches * 2);
+      expect(source.match(/signal: options\?\.signal/g)?.length).toBe(
+        fetches * 2
+      );
       expect(source).not.toContain("if (!res.ok)");
       expect(source).not.toContain("statusText");
     }
@@ -25,7 +28,8 @@ describe("discovery traffic policy", () => {
       ...process.env,
       NODE_ENV: "production",
       DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-      ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+      ERASURE_IDENTITY_HMAC_KEYS:
+        "doctor-erasure-identity-hmac-key-at-least-32-characters",
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
@@ -35,35 +39,47 @@ describe("discovery traffic policy", () => {
       STRIPE_SECRET_KEY: "sk_test_doctor",
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
       JOB_SCRAPING_SCHEDULER_ENABLED: "true",
       JOB_SCRAPING_MAX_CONCURRENT_SOURCES: "3",
       JOB_SCRAPING_SOURCE_TIMEOUT_MS: "90000",
       JOB_SCRAPING_ENABLED_PLATFORMS: "",
       HAI_CONNECTOR_ENABLED: "false",
     };
-    const blocked = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(),
-      env,
-      encoding: "utf8",
-    });
+    const blocked = spawnSync(
+      process.execPath,
+      [resolve("scripts", "doctor.mjs")],
+      {
+        cwd: process.cwd(),
+        env,
+        encoding: "utf8",
+      }
+    );
     expect(blocked.status).toBe(1);
     expect(blocked.stdout).toContain("FAIL discovery traffic policy");
 
-    const accepted = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(),
-      env: { ...env, JOB_SCRAPING_ENABLED_PLATFORMS: "RemoteOK,Remotive" },
-      encoding: "utf8",
-    });
+    const accepted = spawnSync(
+      process.execPath,
+      [resolve("scripts", "doctor.mjs")],
+      {
+        cwd: process.cwd(),
+        env: { ...env, JOB_SCRAPING_ENABLED_PLATFORMS: "RemoteOK,Remotive" },
+        encoding: "utf8",
+      }
+    );
     expect(accepted.status).toBe(0);
     expect(accepted.stdout).toContain("PASS discovery traffic policy");
   });
 
   it("wires effective traffic limits into configuration and the admin surface", () => {
     const example = readFileSync(resolve(".env.example"), "utf8");
-    const admin = readFileSync(resolve("client", "src", "pages", "AdminPanel.tsx"), "utf8");
+    const admin = readFileSync(
+      resolve("client", "src", "pages", "AdminPanel.tsx"),
+      "utf8"
+    );
     expect(example).toContain("JOB_SCRAPING_SOURCE_TIMEOUT_MS=90000");
     expect(example).toContain("JOB_SCRAPING_MAX_CONCURRENT_SOURCES=3");
-    expect(admin).toContain('admin-discovery-metric-${id}');
+    expect(admin).toContain("admin-discovery-metric-${id}");
     expect(admin).toContain('ac("concurrentSourceCap")');
     expect(admin).toContain('ac("sourceTimeout")');
   });
@@ -73,7 +89,8 @@ describe("discovery traffic policy", () => {
       ...process.env,
       NODE_ENV: "production",
       DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-      ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+      ERASURE_IDENTITY_HMAC_KEYS:
+        "doctor-erasure-identity-hmac-key-at-least-32-characters",
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
@@ -84,20 +101,48 @@ describe("discovery traffic policy", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_MODE: "http",
       FILE_MALWARE_SCAN_URL: "",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "",
       JOB_SCRAPING_SCHEDULER_ENABLED: "false",
       HAI_CONNECTOR_ENABLED: "false",
     };
-    const runDoctor = (extra: Record<string, string>) => spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(), env: { ...env, ...extra }, encoding: "utf8",
-    });
+    const runDoctor = (extra: Record<string, string>) =>
+      spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+        cwd: process.cwd(),
+        env: { ...env, ...extra },
+        encoding: "utf8",
+      });
     const blocked = runDoctor({});
     expect(blocked.status).toBe(1);
     expect(blocked.stdout).toContain("FAIL document malware scanning");
-    const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
+    const malformed = runDoctor({
+      FILE_MALWARE_SCAN_URL: "file:///tmp/scanner",
+    });
     expect(malformed.status).toBe(1);
-    expect(malformed.stdout).toContain("scanner URL must be HTTP(S)");
-    const accepted = runDoctor({ FILE_MALWARE_SCAN_URL: "https://scanner.example.test" });
+    expect(malformed.stdout).toContain("scanner URL must be valid");
+    const missingAllowlist = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+    });
+    expect(missingAllowlist.status).toBe(1);
+    const mismatchedOrigin = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://other.example.test/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
+    });
+    expect(mismatchedOrigin.status).toBe(1);
+    const insecureRemote = runDoctor({
+      FILE_MALWARE_SCAN_URL: "http://scanner.example.test/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "http://scanner.example.test",
+    });
+    expect(insecureRemote.status).toBe(1);
+    const accepted = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
+    });
     expect(accepted.status).toBe(0);
     expect(accepted.stdout).toContain("PASS document malware scanning");
+    const loopbackHttp = runDoctor({
+      FILE_MALWARE_SCAN_URL: "http://127.0.0.1:3310/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "http://127.0.0.1:3310",
+    });
+    expect(loopbackHttp.status).toBe(0);
   });
 });
