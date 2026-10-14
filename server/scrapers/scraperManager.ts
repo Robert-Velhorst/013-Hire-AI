@@ -1,6 +1,6 @@
 import type { BaseScraper, ScrapeRequestOptions, ScrapeResult } from "./baseScraper";
 import { getScraperForPlatform, getSupportedPlatforms, hasScraper } from "./index";
-import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
+import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome, withJobPersistenceSerialization } from "../db";
 import { jobDuplicates, jobs, jobPlatforms } from "../../drizzle/schema";
 import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { samplePlatforms } from "../sampleData";
@@ -43,6 +43,16 @@ async function withJobPersistenceLock<T>(operation: () => Promise<T>): Promise<T
   } finally {
     release();
   }
+}
+
+function boundedInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
 }
 
 function sanitizeScrapeError(error: unknown): string {
@@ -155,8 +165,8 @@ export class ScraperManager {
   private readonly platformLastAttemptedAt = new Map<string, Date>();
 
   constructor(options: ScraperManagerOptions = {}) {
-    this.scrapeTimeoutMs = Math.min(300_000, Math.max(1, Math.floor(options.scrapeTimeoutMs ?? DEFAULT_SCRAPE_TIMEOUT_MS)));
-    this.maxConcurrentScrapes = Math.min(10, Math.max(1, Math.floor(options.maxConcurrentScrapes ?? DEFAULT_MAX_CONCURRENT_SCRAPES)));
+    this.scrapeTimeoutMs = boundedInteger(options.scrapeTimeoutMs, DEFAULT_SCRAPE_TIMEOUT_MS, 1, 300_000);
+    this.maxConcurrentScrapes = boundedInteger(options.maxConcurrentScrapes, DEFAULT_MAX_CONCURRENT_SCRAPES, 1, 10);
   }
 
   /**
@@ -305,7 +315,8 @@ export class ScraperManager {
     }
 
     const controller = new AbortController();
-    let timeout: NodeJS.Timeout | undefined;
+    let timeoutSignal: AbortSignal | undefined;
+    let timeoutListener: (() => void) | undefined;
     let removeAbortListener = () => {};
     try {
       const cancellation = new Promise<never>((_, reject) => {
@@ -325,13 +336,12 @@ export class ScraperManager {
         scraper.scrape({ ...options, signal: controller.signal }),
         cancellation,
         new Promise<never>((_, reject) => {
-          timeout = setTimeout(
-            () => {
-              reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
-              controller.abort();
-            },
-            this.scrapeTimeoutMs
-          );
+          timeoutSignal = AbortSignal.timeout(this.scrapeTimeoutMs);
+          timeoutListener = () => {
+            reject(new Error(`Scrape timed out after ${this.scrapeTimeoutMs}ms`));
+            controller.abort();
+          };
+          timeoutSignal.addEventListener("abort", timeoutListener, { once: true });
         }),
       ]);
       const sanitizedResult = {
@@ -344,12 +354,20 @@ export class ScraperManager {
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), sanitizedResult);
       return sanitizedResult;
     } catch (error) {
+      if (
+        options?.signal?.aborted ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        throw cancelledError();
+      }
       const result = { jobs: [], errors: [sanitizeScrapeError(error)], scrapedAt: new Date() };
       console.error(`[ScraperManager] Failed to scrape ${platformName}.`);
       await this.recordScrapeOutcome(platformName, scraper.getPlatformId(), result);
       return result;
     } finally {
-      if (timeout) clearTimeout(timeout);
+      if (timeoutSignal && timeoutListener) {
+        timeoutSignal.removeEventListener("abort", timeoutListener);
+      }
       removeAbortListener();
       releaseRun();
       if (this.platformRunTails.get(platformName) === currentRun) {
@@ -500,16 +518,21 @@ export class ScraperManager {
     duplicates: number;
     errors: number;
   }> {
-    return withJobPersistenceLock(() => this.saveJobsLocked(scrapedJobs));
+    return withJobPersistenceLock(() =>
+      withJobPersistenceSerialization(database => this.saveJobsLocked(scrapedJobs, database))
+    );
   }
 
-  private async saveJobsLocked(scrapedJobs: any[]): Promise<{
+  private async saveJobsLocked(
+    scrapedJobs: any[],
+    persistentDatabase?: Awaited<ReturnType<typeof getDb>>
+  ): Promise<{
     saved: number;
     refreshed: number;
     duplicates: number;
     errors: number;
   }> {
-    const db = await getDb();
+    const db = persistentDatabase === undefined ? await getDb() : persistentDatabase;
     if (!db) {
       return { saved: 0, refreshed: 0, duplicates: scrapedJobs.length, errors: 0 };
     }
@@ -733,3 +756,4 @@ export async function getScraperManager(): Promise<ScraperManager> {
   }
   return scraperManagerInstance;
 }
+
