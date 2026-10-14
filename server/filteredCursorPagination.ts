@@ -41,7 +41,7 @@ export async function collectFilteredCursorPage<T, Cursor>(options: {
       return { items, nextCursor: page.nextCursor, scannedCount };
     }
 
-    if (!page.nextCursor) {
+    if (page.nextCursor === null) {
       return { items, nextCursor: null, scannedCount };
     }
     cursor = page.nextCursor;

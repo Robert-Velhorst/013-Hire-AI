@@ -38,6 +38,39 @@ describe("collectFilteredCursorPage", () => {
     expect(fetchPage).toHaveBeenCalledTimes(3);
   });
 
+  it("continues with a valid numeric zero cursor", async () => {
+    const fetchPage = vi.fn(async (cursor: number | undefined) => {
+      if (cursor === undefined) {
+        return {
+          items: [{ id: 1, matches: true }],
+          nextCursor: 0,
+          scannedCount: 1,
+        };
+      }
+
+      return {
+        items: [{ id: 2, matches: true }],
+        nextCursor: null,
+        scannedCount: 1,
+      };
+    });
+
+    const result = await collectFilteredCursorPage({
+      limit: 2,
+      pageSize: 1,
+      maxScannedCount: 4,
+      fetchPage,
+      cursorForItem: row => row.id,
+    });
+
+    expect(result.items.map(row => row.id)).toEqual([1, 2]);
+    expect(result.nextCursor).toBeNull();
+    expect(fetchPage.mock.calls.map(([cursor]) => cursor)).toEqual([
+      undefined,
+      0,
+    ]);
+  });
+
   it("returns the scan cursor when the bounded scan ends before filling the page", async () => {
     const fetchPage = vi.fn(
       async (cursor: number | undefined, limit: number) => ({
