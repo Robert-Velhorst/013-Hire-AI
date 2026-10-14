@@ -173,6 +173,56 @@ jobs:
             database-acceptance-report.json
           if-no-files-found: warn
 
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+          MYSQL_DATABASE: hire_ai_e2e
+          MYSQL_USER: hire_ai_e2e
+          MYSQL_PASSWORD: isolated-e2e-not-production
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://hire_ai_e2e:isolated-e2e-not-production@127.0.0.1:3306/hire_ai_e2e
+      AUTONOMOUS_SCHEDULER_ENABLED: "false"
+      JOB_SCRAPING_SCHEDULER_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      - name: Enable pnpm with Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.16.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install headless Chromium
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Run authenticated browser smoke tests
+        run: pnpm test:e2e
+      - name: Upload browser test report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: playwright-e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+
   container-runtime:
     runs-on: ubuntu-latest
     services:

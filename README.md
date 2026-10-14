@@ -214,6 +214,7 @@ See [`.env.example`](.env.example), [security policy](SECURITY.md), [detailed se
 | `pnpm check`                                                 | TypeScript check.                                                                |
 | `pnpm test`                                                  | Regular Vitest suite; opt-in MySQL suites are separate.                          |
 | `pnpm test:database`                                         | Approved isolated-MySQL acceptance suite (requires explicit test configuration). |
+| `pnpm test:e2e`                                              | Authenticated Chromium journey on a loopback MySQL database named `hire_ai_e2e`; refuses other database hosts or schemas. |
 | `pnpm run doctor`                                            | Validate runtime and security configuration.                                     |
 | `pnpm security:audit`                                        | Audit dependencies at moderate-or-higher severity.                               |
 | `pnpm build` / `pnpm start`                                  | Build and start the production application.                                      |
