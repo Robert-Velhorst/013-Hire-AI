@@ -1,4 +1,5 @@
-import net from "node:net";
+import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+export { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 
 export type HaiConnectorConfig = {
   enabled: boolean;
@@ -18,23 +19,6 @@ export function parseHaiConnectorUserId(value: string | undefined) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function isPrivateAddress(address: string) {
-  const version = net.isIP(address);
-  if (version === 4) {
-    const [first, second] = address.split(".").map(Number);
-    return first === 10
-      || first === 127
-      || (first === 172 && second >= 16 && second <= 31)
-      || (first === 192 && second === 168);
-  }
-  if (version === 6) {
-    if (address.toLowerCase() === "::1") return true;
-    const firstSegment = address.split(":", 1)[0].toLowerCase();
-    return /^f[cd][0-9a-f]{2}$/.test(firstSegment);
-  }
-  return false;
-}
-
 export function defaultHaiConnectorConfig(): HaiConnectorConfig {
   return {
     enabled: readBoolean(process.env.HAI_CONNECTOR_ENABLED),
@@ -42,32 +26,6 @@ export function defaultHaiConnectorConfig(): HaiConnectorConfig {
     userId: parseHaiConnectorUserId(process.env.HAI_CONNECTOR_USER_ID),
     endpointUrl: process.env.HAI_CONNECTOR_URL ?? "",
   };
-}
-
-export function validateHaiConnectorUrl(value: string) {
-  if (value !== value.trim()) {
-    return "HAI_CONNECTOR_URL must not contain surrounding whitespace.";
-  }
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return "HAI_CONNECTOR_URL must be a valid local HTTP(S) URL.";
-  }
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    return "HAI_CONNECTOR_URL must be a plain local HTTP(S) URL without credentials, query data, or fragments.";
-  }
-  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const parsedIp = net.isIP(hostname) ? hostname : null;
-  const allowedName = ["localhost", "host.docker.internal", "gateway"].includes(hostname);
-  const isPrivateIp = parsedIp ? isPrivateAddress(parsedIp) : false;
-  if (!allowedName && !isPrivateIp) {
-    return "HAI_CONNECTOR_URL must use localhost, a private-network address, host.docker.internal, or gateway.";
-  }
-  if (url.pathname !== "/api/hai/a2a") {
-    return "HAI_CONNECTOR_URL must use the exact /api/hai/a2a endpoint path.";
-  }
-  return null;
 }
 
 const HAI_TOKEN_PLACEHOLDERS = new Set([
@@ -90,3 +48,4 @@ export function validateHaiConnectorConfig(config: HaiConnectorConfig) {
   }
   return validateHaiConnectorUrl(config.endpointUrl);
 }
+
