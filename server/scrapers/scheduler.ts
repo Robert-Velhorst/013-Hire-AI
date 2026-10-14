@@ -1,6 +1,7 @@
 import { getScraperManager } from "./scraperManager";
 import { processJobAlerts } from "../applicationFeatures";
 import { randomUUID } from "node:crypto";
+import { cleanScrapedHtmlToText } from "./htmlText";
 import {
   acquireJobDiscoveryLease,
   releaseJobDiscoveryLease,
@@ -461,16 +462,8 @@ export class JobNormalizer {
    */
   normalizeDescription(description: string | null | undefined): string {
     if (!description) return "";
-    
-    return description
-      .replace(/<[^>]*>/g, " ") // Remove HTML tags
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ") // Normalize whitespace
-      .trim()
-      .slice(0, 10000); // Limit length
+
+    return cleanScrapedHtmlToText(description).slice(0, 10000);
   }
 }
 
