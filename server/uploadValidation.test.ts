@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
 import {
   RESUME_MIME_TYPES,
   resolveMalwareScanMode,
   scanSensitiveUpload,
   validateUploadedFile,
+  windowsDefenderScanPath,
 } from "./uploadValidation";
 
 const originalFetch = globalThis.fetch;
@@ -95,6 +97,11 @@ describe("sensitive upload validation", () => {
     expect(resolveMalwareScanMode({ endpoint: "", platform: "linux" })).toBe(
       "unavailable"
     );
+  });
+
+  it("uses a fixed Defender scan filename instead of the uploaded filename", () => {
+    const directory = join("temporary", "hire-ai-scan-1");
+    expect(windowsDefenderScanPath(directory)).toBe(join(directory, "upload.bin"));
   });
 
   it("uses an authenticated bounded HTTP scanner request", async () => {
