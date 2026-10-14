@@ -46,15 +46,18 @@ describe("OAuth session lifetime", () => {
     } as unknown as Express;
     registerOAuthRoutes(app);
 
+    const browserNonce = "session-lifetime-browser-nonce";
     const oauthState = await createOAuthLoginState(
       "https://hire.example.test/api/oauth/callback",
-      ENV.cookieSecret
+      ENV.cookieSecret,
+      Date.now(),
+      browserNonce
     );
     const cookie = vi.fn();
     const redirect = vi.fn();
     const req = {
-      query: { code: "authorization-code", state: oauthState.state },
-      headers: { cookie: `hire_ai_oauth_state=${oauthState.nonce}` },
+      query: { code: "authorization-code", state: oauthState },
+      headers: { cookie: `hire_ai_oauth_state=${browserNonce}` },
       secure: true,
     } as unknown as Request;
     const res = {

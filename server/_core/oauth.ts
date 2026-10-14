@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { randomBytes } from "node:crypto";
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
@@ -38,14 +39,20 @@ export function registerOAuthRoutes(app: Express) {
         requestProtocol: req.protocol,
         requestHost: req.get("host"),
       });
-      const issued = await createOAuthLoginState(redirectUri, ENV.cookieSecret);
+      const browserNonce = randomBytes(32).toString("base64url");
+      const state = await createOAuthLoginState(
+        redirectUri,
+        ENV.cookieSecret,
+        Date.now(),
+        browserNonce
+      );
       const portalUrl = requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
       portalUrl.pathname = "/app-auth";
       portalUrl.searchParams.set("appId", ENV.appId);
       portalUrl.searchParams.set("redirectUri", redirectUri);
-      portalUrl.searchParams.set("state", issued.state);
+      portalUrl.searchParams.set("state", state);
       portalUrl.searchParams.set("type", "signIn");
-      res.cookie(OAUTH_STATE_COOKIE_NAME, issued.nonce, {
+      res.cookie(OAUTH_STATE_COOKIE_NAME, browserNonce, {
         ...getSessionCookieOptions(req),
         path: "/api/oauth/callback",
         maxAge: OAUTH_LOGIN_STATE_TTL_MS,

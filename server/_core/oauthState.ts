@@ -32,7 +32,7 @@ export async function createOAuthLoginState(
   redirectUri: string,
   secret: string,
   now = Date.now(),
-  nonce = randomBytes(32).toString("base64url")
+  nonce: string
 ) {
   if (!isValidCallbackUri(redirectUri)) {
     throw new Error("OAuth callback URI is invalid.");
@@ -46,10 +46,7 @@ export async function createOAuthLoginState(
     .setIssuedAt(Math.floor(now / 1_000))
     .setExpirationTime(Math.floor((now + OAUTH_LOGIN_STATE_TTL_MS) / 1_000))
     .sign(new TextEncoder().encode(secret));
-  return {
-    nonce,
-    state,
-  };
+  return state;
 }
 
 export async function verifyOAuthLoginState(
