@@ -35,7 +35,7 @@
 
 Verified against the live repository APIs on 2026-10-14 UTC:
 
-- Provider-pattern secret scanning and push protection are enabled. Generic non-provider patterns remain disabled; GitHub's documentation limits this feature to organization-owned repositories on GitHub Team with GitHub Secret Protection, so it is not available for this user-owned repository. Secret validity checks remain disabled because GitHub sends detected credentials to the issuing provider to test them.
+- Provider-pattern secret scanning and push protection are enabled. Generic-pattern scanning is unavailable for this user-owned repository under GitHub's current eligibility rules; qualifying organization-owned repositories need GitHub Team with GitHub Secret Protection. Secret validity checks are also unavailable for this standard user-owned account; where supported, they send detected credentials to the issuer.
 - Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot or secret-scanning alerts were returned by GitHub on 2026-10-14 UTC.
 - CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 30 open CodeQL alerts on `main`: 2 critical, 24 high, and 4 medium. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
 - Private vulnerability reporting is enabled.
