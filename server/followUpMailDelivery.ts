@@ -1,25 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-import {
-  applicationApprovals,
-  applications,
-  auditEvents,
-  followUps,
-  jobs,
-} from "../drizzle/schema";
+import { applicationApprovals, applications, auditEvents, followUps, jobs } from "../drizzle/schema";
 import { isConnectorAuthorizationStale } from "@shared/profileEvidence";
 import { decryptConnectorToken, encryptConnectorToken, getConnectorOAuthConfig, refreshConnectorAccessToken } from "./connectorOAuth";
 import { ConnectorAccessTokenError, getUsableConnectorAccessToken } from "./connectorAccessToken";
 import { isAuthoritativeInvalidConnectorToken } from "./connectorAuthorization";
-import {
-  acquireConnectorRefreshLease,
-  getConnectorAuthorization,
-  getDb,
-  getUserConnectorAccount,
-  releaseConnectorRefreshLease,
-  upsertConnectorAuthorization,
-  upsertUserConnectorAccount,
-} from "./db";
+import { acquireConnectorRefreshLease, getConnectorAuthorization, getDb, getUserConnectorAccount, releaseConnectorRefreshLease, upsertConnectorAuthorization, upsertUserConnectorAccount } from "./db";
 import { providerRequestInit, readProviderJson } from "./_core/providerRequest";
 
 export type FollowUpMailProvider = "gmail" | "outlook";
@@ -31,7 +17,7 @@ export type SendApprovedFollowUpInput = {
   recipient: string;
 };
 
-type FollowUpMailDeliveryDependencies = {
+export type MailDeliveryDependencies = {
   acquireConnectorRefreshLease: typeof acquireConnectorRefreshLease;
   decryptConnectorToken: typeof decryptConnectorToken;
   encryptConnectorToken: typeof encryptConnectorToken;
@@ -45,13 +31,16 @@ type FollowUpMailDeliveryDependencies = {
 };
 
 export class FollowUpProviderRejectionError extends Error {
-  constructor(message: string, readonly authorizationRejected: boolean) {
+  constructor(
+    message: string,
+    readonly authorizationRejected: boolean
+  ) {
     super(message);
     this.name = "FollowUpProviderRejectionError";
   }
 }
 
-const defaults: FollowUpMailDeliveryDependencies = {
+const defaults: MailDeliveryDependencies = {
   acquireConnectorRefreshLease,
   decryptConnectorToken,
   encryptConnectorToken,
@@ -91,7 +80,10 @@ export function normalizeFollowUpRecipient(value: string) {
 }
 
 function headerValue(value: string) {
-  return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const GENERIC_DELIVERY_FAILURE = "Mailbox delivery could not be completed.";
@@ -103,35 +95,24 @@ function failureMessage(error: unknown) {
   // Only retain provider outcomes produced by this module. Transport, OAuth,
   // and persistence exceptions can include sensitive request details and must
   // never become ledger evidence or client-visible error text.
-  if (/^(Gmail|Outlook) rejected the follow-up delivery \(\d{3}\)\.$/.test(normalized)) {
+  if (/^(Gmail|Outlook) rejected the [a-z-]{1,32} delivery \(\d{3}\)\.$/.test(normalized)) {
     return normalized;
   }
-  if (/^(Gmail|Outlook) accepted the request without a deterministic message identifier\.$/.test(normalized)) {
+  if (/^Gmail accepted the (?:mail )?request without a deterministic message identifier\.$/.test(normalized)) {
     return normalized;
   }
   return GENERIC_DELIVERY_FAILURE;
 }
 
-async function getMailAccess(
-  userId: number,
-  provider: FollowUpMailProvider,
-  now: Date,
-  fetcher: typeof fetch,
-  dependencies: FollowUpMailDeliveryDependencies
-) {
+export async function getMailAccess(userId: number, provider: FollowUpMailProvider, now: Date, fetcher: typeof fetch, dependencies: MailDeliveryDependencies = defaults) {
   const account = await dependencies.getUserConnectorAccount(userId, provider);
-  if (
-    !account ||
-    account.status !== "connected" ||
-    !parseScopes(account.consentScopes).includes(SEND_SCOPE[provider]) ||
-    isConnectorAuthorizationStale(account.lastVerifiedAt, now)
-  ) {
-    throw new Error(`${providerLabel(provider)} must be freshly authorized with explicit send consent before Hire.AI can deliver a follow-up.`);
+  if (!account || account.status !== "connected" || !parseScopes(account.consentScopes).includes(SEND_SCOPE[provider]) || isConnectorAuthorizationStale(account.lastVerifiedAt, now)) {
+    throw new Error(`${providerLabel(provider)} must be freshly authorized with explicit send consent before Hire.AI can send mail.`);
   }
   const authorization = await dependencies.getConnectorAuthorization(userId, provider);
   if (!authorization) {
     await markMailAccessNeedsReauth(userId, account, dependencies);
-    throw new Error(`${providerLabel(provider)} authorization is unavailable. Reauthorize before sending a follow-up.`);
+    throw new Error(`${providerLabel(provider)} authorization is unavailable. Reauthorize before sending mail.`);
   }
   try {
     const accessToken = await getUsableConnectorAccessToken({
@@ -147,7 +128,7 @@ async function getMailAccess(
   } catch (error) {
     if (error instanceof ConnectorAccessTokenError && error.reason === "expired") {
       await markMailAccessNeedsReauth(userId, account, dependencies);
-      throw new Error(`${providerLabel(provider)} authorization has expired. Reauthorize before sending a follow-up.`);
+      throw new Error(`${providerLabel(provider)} authorization has expired. Reauthorize before sending mail.`);
     }
     if (error instanceof ConnectorAccessTokenError && error.reason === "renewal_not_configured") {
       throw new Error(`${providerLabel(provider)} token renewal is not configured in this deployment.`);
@@ -156,11 +137,7 @@ async function getMailAccess(
   }
 }
 
-async function markMailAccessNeedsReauth(
-  userId: number,
-  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
-  dependencies: FollowUpMailDeliveryDependencies
-) {
+async function markMailAccessNeedsReauth(userId: number, account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>, dependencies: MailDeliveryDependencies) {
   await dependencies.upsertUserConnectorAccount({
     userId,
     provider: account.provider,
@@ -179,67 +156,150 @@ export async function sendFollowUpProviderMessage(
   recipient: string,
   subject: string,
   message: string,
-  fetcher: typeof fetch
+  fetcher: typeof fetch,
+  attachments: MailAttachment[] = [],
+  deliveryLabel = "follow-up"
 ) {
+  normalizeFollowUpRecipient(recipient);
+  if (!/^[a-z-]{1,32}$/.test(deliveryLabel)) {
+    throw new Error("Mail delivery label is invalid.");
+  }
+  let attachmentBytes = 0;
+  for (const attachment of attachments) {
+    if (!SUPPORTED_MAIL_ATTACHMENT_TYPES.has(attachment.mimeType)) {
+      throw new Error("Mail attachments must use a supported resume document type.");
+    }
+    if (!(attachment.data instanceof Uint8Array) || attachment.data.byteLength === 0) {
+      throw new Error("Mail attachments must contain file data.");
+    }
+    attachmentBytes += attachment.data.byteLength;
+    if (attachmentBytes > MAX_MAIL_ATTACHMENT_BYTES) {
+      throw new Error("Mail attachments exceed the 2.5 MiB delivery limit.");
+    }
+  }
   if (provider === "gmail") {
-    const raw = Buffer.from([
-      `To: ${recipient}`,
-      `Subject: ${subject}`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "",
-      message,
-    ].join("\r\n"), "utf8").toString("base64url");
-    const response = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", providerRequestInit({
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ raw }),
-    }));
+    const safeSubject = headerValue(subject);
+    const mime =
+      attachments.length === 0
+        ? [`To: ${recipient}`, `Subject: ${safeSubject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", message].join("\r\n")
+        : (() => {
+            const boundary = `hire-ai-${randomUUID()}`;
+            const parts = [
+              `To: ${recipient}`,
+              `Subject: ${safeSubject}`,
+              "MIME-Version: 1.0",
+              `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
+              "",
+              `--${boundary}`,
+              "Content-Type: text/plain; charset=UTF-8",
+              "Content-Transfer-Encoding: 8bit",
+              "",
+              message,
+            ];
+            for (const attachment of attachments) {
+              const fileName = safeAttachmentName(attachment.fileName);
+              parts.push(
+                `--${boundary}`,
+                `Content-Type: ${attachment.mimeType}; name=\"${fileName}\"`,
+                "Content-Transfer-Encoding: base64",
+                `Content-Disposition: attachment; filename=\"${fileName}\"`,
+                "",
+                base64Lines(attachment.data)
+              );
+            }
+            parts.push(`--${boundary}--`, "");
+            return parts.join("\r\n");
+          })();
+    const raw = Buffer.from(mime, "utf8").toString("base64url");
+    const response = await fetcher(
+      "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+      providerRequestInit({
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ raw }),
+      })
+    );
     if (!response.ok) {
-      throw new FollowUpProviderRejectionError(
-        `Gmail rejected the follow-up delivery (${response.status}).`,
-        isAuthoritativeInvalidConnectorToken(response)
-      );
+      throw new FollowUpProviderRejectionError(`Gmail rejected the ${deliveryLabel} delivery (${response.status}).`, isAuthoritativeInvalidConnectorToken(response));
     }
     const payload = await readProviderJson<{ id?: unknown }>(response);
     if (typeof payload.id !== "string" || !payload.id) {
       throw new Error("Gmail accepted the request without a deterministic message identifier.");
     }
-    return { messageId: payload.id, confirmation: `Gmail accepted the approved follow-up with message ID ${payload.id}.` };
+    return {
+      messageId: payload.id,
+      confirmation: `Gmail accepted the approved message with ID ${payload.id}.`,
+    };
   }
 
-  const response = await fetcher("https://graph.microsoft.com/v1.0/me/sendMail", providerRequestInit({
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      message: {
-        subject,
-        body: { contentType: "Text", content: message },
-        toRecipients: [{ emailAddress: { address: recipient } }],
+  const response = await fetcher(
+    "https://graph.microsoft.com/v1.0/me/sendMail",
+    providerRequestInit({
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
       },
-      saveToSentItems: true,
-    }),
-  }));
+      body: JSON.stringify({
+        message: {
+          subject: headerValue(subject),
+          body: { contentType: "Text", content: message },
+          toRecipients: [{ emailAddress: { address: recipient } }],
+          ...(attachments.length > 0
+            ? {
+                attachments: attachments.map((attachment) => ({
+                  "@odata.type": "#microsoft.graph.fileAttachment",
+                  name: safeAttachmentName(attachment.fileName),
+                  contentType: attachment.mimeType,
+                  contentBytes: Buffer.from(attachment.data).toString("base64"),
+                })),
+              }
+            : {}),
+        },
+        saveToSentItems: true,
+      }),
+    })
+  );
   if (!response.ok) {
-    throw new FollowUpProviderRejectionError(
-      `Outlook rejected the follow-up delivery (${response.status}).`,
-      isAuthoritativeInvalidConnectorToken(response)
-    );
+    throw new FollowUpProviderRejectionError(`Outlook rejected the ${deliveryLabel} delivery (${response.status}).`, isAuthoritativeInvalidConnectorToken(response));
   }
-  return { messageId: null, confirmation: "Outlook accepted the approved follow-up for delivery and saved it to Sent Items." };
+  return {
+    messageId: null,
+    confirmation: "Outlook accepted the approved message for delivery and saved it to Sent Items.",
+  };
 }
 
-async function reserveDelivery(
-  input: SendApprovedFollowUpInput,
-  recipient: string,
-  attemptKey: string
-) {
+export type MailAttachment = {
+  fileName: string;
+  mimeType: string;
+  data: Uint8Array;
+};
+
+const MAX_MAIL_ATTACHMENT_BYTES = Math.floor(2.5 * 1024 * 1024);
+const SUPPORTED_MAIL_ATTACHMENT_TYPES = new Set(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword", "text/rtf", "application/rtf", "text/plain"]);
+
+function safeAttachmentName(value: string) {
+  return (
+    value
+      .normalize("NFC")
+      .replace(/[^A-Za-z0-9._-]/g, "_")
+      .slice(0, 180) || "attachment"
+  );
+}
+
+function base64Lines(data: Uint8Array) {
+  return (
+    Buffer.from(data)
+      .toString("base64")
+      .match(/.{1,76}/g)
+      ?.join("\r\n") ?? ""
+  );
+}
+
+async function reserveDelivery(input: SendApprovedFollowUpInput, recipient: string, attemptKey: string) {
   const db = await getDb();
   if (!db) throw new Error("Connected mailbox delivery requires durable database storage.");
 
@@ -263,7 +323,10 @@ async function reserveDelivery(
     const followUp = rows[0];
     if (!followUp) throw new Error("Follow-up not found.");
     if (followUp.sentDate || followUp.deliveryState === "sent") {
-      return { alreadySent: true as const, applicationId: followUp.applicationId };
+      return {
+        alreadySent: true as const,
+        applicationId: followUp.applicationId,
+      };
     }
     if (["sending", "unknown"].includes(followUp.deliveryState)) {
       throw new Error("This follow-up already has an in-progress or uncertain external delivery. Do not retry it; confirm delivery manually after checking the mailbox.");
@@ -274,14 +337,14 @@ async function reserveDelivery(
     }
 
     const approvals = await tx
-      .select({ id: applicationApprovals.id, status: applicationApprovals.status })
+      .select({
+        id: applicationApprovals.id,
+        status: applicationApprovals.status,
+      })
       .from(applicationApprovals)
-      .where(and(
-        eq(applicationApprovals.userId, input.userId),
-        eq(applicationApprovals.entityType, "follow_up"),
-        eq(applicationApprovals.entityId, input.followUpId),
-        eq(applicationApprovals.approvalType, "follow_up_send")
-      ))
+      .where(
+        and(eq(applicationApprovals.userId, input.userId), eq(applicationApprovals.entityType, "follow_up"), eq(applicationApprovals.entityId, input.followUpId), eq(applicationApprovals.approvalType, "follow_up_send"))
+      )
       .orderBy(desc(applicationApprovals.createdAt))
       .limit(1);
     if (!approvals[0] || approvals[0].status !== "approved") {
@@ -299,11 +362,7 @@ async function reserveDelivery(
         deliveryAttemptKey: attemptKey,
         deliveryFailureMessage: null,
       })
-      .where(and(
-        eq(followUps.id, input.followUpId),
-        isNull(followUps.sentDate),
-        inArray(followUps.deliveryState, ["draft", "failed"])
-      ));
+      .where(and(eq(followUps.id, input.followUpId), isNull(followUps.sentDate), inArray(followUps.deliveryState, ["draft", "failed"])));
     if (Number(claimed[0].affectedRows) !== 1) {
       throw new Error("Follow-up delivery changed concurrently. Refresh the ledger before retrying.");
     }
@@ -317,11 +376,7 @@ async function reserveDelivery(
   });
 }
 
-async function recordKnownDeliveryFailure(
-  input: SendApprovedFollowUpInput,
-  attemptKey: string,
-  reason: string
-) {
+async function recordKnownDeliveryFailure(input: SendApprovedFollowUpInput, attemptKey: string, reason: string) {
   const db = await getDb();
   if (!db) return;
   await db.transaction(async (tx) => {
@@ -343,17 +398,19 @@ async function recordKnownDeliveryFailure(
       action: "follow_up_mail_delivery_failed",
       actor: "user",
       source: `followUpMailDelivery.${input.provider}`,
-      afterState: JSON.stringify({ followUpId: input.followUpId, provider: input.provider, recipient: input.recipient, reason, externalMessageSent: false }),
+      afterState: JSON.stringify({
+        followUpId: input.followUpId,
+        provider: input.provider,
+        recipient: input.recipient,
+        reason,
+        externalMessageSent: false,
+      }),
       riskLevel: "high",
     });
   });
 }
 
-async function recordUncertainDeliveryOutcome(
-  input: SendApprovedFollowUpInput,
-  attemptKey: string,
-  reason: string
-) {
+async function recordUncertainDeliveryOutcome(input: SendApprovedFollowUpInput, attemptKey: string, reason: string) {
   const db = await getDb();
   if (!db) return;
 
@@ -369,11 +426,7 @@ async function recordUncertainDeliveryOutcome(
     const updated = await tx
       .update(followUps)
       .set({ deliveryState: "unknown", deliveryFailureMessage: reason })
-      .where(and(
-        eq(followUps.id, input.followUpId),
-        eq(followUps.deliveryAttemptKey, attemptKey),
-        eq(followUps.deliveryState, "sending")
-      ));
+      .where(and(eq(followUps.id, input.followUpId), eq(followUps.deliveryAttemptKey, attemptKey), eq(followUps.deliveryState, "sending")));
     if (Number(updated[0].affectedRows) !== 1) return;
     await tx.insert(auditEvents).values({
       userId: input.userId,
@@ -397,7 +450,11 @@ async function recordUncertainDeliveryOutcome(
 
 export async function sendApprovedFollowUp(
   input: SendApprovedFollowUpInput,
-  options: { fetcher?: typeof fetch; now?: Date; dependencies?: FollowUpMailDeliveryDependencies } = {}
+  options: {
+    fetcher?: typeof fetch;
+    now?: Date;
+    dependencies?: MailDeliveryDependencies;
+  } = {}
 ) {
   const recipient = normalizeFollowUpRecipient(input.recipient);
   const now = options.now ?? new Date();
@@ -405,7 +462,12 @@ export async function sendApprovedFollowUp(
   const dependencies = options.dependencies ?? defaults;
   const attemptKey = randomUUID();
   const reservation = await reserveDelivery(input, recipient, attemptKey);
-  if (reservation.alreadySent) return { success: true, existing: true, applicationId: reservation.applicationId };
+  if (reservation.alreadySent)
+    return {
+      success: true,
+      existing: true,
+      applicationId: reservation.applicationId,
+    };
 
   let access: Awaited<ReturnType<typeof getMailAccess>>;
   try {
