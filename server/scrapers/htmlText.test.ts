@@ -33,4 +33,16 @@ describe("scraped HTML text normalization", () => {
     expect(output.length).toBeLessThanOrEqual(256 * 1024);
     expect(output.length).toBeGreaterThan(250 * 1024);
   });
+
+  it("separates text across common block-level elements", () => {
+    expect(cleanScrapedHtmlToText(
+      "<main>Remote</main><aside>Engineer</aside><header>Open</header><footer>Role</footer><form><fieldset>Now</fieldset></form><figure>Apply</figure>"
+    )).toBe("Remote Engineer Open Role Now Apply");
+  });
+
+  it("walks deeply nested provider markup without recursive stack growth", () => {
+    const depth = 25_000;
+    const html = `${"<i>".repeat(depth)}Deep${"</i>".repeat(depth)}`;
+    expect(cleanScrapedHtmlToText(html)).toBe("Deep");
+  });
 });
