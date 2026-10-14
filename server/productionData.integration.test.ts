@@ -177,6 +177,44 @@ describe
       ).toBe(false);
     });
 
+    it("fills filtered catalog pages past review-only MySQL candidates", async () => {
+      const now = Date.now();
+      const clearRows = Array.from({ length: 3 }, (_, index) => ({
+        title: `${marker} Clear Pagination Acceptance ${index}`,
+        company: marker,
+        location: "Remote - Netherlands",
+        description: "Synthetic clear acceptance vacancy. Not a real job.",
+        jobType: "full-time",
+        platformId: records[0].platformId,
+        externalId: `${marker}-pagination-clear-${index}`,
+        sourceUrl: `https://himalayas.app/${marker}/pagination-clear-${index}`,
+        postedDate: new Date(now - (index + 1) * 60 * 60 * 1000),
+      }));
+      const reviewRows = Array.from({ length: 110 }, (_, index) => ({
+        title: `${marker} Review Pagination Acceptance ${index}`,
+        company: marker,
+        location: "Remote - Netherlands",
+        description: "No interview is required. Synthetic review-only acceptance vacancy.",
+        jobType: "full-time",
+        platformId: records[0].platformId,
+        externalId: `${marker}-pagination-review-${index}`,
+        sourceUrl: `https://himalayas.app/${marker}/pagination-review-${index}`,
+        postedDate: new Date(now),
+      }));
+      await new ScraperManager().saveJobs([...clearRows, ...reviewRows]);
+
+      const filters = { query: marker, listingSafety: "clear" as const };
+      const first = await getActiveJobPage({ limit: 1, filters });
+      expect(first.items).toHaveLength(1);
+      expect(first.items[0].title).toContain("Clear Pagination Acceptance");
+      expect(first.nextCursor).not.toBeNull();
+
+      const second = await getActiveJobPage({ limit: 1, cursor: first.nextCursor!, filters });
+      expect(second.items).toHaveLength(1);
+      expect(second.items[0].id).not.toBe(first.items[0].id);
+      expect(second.items[0].title).toContain("Clear Pagination Acceptance");
+    });
+
     it("preserves one canonical duplicate group when platform scans save concurrently", async () => {
       const title = "Concurrent Dedup Acceptance Engineer";
       const listing = {
