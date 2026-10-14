@@ -44,10 +44,22 @@ describe("database recovery tooling", () => {
       database: "hire_ai",
     });
     const args = dumpArguments(connection);
-    expect(args).toContain("backup-user");
+    expect(args).toContain("--host=db.internal");
+    expect(args).toContain("--port=3307");
+    expect(args).toContain("--user=backup-user");
     expect(args).not.toContain("p@ss");
     expect(args).toContain("--single-transaction");
     expect(args).toContain("--quick");
+  });
+
+  it("accepts IPv6 database hosts without passing URL brackets to the client", () => {
+    expect(parseDatabaseUrl("mysql://operator:secret@[::1]:3307/hire_ai")).toEqual({
+      host: "::1",
+      port: "3307",
+      user: "operator",
+      password: "secret",
+      database: "hire_ai",
+    });
   });
 
   it("supports MySQL client execution inside an explicitly named Docker container", () => {
@@ -58,6 +70,8 @@ describe("database recovery tooling", () => {
       });
     expect(() => recoveryCommand("mysql", [], "unsafe container name"))
       .toThrow("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid");
+    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined))
+      .toThrow("Database recovery executable is invalid");
   });
 
   it.each([
@@ -66,6 +80,10 @@ describe("database recovery tooling", () => {
     "postgres://user:secret@db.internal/hire_ai",
     "mysql://db.internal/",
     "mysql://db.internal/one/two",
+    "mysql://--defaults-file%3D%2Ftmp%2Fevil:secret@db.internal/hire_ai",
+    "mysql://operator:secret@db.internal/--defaults-file%3D%2Ftmp%2Fevil",
+    "mysql://operator%0A%2D%2Dhelp:secret@db.internal/hire_ai",
+    "mysql://operator:secret@-defaults-file.internal/hire_ai",
   ])("rejects an unsafe database target: %s", value => {
     expect(() => parseDatabaseUrl(value)).toThrow();
   });
@@ -196,3 +214,4 @@ describe("database recovery tooling", () => {
     expect(gitignore).toMatch(/^backups\/$/m);
   });
 });
+
