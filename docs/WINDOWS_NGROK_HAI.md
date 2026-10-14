@@ -45,7 +45,7 @@ Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending
 
 ## HAI A2A connector
 
-Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector and a companion read-only remote-job search for a local or private-network HAI peer. The connector is disabled by default and must not be pointed at a public ngrok origin.
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
@@ -61,7 +61,8 @@ Endpoints:
 - `GET /.well-known/agent-card.json`: available only when configuration is valid.
 - `GET /api/hai/status`: bearer-authenticated connector configuration status.
 - `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
+- `POST /api/hai/jobs/search`: bearer-authenticated JSON filter request for up to 25 active canonical remote listings. Supported filters cover query, location, job type, source platform, salary range and ISO currency, experience, application process, visa sponsorship, open hiring, diversity-friendly listings, salary disclosure, and posting age. Remote-only and safety-cleared policy is enforced by the server and cannot be overridden. Results contain bounded public listing fields and HTTPS source/application URLs only; cursor pagination is available through the returned `nextCursor`.
 
-The response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. It cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
+The A2A response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. The job-search route contains only public job listing data and does not expose user profiles, documents, or application state. Neither route can submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
 
 HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured.

@@ -8,6 +8,7 @@ import {
 } from "./haiConnector";
 import { parseHaiConnectorUserId, validateHaiConnectorConfig } from "./haiConnectorConfig";
 import { registerHaiConnectorRoutes } from "./haiConnectorRoutes";
+import { sampleJobs } from "./sampleData";
 
 const token = "hire-ai-hai-test-token-32-characters-long";
 const snapshot: HaiJobSearchSnapshot = {
@@ -48,15 +49,23 @@ async function start(service: HaiConnectorService) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-function configuredService(provider = vi.fn(async () => snapshot)) {
+function configuredService(
+  provider = vi.fn(async () => snapshot),
+  jobSearchProvider = vi.fn(async () => ({ items: [], nextCursor: null }))
+) {
   return {
     provider,
-    service: new HaiConnectorService({
-      enabled: true,
-      token,
-      userId: ownerId,
-      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-    }, provider),
+    jobSearchProvider,
+    service: new HaiConnectorService(
+      {
+        enabled: true,
+        token,
+        userId: ownerId,
+        endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+      },
+      provider,
+      jobSearchProvider
+    ),
   };
 }
 
@@ -178,6 +187,87 @@ describe("HAI A2A route", () => {
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(ownerId);
+  });
+
+  it("returns bounded canonical remote jobs with an enforced remote-only policy", async () => {
+    const postedAt = new Date("2026-08-08T12:00:00.000Z");
+    const cursor = {
+      postedDate: postedAt,
+      createdAt: new Date("2026-08-08T13:00:00.000Z"),
+      id: 91,
+    };
+    const jobSearchProvider = vi.fn(async () => ({
+      items: [{
+        ...sampleJobs[0],
+        description: "d".repeat(3_000),
+        requirements: "r".repeat(3_000),
+        sourceUrl: "http://jobs.example.test/source",
+        applicationUrl: "javascript:alert(1)",
+        postedDate: postedAt,
+      }],
+      nextCursor: cursor,
+    }));
+    const { service } = configuredService(vi.fn(async () => snapshot), jobSearchProvider);
+    const base = await start(service);
+    const response = await fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        filters: {
+          query: "engineer",
+          platformId: 4,
+          salaryRange: [50_000, 100_000],
+          salaryCurrency: "eur",
+        },
+        limit: 25,
+      }),
+    });
+    const body = await response.json() as any;
+    expect(response.status).toBe(200);
+    expect(jobSearchProvider).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 25,
+      filters: expect.objectContaining({
+        query: "engineer",
+        platformId: "4",
+        salaryRange: [50_000, 100_000],
+        salaryCurrency: "EUR",
+        remoteOnly: true,
+        listingSafety: "clear",
+      }),
+    }));
+    expect(body.policy).toEqual({ remoteOnly: true, listingSafety: "clear", canonicalListingsOnly: true });
+    expect(body.jobs).toHaveLength(1);
+    expect(body.jobs[0].description).toHaveLength(2_000);
+    expect(body.jobs[0].requirements).toHaveLength(2_000);
+    expect(body.jobs[0].sourceUrl).toBeNull();
+    expect(body.jobs[0].applicationUrl).toBeNull();
+    expect(body.nextCursor).toEqual({
+      postedDate: cursor.postedDate.toISOString(),
+      createdAt: cursor.createdAt.toISOString(),
+      id: cursor.id,
+    });
+  });
+
+  it("rejects unsafe salary filters, policy overrides, and unauthenticated searches before database search", async () => {
+    const { service, jobSearchProvider } = configuredService();
+    const base = await start(service);
+    const request = (authorization: string | null, body: unknown) => fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { authorization } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    expect((await request(`Bearer ${token}`, { filters: { salaryRange: [20_000, 50_000] } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { salaryCurrency: "ZZZ" } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { remoteOnly: false } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { listingSafety: "all" } })).status).toBe(400);
+    expect((await request(null, { filters: { query: "engineer" } })).status).toBe(404);
+    expect(jobSearchProvider).not.toHaveBeenCalled();
   });
 
   it("rejects mutation-shaped metadata and oversized input before building a job-search snapshot", async () => {

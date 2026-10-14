@@ -6,7 +6,7 @@
 
 Hire.AI V2 uses tRPC for type-safe API communication. All endpoints are available under `/api/trpc`.
 
-The optional HAI interoperability surface is a separate, bearer-authenticated A2A 1.0-shaped read-only endpoint at `/api/hai/a2a`; see `docs/WINDOWS_NGROK_HAI.md`. It is not a tRPC user session and has no mutation authority.
+The optional HAI interoperability surface consists of a bearer-authenticated A2A 1.0-shaped status endpoint at `/api/hai/a2a` and a separate bounded, read-only remote-job search at `/api/hai/jobs/search`; see `docs/WINDOWS_NGROK_HAI.md`. These routes are disabled by default, are not tRPC user sessions, and have no mutation authority.
 
 ## Authentication
 
