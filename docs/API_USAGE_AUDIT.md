@@ -8,7 +8,7 @@ All application API calls use `/api/trpc`. Public procedures are limited to unau
 - `GET /readyz`: bounded configuration and database readiness status plus an opaque per-process instance ID used to bind local and public ngrok verification. Database checks are coalesced and cached; a caller timeout does not permit another probe until the underlying database operation settles, preventing polling from accumulating pool work. Development explicitly reports `development_memory` when no database is configured. A configured but unavailable database and incomplete production configuration return `503`; errors expose no connection details.
 - `/api/oauth/callback` and `/api/connectors/oauth/callback`: provider callback boundaries.
 - `/api/stripe/webhook`: registered before JSON parsing to preserve signed raw request bodies.
-- `/.well-known/agent-card.json`, `/api/hai/status`, `/api/hai/a2a`, and `/api/hai/jobs/search`: disabled-by-default HAI bridge. Protected routes require a separate bearer token; JSON requests use a 16 KiB parser before the general 16 MiB application parser. Job search is read-only, limited to 25 canonical, current, safety-cleared remote listings, and exposes only bounded public listing fields.
+- `/.well-known/agent-card.json`, `/api/hai/status`, `/api/hai/a2a`, and `/api/hai/jobs/search`: disabled-by-default HAI bridge. A public advertised endpoint requires HTTPS and an exact origin allowlist; protected routes require a separate bearer token and have dedicated in-memory rate limits. JSON requests use a 16 KiB parser before the general 16 MiB application parser. Job search is read-only, limited to 25 canonical, current, safety-cleared remote listings, and exposes only bounded public listing fields.
 
 ## High-risk action controls
 

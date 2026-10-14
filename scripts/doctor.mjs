@@ -283,6 +283,7 @@ const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "");
 const haiUserIdValue = String(process.env.HAI_CONNECTOR_USER_ID || "");
 const haiUserId = /^[1-9]\d*$/.test(haiUserIdValue) ? Number(haiUserIdValue) : NaN;
 const haiUrl = String(process.env.HAI_CONNECTOR_URL || "");
+const haiAllowedOrigins = String(process.env.HAI_CONNECTOR_ALLOWED_ORIGINS || "");
 let haiDetail = "disabled";
 let haiStatus = "pass";
 if (haiEnabled) {
@@ -291,14 +292,16 @@ if (haiEnabled) {
   else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken)) errors.push("token without whitespace or control characters");
   else if (haiToken === "replace-with-at-least-32-random-characters") errors.push("non-placeholder token");
   if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
-  const endpointError = validateHaiConnectorUrl(haiUrl);
+  const endpointError = validateHaiConnectorUrl(haiUrl, haiAllowedOrigins);
   if (endpointError) {
     if (endpointError.includes("/api/hai/a2a")) errors.push("exact /api/hai/a2a endpoint");
-    else if (endpointError.includes("valid local HTTP(S) URL")) errors.push("valid connector URL");
-    else errors.push("plain local/private connector URL");
+    else if (endpointError.includes("ALLOWED_ORIGINS")) errors.push("valid HAI_CONNECTOR_ALLOWED_ORIGINS HTTPS origins");
+    else if (endpointError.includes("not explicitly allowlisted")) errors.push("explicitly allowlisted public HTTPS connector origin");
+    else if (endpointError.includes("Public HAI connector endpoints must use HTTPS")) errors.push("HTTPS for public connector endpoints");
+    else errors.push("valid local/private or allowlisted HTTPS connector URL");
   }
   haiStatus = errors.length > 0 ? "fail" : "pass";
-  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured read-only local bridge";
+  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured authenticated read-only bridge";
 }
 check("HAI connector", haiStatus, haiDetail);
 

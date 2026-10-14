@@ -86,10 +86,15 @@ function sendMessage(extraMessage: Record<string, unknown> = {}) {
 }
 
 describe("HAI connector configuration", () => {
-  it("stays disabled by default and rejects weak or public connector configuration", () => {
+  it("stays disabled by default and requires an allowlisted HTTPS origin for public peers", () => {
     expect(validateHaiConnectorConfig({ enabled: false, token: "", userId: null, endpointUrl: "" })).toBeNull();
     expect(validateHaiConnectorConfig({ enabled: true, token: "short", userId: 1, endpointUrl: "http://127.0.0.1/a" })).toContain("32");
-    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
+    const publicConfig = { enabled: true, token, userId: 1, endpointUrl: "https://hire-ai.example.test/api/hai/a2a" };
+    expect(validateHaiConnectorConfig(publicConfig)).toContain("not explicitly allowlisted");
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://hire-ai.example.test" })).toBeNull();
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://other.example.test" })).toContain("not explicitly allowlisted");
+    expect(validateHaiConnectorConfig({ ...publicConfig, endpointUrl: "http://hire-ai.example.test/api/hai/a2a", allowedOrigins: "https://hire-ai.example.test" })).toContain("HTTPS");
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://hire-ai.example.test/path" })).toContain("ALLOWED_ORIGINS");
   });
 
   it("accepts only private IP ranges and rejects public IPv6 addresses containing fc or fd", () => {
@@ -98,7 +103,7 @@ describe("HAI connector configuration", () => {
       "http://[2001:db8:fc00::1]:3000/api/hai/a2a",
       "http://[2001:db8:fd00::1]:3000/api/hai/a2a",
     ]) {
-      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("local");
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("HTTPS");
     }
 
     for (const endpointUrl of [
@@ -111,7 +116,7 @@ describe("HAI connector configuration", () => {
       expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toBeNull();
     }
 
-    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("local");
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("HTTPS");
   });
 
   it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {
@@ -150,6 +155,23 @@ describe("HAI A2A route", () => {
       body: "x".repeat(20_000),
     })).status).toBe(404);
     expect(provider).not.toHaveBeenCalled();
+  });
+
+  it("throttles unauthenticated job-search attempts before connector authorization", async () => {
+    const disabled = new HaiConnectorService({ enabled: false, token: "", userId: null, endpointUrl: "" });
+    const base = await start(disabled);
+    const request = () => fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      expect((await request()).status).toBe(404);
+    }
+    const limited = await request();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBeTruthy();
+    expect(limited.headers.get("cache-control")).toBe("no-store");
   });
 
   it("publishes a bounded Agent Card and returns a read-only aggregate snapshot", async () => {

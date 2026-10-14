@@ -45,16 +45,17 @@ Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending
 
 ## HAI A2A connector
 
-Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector and a companion read-only remote-job search for a local or private-network HAI peer. The connector is disabled by default and must not be pointed at a public ngrok origin.
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector and a companion read-only remote-job search. The connector is disabled by default. Local/private peers may use HTTP(S); a hosted HAI peer may use a public endpoint only over HTTPS and only when its exact origin is explicitly allowlisted.
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
 HAI_CONNECTOR_TOKEN=<independently-generated-32-to-4096-character-token>
 HAI_CONNECTOR_USER_ID=123
 HAI_CONNECTOR_URL=http://127.0.0.1:3000/api/hai/a2a
+HAI_CONNECTOR_ALLOWED_ORIGINS=
 ```
 
-Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, public endpoints, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
+Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. For a hosted deployment, set `HAI_CONNECTOR_URL` to `https://<host>/api/hai/a2a` and add only `https://<host>` to `HAI_CONNECTOR_ALLOWED_ORIGINS`; a public HTTP URL, wildcard, path, or lookalike origin is rejected. For ngrok, add the exact current HTTPS origin and update it when the assigned tunnel hostname changes. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, malformed allowlists, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
 
 Endpoints:
 
@@ -62,6 +63,8 @@ Endpoints:
 - `GET /api/hai/status`: bearer-authenticated connector configuration status.
 - `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
 - `POST /api/hai/jobs/search`: bearer-authenticated JSON filter request for up to 25 active canonical remote listings. Supported filters cover query, location, job type, source platform, salary range and ISO currency, experience, application process, visa sponsorship, open hiring, diversity-friendly listings, salary disclosure, and posting age. Remote-only and safety-cleared policy is enforced by the server and cannot be overridden. Results contain bounded public listing fields and HTTPS source/application URLs only; cursor pagination is available through the returned `nextCursor`.
+
+HAI paths have an additional in-memory limit of 120 requests per minute per client; job search is limited to 30 requests per minute per client. These limits complement the global API limiter but are per-process and are not a substitute for a shared limiter in a multi-replica deployment.
 
 The A2A response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. The job-search route contains only public job listing data and does not expose user profiles, documents, or application state. Neither route can submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
 

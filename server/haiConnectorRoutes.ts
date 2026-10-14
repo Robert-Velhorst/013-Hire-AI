@@ -8,8 +8,19 @@ import {
   type HaiRemoteJobSearchFilters,
 } from "./haiConnector";
 import { isKnownSalaryCurrency } from "@shared/salaryCurrency";
+import { createRateLimitMiddleware } from "./_core/apiRateLimit";
 
 const maxBodyBytes = 16 * 1024;
+export const HAI_CONNECTOR_RATE_LIMIT_POLICY = Object.freeze({
+  windowMs: 60_000,
+  maxRequests: 120,
+  maxClients: 2_000,
+});
+export const HAI_JOB_SEARCH_RATE_LIMIT_POLICY = Object.freeze({
+  windowMs: 60_000,
+  maxRequests: 30,
+  maxClients: 2_000,
+});
 const requestIdSchema = z.union([z.string().min(1).max(255), z.number().finite()]);
 const textPartSchema = z.object({
   text: z.string().trim().min(1),
@@ -107,6 +118,12 @@ export function registerHaiConnectorRoutes(
   app: Express,
   service = new HaiConnectorService()
 ) {
+  app.use("/api/hai", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  }, createRateLimitMiddleware(HAI_CONNECTOR_RATE_LIMIT_POLICY));
+  const jobSearchRateLimit = createRateLimitMiddleware(HAI_JOB_SEARCH_RATE_LIMIT_POLICY);
+
   app.get("/.well-known/agent-card.json", (_req, res) => {
     const card = service.agentCard();
     if (!card) {
@@ -136,7 +153,7 @@ export function registerHaiConnectorRoutes(
     res.json(service.status());
   });
 
-  app.post("/api/hai/jobs/search", requireHaiAuth, boundedJsonBodyParser, async (req, res) => {
+  app.post("/api/hai/jobs/search", jobSearchRateLimit, requireHaiAuth, boundedJsonBodyParser, async (req, res) => {
     const parsed = jobSearchRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Remote job search filters are invalid or exceed supported limits." });
