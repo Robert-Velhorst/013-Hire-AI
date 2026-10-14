@@ -16,8 +16,8 @@ function registerRoutes() {
   const routes = new Map<string, RouteHandler>();
   const app = {
     get: vi.fn(),
-    post(path: string, handler: RouteHandler) {
-      routes.set(path, handler);
+    post(path: string, ...handlers: unknown[]) {
+      routes.set(path, handlers.at(-1) as RouteHandler);
     },
   };
   registerDevAuthRoutes(app as unknown as Express);
@@ -180,6 +180,34 @@ describe("development authentication routes", () => {
     expect(seedUser).toHaveBeenCalledOnce();
     expect(seedAdmin).not.toHaveBeenCalled();
     expect(createSession).toHaveBeenCalledOnce();
+  });
+
+  it("rate limits local QA session issuance per direct client", async () => {
+    ENV.devQaAuthEnabled = true;
+    ENV.isProduction = false;
+    process.env.HOST = "127.0.0.1";
+    const user = { openId: "dev-review-queue-user", name: "Review Queue QA" };
+    const seedUser = vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue(user as never);
+    const createSession = vi.spyOn(sdk, "createSessionToken").mockResolvedValue("qa-session" as never);
+    const app = express();
+    registerDevAuthRoutes(app);
+
+    await withLoopbackServer(app, async origin => {
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        const response = await fetch(`${origin}/api/dev/login`, {
+          method: "POST",
+          headers: { Origin: origin },
+          redirect: "manual",
+        });
+        statuses.push(response.status);
+      }
+      expect(statuses.slice(0, 10)).toEqual(Array(10).fill(302));
+      expect(statuses[10]).toBe(429);
+    });
+
+    expect(seedUser).toHaveBeenCalledTimes(10);
+    expect(createSession).toHaveBeenCalledTimes(10);
   });
 
   it.each([
