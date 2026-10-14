@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
@@ -21,16 +22,34 @@ export function parseDatabaseUrl(value) {
   }
 
   const database = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
-  if (!database || database.includes("/")) throw new Error("DATABASE_URL must name exactly one database.");
+  if (!/^[a-zA-Z0-9_$][a-zA-Z0-9_$-]{0,63}$/.test(database)) {
+    throw new Error("DATABASE_URL must name exactly one safe database identifier.");
+  }
   if (!url.hostname) throw new Error("DATABASE_URL must include a host.");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const validHostname = host.length <= 253 && host.split(".").every(label =>
+    /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label)
+  );
+  if (isIP(host) === 0 && !validHostname) {
+    throw new Error("DATABASE_URL host is invalid.");
+  }
 
-  return {
-    host: url.hostname,
-    port: url.port || "3306",
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    database,
-  };
+  const user = decodeURIComponent(url.username);
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.@-]{0,127}$/.test(user)) {
+    throw new Error("DATABASE_URL user is invalid.");
+  }
+
+  const port = url.port || "3306";
+  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+    throw new Error("DATABASE_URL port is invalid.");
+  }
+
+  const password = decodeURIComponent(url.password);
+  if (password.includes("\0") || password.length > 4096) {
+    throw new Error("DATABASE_URL password is invalid.");
+  }
+
+  return { host, port, user, password, database };
 }
 
 export function timestampForFilename(date = new Date()) {
@@ -54,10 +73,34 @@ export function createBackupPaths(outputRoot, database, date = new Date()) {
 }
 
 export function mysqlConnectionArguments(connection) {
-  return ["--host", connection.host, "--port", connection.port, "--user", connection.user];
+  return [
+    `--host=${connection.host}`,
+    `--port=${connection.port}`,
+    `--user=${connection.user}`,
+  ];
 }
 
-export function recoveryCommand(executable, args, dockerContainer) {
+function validateClientExecutable(executable, expectedExecutable) {
+  if (typeof executable !== "string" || /[\u0000-\u001f\u007f]/.test(executable)) {
+    throw new Error("Database recovery executable is invalid.");
+  }
+  const basename = path.win32.basename(executable).toLowerCase();
+  const expectedNames = new Set([expectedExecutable, `${expectedExecutable}.exe`]);
+  const hasPathSeparator = /[\\/]/.test(executable);
+  const isAbsolutePath = path.isAbsolute(executable) || path.win32.isAbsolute(executable);
+  if (!expectedNames.has(basename)
+      || (hasPathSeparator && !isAbsolutePath)
+      || (!hasPathSeparator && executable.toLowerCase() !== basename)) {
+    throw new Error("Database recovery executable is invalid.");
+  }
+  return executable;
+}
+
+export function recoveryCommand(executable, args, dockerContainer, expectedExecutable) {
+  if (!["mysql", "mysqldump"].includes(expectedExecutable)) {
+    throw new Error("Database recovery operation is invalid.");
+  }
+  validateClientExecutable(executable, expectedExecutable);
   if (!dockerContainer) return { executable, args };
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(dockerContainer)) {
     throw new Error("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid.");
@@ -102,7 +145,7 @@ function boundedError(chunks) {
 
 export async function runDump({ connection, executable = "mysqldump", dockerContainer, outputPath, spawnImpl = spawn }) {
   const output = createWriteStream(outputPath, { flags: "wx", mode: 0o600 });
-  const command = recoveryCommand(executable, dumpArguments(commandConnection(connection, dockerContainer)), dockerContainer);
+  const command = recoveryCommand(executable, dumpArguments(commandConnection(connection, dockerContainer)), dockerContainer, "mysqldump");
   const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),
     shell: false,
@@ -139,7 +182,7 @@ export async function sha256File(filePath) {
   return hash.digest("hex");
 }
 
-export async function createDatabaseBackup({ databaseUrl, outputRoot = "backups", now = new Date(), executable, dockerContainer = process.env.DATABASE_RECOVERY_DOCKER_CONTAINER, spawnImpl } = {}) {
+export async function createDatabaseBackup({ databaseUrl, outputRoot = "backups", now = new Date(), executable = "mysqldump", dockerContainer = process.env.DATABASE_RECOVERY_DOCKER_CONTAINER, spawnImpl } = {}) {
   const connection = parseDatabaseUrl(databaseUrl ?? process.env.DATABASE_URL);
   const paths = createBackupPaths(outputRoot, connection.database, now);
   await mkdir(path.resolve(outputRoot), { recursive: true, mode: 0o700 });
@@ -214,7 +257,8 @@ export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmat
   const command = recoveryCommand(
     executable,
     [...mysqlConnectionArguments(commandConnection(connection, dockerContainer)), connection.database],
-    dockerContainer
+    dockerContainer,
+    "mysql"
   );
   const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),
@@ -241,3 +285,4 @@ export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmat
   if (streamState.status === "rejected") throw streamState.reason;
   return verified;
 }
+
