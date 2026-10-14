@@ -173,6 +173,56 @@ jobs:
             database-acceptance-report.json
           if-no-files-found: warn
 
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+          MYSQL_DATABASE: hire_ai_e2e
+          MYSQL_USER: hire_ai_e2e
+          MYSQL_PASSWORD: isolated-e2e-not-production
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://hire_ai_e2e:isolated-e2e-not-production@127.0.0.1:3306/hire_ai_e2e
+      AUTONOMOUS_SCHEDULER_ENABLED: "false"
+      JOB_SCRAPING_SCHEDULER_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      - name: Enable pnpm with Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.16.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install headless Chromium
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Run authenticated browser smoke tests
+        run: pnpm test:e2e
+      - name: Upload browser test report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: playwright-e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+
   container-runtime:
     runs-on: ubuntu-latest
     services:
@@ -233,12 +283,15 @@ jobs:
             -e ERASURE_IDENTITY_HMAC_KEYS='container-ci-erasure-identity-hmac-key-at-least-32-characters' \
             -e VITE_APP_ID='hire-ai-container-ci' \
             -e OAUTH_SERVER_URL='https://oauth.example.test' \
+            -e OAUTH_SERVER_ALLOWED_ORIGINS='https://oauth.example.test' \
             -e OAUTH_PORTAL_URL='https://auth.example.test' \
             -e OWNER_OPEN_ID='container-ci-owner' \
             -e BUILT_IN_FORGE_API_KEY='container-ci-forge-key' \
             -e STRIPE_SECRET_KEY='sk_test_container_ci' \
             -e STRIPE_WEBHOOK_SECRET='whsec_container_ci' \
+            -e FILE_MALWARE_SCAN_MODE='http' \
             -e FILE_MALWARE_SCAN_URL='http://127.0.0.1:39999/scan' \
+            -e FILE_MALWARE_SCAN_ALLOWED_ORIGINS='http://127.0.0.1:39999' \
             -e AUTONOMOUS_SCHEDULER_ENABLED=false \
             -e JOB_SCRAPING_SCHEDULER_ENABLED=false \
             hire-ai:ci

@@ -13,6 +13,10 @@ import {
   seedDevReviewQueueUser,
 } from "../devReviewQueueSeed";
 import { ENV } from "./env";
+import {
+  requireAllowedServiceBaseUrl,
+  requireTrustedServiceBaseUrl,
+} from "./trustedServiceUrl";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { ErasedOAuthIdentityError } from "../erasedOAuthIdentity";
 import type {
@@ -80,11 +84,30 @@ class OAuthService {
   }
 }
 
-const createOAuthHttpClient = (): AxiosInstance =>
-  axios.create({
-    baseURL: ENV.oAuthServerUrl,
+const createOAuthHttpClient = (): AxiosInstance => {
+  const client = axios.create({
     timeout: AXIOS_TIMEOUT_MS,
+    maxRedirects: 0,
   });
+  client.interceptors.request.use(config => {
+    if (ENV.isProduction) {
+      const allowedUrl = requireAllowedServiceBaseUrl(
+        ENV.oAuthServerUrl,
+        ENV.oAuthServerAllowedOrigins
+      );
+      if (allowedUrl.protocol !== "https:") {
+        throw new Error("Production OAUTH_SERVER_URL must use HTTPS.");
+      }
+      config.baseURL = allowedUrl.toString();
+    } else if (ENV.oAuthServerUrl) {
+      config.baseURL = requireTrustedServiceBaseUrl(
+        ENV.oAuthServerUrl
+      ).toString();
+    }
+    return config;
+  });
+  return client;
+};
 
 class SDKServer {
   private readonly client: AxiosInstance;

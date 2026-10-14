@@ -15,6 +15,8 @@ npm.cmd run start:windows -- -Port 3000
 
 The script builds the app, runs the production doctor, applies lock-protected database migrations, audits the resulting schema, starts a hidden child process, and reports success only after that child's `/readyz` confirms the configured database is reachable. It requires a boolean ready status, an exact case-sensitive match to the fresh launch identity, and a child that has not exited during the probe. An older server on the same port cannot satisfy this check. Every preparation step fails closed before server startup. Use `-SkipDatabaseMigration` only when migrations were applied separately from the same checkout; the schema audit still runs and rejects an outdated database.
 
+On Windows, `FILE_MALWARE_SCAN_MODE=auto` uses Microsoft Defender when no HTTP scanner URL is set. If an HTTP scanner is configured, set `FILE_MALWARE_SCAN_URL` and add its exact origin (scheme, host, and port only) to `FILE_MALWARE_SCAN_ALLOWED_ORIGINS`. Remote scanners must use HTTPS; loopback HTTP must also be listed explicitly. Keep its bearer token only in `FILE_MALWARE_SCAN_TOKEN`.
+
 `HIRE_AI_RUNTIME_INSTANCE_ID` is an internal, temporary launcher value, not an authentication token or a setting to put in `.env`. The launcher supplies it only while creating its child and restores the parent value even if process creation fails. Direct Node starts generate an independent random identity when the variable is absent. The runtime rejects malformed supplied identities. Windows child logs use separate `%TEMP%\hire-ai-<runtime-instance-id>.out.log` and `.err.log` files, so concurrent attempts do not overwrite each other's startup evidence.
 
 The service binds to `127.0.0.1` by default. Use `-HostAddress 0.0.0.0` only when a firewall and trusted reverse proxy intentionally protect a LAN/container listener. Production startup fails when its requested port is occupied; it never silently changes the externally configured port.
@@ -43,23 +45,27 @@ Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending
 
 ## HAI A2A connector
 
-Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status connector and a companion read-only remote-job search. The connector is disabled by default. Local/private peers may use HTTP(S); a hosted HAI peer may use a public endpoint only over HTTPS and only when its exact origin is explicitly allowlisted.
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
 HAI_CONNECTOR_TOKEN=<independently-generated-32-to-4096-character-token>
 HAI_CONNECTOR_USER_ID=123
 HAI_CONNECTOR_URL=http://127.0.0.1:3000/api/hai/a2a
+HAI_CONNECTOR_ALLOWED_ORIGINS=
 ```
 
-Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, public endpoints, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
+Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. For a hosted deployment, set `HAI_CONNECTOR_URL` to `https://<host>/api/hai/a2a` and add only `https://<host>` to `HAI_CONNECTOR_ALLOWED_ORIGINS`; a public HTTP URL, wildcard, path, or lookalike origin is rejected. For ngrok, add the exact current HTTPS origin and update it when the assigned tunnel hostname changes. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, malformed allowlists, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
 
 Endpoints:
 
 - `GET /.well-known/agent-card.json`: available only when configuration is valid.
 - `GET /api/hai/status`: bearer-authenticated connector configuration status.
 - `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
+- `POST /api/hai/jobs/search`: bearer-authenticated JSON filter request for up to 25 active canonical remote listings. Supported filters cover query, location, job type, source platform, salary range and ISO currency, experience, application process, visa sponsorship, open hiring, diversity-friendly listings, salary disclosure, and posting age. Remote-only and safety-cleared policy is enforced by the server and cannot be overridden. Results contain bounded public listing fields and HTTPS source/application URLs only; cursor pagination is available through the returned `nextCursor`.
 
-The response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. It cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
+HAI paths have an additional in-memory limit of 120 requests per minute per client; job search is limited to 30 requests per minute per client. These limits complement the global API limiter but are per-process and are not a substitute for a shared limiter in a multi-replica deployment.
+
+The A2A response contains aggregate campaign, application, approval, connector, success-fee-state, and scheduler status for one configured numeric user ID. It excludes names, email addresses, profile content, job details, documents, messages, credentials, payment amounts, and raw audit records. The job-search route contains only public job listing data and does not expose user profiles, documents, or application state. Neither route can submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
 
 HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured.
