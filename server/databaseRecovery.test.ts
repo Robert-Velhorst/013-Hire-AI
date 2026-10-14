@@ -50,6 +50,23 @@ describe("database recovery tooling", () => {
     }
   });
 
+  it("does not treat flag-like option values or restore paths as executable overrides", () => {
+    for (const [script, args] of [
+      ["scripts/database-backup.mjs", ["--output", "--mysqldump"]],
+      ["scripts/database-restore.mjs", ["--mysql"]],
+    ] as const) {
+      const env = { ...process.env, DATABASE_URL: "" };
+      const result = spawnSync(process.execPath, [path.resolve(script), ...args], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env,
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("DATABASE_URL is required");
+      expect(result.stderr).not.toContain("Custom database client paths are not accepted");
+    }
+  });
+
   it("parses MySQL URLs without putting credentials in command arguments", () => {
     const connection = parseDatabaseUrl("mysql://backup-user:p%40ss@db.internal:3307/hire_ai");
     expect(connection).toEqual({
