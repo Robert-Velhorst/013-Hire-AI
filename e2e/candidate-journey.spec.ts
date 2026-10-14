@@ -40,7 +40,7 @@ test("authenticated candidate journey stays local, functional, and billing-safe"
 
   await page.getByRole("button", { name: "Review Queue", exact: true }).click();
   await expect(page).toHaveURL(/\/review-queue$/);
-  await expect(page.getByRole("heading", { name: /review queue/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /review queue/i })).toBeVisible();
   await expect(page.getByTestId("review-queue-section-job-decisions")).toBeVisible();
 
   await page.getByRole("button", { name: /applications/i }).click();
