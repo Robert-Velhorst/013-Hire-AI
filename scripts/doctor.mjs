@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -271,19 +272,11 @@ if (haiEnabled) {
   else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken)) errors.push("token without whitespace or control characters");
   else if (haiToken === "replace-with-at-least-32-random-characters") errors.push("non-placeholder token");
   if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
-  try {
-    const parsed = new URL(haiUrl);
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    const parsedIp = net.isIP(host) ? host : null;
-    const localHost = ["localhost", "host.docker.internal", "gateway"].includes(host)
-      || (parsedIp && /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fc|fd)/i.test(parsedIp));
-    if (haiUrl !== haiUrl.trim() || !["http:", "https:"].includes(parsed.protocol) || !localHost
-      || parsed.username || parsed.password || parsed.search || parsed.hash) {
-      errors.push("plain local/private connector URL");
-    }
-    if (parsed.pathname !== "/api/hai/a2a") errors.push("exact /api/hai/a2a endpoint");
-  } catch {
-    errors.push("valid connector URL");
+  const endpointError = validateHaiConnectorUrl(haiUrl);
+  if (endpointError) {
+    if (endpointError.includes("/api/hai/a2a")) errors.push("exact /api/hai/a2a endpoint");
+    else if (endpointError.includes("valid local HTTP(S) URL")) errors.push("valid connector URL");
+    else errors.push("plain local/private connector URL");
   }
   haiStatus = errors.length > 0 ? "fail" : "pass";
   haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured read-only local bridge";
