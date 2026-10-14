@@ -16,6 +16,7 @@ import {
   getUserApplicationById,
   getUserProfile,
   upsertUserProfile,
+  withJobPersistenceSerialization,
 } from "./db";
 import { assertProductionDatabaseSchema } from "./databaseSchemaValidation";
 import { deleteResumeVersion, getActiveResume, setActiveVersion, uploadResume } from "./resumeStorage";
@@ -214,6 +215,27 @@ describe
       expect(new Set(links.flatMap((link) => [link.primaryJobId, link.duplicateJobId]))).toEqual(
         new Set(group.map((job) => job.id))
       );
+    });
+
+    it("serializes job persistence across independent MySQL connections", async () => {
+      let activeOperations = 0;
+      let maximumConcurrentOperations = 0;
+      await Promise.all(
+        [1, 2].map(() =>
+          withJobPersistenceSerialization(async persistentDatabase => {
+            expect(persistentDatabase).not.toBeNull();
+            activeOperations += 1;
+            maximumConcurrentOperations = Math.max(
+              maximumConcurrentOperations,
+              activeOperations
+            );
+            await new Promise(resolve => setTimeout(resolve, 50));
+            activeOperations -= 1;
+          })
+        )
+      );
+
+      expect(maximumConcurrentOperations).toBe(1);
     });
 
     it("paginates MySQL job results across tied and null posting dates without gaps", async () => {
@@ -581,3 +603,4 @@ describe
       expect(storageDelete).not.toHaveBeenCalled();
     });
   });
+
