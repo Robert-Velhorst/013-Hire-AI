@@ -21,8 +21,17 @@ function Invoke-FixtureNode {
             connectorRedirectUri = $env:CONNECTOR_OAUTH_REDIRECT_URI
         } | ConvertTo-Json -Compress)
     }
+    if ($global:fixture.scenario -eq 'migration-failure' -and $args -contains 'scripts/database-migrate.mjs') {
+        $global:LASTEXITCODE = 1
+    }
+    if ($global:fixture.scenario -eq 'schema-audit-failure' -and $args[-1] -match 'database-schema-audit|schema-audit') {
+        $global:LASTEXITCODE = 1
+    }
 }
-function Invoke-FixtureNpm { $global:LASTEXITCODE = 0 }
+function Invoke-FixtureNpm {
+    $global:fixture.npmCommands += ,($args -join ' ')
+    $global:LASTEXITCODE = if ($global:fixture.scenario -eq 'doctor-failure') { 1 } else { 0 }
+}
 function Test-Path {
     param(
         [Parameter(Position = 0)][string]$Path,
@@ -34,6 +43,10 @@ function Test-Path {
     if ($global:fixture.artifactMode -eq 'legacy') {
         if ($normalized.EndsWith('/dist/runtime/server.js') -or $normalized.EndsWith('/dist/runtime/schema-audit.js')) { return $false }
         if ($normalized.EndsWith('/dist/index.js') -or $normalized.EndsWith('/dist/database-schema-audit.js')) { return $true }
+    }
+    if ($global:fixture.artifactMode -eq 'current' -and
+        ($normalized.EndsWith('/dist/runtime/server.js') -or $normalized.EndsWith('/dist/runtime/schema-audit.js'))) {
+        return $true
     }
     if ($LiteralPath) {
         $parameters = @{ LiteralPath = $LiteralPath }
@@ -105,7 +118,7 @@ function Stop-Process {
 }
 
 $scenarios = @('matching', 'foreign', 'case-mismatch', 'missing', 'string-ready', 'exited', 'start-failure')
-if ($Launcher -eq 'windows') { $scenarios += 'legacy-artifacts' }
+if ($Launcher -eq 'windows') { $scenarios += @('legacy-artifacts', 'doctor-failure', 'migration-failure', 'schema-audit-failure') }
 if ($Launcher -eq 'ngrok') { $scenarios += @('local-string-ready', 'local-newline-id', 'origin-mismatch', 'origin-missing', 'callback-mismatch') }
 $results = foreach ($scenario in $scenarios) {
     $global:fixture = @{
@@ -115,7 +128,7 @@ $results = foreach ($scenario in $scenarios) {
         messages = @(); stopped = @(); launchId = ('local-' + ('a' * 32)); probes = 0; clock = 0
         startCalls = 0
         artifactMode = if ($scenario -eq 'legacy-artifacts') { 'legacy' } else { 'current' }
-        nodeCommands = @()
+        nodeCommands = @(); npmCommands = @()
     }
     $env:PUBLIC_APP_ORIGIN = if ($scenario -eq 'origin-mismatch') {
         'https://other.example.ngrok.app'
@@ -134,7 +147,7 @@ $results = foreach ($scenario in $scenarios) {
     $failure = $null
     try {
         if ($Launcher -eq 'windows') {
-            & (Join-Path $PSScriptRoot '../start-windows.ps1') -NoBuild -SkipDatabaseMigration
+            & (Join-Path $PSScriptRoot '../start-windows.ps1') -NoBuild
         } else {
             & (Join-Path $PSScriptRoot '../start-ngrok.ps1') -PublicUrl 'https://hire-ai.example.ngrok.app/'
         }
@@ -150,6 +163,7 @@ $results = foreach ($scenario in $scenarios) {
         stopped = @($global:fixture.stopped)
         startCalls = $global:fixture.startCalls
         nodeCommands = @($global:fixture.nodeCommands)
+        npmCommands = @($global:fixture.npmCommands)
     }
 }
 $results | ConvertTo-Json -Compress

@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s launcher readiness binding", launcher => {
   let results: Array<{
     scenario: string; announced: boolean; error: string | null; launchId: string;
-    restoredId: string; stopped: number[]; startCalls: number; nodeCommands: string[];
+    restoredId: string; stopped: number[]; startCalls: number; nodeCommands: string[]; npmCommands: string[];
   }>;
   beforeAll(() => {
     const result = spawnSync("powershell.exe", [
@@ -17,7 +17,7 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     results = JSON.parse(result.stdout.trim());
-    expect(results).toHaveLength(launcher === "windows" ? 8 : 12);
+    expect(results).toHaveLength(launcher === "windows" ? 11 : 12);
   }, 40_000);
   function run(scenario: string) {
     const result = results.find(item => item.scenario === scenario);
@@ -32,6 +32,7 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
     expect(result.launchId).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
     expect(result.launchId).not.toBe("parent-value-must-be-restored");
     expect(result.restoredId).toBe("parent-value-must-be-restored");
+    expect(result.npmCommands).toEqual(launcher === "windows" ? ["run doctor"] : []);
   });
 
   it.skipIf(launcher !== "windows")("pairs a legacy server bundle with its legacy schema audit in no-build mode", () => {
@@ -42,6 +43,7 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
   });
 
   const rejected = ["foreign", "case-mismatch", "missing", "string-ready", "exited", "start-failure"];
+  if (launcher === "windows") rejected.push("doctor-failure", "migration-failure", "schema-audit-failure");
   if (launcher === "ngrok") rejected.push("local-string-ready", "local-newline-id", "origin-mismatch", "origin-missing", "callback-mismatch");
   it.each(rejected)(
     "does not announce readiness for %s responses", scenario => {
@@ -49,6 +51,12 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
       expect(result.announced).toBe(false);
       if (scenario === "start-failure") {
         expect(result.error).toBe("Fixture start failure");
+      } else if (scenario === "doctor-failure") {
+        expect(result.error).toContain("Production configuration audit failed");
+      } else if (scenario === "migration-failure") {
+        expect(result.error).toBe("Database migration failed. The service was not started.");
+      } else if (scenario === "schema-audit-failure") {
+        expect(result.error).toBe("Database schema audit failed. Apply the required migrations before startup.");
       } else if (scenario === "local-string-ready") {
         expect(result.error).toBe("The local Hire.AI runtime is not ready.");
       } else if (scenario === "local-newline-id") {
@@ -65,13 +73,15 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
         expect(result.error).toMatch(/^The ngrok endpoint (did not pass public readiness verification|is ready but does not match the local Hire.AI runtime)\./);
       }
       expect(result.restoredId).toBe("parent-value-must-be-restored");
+      expect(result.startCalls).toBe(
+        ["doctor-failure", "migration-failure", "schema-audit-failure", "origin-mismatch", "origin-missing", "callback-mismatch", "local-string-ready", "local-newline-id"].includes(scenario)
+          ? 0
+          : 1
+      );
       expect(result.stopped).toEqual(
-        ["start-failure", "exited", "local-string-ready", "local-newline-id", "origin-mismatch", "origin-missing", "callback-mismatch"].includes(scenario)
+        ["start-failure", "exited", "doctor-failure", "migration-failure", "schema-audit-failure", "local-string-ready", "local-newline-id", "origin-mismatch", "origin-missing", "callback-mismatch"].includes(scenario)
           ? [] : [424242]
       );
-      if (["origin-mismatch", "origin-missing", "callback-mismatch"].includes(scenario)) {
-        expect(result.startCalls).toBe(0);
-      }
     }
   );
 });
