@@ -68,6 +68,7 @@ const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
 const malwareScanAllowedOrigins = String(process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS || "");
 const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
 const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
+const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
 const malwareTimeoutValid = Number.isInteger(malwareScanTimeout) && malwareScanTimeout >= 1_000 && malwareScanTimeout <= 120_000;
 const malwareConcurrencyValid = Number.isInteger(malwareScanConcurrency) && malwareScanConcurrency >= 1 && malwareScanConcurrency <= 8;
 const malwareScannerPolicy = inspectMalwareScannerPolicy({
@@ -249,8 +250,8 @@ check(
 );
 check(
   "document malware scanning",
-  !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? "fail" : scannerAvailable ? "pass" : "warn",
-  malwareScannerPolicy.issue && Boolean(malwareScanUrl) ? malwareScannerPolicy.issue
+  !malwareModeValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? "fail" : scannerAvailable ? "pass" : "warn",
+  !malwareModeValid || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? malwareScannerPolicy.issue
     : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
       : !malwareConcurrencyValid ? "concurrency must be 1-8"
         : scannerAvailable && malwareScannerPolicy.mode === "http" ? `bounded, explicitly allowlisted HTTP scanner configured (${malwareScanConcurrency} concurrent)`

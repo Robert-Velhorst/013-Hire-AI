@@ -100,6 +100,9 @@ describe("discovery traffic policy", () => {
     const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
     expect(malformed.status).toBe(1);
     expect(malformed.stdout).toContain("Scanner URL must use HTTPS");
+    const invalidModeWithoutUrl = runDoctor({ FILE_MALWARE_SCAN_MODE: "typo", FILE_MALWARE_SCAN_URL: "" });
+    expect(invalidModeWithoutUrl.status).toBe(1);
+    expect(invalidModeWithoutUrl.stdout).toContain("FILE_MALWARE_SCAN_MODE is invalid.");
     const accepted = runDoctor({
       FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
       FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
