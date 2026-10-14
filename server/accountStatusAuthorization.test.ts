@@ -10,8 +10,14 @@ function context(accountStatus: "active" | "suspended" | "pending", role: "user"
     user: {
       id: 41,
       openId: "account-state-user",
+      name: "Session User",
+      email: "session-user@example.com",
       role,
+      locale: "en",
       accountStatus,
+      tosAcceptedAt: new Date("2026-10-01T00:00:00.000Z"),
+      stripeCustomerId: "cus_sensitive",
+      sessionGeneration: 17,
     },
   } as unknown as TrpcContext;
 }
@@ -69,5 +75,19 @@ describe("account status authorization", () => {
     });
     await expect(caller.auth.logout()).resolves.toEqual({ success: true });
     expect(ctx.res.clearCookie).toHaveBeenCalled();
+  });
+
+  it("returns only the UI session view instead of internal user and billing fields", async () => {
+    const caller = appRouter.createCaller(context("active", "admin"));
+
+    await expect(caller.auth.me()).resolves.toEqual({
+      id: 41,
+      name: "Session User",
+      email: "session-user@example.com",
+      role: "admin",
+      locale: "en",
+      accountStatus: "active",
+      tosAcceptedAt: new Date("2026-10-01T00:00:00.000Z"),
+    });
   });
 });

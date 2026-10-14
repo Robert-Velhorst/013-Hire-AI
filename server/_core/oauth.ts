@@ -8,6 +8,7 @@ import { logOperationalFailure } from "../operationalFailureLog";
 import { ENV } from "./env";
 import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { isDirectLoopbackDevQaRequest } from "./devAuthPolicy";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
 
@@ -20,8 +21,14 @@ export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/login", (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
-        if (!ENV.isProduction) {
-          res.redirect(302, "/api/dev/login");
+        if (!ENV.isProduction && isDirectLoopbackDevQaRequest(req)) {
+          res.status(200).type("html").send(`<!doctype html>
+            <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>Hire.AI local QA sign-in</title>
+            <body><main><h1>Local QA sign-in</h1>
+            <p>This development-only account is available because explicit loopback QA authentication is enabled.</p>
+            <form method="post" action="/api/dev/login"><button type="submit">Continue to Hire.AI</button></form>
+            </main></body></html>`);
           return;
         }
         res.status(503).json({ error: "OAuth login is not configured" });
