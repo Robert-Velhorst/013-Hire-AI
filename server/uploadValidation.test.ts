@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RESUME_MIME_TYPES,
+  resolveWindowsDefenderPaths,
   resolveMalwareScanMode,
   scanSensitiveUpload,
   validateUploadedFile,
@@ -14,6 +15,29 @@ afterEach(() => {
 });
 
 describe("sensitive upload validation", () => {
+  it("resolves Defender paths from a validated Windows system root", () => {
+    expect(resolveWindowsDefenderPaths("C:\\Windows")).toEqual({
+      legacyExecutable:
+        "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(resolveWindowsDefenderPaths("D:\\Windows\\")).toEqual({
+      legacyExecutable:
+        "D:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "D:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(resolveWindowsDefenderPaths("\\\\?\\C:\\Windows")).toEqual({
+      legacyExecutable:
+        "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(resolveWindowsDefenderPaths("node.exe")).toBeNull();
+    expect(resolveWindowsDefenderPaths("C:\\Windows\\..\\Users")).toBeNull();
+    expect(resolveWindowsDefenderPaths("\\\\server\\share\\node.exe")).toBeNull();
+  });
   it("accepts a bounded PDF with a matching signature", () => {
     expect(
       validateUploadedFile({
