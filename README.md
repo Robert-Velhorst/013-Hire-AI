@@ -171,7 +171,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The development server defaults to `http://localhost:3000`. Configuration requirements vary by feature. `pnpm run doctor` reports configuration issues; production mode deliberately rejects placeholders, unsafe partial OAuth settings, invalid schemas, and missing required security integrations. Review `.env.example` and `docs/OPERATOR_RUNBOOK.md`; do not copy real credentials into examples or logs.
+The development server defaults to `http://localhost:3000`. Local seeded QA sign-in is disabled by default; set `DEV_QA_AUTH_ENABLED=true` only for isolated local testing on a loopback-only bind. Its session routes accept same-origin `POST` requests from direct loopback peers and are not available through forwarded/tunnel traffic or production mode. Configuration requirements vary by feature. `pnpm run doctor` reports configuration issues; production mode deliberately rejects placeholders, unsafe partial OAuth settings, invalid schemas, and missing required security integrations. Review `.env.example` and `docs/OPERATOR_RUNBOOK.md`; do not copy real credentials into examples or logs.
 
 ### Production build
 

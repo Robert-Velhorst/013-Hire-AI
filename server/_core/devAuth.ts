@@ -4,6 +4,7 @@ import { getUserByOpenId, upsertUser } from "../db";
 import { seedDevAdminUser, seedDevReviewQueueUser } from "../devReviewQueueSeed";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
+import { isDevQaAuthDeploymentEnabled, isDevQaAuthWriteRequest } from "./devAuthPolicy";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
 
@@ -34,11 +35,13 @@ function ensureDevSessionConfig() {
 }
 
 export function registerDevAuthRoutes(app: Express) {
-  if (ENV.isProduction) {
-    return;
-  }
+  if (!isDevQaAuthDeploymentEnabled()) return;
 
-  app.get("/api/dev/login", async (req: Request, res: Response) => {
+  app.post("/api/dev/login", async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevReviewQueueUser();
@@ -58,7 +61,11 @@ export function registerDevAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/dev/login-suspended", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-suspended", async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       await upsertUser({
@@ -87,7 +94,11 @@ export function registerDevAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/dev/login-review-queue", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-review-queue", async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevReviewQueueUser();
@@ -107,7 +118,11 @@ export function registerDevAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/dev/login-admin", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-admin", async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevAdminUser();
