@@ -4,8 +4,9 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
+import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
 const DEFAULT_SCAN_TIMEOUT_MS = 30_000;
@@ -28,29 +29,16 @@ export function resolveMalwareScanMode(
   input: {
     configuredMode?: string;
     endpoint?: string;
+    allowedOrigins?: string;
     platform?: NodeJS.Platform;
   } = {}
 ): MalwareScanMode {
-  const configured = (
-    input.configuredMode ??
-    process.env.FILE_MALWARE_SCAN_MODE ??
-    "auto"
-  )
-    .trim()
-    .toLowerCase();
-  const endpoint = (
-    input.endpoint ??
-    process.env.FILE_MALWARE_SCAN_URL ??
-    ""
-  ).trim();
-  const platform = input.platform ?? process.platform;
-  if (configured === "http") return endpoint ? "http" : "unavailable";
-  if (configured === "windows_defender") {
-    return platform === "win32" ? "windows_defender" : "unavailable";
-  }
-  if (configured !== "auto") return "unavailable";
-  if (endpoint) return "http";
-  return platform === "win32" ? "windows_defender" : "unavailable";
+  return inspectMalwareScannerPolicy({
+    mode: input.configuredMode ?? process.env.FILE_MALWARE_SCAN_MODE,
+    endpoint: input.endpoint ?? process.env.FILE_MALWARE_SCAN_URL,
+    allowedOrigins: input.allowedOrigins ?? process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+    platform: input.platform,
+  }).mode;
 }
 
 function scannerTimeoutMs() {
@@ -157,16 +145,12 @@ function runWindowsDefender(executable: string, filePath: string) {
 
 async function scanWithWindowsDefender(input: {
   data: Buffer | Uint8Array;
-  fileName: string;
 }) {
   const executable = await findWindowsDefenderExecutable();
   if (!executable)
     throw new Error("Windows Defender command-line scanner is unavailable.");
   const directory = await mkdtemp(join(tmpdir(), "hire-ai-scan-"));
-  const filePath = join(
-    directory,
-    sanitizeUploadFileName(basename(input.fileName))
-  );
+  const filePath = windowsDefenderScanPath(directory);
   try {
     await writeFile(filePath, Buffer.from(input.data), { mode: 0o600 });
     await runWindowsDefender(executable, filePath);
@@ -184,14 +168,15 @@ async function scanWithHttp(input: {
   const endpoint = process.env.FILE_MALWARE_SCAN_URL?.trim();
   if (!endpoint)
     throw new Error("The malware scanner endpoint is unavailable.");
-  const parsedEndpoint = new URL(endpoint);
-  if (
-    !["http:", "https:"].includes(parsedEndpoint.protocol) ||
-    parsedEndpoint.username ||
-    parsedEndpoint.password
-  ) {
+  const policy = inspectMalwareScannerPolicy({
+    mode: process.env.FILE_MALWARE_SCAN_MODE,
+    endpoint,
+    allowedOrigins: process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+  });
+  if (policy.mode !== "http") {
     throw new Error("The malware scanner endpoint is invalid.");
   }
+  const parsedEndpoint = new URL(endpoint);
   const token = process.env.FILE_MALWARE_SCAN_TOKEN?.trim();
   try {
     const response = await fetch(parsedEndpoint, {
@@ -244,6 +229,10 @@ export const VERIFICATION_MIME_TYPES = new Set<string>(VERIFICATION_UPLOAD_MIME_
 export function sanitizeUploadFileName(fileName: string): string {
   const trimmed = fileName.trim().replace(/[/\\]/g, "_");
   return trimmed.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "upload";
+}
+
+export function windowsDefenderScanPath(directory: string): string {
+  return join(directory, "upload.bin");
 }
 
 export function validateUploadedFile(input: {

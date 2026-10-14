@@ -2,6 +2,7 @@
 
 | Area | Automated evidence | Manual acceptance result |
 | --- | --- | --- |
+| Authenticated browser journey | `e2e/candidate-journey.spec.ts`; `pnpm test:e2e`; `browser-e2e` CI job | A synthetic candidate signs in and visits dashboard, job search, review queue, applications, privacy settings, and billing-safe state. The runner accepts only loopback MySQL schema `hire_ai_e2e`; the flow fails on browser errors, failed or non-success HTTP responses, or external requests. It performs no real employer submission, provider call, charge, or production-data mutation. |
 | Authentication and ownership | tRPC authorization and ownership tests | Sign in as a regular user and confirm admin routes are denied. |
 | Session signing-secret policy | `server/_core/env.test.ts`; `server/sessionSecretPolicy.test.ts`; `pnpm doctor` | Production startup and diagnostics accept a unique bounded secret and fail closed on short, oversized, whitespace-padded, control-character, and known-placeholder values without printing the secret. |
 | Primary OAuth initiation integrity | `server/_core/oauthState.test.ts`; `server/_core/oauthLoginRoute.test.ts`; `client/src/lib/authUrl.test.ts`; `server/oauthPortalPolicy.test.ts` | Production login uses same-origin runtime initiation without baked portal configuration. State is signed, ten-minute bounded, bound to an HttpOnly initiating-browser nonce and an HTTPS/loopback callback, cleared on callback, and rejected before exchange when invalid. |
