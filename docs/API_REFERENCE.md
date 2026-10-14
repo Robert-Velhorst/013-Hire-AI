@@ -6,7 +6,7 @@
 
 Hire.AI V2 uses tRPC for type-safe API communication. All endpoints are available under `/api/trpc`.
 
-The optional HAI interoperability surface is a separate, bearer-authenticated A2A 1.0-shaped read-only endpoint at `/api/hai/a2a`; see `docs/WINDOWS_NGROK_HAI.md`. It is not a tRPC user session and has no mutation authority.
+The optional HAI interoperability surface consists of a bearer-authenticated A2A 1.0-shaped status endpoint at `/api/hai/a2a` and a separate bounded, read-only remote-job search at `/api/hai/jobs/search`; see `docs/WINDOWS_NGROK_HAI.md`. These routes are disabled by default, are not tRPC user sessions, and have no mutation authority.
 
 ## Authentication
 
@@ -25,15 +25,16 @@ Get the current authenticated user.
 ```typescript
 {
   id: number;
-  openId: string;
   email: string | null;
   name: string | null;
   role: "user" | "admin";
-  createdAt: Date;
-  updatedAt: Date;
-  lastSignedIn: Date;
+  locale: "en" | "nl";
+  accountStatus: "active" | "suspended" | "pending";
+  tosAcceptedAt: Date | null;
 } | null
 ```
+
+This is an allowlisted UI session view, not the database user record. OAuth identifiers, login method, billing-customer IDs, session-generation values, and account timestamps are not returned. The browser keeps this response in the in-memory query cache; the app attempts to remove the legacy `manus-runtime-user-info` local-storage entry at startup and logout. If browser policy prevents storage access, the old entry may remain, but Hire.AI no longer reads or writes it.
 
 ### `auth.logout`
 Log out the current user. The mutation clears the browser cookie and revokes all

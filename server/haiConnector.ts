@@ -3,6 +3,8 @@ import {
   getApplicationCampaign,
   getAutonomousRunState,
   getOperationalFailureAggregateSnapshot,
+  getActiveJobPage,
+  getActiveJobPlatforms,
   getUserHaiStatusCounts,
   getUserById,
 } from "./db";
@@ -11,6 +13,8 @@ import {
   type HaiConnectorConfig,
   validateHaiConnectorConfig,
 } from "./haiConnectorConfig";
+import type { ActiveJobPageCursor } from "./db";
+import type { JobSearchFilterState } from "@shared/jobSearchFilters";
 
 export type { HaiConnectorConfig } from "./haiConnectorConfig";
 
@@ -47,6 +51,40 @@ export type HaiJobSearchSnapshot = {
 };
 
 type SnapshotProvider = (userId: number) => Promise<HaiJobSearchSnapshot>;
+type JobSearchProvider = typeof getActiveJobPage;
+
+export type HaiRemoteJobSearchFilters = Partial<Pick<
+  JobSearchFilterState,
+  | "query"
+  | "location"
+  | "jobType"
+  | "experienceLevel"
+  | "applicationProcess"
+  | "visaSponsorshipOnly"
+  | "openHiringSupportOnly"
+  | "diversityFriendlyOnly"
+  | "salaryDisclosedOnly"
+  | "postedWithin"
+>> & {
+  platformId?: number;
+  salaryRange?: [number, number];
+  salaryCurrency?: string;
+};
+
+function boundedText(value: string | null | undefined, limit: number) {
+  return typeof value === "string" ? value.slice(0, limit) : null;
+}
+
+function safePublicHttpsUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString().slice(0, 2_000);
+  } catch {
+    return null;
+  }
+}
 
 function constantTimeTokenMatch(expected: string, actual: string) {
   const expectedDigest = createHash("sha256").update(expected).digest();
@@ -98,7 +136,8 @@ export class HaiConnectorService {
 
   constructor(
     readonly config: HaiConnectorConfig = defaultHaiConnectorConfig(),
-    private readonly snapshotProvider: SnapshotProvider = buildHaiJobSearchSnapshot
+    private readonly snapshotProvider: SnapshotProvider = buildHaiJobSearchSnapshot,
+    private readonly jobSearchProvider: JobSearchProvider = getActiveJobPage
   ) {
     this.configError = validateHaiConnectorConfig(config);
   }
@@ -119,10 +158,14 @@ export class HaiConnectorService {
     return {
       enabled: this.config.enabled,
       configured: this.configured,
-      provider: "HAI A2A read-only status connector",
+      provider: "HAI read-only status and remote-job search connector",
       endpoint: this.configured ? this.config.endpointUrl : undefined,
       configError: this.config.enabled ? this.configError ?? undefined : undefined,
-      capabilities: ["authenticated aggregate job-search and runtime health status", "A2A 1.0-shaped Agent Card and SendMessage response"],
+      capabilities: [
+        "authenticated aggregate job-search and runtime health status",
+        "authenticated, remote-only canonical job search via POST /api/hai/jobs/search",
+        "A2A 1.0-shaped Agent Card and SendMessage response",
+      ],
       restrictions: ["one configured user", "read-only", "no personal data", "no provider calls", "no application, approval, message, billing, or workflow mutation"],
     };
   }
@@ -131,7 +174,7 @@ export class HaiConnectorService {
     if (!this.configured) return null;
     return {
       name: "Hire.AI controlled status",
-      description: "Local, token-authenticated aggregate job-search and runtime health status for HAI. This connector cannot execute or approve work.",
+      description: "Local, token-authenticated aggregate status for HAI. A companion REST endpoint provides bounded read-only remote job search. Neither interface can execute or approve work.",
       supportedInterfaces: [{ url: this.config.endpointUrl, protocolBinding: "JSONRPC", protocolVersion: HAI_CONNECTOR_PROTOCOL_VERSION }],
       version: HAI_CONNECTOR_AGENT_VERSION,
       capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: false },
@@ -154,5 +197,51 @@ export class HaiConnectorService {
   async snapshot() {
     if (!this.configured || !this.config.userId) throw new Error("HAI connector is unavailable.");
     return await this.snapshotProvider(this.config.userId);
+  }
+
+  async searchRemoteJobs(input: {
+    filters: HaiRemoteJobSearchFilters;
+    limit: number;
+    cursor?: ActiveJobPageCursor;
+  }) {
+    if (!this.configured) throw new Error("HAI connector is unavailable.");
+    const [page, platforms] = await Promise.all([
+      this.jobSearchProvider({
+        limit: input.limit,
+        cursor: input.cursor,
+        filters: {
+          ...input.filters,
+          platformId: input.filters.platformId ? String(input.filters.platformId) : "all",
+          remoteOnly: true,
+          listingSafety: "clear",
+        },
+      }),
+      getActiveJobPlatforms(),
+    ]);
+    const platformNames = new Map(platforms.map((platform) => [platform.id, platform.name]));
+
+    return {
+      generatedAt: new Date().toISOString(),
+      policy: { remoteOnly: true, listingSafety: "clear", canonicalListingsOnly: true },
+      jobs: page.items.map((job) => ({
+        id: job.id,
+        title: boundedText(job.title, 300),
+        company: boundedText(job.company, 200),
+        location: boundedText(job.location, 200),
+        jobType: job.jobType,
+        salaryMin: job.salaryMin,
+        salaryMax: job.salaryMax,
+        salaryCurrency: boundedText(job.salaryCurrency, 10),
+        skills: boundedText(job.skills, 500),
+        description: boundedText(job.description, 2_000),
+        requirements: boundedText(job.requirements, 2_000),
+        platformId: job.platformId,
+        platformName: platformNames.get(job.platformId) ?? null,
+        sourceUrl: safePublicHttpsUrl(job.sourceUrl),
+        applicationUrl: safePublicHttpsUrl(job.applicationUrl),
+        postedAt: job.postedDate?.toISOString() ?? null,
+      })),
+      nextCursor: page.nextCursor,
+    };
   }
 }
