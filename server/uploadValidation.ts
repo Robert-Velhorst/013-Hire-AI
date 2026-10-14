@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, win32 } from "node:path";
 import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
@@ -111,29 +111,51 @@ async function acquireScanPermit() {
   });
 }
 
+export function resolveWindowsDefenderPaths(systemRoot: string) {
+  const normalizedSystemRoot = win32.normalize(systemRoot.trim());
+  const standardSystemRoot = normalizedSystemRoot.startsWith("\\\\?\\")
+    ? normalizedSystemRoot.slice(4)
+    : normalizedSystemRoot;
+  const driveMatch = /^([a-z]:)\\Windows\\?$/i.exec(standardSystemRoot);
+  if (!driveMatch) return null;
+
+  const systemDrive = `${driveMatch[1]}\\`;
+  return {
+    legacyExecutable: win32.join(
+      systemDrive,
+      "Program Files",
+      "Windows Defender",
+      "MpCmdRun.exe"
+    ),
+    platformRoot: win32.join(
+      systemDrive,
+      "ProgramData",
+      "Microsoft",
+      "Windows Defender",
+      "Platform"
+    ),
+  };
+}
+
 async function findWindowsDefenderExecutable() {
-  const candidates = [
-    process.env.ProgramFiles
-      ? join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe")
-      : "",
-  ].filter(Boolean);
-  const platformRoot = process.env.ProgramData
-    ? join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform")
-    : "";
-  if (platformRoot && existsSync(platformRoot)) {
-    const versions = (await readdir(platformRoot, { withFileTypes: true }))
+  const paths = resolveWindowsDefenderPaths(process.env.SystemRoot ?? "");
+  if (!paths) return null;
+  const candidates = [paths.legacyExecutable];
+  if (existsSync(paths.platformRoot)) {
+    const versions = (await readdir(paths.platformRoot, { withFileTypes: true }))
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name)
       .sort((left, right) =>
         right.localeCompare(left, undefined, { numeric: true })
       );
     candidates.unshift(
-      ...versions.map(version => join(platformRoot, version, "MpCmdRun.exe"))
+      ...versions.map(version =>
+        win32.join(paths.platformRoot, version, "MpCmdRun.exe")
+      )
     );
   }
   return candidates.find(candidate => existsSync(candidate)) ?? null;
 }
-
 function runWindowsDefender(executable: string, filePath: string) {
   return new Promise<void>((resolve, reject) => {
     execFile(
