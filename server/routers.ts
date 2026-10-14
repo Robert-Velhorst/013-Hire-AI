@@ -293,7 +293,19 @@ export const appRouter = router({
   system: systemRouter,
   workspaces: workspacesRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(({ ctx }) => {
+      const user = ctx.user;
+      if (!user) return null;
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        locale: user.locale,
+        accountStatus: user.accountStatus,
+        tosAcceptedAt: user.tosAcceptedAt,
+      };
+    }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       try {

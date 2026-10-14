@@ -25,15 +25,16 @@ Get the current authenticated user.
 ```typescript
 {
   id: number;
-  openId: string;
   email: string | null;
   name: string | null;
   role: "user" | "admin";
-  createdAt: Date;
-  updatedAt: Date;
-  lastSignedIn: Date;
+  locale: "en" | "nl";
+  accountStatus: "active" | "suspended" | "pending";
+  tosAcceptedAt: Date | null;
 } | null
 ```
+
+This is an allowlisted UI session view, not the database user record. OAuth identifiers, login method, billing-customer IDs, session-generation values, and account timestamps are not returned. The browser keeps this response in the in-memory query cache; the app attempts to remove the legacy `manus-runtime-user-info` local-storage entry at startup and logout. If browser policy prevents storage access, the old entry may remain, but Hire.AI no longer reads or writes it.
 
 ### `auth.logout`
 Log out the current user. The mutation clears the browser cookie and revokes all
