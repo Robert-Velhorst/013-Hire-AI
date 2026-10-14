@@ -313,6 +313,7 @@ export async function discoverCloudResumeDocuments(
   const seenCursors = new Set<string>();
   let scannedCount = 0;
   let resultsCapped = false;
+  let scanBudgetExceeded = false;
   let drivePageToken: string | undefined;
   let dropboxCursor: string | undefined;
   let hasMore = true;
@@ -358,15 +359,21 @@ export async function discoverCloudResumeDocuments(
       }
       throw error;
     }
-    const pageDocuments = provider === "google_drive"
-      ? parseGoogleDriveDocuments(payload)
-      : parseDropboxDocuments(payload);
     const pageRows = payload && typeof payload === "object"
       ? (provider === "google_drive"
         ? (payload as { files?: unknown }).files
         : (payload as { entries?: unknown }).entries)
       : null;
-    scannedCount += Array.isArray(pageRows) ? pageRows.length : 0;
+    const remainingScanBudget = MAX_SCANNED_PROVIDER_DOCUMENTS - scannedCount;
+    const boundedRows = Array.isArray(pageRows) ? pageRows.slice(0, remainingScanBudget) : [];
+    if (Array.isArray(pageRows) && pageRows.length > boundedRows.length) scanBudgetExceeded = true;
+    scannedCount += boundedRows.length;
+    const boundedPayload = provider === "google_drive"
+      ? { ...(payload as object), files: boundedRows }
+      : { ...(payload as object), entries: boundedRows };
+    const pageDocuments = provider === "google_drive"
+      ? parseGoogleDriveDocuments(boundedPayload)
+      : parseDropboxDocuments(boundedPayload);
     const remainingCandidates = MAX_DISCOVERED_DOCUMENTS - documents.length;
     if (pageDocuments.length > remainingCandidates) resultsCapped = true;
     documents.push(...pageDocuments.slice(0, remainingCandidates));
@@ -393,7 +400,7 @@ export async function discoverCloudResumeDocuments(
       }
     }
   }
-  const truncated = hasMore || resultsCapped;
+  const truncated = hasMore || resultsCapped || scanBudgetExceeded;
   await markCloudAccessVerified(userId, account, now, dependencies);
   const storedDocuments = await dependencies.storeCloudResumeCandidates(userId, provider, documents, now);
   return { documents: storedDocuments, scannedCount, truncated };

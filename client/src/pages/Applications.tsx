@@ -180,6 +180,8 @@ export default function Applications() {
   const [confirmingFollowUpSentId, setConfirmingFollowUpSentId] = useState<number | null>(null);
   const [followUpDeliveryConfirmation, setFollowUpDeliveryConfirmation] = useState("");
   const [followUpMailProvider, setFollowUpMailProvider] = useState<"gmail" | "outlook">("gmail");
+  const [applicationMailProvider, setApplicationMailProvider] = useState<"gmail" | "outlook">("gmail");
+  const [applicationEmailConfirmation, setApplicationEmailConfirmation] = useState<any>(null);
   const [followUpMailRecipient, setFollowUpMailRecipient] = useState("");
   const [pendingFollowUpSendApplicationId, setPendingFollowUpSendApplicationId] = useState<number | null>(null);
   const [pendingEmployerReplyApplicationId, setPendingEmployerReplyApplicationId] = useState<number | null>(null);
@@ -518,6 +520,18 @@ export default function Applications() {
       refetchOperatingLedger();
     },
     onError: (error) => toast.error(error.message || "Failed to update approval"),
+  });
+  const sendApplicationEmailMutation = trpc.applications.sendApprovedApplicationByEmail.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.existing ? t("applicationEmailAlreadySent") : t("applicationEmailSent"));
+      setApplicationEmailConfirmation(null);
+      setSelectedApplication(null);
+      refetch();
+      refetchApprovals();
+      refetchLedgerArtifacts();
+      refetchOperatingLedger();
+    },
+    onError: (error) => toast.error(error.message || t("applicationEmailSendFailed")),
   });
 
   const getStatusColor = (status: ApplicationStatus) => {
@@ -2388,6 +2402,23 @@ export default function Applications() {
                               {t("evidenceGated")}
                             </Badge>
                           )}
+                          {approvalStatus === "approved" &&
+                            approval &&
+                            selectedApplication.job?.applicationEmail &&
+                            !selectedApplication.job?.applicationUrl &&
+                            ledgerArtifacts?.resume &&
+                            ledgerArtifacts?.material?.coverLetter?.trim() &&
+                            !evidenceBlocked && (
+                              <Button
+                                data-testid="send-application-email-open"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setApplicationEmailConfirmation(selectedApplication)}
+                              >
+                                <Mail className="mr-1 h-4 w-4" />
+                                {t("sendApplicationByEmail")}
+                              </Button>
+                            )}
                           {approvalStatus === "pending" && approval && (
                             <>
                               <Button
@@ -2863,6 +2894,94 @@ export default function Applications() {
               >
                 {scheduleInterviewMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                  {t("saveInterview")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(applicationEmailConfirmation)}
+          onOpenChange={(open) => {
+            if (!open && !sendApplicationEmailMutation.isPending) setApplicationEmailConfirmation(null);
+          }}
+        >
+          <DialogContent className="border-slate-700 bg-slate-900 sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-white">{t("sendApplicationEmailTitle")}</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {t("sendApplicationEmailDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-md border border-slate-700 bg-slate-950/40 p-3 text-sm sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-slate-400">{t("jobTitleLabel")}</p>
+                  <p className="font-medium text-slate-100">{applicationEmailConfirmation?.job?.title}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">{t("companyLabel")}</p>
+                  <p className="font-medium text-slate-100">{applicationEmailConfirmation?.job?.company}</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-xs text-slate-400">{t("employerApplicationEmail")}</p>
+                  <p className="break-all font-medium text-slate-100">{applicationEmailConfirmation?.job?.applicationEmail}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">{t("resumeToAttach")}</p>
+                  <p className="font-medium text-slate-100">
+                    {ledgerArtifacts?.resume
+                      ? t("applicationResumeVersion", { fileName: ledgerArtifacts.resume.fileName, version: ledgerArtifacts.resume.version })
+                      : t("resumeEvidenceMissingLabel")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">{t("emailProvider")}</p>
+                  <Select
+                    value={applicationMailProvider}
+                    onValueChange={(value) => setApplicationMailProvider(value as "gmail" | "outlook")}
+                  >
+                    <SelectTrigger className="mt-1 border-slate-700 bg-slate-800 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gmail">Gmail</SelectItem>
+                      <SelectItem value="outlook">Outlook</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-200">{t("applicationEmailBody")}</p>
+                <div className="max-h-52 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950/40 p-3 text-sm text-slate-300">
+                  {ledgerArtifacts?.material?.coverLetter}
+                </div>
+              </div>
+              <p className="text-xs leading-5 text-amber-200">{t("applicationEmailSendWarning")}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={sendApplicationEmailMutation.isPending}
+                onClick={() => setApplicationEmailConfirmation(null)}
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                data-testid="send-application-email-confirm"
+                disabled={sendApplicationEmailMutation.isPending || !applicationEmailConfirmation}
+                onClick={() => {
+                  if (!applicationEmailConfirmation) return;
+                  const approval = getApplicationSubmissionApproval(applicationEmailConfirmation.id);
+                  if (!approval || approval.status !== "approved") return;
+                  sendApplicationEmailMutation.mutate({
+                    approvalId: approval.id,
+                    provider: applicationMailProvider,
+                  });
+                }}
+              >
+                {sendApplicationEmailMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Mail className="mr-2 h-4 w-4" />
+                {t("sendApplicationByEmail")}
               </Button>
             </div>
           </DialogContent>

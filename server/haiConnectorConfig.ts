@@ -6,6 +6,7 @@ export type HaiConnectorConfig = {
   token: string;
   userId: number | null;
   endpointUrl: string;
+  allowedOrigins?: string;
 };
 
 function readBoolean(value: string | undefined) {
@@ -25,6 +26,7 @@ export function defaultHaiConnectorConfig(): HaiConnectorConfig {
     token: process.env.HAI_CONNECTOR_TOKEN ?? "",
     userId: parseHaiConnectorUserId(process.env.HAI_CONNECTOR_USER_ID),
     endpointUrl: process.env.HAI_CONNECTOR_URL ?? "",
+    allowedOrigins: process.env.HAI_CONNECTOR_ALLOWED_ORIGINS ?? "",
   };
 }
 
@@ -46,6 +48,6 @@ export function validateHaiConnectorConfig(config: HaiConnectorConfig) {
   if (!Number.isSafeInteger(config.userId) || (config.userId ?? 0) <= 0) {
     return "HAI_CONNECTOR_USER_ID must be a positive integer.";
   }
-  return validateHaiConnectorUrl(config.endpointUrl);
+  return validateHaiConnectorUrl(config.endpointUrl, config.allowedOrigins);
 }
 
