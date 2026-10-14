@@ -6,6 +6,9 @@ function valueAfter(flag) {
 }
 
 try {
+  if (process.argv.includes("--mysql")) {
+    throw new Error("Custom database client paths are not accepted. Install mysql on PATH or use --docker-container.");
+  }
   const bundlePath = process.argv[2];
   if (!bundlePath) throw new Error("Usage: pnpm db:restore -- <backup-directory> --confirm RESTORE:<database>");
   const connection = parseDatabaseUrl(process.env.DATABASE_URL);
@@ -14,7 +17,6 @@ try {
   const result = await restoreDatabaseBackup({
     bundlePath,
     confirmation,
-    executable: valueAfter("--mysql") || "mysql",
     dockerContainer: valueAfter("--docker-container") || process.env.DATABASE_RECOVERY_DOCKER_CONTAINER,
   });
   console.log(`Restored and verified backup into ${result.manifest.database}. Run application reconciliation checks before enabling workers.`);
