@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { createServer } from "node:http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHireTrpcClient } from "@/lib/trpcClient";
 import { applications, jobDuplicates, jobs, userProfiles, userResumes, users } from "../drizzle/schema";
@@ -16,6 +16,7 @@ import {
   getUserApplicationById,
   getUserProfile,
   upsertUserProfile,
+  withJobPersistenceSerialization,
 } from "./db";
 import { assertProductionDatabaseSchema } from "./databaseSchemaValidation";
 import { deleteResumeVersion, getActiveResume, setActiveVersion, uploadResume } from "./resumeStorage";
@@ -174,6 +175,67 @@ describe
       expect(
         next.items.some(pair => pair.duplicate.id === links[0].duplicateJobId)
       ).toBe(false);
+    });
+
+    it("preserves one canonical duplicate group when platform scans save concurrently", async () => {
+      const title = "Concurrent Dedup Acceptance Engineer";
+      const listing = {
+        title,
+        company: marker,
+        location: "Remote - Netherlands",
+        description: "Concurrent synthetic acceptance vacancy. Not a real job.",
+        jobType: "full-time",
+        applicationUrl: `https://employer.example.test/${marker}/concurrent`,
+      };
+      const [first, second] = await Promise.all([
+        new ScraperManager().saveJobs([{
+          ...listing,
+          platformId: records[0].platformId,
+          externalId: `${marker}-concurrent-a`,
+        }]),
+        new ScraperManager().saveJobs([{
+          ...listing,
+          platformId: records[1].platformId,
+          externalId: `${marker}-concurrent-b`,
+        }]),
+      ]);
+      const group = await database
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(and(eq(jobs.company, marker), eq(jobs.title, title)));
+
+      expect(first.saved + second.saved).toBe(1);
+      expect(first.duplicates + second.duplicates).toBe(1);
+      expect(group).toHaveLength(2);
+      const links = await database
+        .select()
+        .from(jobDuplicates)
+        .where(inArray(jobDuplicates.duplicateJobId, group.map((job) => job.id)));
+      expect(links).toHaveLength(1);
+      expect(new Set(links.flatMap((link) => [link.primaryJobId, link.duplicateJobId]))).toEqual(
+        new Set(group.map((job) => job.id))
+      );
+    });
+
+    it("serializes job persistence across independent MySQL connections", async () => {
+      let activeOperations = 0;
+      let maximumConcurrentOperations = 0;
+      await Promise.all(
+        [1, 2].map(() =>
+          withJobPersistenceSerialization(async persistentDatabase => {
+            expect(persistentDatabase).not.toBeNull();
+            activeOperations += 1;
+            maximumConcurrentOperations = Math.max(
+              maximumConcurrentOperations,
+              activeOperations
+            );
+            await new Promise(resolve => setTimeout(resolve, 50));
+            activeOperations -= 1;
+          })
+        )
+      );
+
+      expect(maximumConcurrentOperations).toBe(1);
     });
 
     it("paginates MySQL job results across tied and null posting dates without gaps", async () => {
@@ -541,3 +603,4 @@ describe
       expect(storageDelete).not.toHaveBeenCalled();
     });
   });
+
