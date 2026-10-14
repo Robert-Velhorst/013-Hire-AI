@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { createServer } from "node:http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like, or } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHireTrpcClient } from "@/lib/trpcClient";
 import { applications, jobDuplicates, jobs, userProfiles, userResumes, users } from "../drizzle/schema";
@@ -134,7 +134,12 @@ describe
           await database
             .select({ id: jobs.id })
             .from(jobs)
-            .where(eq(jobs.company, marker))
+            .where(
+              or(
+                eq(jobs.company, marker),
+                like(jobs.externalId, `${marker}-pagination-%`)
+              )
+            )
         ).map(job => job.id);
         if (ownedIds.length) {
           await database
@@ -181,7 +186,7 @@ describe
       const now = Date.now();
       const clearRows = Array.from({ length: 3 }, (_, index) => ({
         title: `${marker} Clear Pagination Acceptance ${index}`,
-        company: marker,
+        company: `Clear Fixture ${randomUUID()}`,
         location: "Remote - Netherlands",
         description: "Synthetic clear acceptance vacancy. Not a real job.",
         jobType: "full-time",
@@ -192,7 +197,7 @@ describe
       }));
       const reviewRows = Array.from({ length: 110 }, (_, index) => ({
         title: `${marker} Review Pagination Acceptance ${index}`,
-        company: marker,
+        company: `Review Fixture ${randomUUID()}`,
         location: "Remote - Netherlands",
         description: "No interview is required. Synthetic review-only acceptance vacancy.",
         jobType: "full-time",
