@@ -32,7 +32,7 @@ test("authenticated candidate journey stays local, functional, and billing-safe"
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: /find jobs/i }).click();
+  await page.getByRole("button", { name: /review jobs/i }).click();
   await expect(page).toHaveURL(/\/jobs$/);
   await expect(page.getByRole("heading", { name: /job search/i })).toBeVisible();
   await page.getByPlaceholder(/search/i).first().fill("Hire.AI E2E Remote Product Engineer");
@@ -48,12 +48,14 @@ test("authenticated candidate journey stays local, functional, and billing-safe"
   await expect(page.getByRole("heading", { name: /applications/i }).first()).toBeVisible();
   await expect(page.getByTestId("application-card").first()).toBeVisible();
 
-  await page.goto("/settings");
+  await page.getByRole("button", { name: /open account menu/i }).click();
+  await page.getByRole("menuitem", { name: /^settings$/i }).click();
   await expect(page.getByRole("heading", { name: /settings/i })).toBeVisible();
   await expect(page.getByText(/privacy.*security/i)).toBeVisible();
   await expect(page.getByText(/export.*data/i)).toBeVisible();
 
-  await page.goto("/billing");
+  await page.getByRole("button", { name: /open account menu/i }).click();
+  await page.getByRole("menuitem", { name: /billing/i }).click();
   await expect(page.getByTestId("billing-compliance-control")).toBeVisible();
   await expect(page.getByRole("heading", { name: /payment history/i })).toBeVisible();
   expect(await page.getByTestId("retry-success-fee-checkout").count()).toBe(0);
