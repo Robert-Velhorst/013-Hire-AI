@@ -88,19 +88,28 @@ function validateClientExecutable(executable, expectedExecutable) {
   const expectedNames = new Set([expectedExecutable, `${expectedExecutable}.exe`]);
   const hasPathSeparator = /[\\/]/.test(executable);
   const isAbsolutePath = path.isAbsolute(executable) || path.win32.isAbsolute(executable);
-  if (!expectedNames.has(basename)
-      || (hasPathSeparator && !isAbsolutePath)
-      || (!hasPathSeparator && executable.toLowerCase() !== basename)) {
+  if (
+    !expectedNames.has(basename) ||
+    (hasPathSeparator && !isAbsolutePath) ||
+    (!hasPathSeparator && executable.toLowerCase() !== basename)
+  ) {
     throw new Error("Database recovery executable is invalid.");
   }
   return executable;
 }
 
-export function recoveryCommand(executable, args, dockerContainer, expectedExecutable) {
-  if (!["mysql", "mysqldump"].includes(expectedExecutable)) {
-    throw new Error("Database recovery operation is invalid.");
-  }
-  validateClientExecutable(executable, expectedExecutable);
+export function recoveryCommand(operation, args, dockerContainer, executableOverride) {
+  const expectedExecutable =
+    operation === "dump"
+      ? "mysqldump"
+      : operation === "restore"
+        ? "mysql"
+        : null;
+  if (!expectedExecutable) throw new Error("Database recovery operation is invalid.");
+  const executable = validateClientExecutable(
+    executableOverride ?? expectedExecutable,
+    expectedExecutable
+  );
   if (!dockerContainer) return { executable, args };
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(dockerContainer)) {
     throw new Error("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid.");
@@ -145,7 +154,12 @@ function boundedError(chunks) {
 
 export async function runDump({ connection, executable = "mysqldump", dockerContainer, outputPath, spawnImpl = spawn }) {
   const output = createWriteStream(outputPath, { flags: "wx", mode: 0o600 });
-  const command = recoveryCommand(executable, dumpArguments(commandConnection(connection, dockerContainer)), dockerContainer, "mysqldump");
+  const command = recoveryCommand(
+    "dump",
+    dumpArguments(commandConnection(connection, dockerContainer)),
+    dockerContainer,
+    executable
+  );
   const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),
     shell: false,
@@ -255,10 +269,10 @@ export async function restoreDatabaseBackup({ bundlePath, databaseUrl, confirmat
   if (confirmation !== expected) throw new Error(`Restore requires the exact confirmation ${expected}.`);
 
   const command = recoveryCommand(
-    executable,
+    "restore",
     [...mysqlConnectionArguments(commandConnection(connection, dockerContainer)), connection.database],
     dockerContainer,
-    "mysql"
+    executable
   );
   const child = spawnImpl(command.executable, command.args, {
     env: childEnvironment(connection),

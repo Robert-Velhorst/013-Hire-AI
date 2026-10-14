@@ -3,7 +3,10 @@ import { createDatabaseBackup, verifyDatabaseBackup } from "./lib/database-recov
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : undefined;
+  if (index < 0) return undefined;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value.`);
+  return value;
 }
 
 try {
@@ -15,6 +18,7 @@ try {
   } else {
     const result = await createDatabaseBackup({
       outputRoot: valueAfter("--output") || path.resolve("backups"),
+      executable: valueAfter("--mysqldump") || "mysqldump",
       dockerContainer: valueAfter("--docker-container") || process.env.DATABASE_RECOVERY_DOCKER_CONTAINER,
     });
     console.log(`Created verified backup at ${result.directory}.`);
