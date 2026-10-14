@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
+import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -34,6 +35,7 @@ const requiredProductionEnv = [
   "ERASURE_IDENTITY_HMAC_KEYS",
   "VITE_APP_ID",
   "OAUTH_SERVER_URL",
+  "OAUTH_SERVER_ALLOWED_ORIGINS",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
   "STRIPE_SECRET_KEY",
@@ -99,6 +101,26 @@ check(
     : oauthPortalValid
       ? "trusted runtime URL configured"
       : "OAUTH_PORTAL_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+);
+
+const oauthServerUrl = String(process.env.OAUTH_SERVER_URL || "").trim();
+const oauthServerAllowedOrigins = String(process.env.OAUTH_SERVER_ALLOWED_ORIGINS || "");
+let oauthServerValid = false;
+try {
+  const oauthApi = requireAllowedServiceBaseUrl(oauthServerUrl, oauthServerAllowedOrigins);
+  if (isProduction && oauthApi.protocol !== "https:") {
+    throw new Error("Production OAuth API must use HTTPS.");
+  }
+  oauthServerValid = true;
+} catch { oauthServerValid = false; }
+check(
+  "OAuth API",
+  !oauthServerUrl && !isProduction ? "warn" : oauthServerValid ? "pass" : "fail",
+  !oauthServerUrl && !isProduction
+    ? "not configured outside production"
+    : oauthServerValid
+      ? "trusted API origin explicitly allowlisted"
+      : "OAUTH_SERVER_URL must use HTTPS (or loopback HTTP) and match an origin-only OAUTH_SERVER_ALLOWED_ORIGINS entry"
 );
 
 const jwtSecret = String(process.env.JWT_SECRET || "");

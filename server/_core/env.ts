@@ -1,5 +1,8 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
-import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import {
+  requireAllowedServiceBaseUrl,
+  requireTrustedServiceBaseUrl,
+} from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
@@ -102,6 +105,7 @@ export const ENV = {
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
+  oAuthServerAllowedOrigins: readEnv("OAUTH_SERVER_ALLOWED_ORIGINS"),
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
@@ -148,6 +152,7 @@ export function validateProductionEnv() {
     "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
+    "OAUTH_SERVER_ALLOWED_ORIGINS",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
     "STRIPE_SECRET_KEY",
@@ -157,6 +162,13 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  const oauthApiUrl = requireAllowedServiceBaseUrl(
+    ENV.oAuthServerUrl,
+    ENV.oAuthServerAllowedOrigins
+  );
+  if (oauthApiUrl.protocol !== "https:") {
+    throw new Error("Production OAUTH_SERVER_URL must use HTTPS.");
+  }
   const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
     ENV.analyticsAllowedOrigin
   );
