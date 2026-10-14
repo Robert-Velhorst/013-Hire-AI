@@ -1,10 +1,12 @@
 # 013 - Hire.AI
 
-Hire.AI is an early-stage, self-hostable application for organizing a fully remote job search. It brings candidate profiles and resumes, job discovery, cross-source duplicate links, job matching, application preparation, follow-up tracking, and interview preparation into one auditable workflow.
+Hire.AI is an early-stage, self-hostable preview application for finding and comparing fully remote jobs and managing the candidate's application journey. It brings candidate profiles and resumes, cross-post comparisons, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
-> **Project status: preview, not a public production service.** This repository contains a substantial working application and automated checks, but its production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer application submission are not complete. The software does not currently apply to jobs on a candidate's behalf.
+> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer application submission are not complete. The software does not currently apply to jobs on a candidate's behalf.
+
+**Quick links:** [first preview release](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1) · [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) · [security reporting](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new) · [production acceptance checklist](docs/PRODUCTION_ACCEPTANCE.md)
 
 ## At A Glance
 
@@ -12,7 +14,7 @@ The product is intended for people looking for any kind of work that can be perf
 - **For developers:** a TypeScript monorepo with a React web client, Express/tRPC API, Drizzle/MySQL data layer, scraper adapters, Docker packaging, and Windows launch tooling.
 - **For operators:** migration, health, backup/restore, schema-audit, privacy, and deployment documentation, plus CI for Linux, Windows, MySQL, and container paths.
 - **Current authority boundary:** review-first. Hire.AI may prepare work and create auditable review records; it does not currently submit employer applications through third-party portals.
-- **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive.
+- **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
 
 ## Product Direction And Current Boundaries
@@ -39,7 +41,7 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 - A guarantee of a job, interview, uninterrupted employment, or fully correct classification of every listing.
 - A legally approved or active fee/credit product. The repository includes legacy billing code that must not be mistaken for the approved commercial direction.
 
-The intended autonomous journey may discover, qualify, prepare and, after explicit provider-specific authorization and acceptance, submit applications; communicate and follow up; arrange and prepare interviews; and stop at the interview boundary. Any external action must be consent-bounded, traceable, reversible where possible, and truthful about uncertain outcomes. A provider timeout or ambiguous send must never be reported as success or blindly retried.
+The intended autonomous journey may discover, qualify, prepare and, after explicit provider-specific authorization and acceptance, submit applications; communicate and follow up; arrange and prepare interviews; and stop at the interview boundary. Any external action must be consent-bounded, traceable, reversible where possible, and truthful about uncertain outcomes. A provider timeout or ambiguous send must never be reported as success or blindly retried. The interview itself is conducted by the candidate; Hire.AI's authority ends there.
 
 ## Job Sources And Deduplication
 
@@ -93,7 +95,7 @@ Express + Node.js 22 API
         |-- source adapters, scheduler, deduplication and health records
         |-- consent-scoped OAuth connector routes and token policy
         |-- audit, admin, billing and privacy workflows
-        |-- optional read-only HAI status endpoint
+        |-- optional read-only HAI status and remote-job discovery endpoint
         | Drizzle ORM
 MySQL / TiDB
         | private document object storage (deployment integration)
@@ -188,18 +190,19 @@ pnpm start
 
 The complete current example is `.env.example`; validate names and constraints in the runtime config before deployment. Common variables include:
 
-| Variable group                                                                        | Purpose                                                                                                       |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`, `DATABASE_POOL_*`                                                     | MySQL/TiDB connection and bounded pool settings.                                                              |
-| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                         | Signed session configuration and application binding.                                                         |
-| `OAUTH_SERVER_URL`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID`                               | Hosted identity and administrator bootstrap.                                                                  |
-| `ERASURE_IDENTITY_HMAC_KEYS`                                                          | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.       |
-| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                    | Optional server-side AI/provider integration.                                                                 |
-| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*` | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed. |
-| `STRIPE_*`                                                                            | Legacy checkout and webhook integration; not authorization to charge users.                                   |
-| `AUTONOMOUS_SCHEDULER_ENABLED`                                                        | Review-first candidate workflow automation.                                                                   |
-| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                    | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off. |
-| Storage and malware-scanner variables                                                 | Private resume storage and production upload scanning. Production fails closed without required scanning.     |
+| Variable group                                                                          | Purpose                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `DATABASE_POOL_*`                                                       | MySQL/TiDB connection and bounded pool settings.                                                                                                                                        |
+| `PUBLIC_APP_ORIGIN`                                                                     | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                                                                                         |
+| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                           | Signed session configuration and application binding.                                                                                                                                   |
+| `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` | Hosted identity and administrator bootstrap. Production requires the OAuth API origin to be explicitly allowlisted over HTTPS.                                                          |
+| `ERASURE_IDENTITY_HMAC_KEYS`                                                            | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.                                                                                 |
+| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                      | Optional server-side AI/provider integration.                                                                                                                                           |
+| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*`   | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed.                                                                           |
+| `STRIPE_*`                                                                              | Legacy checkout and webhook integration; not authorization to charge users.                                                                                                             |
+| `AUTONOMOUS_SCHEDULER_ENABLED`                                                          | Review-first candidate workflow automation.                                                                                                                                             |
+| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                      | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off.                                                                           |
+| `FILE_MALWARE_SCAN_*` and storage variables                                             | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner. |
 
 See [`.env.example`](.env.example), [security policy](SECURITY.md), [detailed security controls](docs/SECURITY.md), and [private Hetzner runbook](deploy/hetzner/README.md). Deployment secrets are not required for ordinary documentation or unit-test work.
 
@@ -229,9 +232,11 @@ Additional HTTP routes include hosted OAuth login/callback, connector OAuth call
 
 ## Security And Privacy
 
-Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status route. These are code-level controls, not a substitute for independent testing or operational configuration.
+Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status and remote-job search route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
 
-The GitHub repository has provider-pattern secret scanning and push protection enabled, Dependabot alerts and security updates enabled, weekly dependency-update configuration, CodeQL default setup for Actions/JavaScript-TypeScript/Python, and private vulnerability reporting enabled. Generic non-provider secret scanning is not available for this user-owned repository under GitHub's current eligibility rules for this feature ([GitHub documentation](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns)). Secret validity checks also remain disabled; where available, they send detected credentials to the issuing provider for validation. `main` requires a pull request, all five CI jobs, resolved review conversations, and an up-to-date base; force pushes and branch deletion are disabled. No approving-review count is required because the repository is maintained by an individual. GitHub Actions is restricted to the eight actions used by repository workflows, including the CodeQL action, with workflow tokens defaulting to read-only and pull-request approval disabled. At the 2026-10-14 check, GitHub reported 45 open CodeQL alerts (7 critical, 34 high, 4 medium) and no open Dependabot or secret-scanning alerts. These findings and settings can change; check GitHub before relying on this snapshot.
+GitHub's live repository APIs were checked on 2026-10-14 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. CodeQL default setup scans GitHub Actions, JavaScript/TypeScript, and Python; 45 code-scanning alerts remained open on `main` (7 critical, 34 high, 4 medium). Pull request [#132](https://github.com/Robert-Velhorst/013-Hire-AI/pull/132) passed its five required CI jobs but its CodeQL gate failed with 10 high-severity findings. Those findings have not been dismissed or represented as fixed. Generic non-provider secret scanning remains disabled; the repository is user-owned and GitHub does not expose that feature for this repository plan. Secret validity checks remain disabled because they send detected credentials to the issuing provider. Neither feature is represented as enabled. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
+
+As of the 2026-10-14 UTC check, the 45 open CodeQL alerts on `main` and pull request #132's failing CodeQL gate had not been dismissed or represented as fixed. `main` requires pull requests, all five CI checks, resolved review conversations, and an up-to-date base. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to the eight workflow actions, tokens default to read-only, and workflows cannot approve pull requests. Settings and alert totals can change; use GitHub as the live source of truth.
 
 Report vulnerabilities through GitHub's private vulnerability reporting for this repository; do not disclose exploitable details in public issues. See the root [SECURITY.md](SECURITY.md) for reporting instructions and [docs/SECURITY.md](docs/SECURITY.md) for controls and outstanding production reviews.
 
@@ -241,13 +246,13 @@ Before real users, deployment owners must complete threat modeling, dependency/l
 
 Pull requests and pushes to `main` run five CI jobs: Hetzner bootstrap validation, build/type-check/tests, Windows runtime, isolated database acceptance, and container runtime. GitHub Actions is the source of truth for a particular commit's results.
 
-Published GitHub Releases trigger a workflow that builds and publishes the application container to GitHub Container Registry (`ghcr.io/robert-velhorst/013-hire-ai`) using the repository's Dockerfile. The first preview release, [`v0.1.0-alpha.1`](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1), is published, and its image-publishing workflow succeeded. The public OCI manifest was verified on 2026-10-13; the [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) is available. This image is a self-hostable **preview artifact**, not a managed Hire.AI service. Treat database migrations, secrets, data backups, TLS, OAuth callbacks, storage, scanning, monitoring, and legal approval as operator responsibilities. Pin a release tag or image digest rather than relying on a mutable tag.
+Published GitHub Releases trigger a workflow that builds and publishes the application container to GitHub Container Registry (`ghcr.io/robert-velhorst/013-hire-ai`) using the repository's Dockerfile. The first preview release, [`v0.1.0-alpha.1`](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1), was published on 2026-10-13, and its image-publishing workflow succeeded. The public OCI manifest was verified for Linux AMD64; the [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) is available. This is a self-hostable **preview artifact**, not a managed Hire.AI service. Treat database migrations, secrets, data backups, TLS, OAuth callbacks, storage, scanning, monitoring, and legal approval as operator responsibilities. Pin a release tag or image digest rather than relying on a mutable tag.
 
 ```powershell
 docker pull ghcr.io/robert-velhorst/013-hire-ai:v0.1.0-alpha.1
 ```
 
-The command above pulls the first published alpha image. Before using a later release, verify that its publishing workflow succeeded and that its package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
+The command above pulls the first published alpha image. Before using a later release, verify that its publishing workflow succeeded and the package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
 
 ## Business And Technical Documentation
 
@@ -275,3 +280,4 @@ The command above pulls the first published alpha image. Before using a later re
 ## License
 
 The `package.json` metadata declares `MIT`, but this repository currently has no root `LICENSE` file. Confirm the intended licensing and add the complete license text before encouraging third-party redistribution; this preview release does not resolve that documentation gap.
+
