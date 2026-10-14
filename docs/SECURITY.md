@@ -33,11 +33,11 @@
 
 ## GitHub repository settings
 
-Verified against the live repository APIs on 2026-10-14 UTC:
+Verified against the live repository APIs on 2026-10-14 UTC, with `main` at `17cb169`:
 
 - Provider-pattern secret scanning and push protection are enabled. Generic non-provider patterns remain disabled; GitHub's documentation limits this feature to organization-owned repositories on GitHub Team with GitHub Secret Protection, so it is not available for this user-owned repository. Secret validity checks remain disabled because GitHub sends detected credentials to the issuing provider to test them.
 - Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot or secret-scanning alerts were returned by GitHub on 2026-10-14 UTC.
-- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 33 open CodeQL alerts on `main`: 5 critical, 24 high, and 4 medium. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
+- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 30 open CodeQL alerts on `main` (2 critical, 24 high, and 4 medium) when this snapshot was refreshed on 2026-10-14 UTC. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
 - Private vulnerability reporting is enabled.
 - The `main` branch requires pull requests, an up-to-date base, all five named CI checks, and resolved review conversations. Administrators are included; force pushes and branch deletion are disabled. The required approving-review count is zero, which allows a single maintainer to merge after checks pass.
 - GitHub Actions workflow token permissions default to read-only and workflows cannot create or approve pull requests. Actions are restricted to the eight dependencies used by repository workflows: `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `docker/build-push-action`, `docker/login-action`, `docker/metadata-action`, `docker/setup-buildx-action`, and `github/codeql-action`. The checked-in workflows pin actions to full commit SHAs, and repository policy requires SHA-pinned references.
