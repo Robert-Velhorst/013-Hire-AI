@@ -582,22 +582,37 @@ export async function acquireApplicationPreparationLock(
   jobId: number
 ): Promise<() => Promise<void>> {
   const key = `${userId}:${jobId}`;
-  const database = await getDb();
-  if (!database || ENV.databasePoolLimit < 2) return acquireMemoryApplicationPreparationLock(key);
-  if (!_pool) throw new Error("A persistent database pool is required for application preparation.");
+  const releaseLocalLock = await acquireMemoryApplicationPreparationLock(key);
+  let database: MySql2Database | null;
+  try {
+    database = await getDb();
+  } catch (error) {
+    await releaseLocalLock();
+    throw error;
+  }
+  if (!database || ENV.databasePoolLimit < 2) return releaseLocalLock;
+  if (!_pool) {
+    await releaseLocalLock();
+    throw new Error("A persistent database pool is required for application preparation.");
+  }
 
   const databaseName = new URL(ENV.databaseUrl).pathname;
   const lockSuffix = createHash("sha256").update(`${databaseName}:${key}`).digest("hex").slice(0, 32);
   const lockName = `hireai:application:${lockSuffix}`;
-  const connection = await _pool.getConnection();
+  let connection: PoolConnection | null = null;
   let lockAcquired = false;
   let connectionUsable = true;
   try {
+    connection = await _pool.getConnection();
     const [rows] = await connection.query("SELECT GET_LOCK(?, 10) AS acquired", [lockName]);
     lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the application-preparation serialization lock.");
   } catch (error) {
-    connection.release();
+    if (connection) {
+      if (lockAcquired) connection.destroy();
+      else connection.release();
+    }
+    await releaseLocalLock();
     throw error;
   }
 
@@ -616,6 +631,7 @@ export async function acquireApplicationPreparationLock(
       throw error;
     } finally {
       if (connectionUsable) connection.release();
+      await releaseLocalLock();
     }
   };
 }
