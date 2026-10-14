@@ -1,6 +1,6 @@
 # 013 - Hire.AI
 
-Hire.AI is an early-stage, self-hostable preview application for finding and comparing fully remote jobs and managing the candidate's application journey. It brings candidate profiles and resumes, cross-post comparisons, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
+Hire.AI is an early-stage, self-hostable preview application for discovering fully remote jobs across configured sources, comparing likely cross-posts, and organizing a candidate's application journey. It brings candidate profiles and resumes, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
@@ -16,6 +16,19 @@ The product is intended for people looking for any kind of work that can be perf
 - **Current authority boundary:** review-first. Hire.AI may prepare work and create auditable review records; it does not currently submit employer applications through third-party portals.
 - **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
+
+## What Works Today
+
+| Area | Available in this preview | Important boundary |
+| --- | --- | --- |
+| Job discovery | Bounded API/RSS collection from nine policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
+| Comparison | Normalized listings, source attribution, freshness information, and links between likely duplicate postings. | A duplicate link is evidence for review, not proof that two listings are identical. Missing or conflicting conditions remain uncertain. |
+| Candidate workspace | Profiles, resume versions, preferences, job filters, match explanations, saved jobs, and application records. | Matching supports decisions; it does not guarantee qualification, an interview, or a job. |
+| Application workflow | Prepare and review application material, preserve decisions, and hand off to the employer's application process. | The candidate submits the application. End-to-end submission to employer or ATS forms is not currently delivered. |
+| Responses and interviews | Track response evidence, follow-up state, scheduling information, and interview preparation. | The candidate conducts the interview and makes every decision after it. Connected inbox features need provider configuration and live acceptance. |
+| Hosting and integrations | Docker and Hetzner deployment material, plus optional connector code. | The published container is for preview/self-hosting. No public hosted service or generally accepted live integration is available. |
+
+The product-direction document describes the intended autonomous service: minimize candidate effort while respecting hard constraints, consent, provider rules, and an auditable record of actions. That target must not be confused with the current preview's capabilities.
 
 ## Product Direction And Current Boundaries
 
