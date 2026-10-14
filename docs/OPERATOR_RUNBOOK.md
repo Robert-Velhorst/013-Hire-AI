@@ -151,7 +151,7 @@ Each source adapter applies its own minimum request interval. Transient network,
 
 ## Database backup and restore
 
-Install compatible MySQL client tools so `mysqldump` and `mysql` are available. If they are not on `PATH`, pass an absolute client path with `pnpm db:backup -- --mysqldump <absolute-path>` or `pnpm db:restore -- <backup-directory> --confirm RESTORE:<database> --mysql <absolute-path>`. The path must resolve to the corresponding `mysqldump` or `mysql` executable; subprocesses remain shell-free. On Windows with a MySQL Docker container, set `DATABASE_RECOVERY_DOCKER_CONTAINER=<exact-container-name>` or pass `--docker-container <name>`; the selected client executable must exist inside that container and is run against its loopback MySQL service. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
+Install compatible MySQL client tools and make the fixed `mysqldump` and `mysql` command names available on `PATH`. On Windows with a MySQL Docker container, set `DATABASE_RECOVERY_DOCKER_CONTAINER=<exact-container-name>` or pass `--docker-container <name>`; the fixed client names then run inside that container against its loopback MySQL service. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
 
 1. Disable autonomous and scraping workers and wait for active runs to finish.
 2. Set `DATABASE_URL` for the source database and run `pnpm db:backup`. A successful run creates `backups/<database>-<UTC timestamp>/database.sql` and `manifest.json` only after a non-empty dump is complete.

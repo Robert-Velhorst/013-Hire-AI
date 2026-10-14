@@ -2,10 +2,7 @@ import { expectedRestoreConfirmation, parseDatabaseUrl, restoreDatabaseBackup } 
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
-  if (index < 0) return undefined;
-  const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value.`);
-  return value;
+  return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
 try {
@@ -17,7 +14,6 @@ try {
   const result = await restoreDatabaseBackup({
     bundlePath,
     confirmation,
-    executable: valueAfter("--mysql") || "mysql",
     dockerContainer: valueAfter("--docker-container") || process.env.DATABASE_RECOVERY_DOCKER_CONTAINER,
   });
   console.log(`Restored and verified backup into ${result.manifest.database}. Run application reconciliation checks before enabling workers.`);

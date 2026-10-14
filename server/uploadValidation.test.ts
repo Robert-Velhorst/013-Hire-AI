@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RESUME_MIME_TYPES,
-  resolveWindowsDefenderPaths,
   resolveMalwareScanMode,
   sanitizeUploadFileName,
   scanSensitiveUpload,
@@ -16,41 +15,6 @@ afterEach(() => {
 });
 
 describe("sensitive upload validation", () => {
-  it("resolves Defender paths from Windows environment directories", () => {
-    expect(
-      resolveWindowsDefenderPaths(
-        "C:\\Program Files",
-        "C:\\ProgramData"
-      )
-    ).toEqual({
-      legacyExecutable:
-        "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
-      platformRoot:
-        "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
-    });
-    expect(
-      resolveWindowsDefenderPaths("D:\\Apps", "C:\\ProgramData")
-    ).toEqual({
-      legacyExecutable:
-        "D:\\Apps\\Windows Defender\\MpCmdRun.exe",
-      platformRoot:
-        "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
-    });
-    expect(
-      resolveWindowsDefenderPaths("node.exe", "C:\\ProgramData")
-    ).toEqual({
-      legacyExecutable: null,
-      platformRoot:
-        "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
-    });
-    expect(
-      resolveWindowsDefenderPaths(
-        "\\\\server\\share\\Program Files",
-        "\\\\server\\share\\ProgramData"
-      )
-    ).toBeNull();
-  });
-
   it("keeps upload names out of paths and rejects dot-only names", () => {
     expect(sanitizeUploadFileName(".")).toBe("upload");
     expect(sanitizeUploadFileName("..")).toBe("upload");

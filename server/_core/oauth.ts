@@ -54,6 +54,8 @@ export function registerOAuthRoutes(app: Express) {
       portalUrl.searchParams.set("type", "signIn");
       res.cookie(OAUTH_STATE_COOKIE_NAME, browserNonce, {
         ...getSessionCookieOptions(req),
+        httpOnly: true,
+        secure: ENV.isProduction || req.secure,
         path: "/api/oauth/callback",
         maxAge: OAUTH_LOGIN_STATE_TTL_MS,
       });

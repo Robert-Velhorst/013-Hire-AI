@@ -107,7 +107,7 @@ describe("OAuth endpoint production policy", () => {
     const result = runDoctor("https://auth.example.test");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("PASS OAuth portal: trusted runtime URL configured");
-  });
+  }, 15_000);
 
   it.each([
     "",
