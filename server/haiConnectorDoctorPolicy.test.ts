@@ -62,6 +62,8 @@ describe("HAI production doctor policy", () => {
     [{ HAI_CONNECTOR_TOKEN: "doctor token with whitespace that is long enough" }, "whitespace"],
     [{ HAI_CONNECTOR_USER_ID: "41junk" }, "positive user ID"],
     [{ HAI_CONNECTOR_URL: "http://127.0.0.1:3000/api/hai/status" }, "/api/hai/a2a"],
+    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fc00::1]:3000/api/hai/a2a" }, "local/private connector URL"],
+    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fd00::1]:3000/api/hai/a2a" }, "local/private connector URL"],
   ])("rejects unsafe HAI configuration", (extra, message) => {
     const result = runDoctor(extra);
     expect(result.status).toBe(1);

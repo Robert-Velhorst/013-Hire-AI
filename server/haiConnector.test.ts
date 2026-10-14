@@ -107,6 +107,28 @@ describe("HAI connector configuration", () => {
     expect(validateHaiConnectorConfig({ ...config, endpointUrl: " http://127.0.0.1:3000/api/hai/a2a" })).toContain("surrounding whitespace");
   });
 
+  it("accepts only private IPv4 and IPv6 ranges, not public IPv6 addresses containing fc or fd", () => {
+    const config = { enabled: true, token, userId: 41, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a" };
+    for (const endpointUrl of [
+      "http://[2001:db8:fc00::1]:3000/api/hai/a2a",
+      "http://[2001:db8:fd00::1]:3000/api/hai/a2a",
+    ]) {
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("local");
+    }
+
+    for (const endpointUrl of [
+      "http://[fc00::1]:3000/api/hai/a2a",
+      "http://[fd12:3456::1]:3000/api/hai/a2a",
+      "http://10.2.3.4:3000/api/hai/a2a",
+      "http://172.31.2.3:3000/api/hai/a2a",
+      "http://192.168.2.3:3000/api/hai/a2a",
+    ]) {
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toBeNull();
+    }
+
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("local");
+  });
+
   it("accepts the configured bearer and exposes no token in status", async () => {
     const { service } = configuredService();
     expect(await service.authorize(token)).toBe(true);

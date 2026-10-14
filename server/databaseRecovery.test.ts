@@ -44,21 +44,39 @@ describe("database recovery tooling", () => {
       database: "hire_ai",
     });
     const args = dumpArguments(connection);
-    expect(args).toContain("backup-user");
+    expect(args).toContain("--host=db.internal");
+    expect(args).toContain("--port=3307");
+    expect(args).toContain("--user=backup-user");
     expect(args).not.toContain("p@ss");
     expect(args).toContain("--single-transaction");
     expect(args).toContain("--quick");
   });
 
+  it("accepts IPv6 database hosts without passing URL brackets to the client", () => {
+    expect(parseDatabaseUrl("mysql://operator:secret@[::1]:3307/hire_ai")).toEqual({
+      host: "::1",
+      port: "3307",
+      user: "operator",
+      password: "secret",
+      database: "hire_ai",
+    });
+  });
+
   it("supports MySQL client execution inside an explicitly named Docker container", () => {
-    expect(recoveryCommand("mysqldump", ["--host", "127.0.0.1"], "hire-ai-db"))
+    expect(recoveryCommand("mysqldump", ["--host", "127.0.0.1"], "hire-ai-db", "mysqldump"))
       .toEqual({
         executable: "docker",
         args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "mysqldump", "--host", "127.0.0.1"],
       });
-    expect(() => recoveryCommand("mysql", [], "unsafe container name"))
+    expect(recoveryCommand("C:\\Program Files\\MySQL\\bin\\mysqldump.exe", [], undefined, "mysqldump"))
+      .toEqual({ executable: "C:\\Program Files\\MySQL\\bin\\mysqldump.exe", args: [] });
+    expect(recoveryCommand("/usr/local/mysql/bin/mysql", [], "hire-ai-db", "mysql"))
+      .toEqual({ executable: "docker", args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "/usr/local/mysql/bin/mysql"] });
+    expect(() => recoveryCommand("mysql", [], "unsafe container name", "mysql"))
       .toThrow("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid");
-    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined))
+    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined, "mysqldump"))
+      .toThrow("Database recovery executable is invalid");
+    expect(() => recoveryCommand("/tmp/mysql", [], undefined, "mysqldump"))
       .toThrow("Database recovery executable is invalid");
   });
 
@@ -68,6 +86,10 @@ describe("database recovery tooling", () => {
     "postgres://user:secret@db.internal/hire_ai",
     "mysql://db.internal/",
     "mysql://db.internal/one/two",
+    "mysql://--defaults-file%3D%2Ftmp%2Fevil:secret@db.internal/hire_ai",
+    "mysql://operator:secret@db.internal/--defaults-file%3D%2Ftmp%2Fevil",
+    "mysql://operator%0A%2D%2Dhelp:secret@db.internal/hire_ai",
+    "mysql://operator:secret@-defaults-file.internal/hire_ai",
   ])("rejects an unsafe database target: %s", value => {
     expect(() => parseDatabaseUrl(value)).toThrow();
   });
@@ -94,6 +116,19 @@ describe("database recovery tooling", () => {
     expect(verified.manifest.source).toEqual({ host: "127.0.0.1", port: "3306" });
     expect(JSON.stringify(verified.manifest)).not.toContain("super-secret");
     expect(await readFile(verified.dumpPath, "utf8")).toContain("CREATE TABLE example");
+  });
+
+  it("uses an explicitly configured absolute mysqldump path", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hire-ai-backup-client-"));
+    const executable = "C:\\Program Files\\MySQL\\bin\\mysqldump.exe";
+    const spawnImpl = vi.fn(() => successfulChild());
+    await createDatabaseBackup({
+      databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
+      outputRoot: root,
+      executable,
+      spawnImpl,
+    });
+    expect(spawnImpl.mock.calls[0]?.[0]).toBe(executable);
   });
 
   it("rejects a backup after its dump is modified", async () => {
@@ -187,6 +222,33 @@ describe("database recovery tooling", () => {
     });
     expect(restoreSpawn).toHaveBeenCalledOnce();
     expect(restoredSql).toContain("CREATE TABLE example");
+  });
+
+  it("uses an explicitly configured absolute mysql restore path", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hire-ai-restore-client-"));
+    const result = await createDatabaseBackup({
+      databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
+      outputRoot: root,
+      spawnImpl: vi.fn(() => successfulChild()),
+    });
+    const executable = "/opt/mysql/bin/mysql";
+    const restoreSpawn = vi.fn(() => {
+      const child = new EventEmitter() as FakeChild;
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.stdin = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+      child.stdin.once("finish", () => child.emit("close", 0));
+      return child;
+    });
+
+    await restoreDatabaseBackup({
+      bundlePath: result.directory,
+      databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
+      confirmation: expectedRestoreConfirmation("hire_ai"),
+      executable,
+      spawnImpl: restoreSpawn,
+    });
+    expect(restoreSpawn.mock.calls[0]?.[0]).toBe(executable);
   });
 
   it("wires recovery commands and excludes backup artifacts from Git", async () => {

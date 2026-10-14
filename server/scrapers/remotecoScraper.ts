@@ -1,4 +1,5 @@
 import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
+import { cleanScrapedHtmlToText } from "./htmlText";
 
 /**
  * Remote.co scraper
@@ -163,13 +164,6 @@ export class RemoteCoScraper extends BaseScraper {
   }
 
   private cleanHtmlText(text: string): string {
-    return text
-      .replace(/<[^>]*>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim();
+    return cleanScrapedHtmlToText(text);
   }
 }

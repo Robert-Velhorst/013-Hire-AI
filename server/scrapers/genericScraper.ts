@@ -1,6 +1,7 @@
 import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult, type ScraperConfig } from "./baseScraper";
 import { getLocationPreferenceFit } from "../../shared/locationEligibility";
 import { normalizeSalary } from "../jobNormalization";
+import { cleanScrapedHtmlToText } from "./htmlText";
 
 /**
  * Generic scraper that can be configured for different platforms
@@ -510,13 +511,6 @@ export class GenericScraper extends BaseScraper {
   }
 
   private cleanHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim();
+    return cleanScrapedHtmlToText(html);
   }
 }

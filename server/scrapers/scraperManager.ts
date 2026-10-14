@@ -1,6 +1,6 @@
 import type { BaseScraper, ScrapeRequestOptions, ScrapeResult } from "./baseScraper";
 import { getScraperForPlatform, getSupportedPlatforms, hasScraper } from "./index";
-import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome } from "../db";
+import { claimPlatformScrapeAttempt, ensureScraperPlatformCatalog, getDb, recordPlatformScrapeOutcome, withJobPersistenceSerialization } from "../db";
 import { jobDuplicates, jobs, jobPlatforms } from "../../drizzle/schema";
 import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { samplePlatforms } from "../sampleData";
@@ -28,6 +28,22 @@ const DEFAULT_MAX_JOBS_PER_CYCLE = 1_000;
 const SOURCE_IDENTITY_BATCH_SIZE = 200;
 export const SCRAPER_FAILURE_MESSAGE = "Source scan could not complete.";
 export const SCRAPER_INITIALIZATION_FAILURE_MESSAGE = "Source initialization could not complete.";
+
+let jobPersistenceTail = Promise.resolve();
+
+async function withJobPersistenceLock<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = jobPersistenceTail;
+  let release!: () => void;
+  jobPersistenceTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 function boundedInteger(
   value: number | undefined,
@@ -502,7 +518,21 @@ export class ScraperManager {
     duplicates: number;
     errors: number;
   }> {
-    const db = await getDb();
+    return withJobPersistenceLock(() =>
+      withJobPersistenceSerialization(database => this.saveJobsLocked(scrapedJobs, database))
+    );
+  }
+
+  private async saveJobsLocked(
+    scrapedJobs: any[],
+    persistentDatabase?: Awaited<ReturnType<typeof getDb>>
+  ): Promise<{
+    saved: number;
+    refreshed: number;
+    duplicates: number;
+    errors: number;
+  }> {
+    const db = persistentDatabase === undefined ? await getDb() : persistentDatabase;
     if (!db) {
       return { saved: 0, refreshed: 0, duplicates: scrapedJobs.length, errors: 0 };
     }

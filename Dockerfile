@@ -19,6 +19,7 @@ COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/shared/haiConnectorEndpointPolicy.mjs ./shared/haiConnectorEndpointPolicy.mjs
 COPY --from=build /app/scripts/doctor.mjs ./scripts/doctor.mjs
 COPY --from=build /app/scripts/database-migrate.mjs ./scripts/database-migrate.mjs
 COPY --from=build /app/scripts/database-migration-plan.mjs ./scripts/database-migration-plan.mjs

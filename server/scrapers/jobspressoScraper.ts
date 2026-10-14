@@ -1,4 +1,5 @@
 import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
+import { cleanScrapedHtmlToText } from "./htmlText";
 
 /**
  * Jobspresso scraper
@@ -132,13 +133,6 @@ export class JobspressoScraper extends BaseScraper {
   }
 
   private cleanHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim();
+    return cleanScrapedHtmlToText(html);
   }
 }

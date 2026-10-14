@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
@@ -496,6 +497,51 @@ export async function withOAuthIdentitySerialization<T>(
         );
         if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
           throw new Error("OAuth identity serialization lock cleanup failed.");
+        }
+      }
+    } catch (error) {
+      connection.destroy();
+      connectionUsable = false;
+      throw error;
+    } finally {
+      if (connectionUsable) connection.release();
+    }
+  }
+}
+
+/** Serialize job persistence across application replicas sharing this database. */
+export async function withJobPersistenceSerialization<T>(
+  operation: (database: MySql2Database | null) => Promise<T>
+): Promise<T> {
+  const database = await getDb();
+  if (!database) return operation(null);
+  if (!_pool) throw new Error("A persistent database pool is required for job persistence.");
+
+  const databaseUrl = new URL(ENV.databaseUrl);
+  const lockSuffix = createHash("sha256").update(databaseUrl.pathname).digest("hex").slice(0, 32);
+  const lockName = `hireai:jobpersist:${lockSuffix}`;
+  const connection = await _pool.getConnection();
+  let lockAcquired = false;
+  let connectionUsable = true;
+  try {
+    const [rows] = await connection.query(
+      "SELECT GET_LOCK(?, 10) AS acquired",
+      [lockName]
+    );
+    lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
+    if (!lockAcquired) {
+      throw new Error("Could not acquire the job persistence serialization lock.");
+    }
+    return await operation(drizzle(connection));
+  } finally {
+    try {
+      if (lockAcquired) {
+        const [rows] = await connection.query(
+          "SELECT RELEASE_LOCK(?) AS released",
+          [lockName]
+        );
+        if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
+          throw new Error("Job persistence serialization lock cleanup failed.");
         }
       }
     } catch (error) {
