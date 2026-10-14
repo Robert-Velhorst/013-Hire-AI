@@ -1,10 +1,17 @@
 # Production Acceptance
 
-Updated: 2026-10-13. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
+Updated: 2026-10-14. Target confirmed by Robert: online, multi-user Hire.AI hosted at Hetzner. Historical Console access, the authorized CPX12 purchase and server start are recorded in [Hetzner Hosting](HETZNER_HOSTING.md). The selected hostname is `013-hire.ai.noodzakelijkonline.de`; DNS was verified on 2026-10-01, but current authenticated shared-host inspection, application publication and HTTPS remain open. See [Hostname Setup](../deploy/hetzner/DOMAIN_SETUP.md) for the dated evidence and prepared proxy fragment. The user conducts the interview; Hire.AI's intended responsibility covers the preceding process, including scheduling and preparation.
 
 **Release decision: not ready for public production use.** This document separates verified technical work from the remaining product and operator requirements. Passing tests or a successful image build is not acceptance of live providers or autonomous employer submission.
 
-## Current Verification (2026-10-13)
+## Current Verification (2026-10-14)
+
+- PR #142 head `90c5e225d1d0081fe2f0d59202bb3d90b7a11c3e` contains an authenticated, disabled-by-default HAI REST search for current canonical remote listings. It enforces the existing `remoteOnly` and `clear` safety policies, limits pages to 25, supports cursor pagination and bounded public listing data, and rejects client policy overrides and unsupported currency codes. It is read-only and does not access candidate profiles or submit applications. The route and filter contract have 42 passing focused HAI/doctor tests.
+- `tsc --noEmit` passed and the full regular Vitest suite passed 302 files / 1,763 tests; 9 files / 33 tests were skipped by suite design. `git diff --check` passed.
+- The earlier container-runtime check on the preceding PR head failed because `scripts/doctor.mjs` imported malware-scanner and trusted-service policy modules that were absent from the runtime image. The current PR adds both files to the Docker runtime stage. CI and CodeQL for the current head were queued at the time of this update; this correction is not yet confirmed by CI. The local Docker daemon did not respond, so no local production image start is claimed.
+- The PR branch is pushed and remains open and unmerged. These local checks do not establish live HAI peer registration, public deployment, HTTPS, live provider behavior, legal/privacy acceptance, billing, or employer application submission. The release decision remains **not ready for public production use**.
+
+## Previous Verification (2026-10-13)
 
 - `tsc --noEmit` passed. The full regular suite passed 299 files / 1,712 tests; 9 opt-in files / 31 tests were skipped by the regular test command.
 - The Vite production client build and production-shell/bundle-budget check passed: 87 JavaScript chunks and 584,561 startup JavaScript bytes, below the 614,400-byte limit. A complete production Docker image built successfully after adding the migration planner to its runtime payload. The standard build could not overwrite the existing `dist/index.js` on Windows (access denied); the server and both database-audit bundles also built successfully into a fresh temporary directory. The direct in-repository `pnpm build` remains unverified.
