@@ -72,7 +72,7 @@ The job-search model supports filters for keywords, company, location, job type,
 1. **Create a profile.** Add work history, education, skills, preferences, and a resume. Optional imports require configured integrations and user authorization.
 2. **Discover and compare jobs.** Search configured sources, apply available filters, inspect source/freshness information, and see match evidence and linked duplicates.
 3. **Review a possible application.** Hire.AI checks profile readiness, job freshness, duplicate history, and safety conditions. Missing decisive vacancy information should be resolved before an application proceeds.
-4. **Prepare materials.** The application can maintain drafts and review records. Today the candidate completes the employer-side form and records reliable submission evidence.
+4. **Prepare and submit.** The limited email path can send only to a verified employer-published address after the application is approved, fresh consent is recorded, and the candidate reviews and confirms the exact recipient and message. Employer and applicant-tracking-system forms remain a candidate handoff. Submission evidence is recorded; ambiguous send outcomes must be reconciled rather than retried blindly.
 5. **Track responses and prepare for interviews.** Connected inbox capabilities may surface response candidates when configured. Interview invitations must be backed by recorded evidence. The candidate attends the interview and decides everything afterwards.
 6. **Pause or restart.** Automation is intended to stop when employment is reported. Restart requires a reason and updated criteria; misuse controls and human review are part of the product direction.
 
