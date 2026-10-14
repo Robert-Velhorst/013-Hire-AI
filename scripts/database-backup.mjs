@@ -6,6 +6,15 @@ function valueAfter(flag) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function hasOption(flag, valueOptions) {
+  const args = process.argv.slice(2);
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === flag) return true;
+    if (valueOptions.includes(args[index])) index += 1;
+  }
+  return false;
+}
+
 try {
   if (process.argv[2] === "verify") {
     const bundlePath = process.argv[3];
@@ -13,7 +22,7 @@ try {
     const verified = await verifyDatabaseBackup(bundlePath);
     console.log(`Verified backup for ${verified.manifest.database}: ${verified.manifest.dump.bytes} bytes, SHA-256 ${verified.manifest.dump.sha256}.`);
   } else {
-    if (process.argv.includes("--mysqldump")) {
+    if (hasOption("--mysqldump", ["--output", "--docker-container"])) {
       throw new Error("Custom database client paths are not accepted. Install mysqldump on PATH or use --docker-container.");
     }
     const result = await createDatabaseBackup({
