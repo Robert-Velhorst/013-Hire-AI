@@ -182,6 +182,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
