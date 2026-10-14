@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
 import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -34,6 +35,21 @@ function successfulChild(stdout = "-- MySQL dump\nCREATE TABLE example (id int);
 }
 
 describe("database recovery tooling", () => {
+  it("rejects CLI overrides for database client executable paths", () => {
+    for (const [script, args, flag, message] of [
+      ["scripts/database-backup.mjs", ["--mysqldump", "/tmp/attacker"], "--mysqldump", "Custom database client paths are not accepted"],
+      ["scripts/database-restore.mjs", ["backups/example", "--mysql", "/tmp/attacker"], "--mysql", "Custom database client paths are not accepted"],
+    ] as const) {
+      const result = spawnSync(process.execPath, [path.resolve(script), ...args], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: { ...process.env, DATABASE_URL: "mysql://operator:secret@127.0.0.1/hire_ai" },
+      });
+      expect(result.status, flag).toBe(1);
+      expect(result.stderr).toContain(message);
+    }
+  });
+
   it("parses MySQL URLs without putting credentials in command arguments", () => {
     const connection = parseDatabaseUrl("mysql://backup-user:p%40ss@db.internal:3307/hire_ai");
     expect(connection).toEqual({
@@ -112,6 +128,7 @@ describe("database recovery tooling", () => {
     });
     const verified = await verifyDatabaseBackup(result.directory);
     expect(spawnImpl).toHaveBeenCalledOnce();
+    expect(spawnImpl.mock.calls[0]?.[0]).toBe("mysqldump");
     expect(verified.manifest.database).toBe("hire_ai");
     expect(verified.manifest.source).toEqual({ host: "127.0.0.1", port: "3306" });
     expect(JSON.stringify(verified.manifest)).not.toContain("super-secret");
@@ -221,6 +238,7 @@ describe("database recovery tooling", () => {
       spawnImpl: restoreSpawn,
     });
     expect(restoreSpawn).toHaveBeenCalledOnce();
+    expect(restoreSpawn.mock.calls[0]?.[0]).toBe("mysql");
     expect(restoredSql).toContain("CREATE TABLE example");
   });
 
