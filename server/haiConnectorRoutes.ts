@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import {
   HAI_CONNECTOR_AGENT_VERSION,
@@ -122,7 +123,13 @@ export function registerHaiConnectorRoutes(
     res.setHeader("Cache-Control", "no-store");
     next();
   }, createRateLimitMiddleware(HAI_CONNECTOR_RATE_LIMIT_POLICY));
-  const jobSearchRateLimit = createRateLimitMiddleware(HAI_JOB_SEARCH_RATE_LIMIT_POLICY);
+  const jobSearchRateLimit = rateLimit({
+    windowMs: HAI_JOB_SEARCH_RATE_LIMIT_POLICY.windowMs,
+    limit: HAI_JOB_SEARCH_RATE_LIMIT_POLICY.maxRequests,
+    standardHeaders: "draft-6",
+    legacyHeaders: false,
+  });
+  const jobSearchClientCapacityLimit = createRateLimitMiddleware(HAI_JOB_SEARCH_RATE_LIMIT_POLICY);
 
   app.get("/.well-known/agent-card.json", (_req, res) => {
     const card = service.agentCard();
@@ -153,7 +160,7 @@ export function registerHaiConnectorRoutes(
     res.json(service.status());
   });
 
-  app.post("/api/hai/jobs/search", jobSearchRateLimit, requireHaiAuth, boundedJsonBodyParser, async (req, res) => {
+  app.post("/api/hai/jobs/search", jobSearchRateLimit, jobSearchClientCapacityLimit, requireHaiAuth, boundedJsonBodyParser, async (req, res) => {
     const parsed = jobSearchRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Remote job search filters are invalid or exceed supported limits." });

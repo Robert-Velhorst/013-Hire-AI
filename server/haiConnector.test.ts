@@ -171,6 +171,7 @@ describe("HAI A2A route", () => {
     const limited = await request();
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toBeTruthy();
+    expect(limited.headers.get("ratelimit-limit")).toBe("30");
     expect(limited.headers.get("cache-control")).toBe("no-store");
   });
 
