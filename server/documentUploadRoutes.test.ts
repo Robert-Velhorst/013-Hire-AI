@@ -134,6 +134,10 @@ describe("bounded raw document upload routes", () => {
       mimeType: "text/plain",
     });
     expect(mocks.lastUploadBytes).toEqual(Buffer.from("streamed resume"));
+    expect(mocks.lastUploadBytes?.byteLength).toBe(15);
+    expect(mocks.lastUploadBytes?.buffer.byteLength).toBe(
+      MAX_DOCUMENT_UPLOAD_BYTES
+    );
   });
 
   it.each([
