@@ -6,23 +6,12 @@ import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
+import { getSafeRedirectPath } from "./safeRedirect";
 
 const DEV_SESSION_MS = 1000 * 60 * 60 * 6;
 const DEV_SESSION_SECRET = "hire-ai-review-queue-local-dev-secret";
 const DEV_APP_ID = "hire-ai-review-queue-local-dev";
 const DEV_SUSPENDED_OPEN_ID = "hire-ai-suspended-local-dev";
-
-function getSafeRedirectPath(value: unknown, fallback: string) {
-  if (
-    typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//")
-  ) {
-    return value;
-  }
-
-  return fallback;
-}
 
 function ensureDevSessionConfig() {
   if (!ENV.cookieSecret) {

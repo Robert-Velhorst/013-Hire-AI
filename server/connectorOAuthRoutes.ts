@@ -92,7 +92,7 @@ function completeRedirect(provider: string, status: "connected" | "denied" | "fa
 }
 
 export function registerConnectorOAuthRoutes(app: Express) {
-  // CodeQL review: the first middleware is the bounded custom connector OAuth limiter.
+  // The limiter's custom store caps the number of client keys held in memory.
   app.get(
     "/api/connectors/oauth/callback",
     createSensitiveRouteRateLimiter("connectorOAuthCallback"),

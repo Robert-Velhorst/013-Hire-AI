@@ -1,4 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { SignJWT, jwtVerify } from "jose";
 
 export const OAUTH_LOGIN_STATE_TTL_MS = 10 * 60 * 1000;
 const MAX_OAUTH_STATE_LENGTH = 4_096;
@@ -27,19 +28,7 @@ function isValidCallbackUri(value: string) {
   }
 }
 
-function signPayload(encodedPayload: string, secret: string) {
-  // CodeQL review: this is HMAC authentication with the app signing key, not password storage.
-  return createHmac("sha256", secret).update(encodedPayload).digest("base64url");
-}
-
-function signaturesMatch(received: string, expected: string) {
-  const receivedBytes = Buffer.from(received);
-  const expectedBytes = Buffer.from(expected);
-  return receivedBytes.length === expectedBytes.length
-    && timingSafeEqual(receivedBytes, expectedBytes);
-}
-
-export function createOAuthLoginState(
+export async function createOAuthLoginState(
   redirectUri: string,
   secret: string,
   now = Date.now(),
@@ -52,36 +41,37 @@ export function createOAuthLoginState(
     throw new Error("OAuth state signing is not configured.");
   }
   const payload: OAuthLoginStatePayload = { redirectUri, nonce, issuedAt: now };
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const state = await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setIssuedAt(Math.floor(now / 1_000))
+    .setExpirationTime(Math.floor((now + OAUTH_LOGIN_STATE_TTL_MS) / 1_000))
+    .sign(new TextEncoder().encode(secret));
   return {
     nonce,
-    state: `${encodedPayload}.${signPayload(encodedPayload, secret)}`,
+    state,
   };
 }
 
-export function verifyOAuthLoginState(
+export async function verifyOAuthLoginState(
   state: string,
   browserNonce: string,
   secret: string,
   now = Date.now()
-): { redirectUri: string } | null {
+): Promise<{ redirectUri: string } | null> {
   if (!state || state.length > MAX_OAUTH_STATE_LENGTH || !browserNonce || !secret) return null;
-  const parts = state.split(".");
-  if (parts.length !== 2) return null;
-  const [encodedPayload, signature] = parts;
-  if (!encodedPayload || !signature || !signaturesMatch(signature, signPayload(encodedPayload, secret))) {
-    return null;
-  }
   try {
-    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Partial<OAuthLoginStatePayload>;
+    const { payload } = await jwtVerify(state, new TextEncoder().encode(secret), {
+      algorithms: ["HS256"],
+      currentDate: new Date(now),
+    });
     if (
       typeof payload.redirectUri !== "string"
       || typeof payload.nonce !== "string"
       || typeof payload.issuedAt !== "number"
       || !Number.isSafeInteger(payload.issuedAt)
       || payload.nonce !== browserNonce
-      || payload.issuedAt > now
-      || now - payload.issuedAt > OAUTH_LOGIN_STATE_TTL_MS
+      || (payload.issuedAt as number) > now
+      || now - (payload.issuedAt as number) > OAUTH_LOGIN_STATE_TTL_MS
       || !isValidCallbackUri(payload.redirectUri)
     ) {
       return null;

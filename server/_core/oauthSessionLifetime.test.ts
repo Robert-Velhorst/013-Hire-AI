@@ -46,7 +46,7 @@ describe("OAuth session lifetime", () => {
     } as unknown as Express;
     registerOAuthRoutes(app);
 
-    const oauthState = createOAuthLoginState(
+    const oauthState = await createOAuthLoginState(
       "https://hire.example.test/api/oauth/callback",
       ENV.cookieSecret
     );

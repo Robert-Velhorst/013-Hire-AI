@@ -82,12 +82,12 @@ export function registerHaiConnectorRoutes(
     next();
   };
 
-  // CodeQL review: the first middleware is the bounded custom connector limiter.
+  // The limiter's custom store caps the number of client keys held in memory.
   app.get("/api/hai/status", connectorRateLimit, requireHaiAuth, (_req, res) => {
     res.json(service.status());
   });
 
-  // CodeQL review: the first middleware is the bounded custom connector limiter.
+  // The limiter's custom store caps the number of client keys held in memory.
   app.post("/api/hai/a2a", connectorRateLimit, requireHaiAuth, boundedJsonParser, async (req, res) => {
     if (req.header("A2A-Version")?.trim() !== HAI_CONNECTOR_PROTOCOL_VERSION) {
       rpcError(res, req.body?.id ?? null, -32009, "A2A-Version 1.0 is required by this connector.");

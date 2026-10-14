@@ -21,8 +21,8 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
-  // CodeQL review: the first middleware is the bounded custom OAuth login limiter.
-  app.get("/api/oauth/login", oauthLoginRateLimit, (req: Request, res: Response) => {
+  // The limiter's custom store caps the number of client keys held in memory.
+  app.get("/api/oauth/login", oauthLoginRateLimit, async (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
         if (!ENV.isProduction) {
@@ -38,7 +38,7 @@ export function registerOAuthRoutes(app: Express) {
         requestProtocol: req.protocol,
         requestHost: req.get("host"),
       });
-      const issued = createOAuthLoginState(redirectUri, ENV.cookieSecret);
+      const issued = await createOAuthLoginState(redirectUri, ENV.cookieSecret);
       const portalUrl = requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
       portalUrl.pathname = "/app-auth";
       portalUrl.searchParams.set("appId", ENV.appId);
@@ -57,7 +57,7 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
-  // CodeQL review: the first middleware is the bounded custom OAuth callback limiter.
+  // The limiter's custom store caps the number of client keys held in memory.
   app.get("/api/oauth/callback", oauthCallbackRateLimit, async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -72,7 +72,7 @@ export function registerOAuthRoutes(app: Express) {
       ...getSessionCookieOptions(req),
       path: "/api/oauth/callback",
     });
-    const verifiedState = verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
+    const verifiedState = await verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
     if (!verifiedState) {
       res.status(400).json({ error: "OAuth state is invalid or expired" });
       return;

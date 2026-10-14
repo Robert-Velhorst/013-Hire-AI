@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
 import {
   createRateLimitMiddleware,
+  createSensitiveRouteRateLimiter,
   SENSITIVE_ROUTE_RATE_LIMIT_POLICIES,
 } from "./apiRateLimit";
 import { applyTrustedProxyPolicy } from "./proxyPolicy";
@@ -49,8 +50,16 @@ describe("bounded API rate limiting", () => {
     expect(SENSITIVE_ROUTE_RATE_LIMIT_POLICIES).toEqual({
       oauthLogin: { windowMs: 900_000, maxRequests: 12, maxClients: 10_000 },
       oauthCallback: { windowMs: 900_000, maxRequests: 30, maxClients: 10_000 },
-      connectorOAuthCallback: { windowMs: 900_000, maxRequests: 30, maxClients: 10_000 },
-      documentUpload: { windowMs: 900_000, maxRequests: 12, maxClients: 10_000 },
+      connectorOAuthCallback: {
+        windowMs: 900_000,
+        maxRequests: 30,
+        maxClients: 10_000,
+      },
+      documentUpload: {
+        windowMs: 900_000,
+        maxRequests: 12,
+        maxClients: 10_000,
+      },
       resumeParse: { windowMs: 900_000, maxRequests: 10, maxClients: 10_000 },
       haiConnector: { windowMs: 60_000, maxRequests: 120, maxClients: 10_000 },
     });
@@ -147,6 +156,39 @@ describe("bounded API rate limiting", () => {
         (await fetch(`${baseUrl}/api/value`, { headers: clientB })).status
       ).toBe(429);
     });
+  });
+
+  it("applies the recognized sensitive-route limiter and resets its bounded window", async () => {
+    let currentTime = Date.now();
+    const limiter = createSensitiveRouteRateLimiter(
+      "oauthLogin",
+      () => currentTime
+    );
+    const app = express();
+    app.get("/api/oauth/login", limiter, (_req, res) => res.sendStatus(204));
+    const server = createServer(app);
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Test server did not bind to TCP.");
+    const url = `http://127.0.0.1:${address.port}/api/oauth/login`;
+
+    try {
+      for (let index = 0; index < 12; index += 1) {
+        expect((await fetch(url)).status).toBe(204);
+      }
+      const blocked = await fetch(url);
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("ratelimit-limit")).toBe("12");
+      expect(blocked.headers.get("retry-after")).toBe("900");
+
+      currentTime += 15 * 60_000;
+      expect((await fetch(url)).status).toBe(204);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close(error => (error ? reject(error) : resolve()))
+      );
+    }
   });
 
   it("prunes only the expired map prefix and preserves later client windows", async () => {

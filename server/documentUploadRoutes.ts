@@ -222,7 +222,7 @@ async function handleDocumentUpload(req: Request, res: Response) {
 }
 
 export function registerDocumentUploadRoutes(app: Express) {
-  // CodeQL review: the first middleware is the bounded custom upload limiter.
+  // The limiter's custom store caps the number of client keys held in memory.
   app.post(DOCUMENT_UPLOAD_PATH, createSensitiveRouteRateLimiter("documentUpload"), (req, res) => {
     void handleDocumentUpload(req, res).catch(() => {
       if (!res.destroyed && !res.headersSent) {
