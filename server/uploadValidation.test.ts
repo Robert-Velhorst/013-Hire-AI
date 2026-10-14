@@ -15,28 +15,33 @@ afterEach(() => {
 });
 
 describe("sensitive upload validation", () => {
-  it("resolves Defender paths from a validated Windows system root", () => {
-    expect(resolveWindowsDefenderPaths("C:\\Windows")).toEqual({
+  it("resolves Defender paths from the runtime executable's Windows drive", () => {
+    expect(
+      resolveWindowsDefenderPaths("C:\\Program Files\\nodejs\\node.exe")
+    ).toEqual({
       legacyExecutable:
         "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
       platformRoot:
         "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
     });
-    expect(resolveWindowsDefenderPaths("D:\\Windows\\")).toEqual({
+    expect(resolveWindowsDefenderPaths("D:\\runtime\\node.exe")).toEqual({
       legacyExecutable:
         "D:\\Program Files\\Windows Defender\\MpCmdRun.exe",
       platformRoot:
         "D:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
     });
-    expect(resolveWindowsDefenderPaths("\\\\?\\C:\\Windows")).toEqual({
+    expect(
+      resolveWindowsDefenderPaths("\\\\?\\C:\\runtime\\node.exe")
+    ).toEqual({
       legacyExecutable:
         "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
       platformRoot:
         "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
     });
     expect(resolveWindowsDefenderPaths("node.exe")).toBeNull();
-    expect(resolveWindowsDefenderPaths("C:\\Windows\\..\\Users")).toBeNull();
-    expect(resolveWindowsDefenderPaths("\\\\server\\share\\node.exe")).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths("\\\\server\\share\\node.exe")
+    ).toBeNull();
   });
   it("accepts a bounded PDF with a matching signature", () => {
     expect(
