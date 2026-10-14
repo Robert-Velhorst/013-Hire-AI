@@ -1,8 +1,5 @@
 import type { Express, Request, Response } from "express";
-import {
-  createRateLimitMiddleware,
-  type RateLimitMiddleware,
-} from "./_core/apiRateLimit";
+import { rateLimit } from "express-rate-limit";
 import {
   encryptConnectorToken,
   exchangeConnectorAuthorizationCode,
@@ -25,10 +22,11 @@ function getQueryParam(req: Request, key: string): string | undefined {
 type ConnectorCallbackProvider =
   "gmail" | "google_drive" | "dropbox" | "outlook" | "linkedin" | "github";
 
-const CONNECTOR_OAUTH_CALLBACK_RATE_LIMIT = Object.freeze({
+const connectorOAuthCallbackRateLimit = rateLimit({
   windowMs: 60_000,
-  maxRequests: 30,
-  maxClients: 10_000,
+  limit: 30,
+  standardHeaders: "draft-6",
+  legacyHeaders: false,
 });
 
 function defaultConnectorConsentScopes(provider: ConnectorCallbackProvider) {
@@ -113,15 +111,10 @@ function completeRedirect(
   return `/profile?connector=${encodeURIComponent(provider)}&connectorStatus=${status}`;
 }
 
-export function registerConnectorOAuthRoutes(
-  app: Express,
-  callbackRateLimit: RateLimitMiddleware = createRateLimitMiddleware(
-    CONNECTOR_OAUTH_CALLBACK_RATE_LIMIT
-  )
-) {
+export function registerConnectorOAuthRoutes(app: Express) {
   app.get(
     "/api/connectors/oauth/callback",
-    callbackRateLimit,
+    connectorOAuthCallbackRateLimit,
     async (req: Request, res: Response) => {
       const state = getQueryParam(req, "state");
       const code = getQueryParam(req, "code");
