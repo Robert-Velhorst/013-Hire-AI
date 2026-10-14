@@ -4,6 +4,12 @@ import path from "node:path";
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
 
+export function resolveProductionClientBundlePath(
+  runtimeDirectory = import.meta.dirname
+) {
+  return path.resolve(runtimeDirectory, "../public");
+}
+
 export function productionAssetCacheControl(filePath: string) {
   const normalizedPath = filePath.replace(/\\/g, "/");
   return normalizedPath.includes("/assets/")
@@ -50,7 +56,7 @@ export function registerSpaNavigationFallback(
 
 export function serveStatic(
   app: Express,
-  distPath = path.resolve(import.meta.dirname, "public")
+  distPath = resolveProductionClientBundlePath()
 ) {
   if (!fs.existsSync(distPath)) {
     throw new Error(`Production client bundle is missing at ${distPath}.`);

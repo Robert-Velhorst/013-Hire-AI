@@ -1421,6 +1421,7 @@ export const appRouter = router({
           getUserSkills,
           getWorkExperiences,
           getPendingUserApplicationForJob,
+          acquireApplicationPreparationLock,
         } = await import("./db");
         const canonicalJobId = await getCanonicalJobId(input.jobId);
         if (canonicalJobId === null) {
@@ -1457,102 +1458,107 @@ export const appRouter = router({
         ]);
         const profileForMaterial = resolveProfileCandidateEvidence(profile, skills, workExperiences);
         const { buildReviewApplicationMaterial } = await import("./applicationMaterialDraft");
-        const existingApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
-        const existingArtifacts = existingApplication
-          ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id).catch(() => null)
-          : null;
-        const material = existingArtifacts?.material
-          ? null
-          : buildReviewApplicationMaterial(profileForMaterial, job, input.coverLetter);
-        const application = await createApplication({
-          userId: ctx.user.id,
-          jobId: input.jobId,
-          coverLetter: material?.coverLetter,
-          customResume: input.customResume,
-          notes: input.notes || "Application prepared and queued for review.",
-          status: "pending",
-        });
-        const applicationId = Number(application.insertId);
-        const artifacts = existingArtifacts ?? (application.existing === true
-          ? await getApplicationLedgerArtifacts(applicationId, ctx.user.id).catch(() => null)
-          : null);
-        const hasPreparedApplication = artifacts?.attempts.some((attempt) =>
-          attempt.attemptType === "prepare" &&
-          ["prepared", "review_required"].includes(attempt.status || "prepared")
-        ) === true;
-        if (application.existing === true && hasPreparedApplication) {
-          return { success: true, applicationRecordId: applicationId, existing: true };
-        }
-        if (material) {
-          await createApplicationMaterial({
-            applicationId,
-            resumeId: activeResume.id,
-            coverLetter: material.coverLetter,
+        const releasePreparationLock = await acquireApplicationPreparationLock(ctx.user.id, input.jobId);
+        try {
+          const existingApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
+          const existingArtifacts = existingApplication
+            ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id)
+            : null;
+          const material = existingArtifacts?.material
+            ? null
+            : buildReviewApplicationMaterial(profileForMaterial, job, input.coverLetter);
+          const application = await createApplication({
+            userId: ctx.user.id,
+            jobId: input.jobId,
+            coverLetter: material?.coverLetter,
             customResume: input.customResume,
-            customAnswers: material.customAnswers,
-            claimsMade: material.claimsMade,
-            sourceProfileSnapshot: profileSnapshotForApplication(ctx.user, profileForMaterial),
+            notes: input.notes || "Application prepared and queued for review.",
+            status: "pending",
           });
-        }
-        await createApplicationAttempt({
-          applicationId,
-          userId: ctx.user.id,
-          jobId: input.jobId,
-          platformId: job.platformId,
-          attemptType: "prepare",
-          status: "review_required",
-          finishedAt: new Date(),
-          confirmationText: "Application materials were prepared and queued for user review.",
-          retryCount: 0,
-        });
-        await createAuditEvent({
-          userId: ctx.user.id,
-          entityType: "application",
-          entityId: applicationId,
-          action: "application_prepared",
-          actor: "user",
-          source: "applications.create",
-          afterState: JSON.stringify({
+          const applicationId = Number(application.insertId);
+          const artifacts = existingArtifacts ?? (application.existing === true
+            ? await getApplicationLedgerArtifacts(applicationId, ctx.user.id)
+            : null);
+          const hasPreparedApplication = artifacts?.attempts.some((attempt) =>
+            attempt.attemptType === "prepare" &&
+            ["prepared", "review_required"].includes(attempt.status || "prepared")
+          ) === true;
+          if (application.existing === true && hasPreparedApplication) {
+            return { success: true, applicationRecordId: applicationId, existing: true };
+          }
+          if (material) {
+            await createApplicationMaterial({
+              applicationId,
+              resumeId: activeResume.id,
+              coverLetter: material.coverLetter,
+              customResume: input.customResume,
+              customAnswers: material.customAnswers,
+              claimsMade: material.claimsMade,
+              sourceProfileSnapshot: profileSnapshotForApplication(ctx.user, profileForMaterial),
+            });
+          }
+          await createApplicationAttempt({
+            applicationId,
+            userId: ctx.user.id,
             jobId: input.jobId,
-            status: "pending",
-            reviewRequired: true,
-            resume: { id: activeResume.id, version: activeResume.version },
-            materialSource: material?.materialSource ?? "existing_application_material",
-            userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
-          }),
-          riskLevel: "medium",
-        });
-        await createAdminReviewItem({
-          userId: ctx.user.id,
-          entityType: "application",
-          entityId: applicationId,
-          category: "application_review",
-          priority: "medium",
-          title: "Application prepared for review",
-          description: input.notes || "Application materials were prepared and require review before external submission.",
-        });
-        await createApplicationApproval({
-          userId: ctx.user.id,
-          applicationId,
-          entityType: "application",
-          entityId: applicationId,
-          approvalType: "application_submission",
-          status: "pending",
-          riskLevel: "high",
-          requestedBy: "system",
-          title: "Approve external application submission",
-          description: input.notes || "Prepared application materials require explicit approval before external submission is confirmed.",
-          payload: JSON.stringify({
-            jobId: input.jobId,
+            platformId: job.platformId,
+            attemptType: "prepare",
+            status: "review_required",
+            finishedAt: new Date(),
+            confirmationText: "Application materials were prepared and queued for user review.",
+            retryCount: 0,
+          });
+          await createAuditEvent({
+            userId: ctx.user.id,
+            entityType: "application",
+            entityId: applicationId,
+            action: "application_prepared",
+            actor: "user",
             source: "applications.create",
+            afterState: JSON.stringify({
+              jobId: input.jobId,
+              status: "pending",
+              reviewRequired: true,
+              resume: { id: activeResume.id, version: activeResume.version },
+              materialSource: material?.materialSource ?? "existing_application_material",
+              userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
+            }),
+            riskLevel: "medium",
+          });
+          await createAdminReviewItem({
+            userId: ctx.user.id,
+            entityType: "application",
+            entityId: applicationId,
+            category: "application_review",
+            priority: "medium",
+            title: "Application prepared for review",
+            description: input.notes || "Application materials were prepared and require review before external submission.",
+          });
+          await createApplicationApproval({
+            userId: ctx.user.id,
+            applicationId,
+            entityType: "application",
+            entityId: applicationId,
+            approvalType: "application_submission",
             status: "pending",
-            resumeId: activeResume.id,
-            resumeVersion: activeResume.version,
-            materialSource: material?.materialSource ?? "existing_application_material",
-            userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
-          }),
-        });
-        return { success: true, applicationRecordId: applicationId };
+            riskLevel: "high",
+            requestedBy: "system",
+            title: "Approve external application submission",
+            description: input.notes || "Prepared application materials require explicit approval before external submission is confirmed.",
+            payload: JSON.stringify({
+              jobId: input.jobId,
+              source: "applications.create",
+              status: "pending",
+              resumeId: activeResume.id,
+              resumeVersion: activeResume.version,
+              materialSource: material?.materialSource ?? "existing_application_material",
+              userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
+            }),
+          });
+          return { success: true, applicationRecordId: applicationId };
+        } finally {
+          await releasePreparationLock();
+        }
       }),
     decide: protectedProcedure
       .input(z.object({
@@ -3796,6 +3802,7 @@ export const appRouter = router({
           createAuditEvent,
           createAdminReviewItem,
           createApplicationApproval,
+          acquireApplicationPreparationLock,
           getCanonicalJobId,
           getApplicationLedgerArtifacts,
           getPendingUserApplicationForJob,
@@ -3855,7 +3862,7 @@ export const appRouter = router({
         };
         const existingApplication = await getPendingUserApplicationForJob(ctx.user.id, input.jobId);
         const existingArtifacts = existingApplication
-          ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id).catch(() => null)
+          ? await getApplicationLedgerArtifacts(existingApplication.id, ctx.user.id)
           : null;
         const material = existingArtifacts?.material
           ? null
@@ -3890,96 +3897,111 @@ export const appRouter = router({
           isAutoApplied: ledgerState.isAutoApplied,
         });
         const applicationRecordId = Number(applicationRecord.insertId);
-        const artifacts = existingArtifacts ?? (applicationRecord.existing === true
-          ? await getApplicationLedgerArtifacts(applicationRecordId, ctx.user.id).catch(() => null)
-          : null);
-        if (material && !artifacts?.material) {
-          await createApplicationMaterial({
+        const releasePreparationLock = await acquireApplicationPreparationLock(ctx.user.id, input.jobId);
+        try {
+          const artifacts = await getApplicationLedgerArtifacts(applicationRecordId, ctx.user.id);
+          const hasPreparedAttempt = artifacts?.attempts.some((attempt) =>
+            attempt.attemptType === "prepare" &&
+            ["prepared", "review_required"].includes(attempt.status || "prepared")
+          ) === true;
+          if (applicationRecord.existing === true && hasPreparedAttempt) {
+            return {
+              ...result,
+              applicationRecordId,
+              applicationUrl: job.applicationUrl,
+              existing: true,
+            };
+          }
+          if (material && !artifacts?.material) {
+            await createApplicationMaterial({
+              applicationId: applicationRecordId,
+              resumeId: activeResume.id,
+              coverLetter: material.coverLetter,
+              customAnswers: material.customAnswers,
+              claimsMade: material.claimsMade,
+              sourceProfileSnapshot: profileSnapshotForApplication(ctx.user, profileForApplication),
+            });
+          }
+          await createApplicationAttempt({
             applicationId: applicationRecordId,
-            resumeId: activeResume.id,
-            coverLetter: material.coverLetter,
-            customAnswers: material.customAnswers,
-            claimsMade: material.claimsMade,
-            sourceProfileSnapshot: profileSnapshotForApplication(ctx.user, profileForApplication),
+            userId: ctx.user.id,
+            jobId: input.jobId,
+            platformId: job.platformId,
+            attemptType: "prepare",
+            status: ledgerState.attemptStatus,
+            startedAt: new Date(),
+            finishedAt: new Date(),
+            errorMessage: result.error,
+            confirmationText: result.message,
+            retryCount: 0,
           });
-        }
-        await createApplicationAttempt({
-          applicationId: applicationRecordId,
-          userId: ctx.user.id,
-          jobId: input.jobId,
-          platformId: job.platformId,
-          attemptType: "prepare",
-          status: ledgerState.attemptStatus,
-          startedAt: new Date(),
-          finishedAt: new Date(),
-          errorMessage: result.error,
-          confirmationText: result.message,
-          retryCount: 0,
-        });
-        await createAuditEvent({
-          userId: ctx.user.id,
-          entityType: "application",
-          entityId: applicationRecordId,
-          action: ledgerState.auditAction,
-          actor: "system",
-          source: "automation.applyToJob",
-          afterState: JSON.stringify({
-            jobId: input.jobId,
-            atsType: result.atsType,
-            prepared: result.prepared,
-            submissionAttempted: result.submissionAttempted,
-            reviewRequired: result.reviewRequired,
-            externalSubmissionPerformed: ledgerState.externalSubmissionPerformed,
-            status: ledgerState.status,
-            resume: {
-              id: activeResume.id,
-              version: activeResume.version,
-              fileName: activeResume.fileName,
-              fileKey: activeResume.fileKey,
-            },
-            materialSource: material?.materialSource ?? "existing_application_material",
-            userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
-          }),
-          riskLevel: result.reviewRequired ? "medium" : "low",
-        });
-        await createAdminReviewItem({
-          userId: ctx.user.id,
-          entityType: "application",
-          entityId: applicationRecordId,
-          category: "application_review",
-          priority: result.reviewRequired ? "high" : "medium",
-          title: "Automation prepared application for review",
-          description: result.message,
-        });
-        await createApplicationApproval({
-          userId: ctx.user.id,
-          applicationId: applicationRecordId,
-          entityType: "application",
-          entityId: applicationRecordId,
-          approvalType: "application_submission",
-          status: "pending",
-          riskLevel: result.reviewRequired ? "high" : "medium",
-          requestedBy: "system",
-          title: "Approve automation-prepared submission",
-          description: result.message,
-          payload: JSON.stringify({
-            jobId: input.jobId,
-            atsType: result.atsType,
-            prepared: result.prepared,
-            submissionAttempted: result.submissionAttempted,
-            resumeId: activeResume.id,
-            resumeVersion: activeResume.version,
-            materialSource: material?.materialSource ?? "existing_application_material",
-            userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
+          await createAuditEvent({
+            userId: ctx.user.id,
+            entityType: "application",
+            entityId: applicationRecordId,
+            action: ledgerState.auditAction,
+            actor: "system",
             source: "automation.applyToJob",
-          }),
-        });
+            afterState: JSON.stringify({
+              jobId: input.jobId,
+              atsType: result.atsType,
+              prepared: result.prepared,
+              submissionAttempted: result.submissionAttempted,
+              reviewRequired: result.reviewRequired,
+              externalSubmissionPerformed: ledgerState.externalSubmissionPerformed,
+              status: ledgerState.status,
+              resume: {
+                id: activeResume.id,
+                version: activeResume.version,
+                fileName: activeResume.fileName,
+                fileKey: activeResume.fileKey,
+              },
+              materialSource: material?.materialSource ?? "existing_application_material",
+              userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
+            }),
+            riskLevel: result.reviewRequired ? "medium" : "low",
+          });
+          await createAdminReviewItem({
+            userId: ctx.user.id,
+            entityType: "application",
+            entityId: applicationRecordId,
+            category: "application_review",
+            priority: result.reviewRequired ? "high" : "medium",
+            title: "Automation prepared application for review",
+            description: result.message,
+          });
+          await createApplicationApproval({
+            userId: ctx.user.id,
+            applicationId: applicationRecordId,
+            entityType: "application",
+            entityId: applicationRecordId,
+            approvalType: "application_submission",
+            status: "pending",
+            riskLevel: result.reviewRequired ? "high" : "medium",
+            requestedBy: "system",
+            title: "Approve automation-prepared submission",
+            description: result.message,
+            payload: JSON.stringify({
+              jobId: input.jobId,
+              atsType: result.atsType,
+              prepared: result.prepared,
+              submissionAttempted: result.submissionAttempted,
+              resumeId: activeResume.id,
+              resumeVersion: activeResume.version,
+              materialSource: material?.materialSource ?? "existing_application_material",
+              userProvidedCoverLetter: material?.userProvidedCoverLetter ?? null,
+              source: "automation.applyToJob",
+            }),
+          });
 
-        return {
-          ...result,
-          applicationRecordId,
-          applicationUrl: job.applicationUrl,
-        };
+          return {
+            ...result,
+            applicationRecordId,
+            applicationUrl: job.applicationUrl,
+          };
+        } finally {
+          await releasePreparationLock();
+        }
       }),
   }),
 

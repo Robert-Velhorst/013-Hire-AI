@@ -14,6 +14,18 @@ Copy the deployment files to `/opt/hire-ai`, owned by root with mode `0700`. Kee
 
 The initial memory limits are 768 MiB for MySQL and 512 MiB for the application. They leave some host capacity but are not evidence that scanners, additional tools or many simultaneous users will fit on the 2 GB server. Do not build large releases alongside a busy live workload.
 
+## Private HAI Peer
+
+When HAI runs in a Docker container on this host, connect that container only to the dedicated internal `hire-ai_peer` network. Do not attach it to `hire-ai_backend`, which also contains MySQL. Hire.AI is reachable on that peer network as `http://app:3000`; set `HAI_CONNECTOR_URL=http://app:3000/api/hai/a2a` in the private production environment. Store the same independently generated `HAI_CONNECTOR_TOKEN` in both applications and use the intended active Hire.AI account ID. The connector remains read-only and exposes aggregate status only.
+
+After bringing up Hire.AI, connect the HAI container to the existing network using its exact container name:
+
+```bash
+docker network connect hire-ai_peer <HAI_CONTAINER_NAME>
+```
+
+Verify that HAI can resolve `app` and retrieve `http://app:3000/.well-known/agent-card.json` from inside its container. Then run the authenticated A2A contract check using the secret mounted through HAI's private environment; do not pass the token as a command-line argument or print it. The peer network is internal and does not publish Hire.AI to the internet. Disconnect the peer with `docker network disconnect hire-ai_peer <HAI_CONTAINER_NAME>` when disabling the integration.
+
 ## Database Preparation
 
 Run as root on the approved host:
@@ -32,14 +44,14 @@ set +a
 docker run --rm --network hire-ai_backend --memory=384m \
   --env-file .env.database "$HIRE_AI_IMAGE" node scripts/database-migrate.mjs
 docker run --rm --network hire-ai_backend --memory=384m \
-  --env-file .env.database "$HIRE_AI_IMAGE" node dist/database-schema-audit.js
+  --env-file .env.database "$HIRE_AI_IMAGE" node dist/runtime/schema-audit.js
 ```
 
 Run migrations explicitly against the intended database, never automatically on application startup. Do not run `docker compose down -v`: the named volume contains the persistent database. Do not regenerate passwords to repair an initialized database; MySQL initialization variables do not rotate existing database accounts.
 
 ## Application Acceptance
 
-Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, TLS, callback origins and external provider acceptance are separate requirements.
+Create `/opt/hire-ai/.env.production` privately with mode `0600` when real configuration is available. It must supply the actual identity application/server/portal/owner settings, `PUBLIC_APP_ORIGIN` as the exact public HTTPS origin, Forge AI/storage access, Stripe credentials and Linux-compatible document scanner configuration required by the production doctor. Configure `FILE_MALWARE_SCAN_ALLOWED_ORIGINS` to the scanner's exact origin; remote scanners must use HTTPS. OAuth callbacks use the configured Hire.AI origin and never reflect the inbound Host header in production. Set `TRUSTED_PROXY_IPS` in `release.env` to the exact IP address observed by the app container for the host Caddy proxy. Determine it from the running app's Docker network inspection; do not guess it, trust a whole Docker subnet, or use an unrestricted hop count. Keep `loopback` only if the actual proxy connection arrives from loopback. The Compose file refuses to start without this setting. Follow the repository's `.env.example` and operator runbook; do not invent credentials or set development mode to get past checks. Domain, DNS, TLS, callback registration and external provider acceptance are separate requirements.
 
 The initializer already supplies `.env.database` and `.env.session`; the application loads these after the provider file. A missing `.env.production` deliberately prevents the combined deployment from starting. The production doctor also rejects incomplete settings.
 
@@ -52,7 +64,7 @@ docker compose --env-file release.env -f compose.yaml -f compose.app.yaml up -d 
 curl --fail http://127.0.0.1:3000/readyz
 ```
 
-Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. The current server trusts loopback proxies only; a Docker bridge proxy needs an explicitly reviewed configuration. Do not use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
+Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. The server trusts only configured exact proxy IPs (loopback by default outside production). Verify that Caddy's observed peer IP matches `TRUSTED_PROXY_IPS` and that an unrelated Docker peer is not trusted. Do not use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
 
 ## Recovery And Remaining Work
 

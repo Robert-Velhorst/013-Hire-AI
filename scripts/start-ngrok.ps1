@@ -12,6 +12,42 @@ $public = [Uri]$PublicUrl
 if ($public.Scheme -ne 'https' -or -not $public.Host -or $public.UserInfo -or $public.Query -or $public.Fragment -or $public.AbsolutePath -ne '/') {
     throw 'PublicUrl must be an origin-only HTTPS URL, for example https://hire-ai.example.ngrok.app/'
 }
+$publicOrigin = $public.GetLeftPart([UriPartial]::Authority)
+$node = Get-Command node.exe -ErrorAction Stop
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Push-Location $repoRoot
+try {
+    $runtimeConfigJson = & $node.Source --input-type=module -e "import 'dotenv/config'; process.stdout.write(JSON.stringify({ publicAppOrigin: process.env.PUBLIC_APP_ORIGIN || '', connectorRedirectUri: process.env.CONNECTOR_OAUTH_REDIRECT_URI || '' }));"
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Hire.AI runtime configuration could not be read.'
+    }
+} finally {
+    Pop-Location
+}
+try {
+    $runtimeConfig = ($runtimeConfigJson -join [Environment]::NewLine) | ConvertFrom-Json
+} catch {
+    throw 'Hire.AI runtime configuration could not be read.'
+}
+if ([string]::IsNullOrWhiteSpace($runtimeConfig.publicAppOrigin)) {
+    throw 'PUBLIC_APP_ORIGIN must be set to the same canonical HTTPS origin as PublicUrl before exposing the runtime.'
+}
+try {
+    $configuredAppOrigin = [Uri]$runtimeConfig.publicAppOrigin
+} catch {
+    throw 'PUBLIC_APP_ORIGIN must be set to the same canonical HTTPS origin as PublicUrl before exposing the runtime.'
+}
+if (
+    $configuredAppOrigin.Scheme -ne 'https' -or
+    -not $configuredAppOrigin.Host -or
+    $configuredAppOrigin.UserInfo -or
+    $configuredAppOrigin.Query -or
+    $configuredAppOrigin.Fragment -or
+    $configuredAppOrigin.AbsolutePath -ne '/' -or
+    $configuredAppOrigin.GetLeftPart([UriPartial]::Authority) -ine $publicOrigin
+) {
+    throw "PUBLIC_APP_ORIGIN must be the same canonical HTTPS origin as PublicUrl ($publicOrigin)."
+}
 
 $localReadiness = "http://127.0.0.1:$Port/readyz"
 try {
@@ -25,8 +61,8 @@ if ($local.instanceId -isnot [string] -or $localInstanceId -notmatch '\A[A-Za-z0
     throw 'The local Hire.AI runtime did not provide a valid process identity.'
 }
 
-$expectedConnectorCallback = "$($public.GetLeftPart([UriPartial]::Authority))/api/connectors/oauth/callback"
-if ($env:CONNECTOR_OAUTH_REDIRECT_URI -and $env:CONNECTOR_OAUTH_REDIRECT_URI.TrimEnd('/') -ne $expectedConnectorCallback) {
+$expectedConnectorCallback = "$publicOrigin/api/connectors/oauth/callback"
+if ($runtimeConfig.connectorRedirectUri -and $runtimeConfig.connectorRedirectUri.TrimEnd('/') -ne $expectedConnectorCallback) {
     throw "CONNECTOR_OAUTH_REDIRECT_URI must equal $expectedConnectorCallback before exposing connector OAuth through this tunnel."
 }
 

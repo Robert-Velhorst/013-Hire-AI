@@ -55,7 +55,7 @@ async function startServer() {
   startupStage = "application assembly";
 
   const app = express();
-  applyTrustedProxyPolicy(app);
+  applyTrustedProxyPolicy(app, ENV.trustedProxyIps);
   const server = createServer(app);
   applyHttpRuntimePolicy(server);
   const databaseReadiness = createDatabaseReadinessProbe({ probe: probeDatabaseConnection });

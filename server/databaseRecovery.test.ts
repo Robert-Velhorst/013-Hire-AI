@@ -63,21 +63,23 @@ describe("database recovery tooling", () => {
   });
 
   it("supports MySQL client execution inside an explicitly named Docker container", () => {
-    expect(recoveryCommand("mysqldump", ["--host", "127.0.0.1"], "hire-ai-db", "mysqldump"))
+    expect(recoveryCommand("dump", ["--host", "127.0.0.1"], "hire-ai-db"))
       .toEqual({
         executable: "docker",
         args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "mysqldump", "--host", "127.0.0.1"],
       });
-    expect(recoveryCommand("C:\\Program Files\\MySQL\\bin\\mysqldump.exe", [], undefined, "mysqldump"))
-      .toEqual({ executable: "C:\\Program Files\\MySQL\\bin\\mysqldump.exe", args: [] });
-    expect(recoveryCommand("/usr/local/mysql/bin/mysql", [], "hire-ai-db", "mysql"))
-      .toEqual({ executable: "docker", args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "/usr/local/mysql/bin/mysql"] });
-    expect(() => recoveryCommand("mysql", [], "unsafe container name", "mysql"))
+    expect(recoveryCommand("dump", [], undefined)).toEqual({
+      executable: "mysqldump",
+      args: [],
+    });
+    expect(recoveryCommand("restore", [], "hire-ai-db")).toEqual({
+      executable: "docker",
+      args: ["exec", "-i", "-e", "MYSQL_PWD", "hire-ai-db", "mysql"],
+    });
+    expect(() => recoveryCommand("restore", [], "unsafe container name"))
       .toThrow("DATABASE_RECOVERY_DOCKER_CONTAINER is invalid");
-    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined, "mysqldump"))
-      .toThrow("Database recovery executable is invalid");
-    expect(() => recoveryCommand("/tmp/mysql", [], undefined, "mysqldump"))
-      .toThrow("Database recovery executable is invalid");
+    expect(() => recoveryCommand("powershell", ["-Command", "Get-Process"], undefined))
+      .toThrow("Database recovery operation is invalid");
   });
 
   it.each([
@@ -118,17 +120,15 @@ describe("database recovery tooling", () => {
     expect(await readFile(verified.dumpPath, "utf8")).toContain("CREATE TABLE example");
   });
 
-  it("uses an explicitly configured absolute mysqldump path", async () => {
+  it("uses the fixed mysqldump client", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "hire-ai-backup-client-"));
-    const executable = "C:\\Program Files\\MySQL\\bin\\mysqldump.exe";
     const spawnImpl = vi.fn(() => successfulChild());
     await createDatabaseBackup({
       databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
       outputRoot: root,
-      executable,
       spawnImpl,
     });
-    expect(spawnImpl.mock.calls[0]?.[0]).toBe(executable);
+    expect(spawnImpl.mock.calls[0]?.[0]).toBe("mysqldump");
   });
 
   it("rejects a backup after its dump is modified", async () => {
@@ -224,14 +224,13 @@ describe("database recovery tooling", () => {
     expect(restoredSql).toContain("CREATE TABLE example");
   });
 
-  it("uses an explicitly configured absolute mysql restore path", async () => {
+  it("uses the fixed mysql client for restores", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "hire-ai-restore-client-"));
     const result = await createDatabaseBackup({
       databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
       outputRoot: root,
       spawnImpl: vi.fn(() => successfulChild()),
     });
-    const executable = "/opt/mysql/bin/mysql";
     const restoreSpawn = vi.fn(() => {
       const child = new EventEmitter() as FakeChild;
       child.stdout = new PassThrough();
@@ -245,10 +244,9 @@ describe("database recovery tooling", () => {
       bundlePath: result.directory,
       databaseUrl: "mysql://operator:secret@127.0.0.1/hire_ai",
       confirmation: expectedRestoreConfirmation("hire_ai"),
-      executable,
       spawnImpl: restoreSpawn,
     });
-    expect(restoreSpawn.mock.calls[0]?.[0]).toBe(executable);
+    expect(restoreSpawn.mock.calls[0]?.[0]).toBe("mysql");
   });
 
   it("wires recovery commands and excludes backup artifacts from Git", async () => {
@@ -260,4 +258,3 @@ describe("database recovery tooling", () => {
     expect(gitignore).toMatch(/^backups\/$/m);
   });
 });
-

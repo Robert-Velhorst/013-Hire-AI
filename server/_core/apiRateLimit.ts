@@ -1,11 +1,115 @@
 import { performance } from "node:perf_hooks";
 import type { Express, NextFunction, Request, Response } from "express";
+import {
+  rateLimit,
+  type IncrementResponse,
+  type Options,
+  type Store,
+} from "express-rate-limit";
 
 export const API_RATE_LIMIT_POLICY = Object.freeze({
   windowMs: 60_000,
   maxRequests: 600,
   maxClients: 10_000,
 });
+
+export const SENSITIVE_ROUTE_RATE_LIMIT_POLICIES = Object.freeze({
+  oauthLogin: { windowMs: 15 * 60_000, maxRequests: 12, maxClients: 10_000 },
+  oauthCallback: { windowMs: 15 * 60_000, maxRequests: 30, maxClients: 10_000 },
+  connectorOAuthCallback: {
+    windowMs: 15 * 60_000,
+    maxRequests: 30,
+    maxClients: 10_000,
+  },
+  documentUpload: {
+    windowMs: 15 * 60_000,
+    maxRequests: 12,
+    maxClients: 10_000,
+  },
+  resumeParse: { windowMs: 15 * 60_000, maxRequests: 10, maxClients: 10_000 },
+  haiConnector: { windowMs: 60_000, maxRequests: 120, maxClients: 10_000 },
+});
+
+export type SensitiveRouteRateLimitName =
+  keyof typeof SENSITIVE_ROUTE_RATE_LIMIT_POLICIES;
+
+type StoredClientWindow = {
+  totalHits: number;
+  resetTime: Date;
+};
+
+class BoundedRateLimitStore implements Store {
+  readonly localKeys = true;
+  private readonly clients = new Map<string, StoredClientWindow>();
+  private windowMs = 60_000;
+  private limit = 1;
+
+  constructor(
+    private readonly maxClients: number,
+    private readonly now: () => number
+  ) {}
+
+  init(options: Options) {
+    this.windowMs = options.windowMs;
+    this.limit = typeof options.limit === "number" ? options.limit : 1;
+  }
+
+  private pruneExpired(timestamp: number) {
+    let first = this.clients.entries().next();
+    while (!first.done && first.value[1].resetTime.getTime() <= timestamp) {
+      this.clients.delete(first.value[0]);
+      first = this.clients.entries().next();
+    }
+  }
+
+  increment(key: string): IncrementResponse {
+    const timestamp = this.now();
+    this.pruneExpired(timestamp);
+    let client = this.clients.get(key);
+    if (!client) {
+      if (this.clients.size >= this.maxClients) {
+        const earliest = this.clients.values().next().value as
+          StoredClientWindow | undefined;
+        return {
+          totalHits: this.limit + 1,
+          resetTime: earliest?.resetTime ?? new Date(timestamp + this.windowMs),
+        };
+      }
+      client = { totalHits: 0, resetTime: new Date(timestamp + this.windowMs) };
+      this.clients.set(key, client);
+    }
+    client.totalHits = Math.min(client.totalHits + 1, this.limit + 1);
+    return { totalHits: client.totalHits, resetTime: client.resetTime };
+  }
+
+  get(key: string) {
+    const client = this.clients.get(key);
+    if (client && client.resetTime.getTime() <= this.now()) {
+      this.clients.delete(key);
+      return undefined;
+    }
+    return client;
+  }
+
+  decrement(key: string) {
+    const client = this.clients.get(key);
+    if (!client) return;
+    client.totalHits = Math.max(0, client.totalHits - 1);
+    if (client.totalHits === 0) this.clients.delete(key);
+  }
+
+  resetKey(key: string) {
+    this.clients.delete(key);
+  }
+
+  resetAll() {
+    this.clients.clear();
+  }
+
+  shutdown() {
+    this.resetAll();
+  }
+}
 
 type ClientWindow = {
   count: number;
@@ -44,7 +148,7 @@ export function createRateLimitMiddleware(
   const now = options.now ?? (() => performance.now());
   const clientKey =
     options.clientKey ??
-    ((req: Request) => req.ip || req.socket.remoteAddress || "unknown");
+    ((req: Request) => req.ip || req.socket?.remoteAddress || "unknown");
   const clients = new Map<string, ClientWindow>();
   let nextSweepAt = now() + options.windowMs;
 
@@ -74,8 +178,9 @@ export function createRateLimitMiddleware(
       if (clients.size >= options.maxClients) {
         pruneExpiredClients(timestamp);
         if (clients.size >= options.maxClients) {
-          const earliestResetAt = clients.entries().next().value?.[1].resetAt
-            ?? timestamp + options.windowMs;
+          const earliestResetAt =
+            clients.entries().next().value?.[1].resetAt ??
+            timestamp + options.windowMs;
           const retrySeconds = Math.max(
             1,
             Math.ceil((earliestResetAt - timestamp) / 1_000)
@@ -118,6 +223,21 @@ export function createRateLimitMiddleware(
 
   middleware.activeClientCount = () => clients.size;
   return middleware;
+}
+
+export function createSensitiveRouteRateLimiter(
+  name: SensitiveRouteRateLimitName,
+  now?: () => number
+) {
+  const policy = SENSITIVE_ROUTE_RATE_LIMIT_POLICIES[name];
+  return rateLimit({
+    windowMs: policy.windowMs,
+    limit: policy.maxRequests,
+    store: new BoundedRateLimitStore(policy.maxClients, now ?? Date.now),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests. Retry later." },
+  });
 }
 
 export function registerApiRateLimit(app: Express) {

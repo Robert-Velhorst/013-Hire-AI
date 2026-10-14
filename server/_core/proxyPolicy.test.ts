@@ -1,18 +1,53 @@
 import express from "express";
 import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
-import { applyTrustedProxyPolicy, TRUSTED_PROXY_RANGE } from "./proxyPolicy";
+import {
+  applyTrustedProxyPolicy,
+  parseTrustedProxyIps,
+  TRUSTED_PROXY_RANGE,
+} from "./proxyPolicy";
 
 describe("trusted reverse-proxy policy", () => {
   it("trusts loopback peers without trusting private or public network peers", () => {
     const app = express();
     applyTrustedProxyPolicy(app);
-    expect(app.get("trust proxy")).toBe(TRUSTED_PROXY_RANGE);
+    expect(app.get("trust proxy")).toEqual([TRUSTED_PROXY_RANGE]);
 
     const trust = app.get("trust proxy fn") as (address: string, hop: number) => boolean;
     expect(trust("127.0.0.1", 0)).toBe(true);
     expect(trust("::1", 0)).toBe(true);
     expect(trust("10.0.0.8", 0)).toBe(false);
+    expect(trust("203.0.113.8", 0)).toBe(false);
+  });
+
+  it("allows exact proxy peers and rejects broad or unresolved proxy rules", () => {
+    expect(parseTrustedProxyIps(undefined, false)).toEqual([TRUSTED_PROXY_RANGE]);
+    expect(parseTrustedProxyIps(undefined, true)).toEqual([]);
+    expect(parseTrustedProxyIps("loopback,172.22.0.1,2001:db8::1", true)).toEqual([
+      "loopback",
+      "172.22.0.1",
+      "2001:db8::1",
+    ]);
+    expect(() => parseTrustedProxyIps("172.22.0.0/16", true)).toThrow(
+      "exact IP addresses"
+    );
+    expect(() => parseTrustedProxyIps("proxy.internal", true)).toThrow(
+      "exact IP addresses"
+    );
+    expect(() => parseTrustedProxyIps("0.0.0.0", true)).toThrow(
+      "exact IP addresses"
+    );
+    const addresses = Array.from({ length: 17 }, (_, index) => `10.0.0.${index + 1}`);
+    expect(() => parseTrustedProxyIps(addresses.join(","), true)).toThrow("at most 16");
+  });
+
+  it("trusts only explicitly configured Docker proxy peers", () => {
+    const app = express();
+    applyTrustedProxyPolicy(app, ["172.22.0.1"]);
+    const trust = app.get("trust proxy fn") as (address: string, hop: number) => boolean;
+
+    expect(trust("172.22.0.1", 0)).toBe(true);
+    expect(trust("172.22.0.2", 0)).toBe(false);
     expect(trust("203.0.113.8", 0)).toBe(false);
   });
 

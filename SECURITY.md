@@ -1,15 +1,15 @@
 # Security Policy
 
-Hire.AI is an early-stage project and is not yet accepted for production use. Security reports are welcome and should be handled privately.
+Hire.AI is an early-stage preview and is not accepted for production use. Please report suspected vulnerabilities privately. Do not test against a live service or submit real candidate data; no public production service is currently offered.
 
-## Report a vulnerability
+## Reporting
 
-Use **Report a vulnerability** on the repository's GitHub **Security** tab. This opens GitHub's private vulnerability reporting form and keeps details out of public issues and discussions. Include the affected commit or release, impact, reproduction steps, and any safe proof of concept. Do not include real user data, credentials, or secrets in a report.
+Use GitHub's **Report a vulnerability** form on the repository's [Security Advisories page](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new). Private vulnerability reporting is enabled. Include the affected commit or release, impact, reproduction steps, and a safe proof of concept where possible. Redact personal information, access tokens, passwords, and other secrets.
 
-If private reporting is unavailable, open a public issue with only the title **Request private security contact**. Do not include vulnerability details, exploit code, affected user data, or credentials. Maintainers will provide a private reporting route.
+If the private form is unavailable, open a public issue titled **Request private security contact** only. Do not put vulnerability details, exploit code, affected user data, or credentials in a public issue, discussion, or pull request.
 
-## Scope and response
+## Scope and handling
 
-Reports involving authentication, authorization, candidate data, resumes, connector tokens, application actions, payments, privacy erasure, or deployment configuration are in scope. Please allow maintainers time to investigate and coordinate a fix before public disclosure. No response-time or remediation-time guarantee is currently offered.
+Reports involving authentication, authorization, candidate data or resumes, provider grants, application actions, payments, privacy erasure, source ingestion, or deployment configuration are in scope. Please allow maintainers to investigate and coordinate remediation before public disclosure. Acknowledgment, response, and remediation timelines are not guaranteed.
 
-The project has no supported production release or service-level commitment yet. Security fixes and advisories will be published through the repository when appropriate. See [docs/SECURITY.md](docs/SECURITY.md) for the implemented controls and outstanding acceptance work.
+The project has no supported production release or service-level commitment. The published `v0.1.0-alpha.1` release and container are previews, not a managed service. Security fixes and advisories will be published through the repository when appropriate. See [docs/SECURITY.md](docs/SECURITY.md) for implementation details, current controls, known limitations, and production acceptance work.

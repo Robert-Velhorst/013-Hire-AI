@@ -1,6 +1,6 @@
 # 013 - Hire.AI
 
-Hire.AI is an early-stage, self-hostable preview application for finding and comparing fully remote jobs and managing the candidate's application journey. It brings candidate profiles and resumes, cross-post comparisons, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
+Hire.AI is an early-stage, self-hostable preview application for discovering fully remote jobs across configured sources, comparing likely cross-posts, and organizing a candidate's application journey. It brings candidate profiles and resumes, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
@@ -16,6 +16,19 @@ The product is intended for people looking for any kind of work that can be perf
 - **Current authority boundary:** review-first. Hire.AI may prepare work and create auditable review records; it does not currently submit employer applications through third-party portals.
 - **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
+
+## What Works Today
+
+| Area | Available in this preview | Important boundary |
+| --- | --- | --- |
+| Job discovery | Bounded API/RSS collection from nine policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
+| Comparison | Normalized listings, source attribution, freshness information, and links between likely duplicate postings. | A duplicate link is evidence for review, not proof that two listings are identical. Missing or conflicting conditions remain uncertain. |
+| Candidate workspace | Profiles, resume versions, preferences, job filters, match explanations, saved jobs, and application records. | Matching supports decisions; it does not guarantee qualification, an interview, or a job. |
+| Application workflow | Prepare and review application material, preserve decisions, and hand off to the employer's application process. | The candidate submits the application. End-to-end submission to employer or ATS forms is not currently delivered. |
+| Responses and interviews | Track response evidence, follow-up state, scheduling information, and interview preparation. | The candidate conducts the interview and makes every decision after it. Connected inbox features need provider configuration and live acceptance. |
+| Hosting and integrations | Docker and Hetzner deployment material, plus optional connector code. | The published container is for preview/self-hosting. No public hosted service or generally accepted live integration is available. |
+
+The product-direction document describes the intended autonomous service: minimize candidate effort while respecting hard constraints, consent, provider rules, and an auditable record of actions. That target must not be confused with the current preview's capabilities.
 
 ## Product Direction And Current Boundaries
 
@@ -234,9 +247,9 @@ Additional HTTP routes include hosted OAuth login/callback, connector OAuth call
 
 Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status and remote-job search route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
 
-GitHub's live repository settings and CodeQL inventory were checked on 2026-10-14 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. CodeQL scans GitHub Actions, JavaScript/TypeScript, and Python; 45 code-scanning alerts were open on `main` (7 critical, 34 high, 4 medium). Pull request [#132](https://github.com/Robert-Velhorst/013-Hire-AI/pull/132) passed its five required CI jobs but its CodeQL gate failed with 10 high-severity findings. Those findings have not been dismissed or represented as fixed. The Dependabot and secret-scanning alert lists were last verified on 2026-10-13 UTC, when neither list contained open alerts; a fresh list could not be retrieved in the current check. Generic non-provider secret scanning remains disabled; GitHub does not make it available for this user-owned repository. Secret validity checks remain disabled because they send detected credentials to the issuing provider. Neither feature is represented as enabled. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
+GitHub's repository security settings and alert inventories were checked on 2026-10-14 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. The live alert lists contained 0 open Dependabot alerts, 0 open secret-scanning alerts, and 35 open CodeQL alerts on `main` (7 critical, 24 high, 4 medium). The latest CodeQL analyses on pull request [#132](https://github.com/Robert-Velhorst/013-Hire-AI/pull/132) passed; the 35 existing alerts on `main` remain to be triaged. No CodeQL alerts are described as fixed or dismissed here. Generic non-provider secret scanning and secret validity checks are unavailable for this user-owned repository on its current GitHub plan; validity checks would also transmit detected credentials to their issuers. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
 
-As of the 2026-10-14 UTC check, the 45 open CodeQL alerts on `main` and pull request #132's failing CodeQL gate had not been dismissed or represented as fixed. `main` requires pull requests, all five CI checks, resolved review conversations, and an up-to-date base. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to the eight workflow actions, tokens default to read-only, and workflows cannot approve pull requests. Settings and alert totals can change; use GitHub as the live source of truth.
+As of the 2026-10-14 UTC check, the 35 open CodeQL alerts on `main` remained unresolved and require triage. Pull request #132's latest CodeQL analyses passed. `main` requires pull requests, all five CI checks, resolved review conversations, and an up-to-date base. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to the eight workflow actions, tokens default to read-only, and workflows cannot approve pull requests. Settings and alert totals can change; use GitHub as the live source of truth.
 
 Report vulnerabilities through GitHub's private vulnerability reporting for this repository; do not disclose exploitable details in public issues. See the root [SECURITY.md](SECURITY.md) for reporting instructions and [docs/SECURITY.md](docs/SECURITY.md) for controls and outstanding production reviews.
 
@@ -252,7 +265,7 @@ Published GitHub Releases trigger a workflow that builds and publishes the appli
 docker pull ghcr.io/robert-velhorst/013-hire-ai:v0.1.0-alpha.1
 ```
 
-The command above pulls the first published alpha image. Before using a later release, verify that its publishing workflow succeeded and the package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
+The command above pulls the first published alpha image. Its OCI index digest at verification was `sha256:78088b48741842ec51300dba02bcf01d411f9ba90fc2b516eb005553e0a095ba`; use `ghcr.io/robert-velhorst/013-hire-ai@sha256:78088b48741842ec51300dba02bcf01d411f9ba90fc2b516eb005553e0a095ba` when an immutable reference is required. Before using a later release, verify that its publishing workflow succeeded and the package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
 
 ## Business And Technical Documentation
 
@@ -280,4 +293,3 @@ The command above pulls the first published alpha image. Before using a later re
 ## License
 
 The `package.json` metadata declares `MIT`, but this repository currently has no root `LICENSE` file. Confirm the intended licensing and add the complete license text before encouraging third-party redistribution; this preview release does not resolve that documentation gap.
-

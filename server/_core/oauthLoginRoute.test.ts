@@ -21,7 +21,10 @@ describe("primary OAuth login route", () => {
     ENV.oAuthPortalUrl = "";
     const routes = new Map<string, (req: Request, res: Response) => Promise<void> | void>();
     registerOAuthRoutes({
-      get: vi.fn((path: string, handler: (req: Request, res: Response) => Promise<void> | void) => routes.set(path, handler)),
+      get: vi.fn((path: string, ...handlers: unknown[]) => routes.set(
+        path,
+        handlers.at(-1) as (req: Request, res: Response) => Promise<void> | void
+      )),
     } as unknown as Express);
     const redirect = vi.fn();
 
@@ -49,8 +52,8 @@ describe("primary OAuth login route", () => {
 
     const routes = new Map<string, (req: Request, res: Response) => Promise<void> | void>();
     const app = {
-      get: vi.fn((path: string, handler: (req: Request, res: Response) => Promise<void> | void) => {
-        routes.set(path, handler);
+      get: vi.fn((path: string, ...handlers: unknown[]) => {
+        routes.set(path, handlers.at(-1) as (req: Request, res: Response) => Promise<void> | void);
       }),
     } as unknown as Express;
     registerOAuthRoutes(app);
@@ -103,7 +106,10 @@ describe("primary OAuth login route", () => {
     const exchange = vi.spyOn(sdk, "exchangeCodeForToken");
     const routes = new Map<string, (req: Request, res: Response) => Promise<void> | void>();
     registerOAuthRoutes({
-      get: vi.fn((path: string, handler: (req: Request, res: Response) => Promise<void> | void) => routes.set(path, handler)),
+      get: vi.fn((path: string, ...handlers: unknown[]) => routes.set(
+        path,
+        handlers.at(-1) as (req: Request, res: Response) => Promise<void> | void
+      )),
     } as unknown as Express);
     const status = vi.fn().mockReturnThis();
     const json = vi.fn();

@@ -17,7 +17,7 @@ For native production startup on Windows 11, use `npm.cmd run start:windows`. It
 
 Generate `JWT_SECRET` with a cryptographically secure secret manager or random-byte generator and inject it at runtime. Production accepts 32-4096 characters with no surrounding whitespace or control characters; checked-in and local-development placeholders are rejected. Rotating this value invalidates every existing session, so schedule rotation and require users to sign in again. `pnpm run doctor` reports only whether the policy passes and never prints the value.
 
-Set `OAUTH_PORTAL_URL` at runtime to the trusted Manus login portal base URL. Production accepts HTTPS; loopback HTTP is available only for local operation. Credentials, query parameters, and fragments are rejected. The browser opens `/api/oauth/login`, and the server derives the current direct or trusted-ngrok callback origin, creates signed browser-bound state, and redirects to the portal. The legacy `VITE_OAUTH_PORTAL_URL` name remains a migration alias, but new deployments must not bake portal configuration into the browser bundle.
+Set `OAUTH_PORTAL_URL` at runtime to the trusted Manus login portal base URL. Set `OAUTH_SERVER_URL` to the OAuth API base URL and `OAUTH_SERVER_ALLOWED_ORIGINS` to its exact HTTPS origin (comma-separated only if multiple origins are genuinely required). Production requires the API URL to use HTTPS and match that allowlist; loopback HTTP is available only for local operation. Credentials, query parameters, and fragments are rejected. The browser opens `/api/oauth/login`, and the server derives the current direct or trusted-ngrok callback origin, creates signed browser-bound state, and redirects to the portal. The legacy `VITE_OAUTH_PORTAL_URL` name remains a migration alias, but new deployments must not bake portal configuration into the browser bundle.
 
 OAuth sessions default to a seven-day absolute lifetime. Set `SESSION_TTL_MS` only to an integer from 900,000 (15 minutes) through 2,592,000,000 (30 days). The production doctor rejects malformed or out-of-range values, and the same effective value controls both the signed JWT expiry and browser-cookie age. Changing it affects newly issued sessions; use logout/session revocation when existing sessions must end immediately.
 
@@ -54,6 +54,14 @@ document parser or AI. A failed scan leaves parsing, versioned storage and profi
 updates unstarted. Production rejects an unavailable scanner; development retains
 its existing explicitly unconfigured-scanner behavior. A successful scan is not
 a guarantee that a document is harmless or that extracted statements are true.
+
+When an HTTP scanner is configured, production requires its exact origin in
+`FILE_MALWARE_SCAN_ALLOWED_ORIGINS`. Use HTTPS for remote scanners. HTTP is
+accepted only for a loopback scanner on the same host, and that origin must also
+be explicitly allowlisted. Origin entries contain only scheme, hostname and
+optional port, with no path, query, fragment or credentials. The production
+doctor and application startup both enforce this policy before uploads are
+accepted.
 
 The storage boundary still independently scans sensitive uploads. This protects
 direct upload callers as well as imports, but means a successful imported resume
@@ -143,7 +151,7 @@ Each source adapter applies its own minimum request interval. Transient network,
 
 ## Database backup and restore
 
-Install compatible MySQL client tools so `mysqldump` and `mysql` are available. On Windows with a MySQL Docker container, set `DATABASE_RECOVERY_DOCKER_CONTAINER=<exact-container-name>` or pass `--docker-container <name>`; the tools then run inside that container against its loopback MySQL service. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
+Install compatible MySQL client tools and make the fixed `mysqldump` and `mysql` command names available on `PATH`. On Windows with a MySQL Docker container, set `DATABASE_RECOVERY_DOCKER_CONTAINER=<exact-container-name>` or pass `--docker-container <name>`; the fixed client names then run inside that container against its loopback MySQL service. The commands pass the database password through the child-process environment, never through the process argument list or backup manifest.
 
 1. Disable autonomous and scraping workers and wait for active runs to finish.
 2. Set `DATABASE_URL` for the source database and run `pnpm db:backup`. A successful run creates `backups/<database>-<UTC timestamp>/database.sql` and `manifest.json` only after a non-empty dump is complete.
@@ -177,6 +185,6 @@ The restore command fails before starting `mysql` when the manifest is malformed
 
 ## Deployment
 
-For the online multi-user release at Hetzner, begin with [Hetzner Hosting](HETZNER_HOSTING.md) and use [Production Acceptance](PRODUCTION_ACCEPTANCE.md) as the release gate. The runtime now validates the shared schema contract itself before catalog initialization and HTTP listening, including direct `node dist/index.js` starts. Validation never applies migrations automatically. Docker health checks `/readyz`, not just process liveness. Live identity, private storage/scanning, provider and employer-submission acceptance are separate requirements.
+For the online multi-user release at Hetzner, begin with [Hetzner Hosting](HETZNER_HOSTING.md) and use [Production Acceptance](PRODUCTION_ACCEPTANCE.md) as the release gate. The runtime now validates the shared schema contract itself before catalog initialization and HTTP listening, including direct `node dist/runtime/server.js` starts. Validation never applies migrations automatically. Docker health checks `/readyz`, not just process liveness. Live identity, private storage/scanning, provider and employer-submission acceptance are separate requirements.
 
-Build with `docker build -t hire-ai .`. Inject `DATABASE_URL` securely into the operator environment. Apply migrations from the same immutable image with `docker run --rm --network <database-network> -e DATABASE_URL --entrypoint node hire-ai scripts/database-migrate.mjs`, then run the exact runtime-model check with the same network and inherited `DATABASE_URL` using `--entrypoint node hire-ai dist/database-schema-audit.js`. Start the normal image only after both commands pass. The non-root container runs the production doctor before the server and reports Docker health through `/readyz`; missing configuration, schema drift, or malware scanning fails acceptance. Do not deploy until the doctor passes and a verified database backup and isolated restore drill have been recorded.
+Build with `docker build -t hire-ai .`. Inject `DATABASE_URL` securely into the operator environment. Apply migrations from the same immutable image with `docker run --rm --network <database-network> -e DATABASE_URL --entrypoint node hire-ai scripts/database-migrate.mjs`, then run the exact runtime-model check with the same network and inherited `DATABASE_URL` using `--entrypoint node hire-ai dist/runtime/schema-audit.js`. Start the normal image only after both commands pass. The non-root container runs the production doctor before the server and reports Docker health through `/readyz`; missing configuration, schema drift, or malware scanning fails acceptance. Do not deploy until the doctor passes and a verified database backup and isolated restore drill have been recorded.

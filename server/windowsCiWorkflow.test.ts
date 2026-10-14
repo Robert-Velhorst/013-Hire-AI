@@ -12,9 +12,19 @@ describe("Windows runtime CI contract", () => {
     expect(workflow).toContain("windows-runtime:");
     expect(workflow).toContain("runs-on: windows-latest");
     expect(workflow).toContain("./scripts/check-windows-runtime.ps1");
-    expect(workflow).toContain("server/_core/network.test.ts server/haiConnector.test.ts");
+    expect(workflow).toContain(
+      "server/_core/network.test.ts server/haiConnector.test.ts"
+    );
     expect(workflow).toContain("run: pnpm check");
     expect(workflow.match(/run: pnpm build/g)).toHaveLength(2);
+    const windowsRuntime =
+      workflow
+        .split(/  windows-runtime:\r?\n/)[1]
+        ?.split(/\r?\n  database-acceptance:/)[0] ?? "";
+    expect(windowsRuntime.indexOf("- name: Build")).toBeGreaterThan(-1);
+    expect(windowsRuntime.indexOf("- name: Build")).toBeLessThan(
+      windowsRuntime.indexOf("- name: Test Windows and HAI runtime contracts")
+    );
   });
 
   it("syntax-checks both supported PowerShell launchers", () => {
@@ -44,8 +54,17 @@ describe("Windows runtime CI contract", () => {
     expect(ngrokLauncher.match(/\/readyz/g)).toHaveLength(2);
     expect(ngrokLauncher).toContain("$response.ready -eq $true");
     expect(ngrokLauncher).toContain("$local.instanceId");
-    expect(ngrokLauncher).toContain("$response.instanceId -ceq $localInstanceId");
+    expect(ngrokLauncher).toContain(
+      "$response.instanceId -ceq $localInstanceId"
+    );
     expect(ngrokLauncher).toContain("does not match the local Hire.AI runtime");
+    expect(ngrokLauncher).toContain(
+      "$configuredAppOrigin.GetLeftPart([UriPartial]::Authority) -ine $publicOrigin"
+    );
+    expect(ngrokLauncher).toContain("import 'dotenv/config'");
+    expect(ngrokLauncher.indexOf("PUBLIC_APP_ORIGIN")).toBeLessThan(
+      ngrokLauncher.indexOf("Start-Process -FilePath $ngrok.Source")
+    );
   });
 
   it("prepares and verifies the database before starting the Windows server", () => {
@@ -54,7 +73,9 @@ describe("Windows runtime CI contract", () => {
       "utf8"
     );
     const migration = windowsLauncher.indexOf("'scripts/database-migrate.mjs'");
-    const schemaAudit = windowsLauncher.indexOf("'dist/database-schema-audit.js'");
+    const schemaAudit = windowsLauncher.indexOf(
+      "& $node.Source $schemaAuditEntrypoint"
+    );
     const serverStart = windowsLauncher.indexOf(
       "Start-Process -FilePath $node.Source"
     );

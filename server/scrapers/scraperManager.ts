@@ -756,4 +756,3 @@ export async function getScraperManager(): Promise<ScraperManager> {
   }
   return scraperManagerInstance;
 }
-

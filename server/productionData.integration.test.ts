@@ -603,4 +603,3 @@ describe
       expect(storageDelete).not.toHaveBeenCalled();
     });
   });
-

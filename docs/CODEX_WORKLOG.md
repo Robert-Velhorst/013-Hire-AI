@@ -1,11 +1,17 @@
 # Codex Worklog
 
+## 2026-10-13 - Pair legacy Windows runtime and schema-audit artifacts
+
+- Fixed the Windows `-NoBuild` compatibility path so a legacy `dist/index.js` server is only paired with its legacy `dist/database-schema-audit.js`; current `dist/runtime` builds use the matching `dist/runtime/schema-audit.js`. Missing audit bundles now stop startup before database migration.
+- Added native PowerShell-harness coverage for legacy artifact selection and retained current Windows/ngrok readiness coverage.
+- Verification: 24 focused Windows launcher/workflow tests passed; one Windows-only legacy-path case was skipped in the ngrok matrix by design. Full suite and GitHub CI have not been rerun for this incremental fix.
+
 ## 2026-10-13 - Durable connector revocation and migration ordering
 
 - Addressed the open provider-revocation gap: manual provider-side cleanup is now persisted as a token-free, owner-scoped obligation before local grants are deleted. Retryable provider failures retain encrypted grants and store only bounded error codes. The user can retry or explicitly attest that access was removed; admin evidence is a fixed attestation, not free text.
 - Wired obligations into data export, retention policy, privacy erasure planning, and finalization. Unresolved external cleanup blocks erasure even if a task is otherwise marked complete. Added bilingual settings controls and admin confirmation.
 - Fixed the custom migration runner to select unapplied migrations by exact SQL hash in journal order and normalize ledger timestamps monotonically. It now also rejects unknown applied hashes and duplicate journal hashes instead of silently advancing a divergent database. This addresses existing non-monotonic timestamps that the stock max-timestamp cursor could silently skip. Added plan and migration-journal regression tests.
-- Verification: all 83 migrations applied to a fresh isolated MySQL 8.4 database; schema audit had no missing or mismatched objects; all 10 approved database suites / 34 tests passed with no skipped suite. Full regular tests passed 299 files / 1,712 tests (9 opt-in files / 31 tests skipped); TypeScript passed. Vite client build and shell/bundle checks passed, server/database-audit bundles built in a temporary directory, and a complete production Docker image built successfully. The direct host build could not overwrite an existing `dist/index.js` on Windows (access denied), so `pnpm build` itself is not claimed as passing. GitHub CI on the published commit also exposed and then verified the fix for the missing runtime planner copy. No live provider cleanup or production deployment was exercised.
+- Verification: all 83 migrations applied to a fresh isolated MySQL 8.4 database; schema audit had no missing or mismatched objects; all 10 approved database suites / 34 tests passed with no skipped suite. The regular suite passed 302 files / 1,748 tests (9 opt-in files / 31 tests skipped); TypeScript passed. On 2026-10-13, the Windows `npm.cmd run build` path passed after moving the server and audit outputs to `dist/runtime/`; the client shell and startup bundle budgets also passed. The separate pnpm shim could not update `node_modules/.modules.yaml` in this local environment (`EPERM`), before invoking the build script. GitHub CI on the published commit exposed and then verified the fix for the missing runtime planner copy. No live provider cleanup or production deployment was exercised.
 
 ## 2026-10-13 - Database-enforced active approval and review identities
 

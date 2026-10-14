@@ -158,6 +158,7 @@ const memoryInterviewPreparations: (InsertInterviewPreparation & { id: number; c
 const memoryJobMatches: (InsertJobMatch & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memorySuccessFees: (InsertSuccessFee & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryApplicationTransactionTails = new Map<number, Promise<void>>();
+const memoryApplicationPreparationTails = new Map<string, Promise<void>>();
 const memoryAutonomousRuns = new Map<number, {
   leaseToken: string | null;
   leaseExpiresAt: number;
@@ -552,6 +553,87 @@ export async function withJobPersistenceSerialization<T>(
       if (connectionUsable) connection.release();
     }
   }
+}
+
+async function acquireMemoryApplicationPreparationLock(lockKey: string): Promise<() => Promise<void>> {
+  const previous = memoryApplicationPreparationTails.get(lockKey) ?? Promise.resolve();
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseCurrent = resolve;
+  });
+  const tail = previous.then(() => current);
+  memoryApplicationPreparationTails.set(lockKey, tail);
+  await previous;
+
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    releaseCurrent();
+    if (memoryApplicationPreparationTails.get(lockKey) === tail) {
+      memoryApplicationPreparationTails.delete(lockKey);
+    }
+  };
+}
+
+/** Serialize application-preparation ledger writes across requests and replicas. */
+export async function acquireApplicationPreparationLock(
+  userId: number,
+  jobId: number
+): Promise<() => Promise<void>> {
+  const key = `${userId}:${jobId}`;
+  const releaseLocalLock = await acquireMemoryApplicationPreparationLock(key);
+  let database: MySql2Database | null;
+  try {
+    database = await getDb();
+  } catch (error) {
+    await releaseLocalLock();
+    throw error;
+  }
+  if (!database || ENV.databasePoolLimit < 2) return releaseLocalLock;
+  if (!_pool) {
+    await releaseLocalLock();
+    throw new Error("A persistent database pool is required for application preparation.");
+  }
+
+  const databaseName = new URL(ENV.databaseUrl).pathname;
+  const lockSuffix = createHash("sha256").update(`${databaseName}:${key}`).digest("hex").slice(0, 32);
+  const lockName = `hireai:application:${lockSuffix}`;
+  let connection: PoolConnection | null = null;
+  let lockAcquired = false;
+  let connectionUsable = true;
+  try {
+    connection = await _pool.getConnection();
+    const [rows] = await connection.query("SELECT GET_LOCK(?, 10) AS acquired", [lockName]);
+    lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
+    if (!lockAcquired) throw new Error("Could not acquire the application-preparation serialization lock.");
+  } catch (error) {
+    if (connection) {
+      if (lockAcquired) connection.destroy();
+      else connection.release();
+    }
+    await releaseLocalLock();
+    throw error;
+  }
+
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    try {
+      const [rows] = await connection.query("SELECT RELEASE_LOCK(?) AS released", [lockName]);
+      if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
+        throw new Error("Application-preparation serialization lock cleanup failed.");
+      }
+    } catch (error) {
+      connection.destroy();
+      connectionUsable = false;
+      throw error;
+    } finally {
+      if (connectionUsable) connection.release();
+      await releaseLocalLock();
+    }
+  };
 }
 
 /** Drain the explicit SQL pool after HTTP requests and workers have stopped. */

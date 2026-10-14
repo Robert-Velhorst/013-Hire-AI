@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { resolveProductionClientBundlePath } from "./_core/static";
 
 describe("production container packaging", () => {
   it("uses the repository package manager and carries its frozen-install configuration", () => {
@@ -41,13 +42,16 @@ describe("production container packaging", () => {
       "COPY --from=build /app/scripts/database-migration-plan.mjs ./scripts/database-migration-plan.mjs"
     );
     expect(dockerfile).toContain(
-      "node scripts/doctor.mjs && exec node dist/index.js"
+      "node scripts/doctor.mjs && exec node dist/runtime/server.js"
     );
     expect(dockerfile).toContain("HEALTHCHECK");
     expect(dockerfile).toContain("/readyz");
     expect(dockerfile).toContain("AbortSignal.timeout(4000)");
     expect(dockerfile).toContain("USER node");
-    const ignored = readFileSync(resolve(process.cwd(), ".dockerignore"), "utf8");
+    const ignored = readFileSync(
+      resolve(process.cwd(), ".dockerignore"),
+      "utf8"
+    );
     expect(ignored).toContain(".playwright-cli");
     expect(ignored).toContain("backups");
 
@@ -57,6 +61,21 @@ describe("production container packaging", () => {
     );
     expect(migrator).toContain("SELECT GET_LOCK(?, ?) AS acquired");
     expect(migrator).toContain("SELECT RELEASE_LOCK(?)");
+
+    const ciWorkflow = readFileSync(
+      resolve(process.cwd(), ".github", "workflows", "ci.yml"),
+      "utf8"
+    );
+    expect(ciWorkflow).toContain(
+      "-e PUBLIC_APP_ORIGIN='https://hire-ai.example.test'"
+    );
+    expect(ciWorkflow).toContain("-e TRUSTED_PROXY_IPS='127.0.0.1'");
+
+    const hetznerCompose = readFileSync(
+      resolve(process.cwd(), "deploy", "hetzner", "compose.app.yaml"),
+      "utf8"
+    );
+    expect(hetznerCompose).toContain("TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:?");
   });
 
   it("excludes the development-only Vite server from the production server bundle", () => {
@@ -67,5 +86,13 @@ describe("production container packaging", () => {
     };
 
     expect(packageJson.scripts?.build).toContain("--external:./vite");
+  });
+
+  it("serves the Vite client output beside the runtime bundle", () => {
+    expect(
+      resolveProductionClientBundlePath(
+        resolve(process.cwd(), "dist", "runtime")
+      )
+    ).toBe(resolve(process.cwd(), "dist", "public"));
   });
 });

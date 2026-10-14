@@ -183,6 +183,96 @@ describe("automation application preparation route", () => {
     ).toBe(true);
   });
 
+  it("does not duplicate preparation attempts when the same application is requested again", async () => {
+    const userId = 98410;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote, worldwide",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    const first = await caller.automation.applyToJob({ jobId: 1 });
+    const second = await caller.automation.applyToJob({ jobId: 1 });
+    const artifacts = await getApplicationLedgerArtifacts(first.applicationRecordId, userId);
+    const auditEvents = await getAuditEventsForEntity(userId, "application", first.applicationRecordId);
+    const approvals = await listUserApplicationApprovals(userId, "all");
+
+    expect(second).toMatchObject({
+      applicationRecordId: first.applicationRecordId,
+      existing: true,
+      prepared: true,
+      externalSubmissionPerformed: false,
+    });
+    expect(artifacts.attempts.filter(attempt => attempt.attemptType === "prepare")).toHaveLength(1);
+    expect(auditEvents.filter(event => event.action === "application_prepared_by_automation")).toHaveLength(1);
+    expect(approvals.filter(approval =>
+      approval.applicationId === first.applicationRecordId &&
+      approval.approvalType === "application_submission"
+    )).toHaveLength(1);
+  });
+
+  it("deduplicates concurrent requests for the same prepared application", async () => {
+    const userId = 98411;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote, worldwide",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => caller.automation.applyToJob({ jobId: 1 }))
+    );
+    const [first, ...retries] = results;
+    const artifacts = await getApplicationLedgerArtifacts(first.applicationRecordId, userId);
+    const auditEvents = await getAuditEventsForEntity(userId, "application", first.applicationRecordId);
+    const approvals = await listUserApplicationApprovals(userId, "all");
+
+    expect(retries.every(result => result.applicationRecordId === first.applicationRecordId)).toBe(true);
+    expect(artifacts.attempts.filter(attempt => attempt.attemptType === "prepare")).toHaveLength(1);
+    expect(auditEvents.filter(event => event.action === "application_prepared_by_automation")).toHaveLength(1);
+    expect(approvals.filter(approval =>
+      approval.applicationId === first.applicationRecordId &&
+      approval.approvalType === "application_submission"
+    )).toHaveLength(1);
+  });
+
+  it("serializes concurrent direct application-preparation requests", async () => {
+    const userId = 98412;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote, worldwide",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => caller.applications.create({ jobId: 1 }))
+    );
+    const applicationId = results[0].applicationRecordId;
+    const artifacts = await getApplicationLedgerArtifacts(applicationId, userId);
+    const auditEvents = await getAuditEventsForEntity(userId, "application", applicationId);
+    const approvals = await listUserApplicationApprovals(userId, "all");
+
+    expect(results.every(result => result.applicationRecordId === applicationId)).toBe(true);
+    expect(artifacts.attempts.filter(attempt => attempt.attemptType === "prepare")).toHaveLength(1);
+    expect(auditEvents.filter(event => event.action === "application_prepared")).toHaveLength(1);
+    expect(approvals.filter(approval =>
+      approval.applicationId === applicationId &&
+      approval.approvalType === "application_submission"
+    )).toHaveLength(1);
+  });
+
   it("uses a grounded draft for direct preparation and records the source profile snapshot", async () => {
     const userId = 98406;
     await upsertUserProfile({

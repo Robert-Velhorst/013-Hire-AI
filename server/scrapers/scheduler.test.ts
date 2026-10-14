@@ -14,7 +14,7 @@ vi.mock("../applicationFeatures", () => ({
   processJobAlerts: mocks.processJobAlerts,
 }));
 
-import { getScheduler, JobScrapingScheduler } from "./scheduler";
+import { getScheduler, JobNormalizer, JobScrapingScheduler } from "./scheduler";
 import * as database from "../db";
 
 describe("job scraping scheduler", () => {
@@ -333,5 +333,39 @@ describe("job scraping scheduler", () => {
     });
     expect(JSON.stringify(scheduler.getStatus())).not.toContain("database connection secret");
     leaseSpy.mockRestore();
+  });
+});
+
+describe("scraper salary normalization", () => {
+  it("annualizes amounts while preserving their declared currency", () => {
+    const normalizer = new JobNormalizer();
+
+    expect(normalizer.normalizeSalary({
+      min: 5_000,
+      max: 6_000,
+      currency: "EUR",
+      period: "monthly",
+    })).toEqual({
+      min: 60_000,
+      max: 72_000,
+      currency: "EUR",
+      period: "yearly",
+    });
+  });
+
+  it("does not infer USD or convert unknown currencies", () => {
+    const normalizer = new JobNormalizer();
+
+    expect(normalizer.normalizeSalary({
+      min: 60_000,
+      max: 75_000,
+      currency: "ZZZ",
+      period: "yearly",
+    })).toEqual({
+      min: 60_000,
+      max: 75_000,
+      currency: null,
+      period: "yearly",
+    });
   });
 });

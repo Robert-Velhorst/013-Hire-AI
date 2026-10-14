@@ -48,4 +48,3 @@ export function validateHaiConnectorConfig(config: HaiConnectorConfig) {
   }
   return validateHaiConnectorUrl(config.endpointUrl);
 }
-

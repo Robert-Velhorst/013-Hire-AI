@@ -2,6 +2,7 @@ import { getScraperManager } from "./scraperManager";
 import { processJobAlerts } from "../applicationFeatures";
 import { randomUUID } from "node:crypto";
 import { cleanScrapedHtmlToText } from "./htmlText";
+import { normalizeSalaryCurrency } from "@shared/salaryCurrency";
 import {
   acquireJobDiscoveryLease,
   releaseJobDiscoveryLease,
@@ -343,16 +344,16 @@ export function getScheduler(config?: Partial<SchedulerConfig>): JobScrapingSche
  */
 export class JobNormalizer {
   /**
-   * Normalize salary to annual USD
+   * Annualize salary amounts without changing their source currency.
+   * Cross-currency comparison requires dated FX evidence and is handled separately.
    */
   normalizeSalary(salary: {
     min?: number | null;
     max?: number | null;
     currency?: string | null;
     period?: string | null;
-  }): { min: number | null; max: number | null } {
+  }): { min: number | null; max: number | null; currency: string | null; period: "yearly" } {
     let { min, max } = salary;
-    const currency = salary.currency?.toUpperCase() || "USD";
     const period = salary.period?.toLowerCase() || "yearly";
 
     // Convert to annual
@@ -367,21 +368,15 @@ export class JobNormalizer {
       if (max) max = max * 52;
     }
 
-    // Convert to USD (simplified - in production use real exchange rates)
-    const exchangeRates: Record<string, number> = {
-      USD: 1,
-      EUR: 1.1,
-      GBP: 1.27,
-      CAD: 0.74,
-      AUD: 0.65,
-      INR: 0.012,
+    if (min !== null && min !== undefined && !Number.isFinite(min)) min = null;
+    if (max !== null && max !== undefined && !Number.isFinite(max)) max = null;
+
+    return {
+      min: min === null || min === undefined ? null : Math.round(min),
+      max: max === null || max === undefined ? null : Math.round(max),
+      currency: normalizeSalaryCurrency(salary.currency),
+      period: "yearly",
     };
-
-    const rate = exchangeRates[currency] || 1;
-    if (min) min = Math.round(min * rate);
-    if (max) max = Math.round(max * rate);
-
-    return { min: min || null, max: max || null };
   }
 
   /**

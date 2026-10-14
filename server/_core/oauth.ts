@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { randomBytes } from "node:crypto";
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
@@ -8,8 +9,12 @@ import { logOperationalFailure } from "../operationalFailureLog";
 import { ENV } from "./env";
 import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { createSensitiveRouteRateLimiter } from "./apiRateLimit";
+import { resolveOAuthCallbackUri } from "./publicAppOrigin";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
+const oauthLoginRateLimit = createSensitiveRouteRateLimiter("oauthLogin");
+const oauthCallbackRateLimit = createSensitiveRouteRateLimiter("oauthCallback");
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -17,7 +22,8 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
-  app.get("/api/oauth/login", (req: Request, res: Response) => {
+  // The limiter's custom store caps the number of client keys held in memory.
+  app.get("/api/oauth/login", oauthLoginRateLimit, async (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
         if (!ENV.isProduction) {
@@ -27,21 +33,29 @@ export function registerOAuthRoutes(app: Express) {
         res.status(503).json({ error: "OAuth login is not configured" });
         return;
       }
-      const host = req.get("host");
-      if (!host) {
-        res.status(400).json({ error: "OAuth callback origin is invalid" });
-        return;
-      }
-      const redirectUri = `${req.protocol}://${host}/api/oauth/callback`;
-      const issued = createOAuthLoginState(redirectUri, ENV.cookieSecret);
+      const redirectUri = resolveOAuthCallbackUri({
+        publicAppOrigin: ENV.publicAppOrigin,
+        isProduction: ENV.isProduction,
+        requestProtocol: req.protocol,
+        requestHost: req.get("host"),
+      });
+      const browserNonce = randomBytes(32).toString("base64url");
+      const state = await createOAuthLoginState(
+        redirectUri,
+        ENV.cookieSecret,
+        Date.now(),
+        browserNonce
+      );
       const portalUrl = requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
       portalUrl.pathname = "/app-auth";
       portalUrl.searchParams.set("appId", ENV.appId);
       portalUrl.searchParams.set("redirectUri", redirectUri);
-      portalUrl.searchParams.set("state", issued.state);
+      portalUrl.searchParams.set("state", state);
       portalUrl.searchParams.set("type", "signIn");
-      res.cookie(OAUTH_STATE_COOKIE_NAME, issued.nonce, {
+      res.cookie(OAUTH_STATE_COOKIE_NAME, browserNonce, {
         ...getSessionCookieOptions(req),
+        httpOnly: true,
+        secure: ENV.isProduction || req.secure,
         path: "/api/oauth/callback",
         maxAge: OAUTH_LOGIN_STATE_TTL_MS,
       });
@@ -52,7 +66,8 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/oauth/callback", async (req: Request, res: Response) => {
+  // The limiter's custom store caps the number of client keys held in memory.
+  app.get("/api/oauth/callback", oauthCallbackRateLimit, async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 
@@ -66,7 +81,7 @@ export function registerOAuthRoutes(app: Express) {
       ...getSessionCookieOptions(req),
       path: "/api/oauth/callback",
     });
-    const verifiedState = verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
+    const verifiedState = await verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
     if (!verifiedState) {
       res.status(400).json({ error: "OAuth state is invalid or expired" });
       return;

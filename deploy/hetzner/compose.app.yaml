@@ -19,6 +19,7 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:?Set exact trusted reverse-proxy peer IPs in release.env}
       NODE_OPTIONS: --max-old-space-size=320
       DATABASE_POOL_LIMIT: "5"
       AUTONOMOUS_SCHEDULER_ENABLED: "false"
@@ -27,6 +28,7 @@ services:
       - 127.0.0.1:3000:3000
     networks:
       - backend
+      - hai_peer
       - outbound
     depends_on:
       db:
@@ -38,4 +40,7 @@ services:
         max-file: "3"
 
 networks:
+  hai_peer:
+    name: hire-ai_peer
+    internal: true
   outbound:

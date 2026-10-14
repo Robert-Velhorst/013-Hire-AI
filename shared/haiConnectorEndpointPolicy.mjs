@@ -56,4 +56,3 @@ export function validateHaiConnectorUrl(value) {
   }
   return null;
 }
-

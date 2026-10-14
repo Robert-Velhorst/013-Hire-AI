@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RESUME_MIME_TYPES,
   resolveMalwareScanMode,
+  sanitizeUploadFileName,
   scanSensitiveUpload,
   validateUploadedFile,
 } from "./uploadValidation";
@@ -14,6 +15,14 @@ afterEach(() => {
 });
 
 describe("sensitive upload validation", () => {
+  it("keeps upload names out of paths and rejects dot-only names", () => {
+    expect(sanitizeUploadFileName(".")).toBe("upload");
+    expect(sanitizeUploadFileName("..")).toBe("upload");
+    expect(sanitizeUploadFileName("resume/../candidate.pdf")).toBe(
+      "resume_.._candidate.pdf"
+    );
+  });
+
   it("accepts a bounded PDF with a matching signature", () => {
     expect(
       validateUploadedFile({

@@ -23,7 +23,7 @@ describe("admin fee query contract", () => {
   it("runs the production query-plan audit in container CI", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
 
-    expect(workflow).toContain("--entrypoint node hire-ai:ci dist/database-query-plan-audit.js");
+    expect(workflow).toContain("--entrypoint node hire-ai:ci dist/runtime/query-plan-audit.js");
   });
 
   it("uses stable keyset cursors and filtered totals for payment history", () => {

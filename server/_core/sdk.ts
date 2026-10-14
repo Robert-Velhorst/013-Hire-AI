@@ -13,6 +13,7 @@ import {
   seedDevReviewQueueUser,
 } from "../devReviewQueueSeed";
 import { ENV } from "./env";
+import { requireOAuthServerUrl } from "./trustedServiceUrl";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { ErasedOAuthIdentityError } from "../erasedOAuthIdentity";
 import type {
@@ -80,11 +81,29 @@ class OAuthService {
   }
 }
 
-const createOAuthHttpClient = (): AxiosInstance =>
-  axios.create({
-    baseURL: ENV.oAuthServerUrl,
+export const createOAuthHttpClient = (config: {
+  serverUrl: string;
+  allowedOrigins: string[];
+  production: boolean;
+} = {
+  serverUrl: ENV.oAuthServerUrl,
+  allowedOrigins: ENV.oAuthServerAllowedOrigins,
+  production: ENV.isProduction,
+}): AxiosInstance => {
+  const baseUrl = config.serverUrl.trim()
+    ? requireOAuthServerUrl(
+      config.serverUrl,
+      config.allowedOrigins,
+      config.production
+    ).toString()
+    : undefined;
+
+  return axios.create({
+    ...(baseUrl ? { baseURL: baseUrl } : {}),
     timeout: AXIOS_TIMEOUT_MS,
+    maxRedirects: 0,
   });
+};
 
 class SDKServer {
   private readonly client: AxiosInstance;

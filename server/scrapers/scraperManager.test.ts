@@ -710,4 +710,3 @@ describe("scraper manager platform restrictions", () => {
     }));
   });
 });
-

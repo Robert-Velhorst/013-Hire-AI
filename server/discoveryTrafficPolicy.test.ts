@@ -29,12 +29,16 @@ describe("discovery traffic policy", () => {
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
+      OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
       OAUTH_PORTAL_URL: "https://auth.example.test",
+      PUBLIC_APP_ORIGIN: "https://hire.example.test",
+      TRUSTED_PROXY_IPS: "127.0.0.1",
       OWNER_OPEN_ID: "doctor-owner",
       BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
       STRIPE_SECRET_KEY: "sk_test_doctor",
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
       JOB_SCRAPING_SCHEDULER_ENABLED: "true",
       JOB_SCRAPING_MAX_CONCURRENT_SOURCES: "3",
       JOB_SCRAPING_SOURCE_TIMEOUT_MS: "90000",
@@ -77,13 +81,17 @@ describe("discovery traffic policy", () => {
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
+      OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
       OAUTH_PORTAL_URL: "https://auth.example.test",
+      PUBLIC_APP_ORIGIN: "https://hire.example.test",
+      TRUSTED_PROXY_IPS: "127.0.0.1",
       OWNER_OPEN_ID: "doctor-owner",
       BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
       STRIPE_SECRET_KEY: "sk_test_doctor",
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_MODE: "http",
       FILE_MALWARE_SCAN_URL: "",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "",
       JOB_SCRAPING_SCHEDULER_ENABLED: "false",
       HAI_CONNECTOR_ENABLED: "false",
     };
@@ -95,9 +103,25 @@ describe("discovery traffic policy", () => {
     expect(blocked.stdout).toContain("FAIL document malware scanning");
     const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
     expect(malformed.status).toBe(1);
-    expect(malformed.stdout).toContain("scanner URL must be HTTP(S)");
-    const accepted = runDoctor({ FILE_MALWARE_SCAN_URL: "https://scanner.example.test" });
+    expect(malformed.stdout).toContain("scanner URL must use HTTPS");
+    const notAllowlisted = runDoctor({ FILE_MALWARE_SCAN_URL: "https://scanner.example.test" });
+    expect(notAllowlisted.status).toBe(1);
+    const accepted = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://scanner.example.test/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
+    });
     expect(accepted.status).toBe(0);
     expect(accepted.stdout).toContain("PASS document malware scanning");
+    const insecure = runDoctor({
+      FILE_MALWARE_SCAN_URL: "http://scanner.example.test/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "http://scanner.example.test",
+    });
+    expect(insecure.status).toBe(1);
+    expect(insecure.stdout).toContain("scanner URL must use HTTPS");
+    const localScanner = runDoctor({
+      FILE_MALWARE_SCAN_URL: "http://127.0.0.1:39999/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "http://127.0.0.1:39999",
+    });
+    expect(localScanner.status).toBe(0);
   });
 });

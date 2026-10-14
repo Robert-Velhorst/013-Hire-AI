@@ -1,13 +1,15 @@
 import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
-import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
+import { requireMalwareScannerUrl, requireOAuthServerUrl, requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
+import { normalizePublicAppOrigin } from "./publicAppOrigin";
+import { parseTrustedProxyIps } from "./proxyPolicy";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
   if (nodeEnv === "development" || nodeEnv === "test") return false;
 
-  return /\/dist\/index\.js(?:$|[?#])/.test(moduleUrl.replace(/\\/g, "/"));
+  return /\/dist\/(?:runtime\/server|index)\.js(?:$|[?#])/.test(moduleUrl.replace(/\\/g, "/"));
 }
 
 const isProduction = resolveProductionRuntime(process.env.NODE_ENV, import.meta.url);
@@ -101,7 +103,12 @@ export const ENV = {
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
+  oAuthServerAllowedOrigins: readOptionalCsv("OAUTH_SERVER_ALLOWED_ORIGINS") ?? [],
+  malwareScanUrl: readEnv("FILE_MALWARE_SCAN_URL"),
+  malwareScanAllowedOrigins: readOptionalCsv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS") ?? [],
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
+  publicAppOrigin: readEnv("PUBLIC_APP_ORIGIN"),
+  trustedProxyIps: parseTrustedProxyIps(readEnv("TRUSTED_PROXY_IPS"), isProduction),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),
@@ -139,7 +146,23 @@ export function assertRequiredEnv(names: string[]) {
 }
 
 export function validateProductionEnv() {
-  if (!isProduction) return;
+  if (!isProduction) {
+    if (ENV.oAuthServerUrl.trim()) {
+      requireOAuthServerUrl(
+        ENV.oAuthServerUrl,
+        ENV.oAuthServerAllowedOrigins,
+        false
+      );
+    }
+    if (ENV.malwareScanUrl.trim()) {
+      requireMalwareScannerUrl(
+        ENV.malwareScanUrl,
+        ENV.malwareScanAllowedOrigins,
+        false
+      );
+    }
+    return;
+  }
 
   assertRequiredEnv([
     "DATABASE_URL",
@@ -147,6 +170,9 @@ export function validateProductionEnv() {
     "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
+    "OAUTH_SERVER_ALLOWED_ORIGINS",
+    "PUBLIC_APP_ORIGIN",
+    "TRUSTED_PROXY_IPS",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
     "STRIPE_SECRET_KEY",
@@ -155,7 +181,21 @@ export function validateProductionEnv() {
   if (!ENV.oAuthPortalUrl.trim()) {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
+  requireOAuthServerUrl(ENV.oAuthServerUrl, ENV.oAuthServerAllowedOrigins, true);
+  if (ENV.malwareScanUrl.trim()) {
+    requireMalwareScannerUrl(
+      ENV.malwareScanUrl,
+      ENV.malwareScanAllowedOrigins,
+      true
+    );
+  }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  if (!normalizePublicAppOrigin(ENV.publicAppOrigin, true)) {
+    throw new Error("PUBLIC_APP_ORIGIN must be a canonical HTTPS origin without a path, query, or fragment.");
+  }
+  if (ENV.trustedProxyIps.length === 0) {
+    throw new Error("TRUSTED_PROXY_IPS must include the exact IP address of each trusted reverse proxy in production.");
+  }
   const analyticsRuntimeOrigin = normalizeApprovedAnalyticsOrigin(
     ENV.analyticsAllowedOrigin
   );

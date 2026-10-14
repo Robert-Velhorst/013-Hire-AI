@@ -37,4 +37,10 @@ describe("session cookie options", () => {
 
     expect(options).toMatchObject({ secure: false, sameSite: "lax" });
   });
+
+  it("always marks session cookies secure in production behind a TLS-terminating proxy", () => {
+    const options = getSessionCookieOptions({ secure: false } as Request, true);
+
+    expect(options).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax" });
+  });
 });

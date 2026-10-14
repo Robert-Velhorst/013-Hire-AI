@@ -30,17 +30,24 @@ foreach ($launcherPath in $launcherPaths) {
 }
 
 $windowsLauncher = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'start-windows.ps1') -Raw
+$ngrokLauncher = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'start-ngrok.ps1') -Raw
 $migrationPosition = $windowsLauncher.IndexOf("'scripts/database-migrate.mjs'")
-$schemaAuditPosition = $windowsLauncher.IndexOf("'dist/database-schema-audit.js'")
+$schemaAuditPosition = $windowsLauncher.IndexOf('& $node.Source $schemaAuditEntrypoint')
 $serverStartPosition = $windowsLauncher.IndexOf('Start-Process -FilePath $node.Source')
-if ($migrationPosition -lt 0 -or $schemaAuditPosition -lt 0 -or $serverStartPosition -lt 0) {
+$serverEntrypointConfigured = $windowsLauncher.Contains("'dist/runtime/server.js'")
+if ($migrationPosition -lt 0 -or $schemaAuditPosition -lt 0 -or -not $serverEntrypointConfigured -or $serverStartPosition -lt 0) {
     throw 'The Windows launcher must migrate, audit, and start the database-backed runtime.'
 }
 if (-not ($migrationPosition -lt $schemaAuditPosition -and $schemaAuditPosition -lt $serverStartPosition)) {
     throw 'The Windows launcher must migrate and audit the database before starting the server.'
 }
+$originValidationPosition = $ngrokLauncher.IndexOf('PUBLIC_APP_ORIGIN')
+$ngrokStartPosition = $ngrokLauncher.IndexOf('Start-Process -FilePath $ngrok.Source')
+if ($originValidationPosition -lt 0 -or $ngrokStartPosition -lt 0 -or $originValidationPosition -gt $ngrokStartPosition) {
+    throw 'The ngrok launcher must verify PUBLIC_APP_ORIGIN before starting the public tunnel.'
+}
 
-$distEntry = Join-Path $repoRoot 'dist\index.js'
+$distEntry = Join-Path $repoRoot 'dist\runtime\server.js'
 if (Test-Path -LiteralPath $distEntry -PathType Container) {
     throw "Production entry path is unexpectedly a directory: $distEntry"
 }
