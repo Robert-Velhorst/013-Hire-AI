@@ -31,6 +31,42 @@ describe("sensitive upload validation", () => {
         "D:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
     });
     expect(
+      resolveWindowsDefenderPaths(
+        "C:\\Program Files\\nodejs\\node.exe",
+        undefined,
+        "D:\\Shared Program Data"
+      )
+    ).toEqual({
+      legacyExecutable:
+        "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "D:\\Shared Program Data\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\Program Files\\nodejs\\node.exe",
+        "E:\\Windows Apps\\Program Files\\",
+        "D:/Shared Program Data/"
+      )
+    ).toEqual({
+      legacyExecutable:
+        "E:\\Windows Apps\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "D:\\Shared Program Data\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
+      resolveWindowsDefenderPaths(
+        "\\\\?\\C:\\runtime\\node.exe",
+        "\\\\?\\E:\\Program Files",
+        "\\\\?\\D:\\Shared ProgramData"
+      )
+    ).toEqual({
+      legacyExecutable:
+        "\\\\?\\E:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot:
+        "\\\\?\\D:\\Shared ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
       resolveWindowsDefenderPaths("\\\\?\\C:\\runtime\\node.exe")
     ).toEqual({
       legacyExecutable:
@@ -42,6 +78,70 @@ describe("sensitive upload validation", () => {
     expect(
       resolveWindowsDefenderPaths("\\\\server\\share\\node.exe")
     ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        undefined,
+        "relative\\ProgramData"
+      )
+    ).toEqual({
+      legacyExecutable:
+        "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot: null,
+    });
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        undefined,
+        "\\\\server\\share\\ProgramData"
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        undefined,
+        ""
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        "C:\\Program Files",
+        "\\\\?\\UNC\\server\\share\\ProgramData"
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        "C:\\Program Files",
+        "D:\\Shared?Data"
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        undefined,
+        "D:\\Shared Data."
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        undefined,
+        "\\\\.\\C:\\ProgramData"
+      )?.platformRoot
+    ).toBeNull();
+    expect(
+      resolveWindowsDefenderPaths(
+        "C:\\runtime\\node.exe",
+        "relative\\Program Files",
+        "D:\\ProgramData"
+      )
+    ).toEqual({
+      legacyExecutable: null,
+      platformRoot:
+        "D:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
   });
   it("accepts a bounded PDF with a matching signature", () => {
     expect(
