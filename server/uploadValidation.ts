@@ -111,12 +111,12 @@ async function acquireScanPermit() {
   });
 }
 
-export function resolveWindowsDefenderPaths(systemRoot: string) {
-  const normalizedSystemRoot = win32.normalize(systemRoot.trim());
-  const standardSystemRoot = normalizedSystemRoot.startsWith("\\\\?\\")
-    ? normalizedSystemRoot.slice(4)
-    : normalizedSystemRoot;
-  const driveMatch = /^([a-z]:)\\Windows\\?$/i.exec(standardSystemRoot);
+export function resolveWindowsDefenderPaths(executablePath: string) {
+  const parsedRoot = win32.parse(executablePath).root;
+  const driveRoot = parsedRoot.startsWith("\\\\?\\")
+    ? parsedRoot.slice(4)
+    : parsedRoot;
+  const driveMatch = /^([a-z]:)\\$/i.exec(driveRoot);
   if (!driveMatch) return null;
 
   const systemDrive = `${driveMatch[1]}\\`;
@@ -138,7 +138,7 @@ export function resolveWindowsDefenderPaths(systemRoot: string) {
 }
 
 async function findWindowsDefenderExecutable() {
-  const paths = resolveWindowsDefenderPaths(process.env.SystemRoot ?? "");
+  const paths = resolveWindowsDefenderPaths(process.execPath);
   if (!paths) return null;
   const candidates = [paths.legacyExecutable];
   if (existsSync(paths.platformRoot)) {
