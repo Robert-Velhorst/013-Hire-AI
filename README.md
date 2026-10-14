@@ -4,7 +4,7 @@ Hire.AI is an early-stage, self-hostable preview application for finding and com
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
-> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer application submission are not complete. The software does not currently apply to jobs on a candidate's behalf.
+> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer-portal submission are not complete. The application workflow now supports sending an application to a verified employer-published email address only after recorded approval, a fresh consent confirmation, and a final review of the exact recipient and message. This limited path is not evidence of live provider acceptance or production readiness.
 
 **Quick links:** [first preview release](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1) · [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) · [security reporting](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new) · [production acceptance checklist](docs/PRODUCTION_ACCEPTANCE.md)
 
@@ -13,7 +13,7 @@ The product is intended for people looking for any kind of work that can be perf
 - **For job seekers:** one place for a profile, resume versions, remote job listings, match explanations, saved jobs, application records, employer responses, and interview preparation.
 - **For developers:** a TypeScript monorepo with a React web client, Express/tRPC API, Drizzle/MySQL data layer, scraper adapters, Docker packaging, and Windows launch tooling.
 - **For operators:** migration, health, backup/restore, schema-audit, privacy, and deployment documentation, plus CI for Linux, Windows, MySQL, and container paths.
-- **Current authority boundary:** review-first. Hire.AI may prepare work and create auditable review records; it does not currently submit employer applications through third-party portals.
+- **Current authority boundary:** review-first. Hire.AI can send an approved application by email only after the candidate reviews and explicitly confirms the exact destination and message. Employer and applicant-tracking-system forms remain a user handoff; browser automation is disabled.
 - **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
 
@@ -35,7 +35,7 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 
 ### Not currently delivered as an end-to-end service
 
-- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; the current application path is review and user handoff.
+- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; those applications still require a user handoff. The separate email-delivery path is gated by an approved application, current listing and candidate evidence, a verified employer-published address, and explicit final confirmation.
 - Complete coverage of all job boards or permission to scrape every public website. Catalog entries may be manual, unavailable, account-mediated, or awaiting provider approval.
 - Live or accepted production use of all OAuth, email, document-storage, payment, malware-scanning, or AI providers.
 - A guarantee of a job, interview, uninterrupted employment, or fully correct classification of every listing.

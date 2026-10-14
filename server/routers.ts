@@ -2207,7 +2207,31 @@ export const appRouter = router({
           });
         }
       }),
-    updateStatus: protectedProcedure
+      sendApprovedApplicationByEmail: protectedProcedure
+        .input(z.object({
+          approvalId: z.number().int().positive(),
+          provider: z.enum(["gmail", "outlook"]),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          assertJobSearchTermsAccepted(ctx.user);
+          const { sendApprovedApplicationByEmail, ApplicationEmailDeliveryError } = await import("./applicationEmailDelivery");
+          try {
+            return await sendApprovedApplicationByEmail({
+              approvalId: input.approvalId,
+              provider: input.provider,
+              userId: ctx.user.id,
+            });
+          } catch (error) {
+            const knownFailure = error instanceof ApplicationEmailDeliveryError;
+            throw new TRPCError({
+              code: knownFailure ? "PRECONDITION_FAILED" : "INTERNAL_SERVER_ERROR",
+              message: knownFailure
+                ? error.message
+                : "Application email delivery failed unexpectedly. Check the application ledger before trying again.",
+            });
+          }
+        }),
+      updateStatus: protectedProcedure
       .input(
         z.object({
           applicationId: z.number().int().positive(),

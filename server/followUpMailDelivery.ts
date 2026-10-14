@@ -150,6 +150,14 @@ async function markMailAccessNeedsReauth(userId: number, account: NonNullable<Aw
   });
 }
 
+export async function markMailProviderNeedsReauth(
+  userId: number,
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
+  dependencies: MailDeliveryDependencies = defaults
+) {
+  await markMailAccessNeedsReauth(userId, account, dependencies);
+}
+
 export async function sendFollowUpProviderMessage(
   provider: FollowUpMailProvider,
   accessToken: string,
