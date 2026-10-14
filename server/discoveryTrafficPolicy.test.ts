@@ -35,6 +35,7 @@ describe("discovery traffic policy", () => {
       STRIPE_SECRET_KEY: "sk_test_doctor",
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
       JOB_SCRAPING_SCHEDULER_ENABLED: "true",
       JOB_SCRAPING_MAX_CONCURRENT_SOURCES: "3",
       JOB_SCRAPING_SOURCE_TIMEOUT_MS: "90000",
@@ -84,6 +85,7 @@ describe("discovery traffic policy", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_doctor",
       FILE_MALWARE_SCAN_MODE: "http",
       FILE_MALWARE_SCAN_URL: "",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "",
       JOB_SCRAPING_SCHEDULER_ENABLED: "false",
       HAI_CONNECTOR_ENABLED: "false",
     };
@@ -95,9 +97,18 @@ describe("discovery traffic policy", () => {
     expect(blocked.stdout).toContain("FAIL document malware scanning");
     const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
     expect(malformed.status).toBe(1);
-    expect(malformed.stdout).toContain("scanner URL must be HTTP(S)");
-    const accepted = runDoctor({ FILE_MALWARE_SCAN_URL: "https://scanner.example.test" });
+    expect(malformed.stdout).toContain("Scanner URL must use HTTPS");
+    const accepted = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
+    });
     expect(accepted.status).toBe(0);
     expect(accepted.stdout).toContain("PASS document malware scanning");
+    const unlisted = runDoctor({
+      FILE_MALWARE_SCAN_URL: "https://other.example.test",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
+    });
+    expect(unlisted.status).toBe(1);
+    expect(unlisted.stdout).toContain("Scanner URL origin is not in FILE_MALWARE_SCAN_ALLOWED_ORIGINS");
   });
 });

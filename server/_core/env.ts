@@ -2,6 +2,7 @@ import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiCon
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
+import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -180,6 +181,14 @@ export function validateProductionEnv() {
     throw new Error(
       "ERASURE_IDENTITY_HMAC_KEYS must contain comma-separated 32-4096 character secrets without whitespace or control characters"
     );
+  }
+  const malwareScannerPolicy = inspectMalwareScannerPolicy({
+    mode: readEnv("FILE_MALWARE_SCAN_MODE"),
+    endpoint: readEnv("FILE_MALWARE_SCAN_URL"),
+    allowedOrigins: readEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS"),
+  });
+  if (malwareScannerPolicy.mode === "unavailable") {
+    throw new Error(`Production malware scanning is not safely configured: ${malwareScannerPolicy.issue}`);
   }
   if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {
     throw new Error(

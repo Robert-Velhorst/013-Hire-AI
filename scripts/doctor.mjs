@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -62,23 +63,20 @@ function windowsDefenderAvailable() {
 
 const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto").trim().toLowerCase();
 const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
+const malwareScanAllowedOrigins = String(process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS || "");
 const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
 const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
-const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
 const malwareTimeoutValid = Number.isInteger(malwareScanTimeout) && malwareScanTimeout >= 1_000 && malwareScanTimeout <= 120_000;
 const malwareConcurrencyValid = Number.isInteger(malwareScanConcurrency) && malwareScanConcurrency >= 1 && malwareScanConcurrency <= 8;
-let malwareScanUrlValid = !malwareScanUrl;
-try {
-  if (malwareScanUrl) {
-    const parsed = new URL(malwareScanUrl);
-    malwareScanUrlValid = ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
-  }
-} catch { malwareScanUrlValid = false; }
+const malwareScannerPolicy = inspectMalwareScannerPolicy({
+  mode: malwareScanMode,
+  endpoint: malwareScanUrl,
+  allowedOrigins: malwareScanAllowedOrigins,
+});
 const defenderAvailable = windowsDefenderAvailable();
-const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcurrencyValid && malwareScanUrlValid && (
-  (malwareScanMode === "http" && Boolean(malwareScanUrl))
-  || (malwareScanMode === "windows_defender" && defenderAvailable)
-  || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
+const scannerAvailable = malwareTimeoutValid && malwareConcurrencyValid && (
+  malwareScannerPolicy.mode === "http" ||
+  (malwareScannerPolicy.mode === "windows_defender" && defenderAvailable)
 );
 
 const oauthPortalUrl = String(process.env.OAUTH_PORTAL_URL || process.env.VITE_OAUTH_PORTAL_URL || "").trim();
@@ -229,14 +227,13 @@ check(
 );
 check(
   "document malware scanning",
-  !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",
-  !malwareModeValid ? "mode must be auto, http, or windows_defender"
-    : !malwareScanUrlValid ? "scanner URL must be HTTP(S) without embedded credentials"
-      : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
-        : !malwareConcurrencyValid ? "concurrency must be 1-8"
-          : malwareScanUrl && malwareScanMode !== "windows_defender" ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`
-            : defenderAvailable && malwareScanMode !== "http" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
-              : "scanner required before production document uploads"
+  !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? "fail" : scannerAvailable ? "pass" : "warn",
+  malwareScannerPolicy.issue && Boolean(malwareScanUrl) ? malwareScannerPolicy.issue
+    : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
+      : !malwareConcurrencyValid ? "concurrency must be 1-8"
+        : scannerAvailable && malwareScannerPolicy.mode === "http" ? `bounded, explicitly allowlisted HTTP scanner configured (${malwareScanConcurrency} concurrent)`
+          : scannerAvailable && malwareScannerPolicy.mode === "windows_defender" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
+            : "scanner required before production document uploads"
 );
 
 const scrapingEnabled = String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "").trim().toLowerCase() === "true";
