@@ -5,8 +5,17 @@ function valueAfter(flag) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function hasOption(flag, valueOptions) {
+  const args = process.argv.slice(3);
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === flag) return true;
+    if (valueOptions.includes(args[index])) index += 1;
+  }
+  return false;
+}
+
 try {
-  if (process.argv.includes("--mysql")) {
+  if (hasOption("--mysql", ["--confirm", "--docker-container"])) {
     throw new Error("Custom database client paths are not accepted. Install mysql on PATH or use --docker-container.");
   }
   const bundlePath = process.argv[2];
