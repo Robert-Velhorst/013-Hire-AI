@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Request } from "express";
-import { getSessionCookieOptions, shouldUseSecureSessionCookie } from "./_core/cookies";
+import { ENV } from "./_core/env";
+import { getSessionCookieOptions } from "./_core/cookies";
 
 describe("session cookie options", () => {
+  const originalProduction = ENV.isProduction;
+  afterEach(() => {
+    ENV.isProduction = originalProduction;
+  });
+
   it("uses lax cookies on local non-secure requests so browsers keep the session", () => {
     const options = getSessionCookieOptions({
       secure: false,
@@ -39,6 +45,9 @@ describe("session cookie options", () => {
   });
 
   it("always marks production session cookies secure even when proxy metadata is misconfigured", () => {
-    expect(shouldUseSecureSessionCookie(true, false)).toBe(true);
+    ENV.isProduction = true;
+    const options = getSessionCookieOptions({ secure: false } as Request);
+
+    expect(options).toMatchObject({ secure: true, sameSite: "lax" });
   });
 });
