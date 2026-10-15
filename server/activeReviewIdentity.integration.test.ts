@@ -18,6 +18,56 @@ import {
 const runIntegration = process.env.HIRE_AI_DATABASE_ACCEPTANCE === "true";
 const userId = 1_781_013_081;
 const adminId = 1_781_013_082;
+const adminFixtureBackfill = `UPDATE hire_ai_active_review_backfill_fixture AS older
+      JOIN hire_ai_active_review_backfill_fixture AS newer
+        ON newer.user_id = older.user_id
+        AND newer.entity_type = older.entity_type
+        AND newer.entity_id = older.entity_id
+        AND newer.category = older.category
+        AND newer.status IN ('open', 'in_progress')
+        AND (newer.updated_at > older.updated_at OR (newer.updated_at = older.updated_at AND newer.id > older.id))
+      SET older.status = 'dismissed', older.resolved_at = COALESCE(older.resolved_at, CURRENT_TIMESTAMP),
+        older.resolution = COALESCE(older.resolution, 'Duplicate active review superseded during migration; historical record retained.')
+      WHERE older.status IN ('open', 'in_progress')`;
+const approvalFixtureBackfill = `UPDATE hire_ai_active_approval_backfill_fixture AS older
+      JOIN hire_ai_active_approval_backfill_fixture AS newer
+        ON newer.user_id = older.user_id
+        AND newer.entity_type = older.entity_type
+        AND newer.entity_id = older.entity_id
+        AND newer.approval_type = older.approval_type
+        AND newer.status = 'pending'
+        AND (newer.updated_at > older.updated_at OR (newer.updated_at = older.updated_at AND newer.id > older.id))
+      SET older.status = 'cancelled', older.decided_at = COALESCE(older.decided_at, CURRENT_TIMESTAMP),
+        older.decision_note = COALESCE(older.decision_note, 'Duplicate pending approval superseded during migration; historical record retained.')
+      WHERE older.status = 'pending'`;
+const normalizeBackfillSql = (statement: string) =>
+  statement
+    .replaceAll("`", "")
+    .replaceAll("hire_ai_active_review_backfill_fixture", "admin_review_items")
+    .replaceAll("hire_ai_active_approval_backfill_fixture", "application_approvals")
+    .replace(/\s+/g, " ")
+    .replace(/\s*\(\s*/g, "(")
+    .replace(/\s*\)\s*/g, ")")
+    .trim()
+    .replace(/;$/, "");
+
+describe("active identity migration backfill SQL", () => {
+  it("keeps fixture statements aligned with the migration", () => {
+    const migration = readFileSync(resolve(process.cwd(), "drizzle", "0081_mighty_oracle.sql"), "utf8");
+    const statements = migration.split("--> statement-breakpoint");
+    const adminBackfill = statements.find(statement =>
+      statement.trimStart().startsWith("UPDATE `admin_review_items` AS older")
+    );
+    const approvalBackfill = statements.find(statement =>
+      statement.trimStart().startsWith("UPDATE `application_approvals` AS older")
+    );
+
+    expect(adminBackfill).toBeDefined();
+    expect(approvalBackfill).toBeDefined();
+    expect(normalizeBackfillSql(adminBackfill!)).toBe(normalizeBackfillSql(adminFixtureBackfill));
+    expect(normalizeBackfillSql(approvalBackfill!)).toBe(normalizeBackfillSql(approvalFixtureBackfill));
+  });
+});
 
 describe.skipIf(!runIntegration)("active approval and review identities on MySQL", () => {
   let db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -135,16 +185,10 @@ describe.skipIf(!runIntegration)("active approval and review identities on MySQL
     }
   }, 60_000);
 
-  it("executes the migration's deterministic duplicate cleanup against legacy rows", async () => {
+  it("preserves the migration's deterministic duplicate cleanup for legacy rows", async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("Integration DATABASE_URL is required.");
     const connection = await mysql.createConnection(databaseUrl);
-    const migration = readFileSync(resolve(process.cwd(), "drizzle", "0081_mighty_oracle.sql"), "utf8");
-    const adminBackfill = migration.split("--> statement-breakpoint")
-      .find(statement => statement.trimStart().startsWith("UPDATE `admin_review_items` AS older"));
-    const approvalBackfill = migration.split("--> statement-breakpoint")
-      .find(statement => statement.trimStart().startsWith("UPDATE `application_approvals` AS older"));
-    if (!adminBackfill || !approvalBackfill) throw new Error("Active identity backfill SQL is missing.");
 
     try {
       await connection.query("DROP TABLE IF EXISTS hire_ai_active_review_backfill_fixture");
@@ -184,8 +228,8 @@ describe.skipIf(!runIntegration)("active approval and review identities on MySQL
           (3, 10, 'application', 21, 'application_submission', 'pending', '2026-01-01 00:00:00', NULL, NULL)`
       );
 
-      await connection.query(adminBackfill.replaceAll("`admin_review_items`", "`hire_ai_active_review_backfill_fixture`"));
-      await connection.query(approvalBackfill.replaceAll("`application_approvals`", "`hire_ai_active_approval_backfill_fixture`"));
+      await connection.query(adminFixtureBackfill);
+      await connection.query(approvalFixtureBackfill);
 
       const [reviews] = await connection.query<Array<{ id: number; status: string; resolution: string | null }>>(
         "SELECT id, status, resolution FROM hire_ai_active_review_backfill_fixture ORDER BY id"
