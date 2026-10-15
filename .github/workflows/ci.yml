@@ -157,7 +157,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Apply migrations to isolated acceptance database
-        run: pnpm db:migrate
+        run: pnpm db:migrate:acceptance
       - name: Verify persistence, isolation and privacy cleanup on MySQL
         run: |
           set -o pipefail
