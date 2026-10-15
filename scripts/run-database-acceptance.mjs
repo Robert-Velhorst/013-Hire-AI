@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDatabaseAcceptanceTarget } from "./database-acceptance-policy.mjs";
 import { verifyDatabaseAcceptanceReport } from "./database-acceptance-report.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -32,21 +33,9 @@ async function findIntegrationSuites(directory, relativeToRoot = "") {
   return files.flat().sort();
 }
 
-let allowed = false;
-try {
-  const target = new URL(process.env.DATABASE_URL || "");
-  allowed =
-    process.env.HIRE_AI_DATABASE_ACCEPTANCE === "true" &&
-    process.env.NODE_ENV !== "production" &&
-    target.protocol === "mysql:" &&
-    target.pathname === "/hire_ai_acceptance";
-} catch {
-  /* Invalid targets must not reach the test runner. */
-}
-
-if (!allowed) {
+if (!isDatabaseAcceptanceTarget()) {
   console.error(
-    "Set HIRE_AI_DATABASE_ACCEPTANCE=true and DATABASE_URL for an isolated hire_ai_acceptance database outside production. No tests were run."
+    "Set HIRE_AI_DATABASE_ACCEPTANCE=true and DATABASE_URL for a dedicated local hire_ai_acceptance database outside production. Do not use a shared or port-forwarded database. No tests were run."
   );
   process.exitCode = 1;
 } else {

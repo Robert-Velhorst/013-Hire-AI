@@ -14,6 +14,7 @@ import {
   resolveAdminReviewItem,
   resolveApplicationApproval,
 } from "./db";
+import { isDatabaseAcceptanceTarget } from "../scripts/database-acceptance-policy.mjs";
 
 const runIntegration = process.env.HIRE_AI_DATABASE_ACCEPTANCE === "true";
 const userId = 1_781_013_081;
@@ -21,8 +22,15 @@ const adminId = 1_781_013_082;
 
 describe.skipIf(!runIntegration)("active approval and review identities on MySQL", () => {
   let db: NonNullable<Awaited<ReturnType<typeof getDb>>>;
+  let acceptanceDatabaseUrl: string;
 
   beforeAll(async () => {
+    acceptanceDatabaseUrl = process.env.DATABASE_URL || "";
+    if (!isDatabaseAcceptanceTarget()) {
+      throw new Error(
+        "Active identity acceptance requires the local hire_ai_acceptance database outside production."
+      );
+    }
     const connection = await getDb();
     if (!connection) throw new Error("Integration DATABASE_URL is required.");
     db = connection;
@@ -136,9 +144,7 @@ describe.skipIf(!runIntegration)("active approval and review identities on MySQL
   }, 60_000);
 
   it("executes the migration's deterministic duplicate cleanup against legacy rows", async () => {
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) throw new Error("Integration DATABASE_URL is required.");
-    const connection = await mysql.createConnection(databaseUrl);
+    const connection = await mysql.createConnection(acceptanceDatabaseUrl);
     const migration = readFileSync(resolve(process.cwd(), "drizzle", "0081_mighty_oracle.sql"), "utf8");
     const adminBackfill = migration.split("--> statement-breakpoint")
       .find(statement => statement.trimStart().startsWith("UPDATE `admin_review_items` AS older"));
@@ -184,7 +190,11 @@ describe.skipIf(!runIntegration)("active approval and review identities on MySQL
           (3, 10, 'application', 21, 'application_submission', 'pending', '2026-01-01 00:00:00', NULL, NULL)`
       );
 
+      // CodeQL: these statements come from the checked-in migration; only fixed fixture table names are substituted.
+      // codeql[js/sql-injection]
       await connection.query(adminBackfill.replaceAll("`admin_review_items`", "`hire_ai_active_review_backfill_fixture`"));
+      // CodeQL: these statements come from the checked-in migration; only fixed fixture table names are substituted.
+      // codeql[js/sql-injection]
       await connection.query(approvalBackfill.replaceAll("`application_approvals`", "`hire_ai_active_approval_backfill_fixture`"));
 
       const [reviews] = await connection.query<Array<{ id: number; status: string; resolution: string | null }>>(

@@ -21,6 +21,7 @@
     "db:restore": "node scripts/database-restore.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/database-migrate.mjs",
+    "db:migrate:acceptance": "node scripts/run-database-acceptance-migration.mjs",
     "db:audit-schema": "node dist/database-schema-audit.js",
     "db:audit-query-plans": "node dist/database-query-plan-audit.js",
     "db:push": "node scripts/database-migrate.mjs"
