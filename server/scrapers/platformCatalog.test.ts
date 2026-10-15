@@ -51,9 +51,11 @@ describe("scraper platform catalog", () => {
 
   it("only permits unattended discovery for explicit public API or RSS adapters", () => {
     expect(scraperPlatformCatalog.filter((platform) => isAutomatedDiscoveryPlatform(platform.name)))
-      .toHaveLength(9);
+      .toHaveLength(8);
     expect(isAutomatedDiscoveryPlatform("RemoteOK")).toBe(true);
-    expect(isAutomatedDiscoveryPlatform("Remotive")).toBe(true);
+    expect(isAutomatedDiscoveryPlatform("Remotive")).toBe(false);
+    expect(getPlatformDiscoveryPolicy("Remotive").reason)
+      .toContain("private paid API");
     expect(isAutomatedDiscoveryPlatform("We Work Remotely")).toBe(true);
     expect(isAutomatedDiscoveryPlatform("Jobicy")).toBe(true);
     expect(getPlatformMinimumPollIntervalMs("Jobicy")).toBe(60 * 60 * 1000);

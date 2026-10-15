@@ -14,14 +14,14 @@ The product is intended for people looking for any kind of work that can be perf
 - **For developers:** a TypeScript monorepo with a React web client, Express/tRPC API, Drizzle/MySQL data layer, scraper adapters, Docker packaging, and Windows launch tooling.
 - **For operators:** migration, health, backup/restore, schema-audit, privacy, and deployment documentation, plus CI for Linux, Windows, MySQL, and container paths.
 - **Current authority boundary:** review-first. For a current, clearly fully remote listing with an application email and prepared versioned resume, the candidate can review an exact Gmail/Outlook draft, approve it, and separately choose **Send now**. The address comes from the posting and is not independently verified. Employer portals and ATS forms remain a user handoff; ambiguous sends are blocked from automatic retry.
-- **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
+- **Source coverage:** a catalog of 90 job sources and eight policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
 
 ## What Works Today
 
 | Area | Available in this preview | Important boundary |
 | --- | --- | --- |
-| Job discovery | Bounded API/RSS collection from nine policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
+| Job discovery | Bounded API/RSS collection from eight policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
 | Comparison | Normalized listings, source attribution, freshness information, and links between likely duplicate postings. | A duplicate link is evidence for review, not proof that two listings are identical. Missing or conflicting conditions remain uncertain. |
 | Candidate workspace | Profiles, resume versions, preferences, job filters, match explanations, saved jobs, and application records. | Matching supports decisions; it does not guarantee qualification, an interview, or a job. |
 | Application workflow | Prepare and review application material; for eligible postings, send an explicitly approved email with the selected versioned resume attached through Gmail or Outlook. | Requires configured mailbox scopes and live provider acceptance. The listing email is not independently verified, provider acceptance does not guarantee recipient delivery, and employer/ATS forms remain a user handoff. |
@@ -59,12 +59,11 @@ The intended autonomous journey may discover, qualify, prepare and, after explic
 
 ## Job Sources And Deduplication
 
-The current code policy enables unattended discovery from these nine API/RSS sources:
+The current code policy enables unattended discovery from these eight API/RSS sources:
 
 | Source           | Collection method / important limit                                         |
 | ---------------- | --------------------------------------------------------------------------- |
 | RemoteOK         | Public job API; preserves source attribution and listing details.           |
-| Remotive         | Public remote-job API.                                                      |
 | Jobicy           | Public documented API with bounded polling.                                 |
 | Arbeitnow        | Public API; accepts records explicitly marked remote.                       |
 | Arbeitnow UK     | Bounded UK API page; requires explicit remote status and provider backlink. |
@@ -72,6 +71,8 @@ The current code policy enables unattended discovery from these nine API/RSS sou
 | We Work Remotely | Public RSS category feeds.                                                  |
 | NoDesk           | Public RSS feed.                                                            |
 | ProBlogger       | Public RSS feed.                                                            |
+
+Remotive remains cataloged, but unattended ingestion is paused until written approval or an appropriate private API agreement is in place. Its [public API terms](https://remotive.com/remote-jobs/api) restrict using listings to collect signups and point to a private paid API for that use; its [Terms of Use](https://support.remotive.com/en/article/terms-of-service-u4kbkf/) also restrict automated extraction and redistribution. The eight enabled sources are still not universal coverage.
 
 The source catalog currently represents 90 platforms for provenance and possible expansion. It includes regional/local sources and platforms such as LinkedIn Jobs, Wellfound, Glassdoor, and freelance marketplaces, but inclusion is not permission to scrape or evidence of a working adapter. Working Nomads is specifically excluded from automatic ingestion pending written authorization. The scheduler is disabled by default. Operators must review provider terms, rate limits, attribution, robots/API guidance, and regional privacy obligations before enabling a source.
 

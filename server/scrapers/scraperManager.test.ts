@@ -82,6 +82,20 @@ describe("scraper manager platform restrictions", () => {
     expect(manager.getInitializationError("LinkedIn Jobs")).toContain("approved integration");
     expect(manager.getInitializedPlatforms()).not.toContain("Working Nomads");
     expect(manager.getInitializationError("Working Nomads")).toContain("competitive product");
+    expect(manager.getInitializedPlatforms()).not.toContain("Remotive");
+    expect(manager.getInitializationError("Remotive")).toContain("private paid API");
+  });
+
+  it("blocks a manually requested source when its policy is not automated", async () => {
+    const manager = new ScraperManager();
+    const remotive = createScraper(2);
+    (manager as unknown as { scrapers: Map<string, BaseScraper> }).scrapers.set("Remotive", remotive);
+
+    const result = await manager.scrapePlatform("Remotive");
+
+    expect(remotive.scrape).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ jobs: [], skippedReason: "policy" });
+    expect(result.errors[0]).toContain("private paid API");
   });
 
   it("runs only the explicitly enabled platform sources", async () => {
@@ -710,4 +724,3 @@ describe("scraper manager platform restrictions", () => {
     }));
   });
 });
-
