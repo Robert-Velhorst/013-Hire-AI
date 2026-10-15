@@ -15,6 +15,9 @@ describe("public outbound URL policy", () => {
     "192.168.1.20",
     "::1",
     "fc00::1",
+    "fec0::1",
+    "64:ff9b::a00:1",
+    "64:ff9b:1::a00:1",
     "::ffff:7f00:1",
   ])("rejects a URL resolving to blocked address %s", async (address) => {
     const lookup = vi.fn().mockResolvedValue([{ address, family: address.includes(":") ? 6 : 4 }]);

@@ -1,5 +1,6 @@
 import { ENV } from "./_core/env";
 import { readBoundedResponseJson } from "./_core/outboundRequest";
+import { fetchPublicHttpsUrl } from "./_core/publicUrl";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -179,7 +180,7 @@ async function scanWithHttp(input: {
   const parsedEndpoint = new URL(endpoint);
   const token = process.env.FILE_MALWARE_SCAN_TOKEN?.trim();
   try {
-    const response = await fetch(parsedEndpoint, {
+    const request = {
       method: "POST",
       headers: {
         "content-type": input.mimeType,
@@ -188,8 +189,15 @@ async function scanWithHttp(input: {
       },
       body: Buffer.from(input.data),
       signal: AbortSignal.timeout(scannerTimeoutMs()),
-      redirect: "error",
-    });
+    } as const;
+    const isLoopbackHttp =
+      parsedEndpoint.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]", "::1"].includes(
+        parsedEndpoint.hostname.toLowerCase()
+      );
+    const response = isLoopbackHttp
+      ? await fetch(parsedEndpoint, { ...request, redirect: "error" })
+      : await fetchPublicHttpsUrl(parsedEndpoint.toString(), request);
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
       throw new Error("scanner_status");
