@@ -1,25 +1,21 @@
 # Security Policy
 
-Hire.AI is an early-stage, self-hostable preview project. It is not a managed service and has not been accepted for production use. Security reports are welcome; please keep vulnerability details private until a fix or coordinated disclosure is agreed.
+Hire.AI is an early-stage preview and is not accepted for production use. Please report suspected vulnerabilities privately. Do not test against a live service or submit real candidate data; no public production service is currently offered.
 
-## Supported versions
+## Reporting
 
-There is no supported production release, support window, or service-level commitment. The published [`v0.1.0-alpha.1` release](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1) is an evaluation preview only. Maintainers may publish security fixes for `main` and the preview release as capacity permits; no response, remediation, or backport time is guaranteed. Do not use the preview to process real candidate data without completing the production acceptance requirements.
+Use GitHub's **Report a vulnerability** form on the repository's [Security Advisories page](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new). Private vulnerability reporting is enabled. Include the affected commit or release, impact, reproduction steps, and a safe proof of concept where possible. Redact personal information, access tokens, passwords, and other secrets.
 
-## Report a vulnerability
+If the private form is unavailable, open a public issue titled **Request private security contact** only. Do not put vulnerability details, exploit code, affected user data, or credentials in a public issue, discussion, or pull request.
 
-Use **Report a vulnerability** on the repository's [GitHub Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security). Private vulnerability reporting is enabled; the form keeps the initial report out of public issues and discussions. Include the affected commit or release, impact, reproduction steps, and a safe proof of concept where useful. Do not include real user data, working credentials, or unrelated secrets in a report.
+## Scope and handling
 
-If private reporting is unavailable, open a public issue with only the title **Request private security contact**. Do not include vulnerability details, exploit code, affected user data, or credentials. Maintainers will provide a private reporting route. Do not use public issues, discussions, or pull requests to disclose an unpatched vulnerability.
-
-## Scope and response
-
-Reports involving authentication, authorization, candidate data, resumes, connector tokens, application actions, payments, privacy erasure, dependency vulnerabilities, or deployment configuration are in scope. Please allow maintainers time to investigate and coordinate a fix before public disclosure. Acknowledgement, severity assessment, remediation, and disclosure timing depend on impact and maintainer availability; no response-time or remediation-time guarantee is currently offered. Security reports are not a substitute for ordinary bug reports or product support requests.
+Reports involving authentication, authorization, candidate data or resumes, provider grants, application actions, payments, privacy erasure, source ingestion, or deployment configuration are in scope. Please allow maintainers to investigate and coordinate remediation before public disclosure. Acknowledgment, response, and remediation timelines are not guaranteed.
 
 ## Repository safeguards
 
-The following GitHub repository controls were verified on 2026-10-15 UTC: private vulnerability reporting, CodeQL default setup, Dependabot security updates, provider-pattern secret scanning and push protection are enabled. The `main` branch requires pull requests, an up-to-date base, seven named status checks, and resolved review conversations; force pushes and branch deletion are disabled. GitHub Actions uses read-only default token permissions, an allowlist of eight actions, and required full-SHA pinning.
+Verified against GitHub on 2026-10-15 UTC: private vulnerability reporting, CodeQL default setup, Dependabot alerts and security updates, provider-pattern secret scanning, and secret push protection are enabled. No open Dependabot or secret-scanning alerts were returned. GitHub reported 29 open CodeQL alerts on `main` (2 critical, 23 high, 4 medium); they remain to be triaged and are not considered fixed by the presence of scanning.
 
-At that check, GitHub reported 29 open CodeQL alerts on `main` (2 critical, 23 high, and 4 medium), and no open Dependabot or secret-scanning alerts. Open findings are not considered fixed merely because scanning is enabled. Generic non-provider secret-pattern scanning and provider-token validity checks are not enabled; GitHub's current eligibility requirements do not make these options available to this user-owned repository. Validity checks can send detected credentials to their issuers. Alert counts and repository settings change over time; the live [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) is authoritative. Detailed controls and production gaps are documented in [docs/SECURITY.md](docs/SECURITY.md).
+The `main` branch is protected: pull requests, up-to-date base, seven required CI/security checks, and resolved review conversations are required. Administrators are included; force pushes and branch deletion are disabled. GitHub Actions defaults to read-only workflow permissions, cannot approve pull requests, is restricted to eight selected actions, and requires full-SHA action pinning. Generic-pattern secret scanning and secret validity checks are not enabled for this user-owned repository; GitHub documents generic-pattern scanning for organization-owned repositories with GitHub Secret Protection. Validity checks send supported detected credentials to their issuers. See [docs/SECURITY.md](docs/SECURITY.md) for details and the live [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) for current settings and alerts.
 
-The project has no supported production release or service-level commitment yet. Security fixes and advisories will be published through the repository when appropriate. See [docs/SECURITY.md](docs/SECURITY.md) for the implemented controls and outstanding acceptance work.
+The project has no supported production release or service-level commitment. The published `v0.1.0-alpha.1` release and container are previews, not a managed service. Security fixes and advisories will be published through the repository when appropriate. See [docs/SECURITY.md](docs/SECURITY.md) for implementation details, current controls, known limitations, and production acceptance work.
