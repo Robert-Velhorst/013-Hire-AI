@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import {
   RESUME_MIME_TYPES,
+  getWindowsDefenderExecutableCandidates,
+  getWindowsDefenderLocations,
   resolveMalwareScanMode,
   scanSensitiveUpload,
   validateUploadedFile,
@@ -102,6 +104,32 @@ describe("sensitive upload validation", () => {
   it("uses a fixed Defender scan filename instead of the uploaded filename", () => {
     const directory = join("temporary", "hire-ai-scan-1");
     expect(windowsDefenderScanPath(directory)).toBe(join(directory, "upload.bin"));
+  });
+
+
+  it("uses canonical Defender roots and ignores malformed platform directory names", () => {
+    const locations = getWindowsDefenderLocations({
+      runtimePath: "D:\\HireAI\\node.exe",
+      systemRoot: "C:\\Windows",
+    });
+    expect(locations).toEqual({
+      legacyExecutable: "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot: "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
+      getWindowsDefenderExecutableCandidates(locations, [
+        "4.18.9.1-0",
+        "4.18.10.2-0",
+        "..",
+        "..\\outside",
+        "4.18.10.2-0\\..\\outside",
+        "version;malicious.exe",
+      ])
+    ).toEqual([
+      "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.10.2-0\\MpCmdRun.exe",
+      "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.9.1-0\\MpCmdRun.exe",
+      "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+    ]);
   });
 
   it("uses an authenticated bounded HTTP scanner request", async () => {
