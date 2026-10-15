@@ -261,6 +261,16 @@ export class ScraperManager {
     scraper: BaseScraper,
     options?: ScrapeRequestOptions
   ): Promise<ScrapeResult> {
+    const discoveryPolicy = getPlatformDiscoveryPolicy(platformName);
+    if (isCatalogedPlatform(platformName) && discoveryPolicy.mode !== "automated") {
+      return {
+        jobs: [],
+        errors: [discoveryPolicy.reason],
+        scrapedAt: new Date(),
+        skippedReason: "policy",
+      };
+    }
+
     const previousRun = this.platformRunTails.get(platformName) ?? Promise.resolve();
     let releaseRun = () => {};
     const currentRun = new Promise<void>((resolve) => { releaseRun = resolve; });
@@ -756,4 +766,3 @@ export async function getScraperManager(): Promise<ScraperManager> {
   }
   return scraperManagerInstance;
 }
-

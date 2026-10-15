@@ -235,7 +235,7 @@ describe("Scraping API", () => {
         configuredGenericRssAdapterSources: 2,
         configuredGenericHtmlAdapterSources: 36,
         zeroListingSources: 0,
-        readySources: 9,
+        readySources: 8,
         unconfiguredSources: 0,
       });
       expect(indeed).toMatchObject({

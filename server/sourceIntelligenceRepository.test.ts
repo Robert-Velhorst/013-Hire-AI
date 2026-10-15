@@ -20,7 +20,7 @@ describe("source intelligence sample repository", () => {
     const directory = await getSourceDirectory({ limit: 100, offset: 0 });
     expect(directory.dataMode).toBe("sample");
     expect(directory.summary.total).toBe(90);
-    expect(directory.summary.automated).toBe(9);
+    expect(directory.summary.automated).toBe(8);
     expect(
       directory.items.reduce((sum, item) => sum + item.listingCount, 0)
     ).toBe(sampleJobs.length);
