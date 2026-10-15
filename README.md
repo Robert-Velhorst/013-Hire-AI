@@ -26,7 +26,7 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 - User accounts, signed sessions, terms acceptance, account status, and session revocation.
 - Candidate profiles with experience, education, skills, projects, preferences, social references, and versioned resumes.
 - Job catalog, filters, saved jobs, source records, freshness indicators, match explanations, and duplicate relationships.
-- Application ledger, decisions, prepared materials, review/handoff records, employer-response records, interview scheduling/preparation, and follow-up tracking.
+- Application ledger, decisions, prepared materials, review/handoff records, a gated Gmail/Outlook email-submission path, employer-response records, interview scheduling/preparation, and follow-up tracking.
 - Opt-in, review-first automation with source limits, evidence gates, audit records, and operational health tracking.
 - English and Dutch localization across major user workflows.
 - Admin tools for reviews, operating queues, source health, account controls, and privacy operations.
@@ -72,7 +72,7 @@ The job-search model supports filters for keywords, company, location, job type,
 1. **Create a profile.** Add work history, education, skills, preferences, and a resume. Optional imports require configured integrations and user authorization.
 2. **Discover and compare jobs.** Search configured sources, apply available filters, inspect source/freshness information, and see match evidence and linked duplicates.
 3. **Review a possible application.** Hire.AI checks profile readiness, job freshness, duplicate history, and safety conditions. Missing decisive vacancy information should be resolved before an application proceeds.
-4. **Prepare materials.** The application can maintain drafts and review records. Today the candidate completes the employer-side form and records reliable submission evidence.
+4. **Prepare and review an application.** For a current, clearly fully remote listing that provides an application email, a connected Gmail/Outlook account can prepare a draft with the selected versioned resume. The candidate reviews the exact recipient and message, approves it, and separately chooses **Send now**. The address is sourced from the listing, not independently verified; employer portals and ATS forms remain a user handoff.
 5. **Track responses and prepare for interviews.** Connected inbox capabilities may surface response candidates when configured. Interview invitations must be backed by recorded evidence. The candidate attends the interview and decides everything afterwards.
 6. **Pause or restart.** Automation is intended to stop when employment is reported. Restart requires a reason and updated criteria; misuse controls and human review are part of the product direction.
 
@@ -116,10 +116,10 @@ MySQL / TiDB
 
 | Service               | Codebase capability                               | What is still needed for live use                                                          |
 | --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Gmail                 | OAuth policy and bounded inbox-response discovery | Google app, approved scopes/callback, consent, real-account acceptance.                    |
+| Gmail                 | OAuth policy, bounded inbox-response discovery, and gated application-email sending with a versioned resume attachment | Google app, approved scopes/callback, explicit send consent, and live delivery/outcome acceptance. |
 | Google Drive          | Consent-scoped resume candidate discovery         | Google app/scopes, private-storage decision, real-account acceptance.                      |
 | Dropbox               | Consent-scoped document candidate discovery       | Dropbox app/scopes and real-account acceptance.                                            |
-| Outlook / Microsoft   | OAuth policy and cleanup guidance                 | Microsoft app/scopes plus tested read, revoke, and cleanup flows.                          |
+| Outlook / Microsoft   | OAuth policy, inbox-response discovery, cleanup guidance, and gated application-email sending with a versioned resume attachment | Microsoft app/scopes and live read, send, revoke, and cleanup acceptance. |
 | LinkedIn              | Profile reference/OAuth policy                    | Approved integration; no unattended LinkedIn job scraping is claimed.                      |
 | GitHub                | Profile evidence connector policy                 | OAuth app, scopes, and account acceptance.                                                 |
 | Stripe                | Legacy checkout/webhook code and payment ledger   | Separate legal/commercial approval and live test; not the approved pricing implementation. |
