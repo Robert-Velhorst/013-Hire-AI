@@ -3,6 +3,10 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+import {
+  getWindowsDefenderExecutableCandidates,
+  getWindowsDefenderLocations,
+} from "../shared/windowsDefenderPaths.mjs";
 import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
 import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
 
@@ -50,16 +54,18 @@ check(
 
 function windowsDefenderAvailable() {
   if (process.platform !== "win32") return false;
-  const candidates = [];
-  if (process.env.ProgramFiles) candidates.push(path.join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe"));
-  if (process.env.ProgramData) {
-    const root = path.join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform");
-    if (fs.existsSync(root)) {
-      const versions = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
-        .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
-      candidates.unshift(...versions.map(version => path.join(root, version, "MpCmdRun.exe")));
-    }
-  }
+  const locations = getWindowsDefenderLocations();
+  if (!locations) return false;
+  const versions = fs.existsSync(locations.platformRoot)
+    ? fs
+        .readdirSync(locations.platformRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+    : [];
+  const candidates = getWindowsDefenderExecutableCandidates(
+    locations,
+    versions
+  );
   return candidates.some(candidate => fs.existsSync(candidate));
 }
 
