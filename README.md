@@ -1,10 +1,10 @@
 # 013 - Hire.AI
 
-Hire.AI is an early-stage, self-hostable preview application for finding and comparing fully remote jobs and managing the candidate's application journey. It brings candidate profiles and resumes, cross-post comparisons, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
+Hire.AI is an early-stage, self-hostable preview application for discovering fully remote jobs across configured sources, comparing likely cross-posts, and organizing a candidate's application journey. It brings candidate profiles and resumes, match review, application preparation, response tracking, and interview preparation into one auditable workflow.
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
-> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer-portal submission are not complete. The limited email application path is gated by recorded approval, fresh consent, and a final review of the exact recipient and message; the recipient must match the address listed on the active job posting. This does not independently verify the employer or guarantee delivery, and it is not evidence of production readiness.
+> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and live provider acceptance are not complete. Code includes a narrowly gated Gmail/Outlook application-email path; it is not live-provider or production accepted. Employer portals and ATS forms remain a user handoff.
 
 **Quick links:** [first preview release](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1) · [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) · [security reporting](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new) · [production acceptance checklist](docs/PRODUCTION_ACCEPTANCE.md)
 
@@ -13,9 +13,22 @@ The product is intended for people looking for any kind of work that can be perf
 - **For job seekers:** one place for a profile, resume versions, remote job listings, match explanations, saved jobs, application records, employer responses, and interview preparation.
 - **For developers:** a TypeScript monorepo with a React web client, Express/tRPC API, Drizzle/MySQL data layer, scraper adapters, Docker packaging, and Windows launch tooling.
 - **For operators:** migration, health, backup/restore, schema-audit, privacy, and deployment documentation, plus CI for Linux, Windows, MySQL, and container paths.
-- **Current authority boundary:** review-first. Hire.AI can send an approved application by email only after the candidate reviews and explicitly confirms the exact destination and message. The destination is constrained to the address on the active listing, not independently verified. Employer and applicant-tracking-system forms remain a user handoff; browser automation is disabled.
+- **Current authority boundary:** review-first. For a current, clearly fully remote listing with an application email and prepared versioned resume, the candidate can review an exact Gmail/Outlook draft, approve it, and separately choose **Send now**. The address comes from the posting and is not independently verified. Employer portals and ATS forms remain a user handoff; ambiguous sends are blocked from automatic retry.
 - **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
+
+## What Works Today
+
+| Area | Available in this preview | Important boundary |
+| --- | --- | --- |
+| Job discovery | Bounded API/RSS collection from nine policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
+| Comparison | Normalized listings, source attribution, freshness information, and links between likely duplicate postings. | A duplicate link is evidence for review, not proof that two listings are identical. Missing or conflicting conditions remain uncertain. |
+| Candidate workspace | Profiles, resume versions, preferences, job filters, match explanations, saved jobs, and application records. | Matching supports decisions; it does not guarantee qualification, an interview, or a job. |
+| Application workflow | Prepare and review application material; for eligible postings, send an explicitly approved email with the selected versioned resume attached through Gmail or Outlook. | Requires configured mailbox scopes and live provider acceptance. The listing email is not independently verified, provider acceptance does not guarantee recipient delivery, and employer/ATS forms remain a user handoff. |
+| Responses and interviews | Track response evidence, follow-up state, scheduling information, and interview preparation. | The candidate conducts the interview and makes every decision after it. Connected inbox features need provider configuration and live acceptance. |
+| Hosting and integrations | Docker and Hetzner deployment material, plus optional connector code. | The published container is for preview/self-hosting. No public hosted service or generally accepted live integration is available. |
+
+The product-direction document describes the intended autonomous service: minimize candidate effort while respecting hard constraints, consent, provider rules, and an auditable record of actions. That target must not be confused with the current preview's capabilities.
 
 ## Product Direction And Current Boundaries
 
@@ -26,7 +39,7 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 - User accounts, signed sessions, terms acceptance, account status, and session revocation.
 - Candidate profiles with experience, education, skills, projects, preferences, social references, and versioned resumes.
 - Job catalog, filters, saved jobs, source records, freshness indicators, match explanations, and duplicate relationships.
-- Application ledger, decisions, prepared materials, review/handoff records, a gated Gmail/Outlook email-submission path, employer-response records, interview scheduling/preparation, and follow-up tracking.
+- Application ledger, decisions, prepared materials, review/handoff records, a gated Gmail/Outlook email submission path, employer-response records, interview scheduling/preparation, and follow-up tracking.
 - Opt-in, review-first automation with source limits, evidence gates, audit records, and operational health tracking.
 - English and Dutch localization across major user workflows.
 - Admin tools for reviews, operating queues, source health, account controls, and privacy operations.
@@ -35,7 +48,8 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 
 ### Not currently delivered as an end-to-end service
 
-- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; those applications still require a user handoff. The separate email-delivery path is gated by an approved application, current listing and candidate evidence, an address listed on the active job posting, and explicit final confirmation. Hire.AI does not independently verify that the address belongs to the employer.
+- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; those applications remain a user handoff. The limited email path only applies to eligible listings with a listed email and still requires exact-content approval followed by a separate send action.
+- Live acceptance of the email submission path. Gmail/Outlook scopes, OAuth apps, mailbox permissions, real-account delivery and outcome reconciliation must be configured and verified before production use. The recipient address is listing-sourced, not independently verified.
 - Complete coverage of all job boards or permission to scrape every public website. Catalog entries may be manual, unavailable, account-mediated, or awaiting provider approval.
 - Live or accepted production use of all OAuth, email, document-storage, payment, malware-scanning, or AI providers.
 - A guarantee of a job, interview, uninterrupted employment, or fully correct classification of every listing.
@@ -72,7 +86,7 @@ The job-search model supports filters for keywords, company, location, job type,
 1. **Create a profile.** Add work history, education, skills, preferences, and a resume. Optional imports require configured integrations and user authorization.
 2. **Discover and compare jobs.** Search configured sources, apply available filters, inspect source/freshness information, and see match evidence and linked duplicates.
 3. **Review a possible application.** Hire.AI checks profile readiness, job freshness, duplicate history, and safety conditions. Missing decisive vacancy information should be resolved before an application proceeds.
-4. **Prepare and review an application.** For a current, clearly fully remote listing that provides an application email, a connected Gmail/Outlook account can prepare a draft with the selected versioned resume. The candidate reviews the exact recipient and message, approves it, and separately chooses **Send now**. The address is sourced from the listing, not independently verified; employer portals and ATS forms remain a user handoff.
+4. **Prepare materials.** Review the exact recipient, subject, message, and resume attachment. If the current listing provides an application email, a connected Gmail/Outlook account has explicit send consent, and the role is clearly fully remote, the candidate may request approval and then separately choose **Send now**. Employer/ATS forms still require the candidate to complete the external form and record submission evidence.
 5. **Track responses and prepare for interviews.** Connected inbox capabilities may surface response candidates when configured. Interview invitations must be backed by recorded evidence. The candidate attends the interview and decides everything afterwards.
 6. **Pause or restart.** Automation is intended to stop when employment is reported. Restart requires a reason and updated criteria; misuse controls and human review are part of the product direction.
 
@@ -114,17 +128,17 @@ MySQL / TiDB
 
 ### Integration support
 
-| Service               | Codebase capability                                                                                                              | What is still needed for live use                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Gmail                 | OAuth policy, bounded inbox-response discovery, and gated application-email sending with a versioned resume attachment           | Google app, approved scopes/callback, explicit send consent, and live delivery/outcome acceptance. |
-| Google Drive          | Consent-scoped resume candidate discovery                                                                                        | Google app/scopes, private-storage decision, real-account acceptance.                              |
-| Dropbox               | Consent-scoped document candidate discovery                                                                                      | Dropbox app/scopes and real-account acceptance.                                                    |
-| Outlook / Microsoft   | OAuth policy, inbox-response discovery, cleanup guidance, and gated application-email sending with a versioned resume attachment | Microsoft app/scopes and live read, send, revoke, and cleanup acceptance.                          |
-| LinkedIn              | Profile reference/OAuth policy                                                                                                   | Approved integration; no unattended LinkedIn job scraping is claimed.                              |
-| GitHub                | Profile evidence connector policy                                                                                                | OAuth app, scopes, and account acceptance.                                                         |
-| Stripe                | Legacy checkout/webhook code and payment ledger                                                                                  | Separate legal/commercial approval and live test; not the approved pricing implementation.         |
-| S3-compatible storage | Private document storage integration                                                                                             | Bucket, access policy, retention plan, recovery test, and malware scanner.                         |
-| AI provider           | Server-side adapter boundary                                                                                                     | Provider credentials, data-processing review, budget limits, and live acceptance.                  |
+| Service               | Codebase capability                               | What is still needed for live use                                                          |
+| --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Gmail                 | OAuth policy, bounded inbox-response discovery, and approved application-email sending with a versioned resume attachment | Google app, approved scopes/callback, send consent, real-account delivery and uncertain-outcome acceptance. |
+| Google Drive          | Consent-scoped resume candidate discovery         | Google app/scopes, private-storage decision, real-account acceptance.                      |
+| Dropbox               | Consent-scoped document candidate discovery       | Dropbox app/scopes and real-account acceptance.                                            |
+| Outlook / Microsoft   | OAuth policy, cleanup guidance, inbox-response discovery, and approved application-email sending with a versioned resume attachment | Microsoft app/scopes, explicit send consent, and tested read, send, revoke, and cleanup flows. |
+| LinkedIn              | Profile reference/OAuth policy                    | Approved integration; no unattended LinkedIn job scraping is claimed.                      |
+| GitHub                | Profile evidence connector policy                 | OAuth app, scopes, and account acceptance.                                                 |
+| Stripe                | Legacy checkout/webhook code and payment ledger   | Separate legal/commercial approval and live test; not the approved pricing implementation. |
+| S3-compatible storage | Private document storage integration              | Bucket, access policy, retention plan, recovery test, and malware scanner.                 |
+| AI provider           | Server-side adapter boundary                      | Provider credentials, data-processing review, budget limits, and live acceptance.          |
 
 No integration is live merely because its code or environment-variable names exist. Credentials should only be supplied through a managed secret store and after user consent and provider approval.
 
@@ -171,7 +185,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The development server defaults to `http://localhost:3000`. Local seeded QA sign-in is disabled by default; set `DEV_QA_AUTH_ENABLED=true` only for isolated local testing on a loopback-only bind. Its session routes accept same-origin `POST` requests from direct loopback peers and are not available through forwarded/tunnel traffic or production mode. Configuration requirements vary by feature. `pnpm run doctor` reports configuration issues; production mode deliberately rejects placeholders, unsafe partial OAuth settings, invalid schemas, and missing required security integrations. Review `.env.example` and `docs/OPERATOR_RUNBOOK.md`; do not copy real credentials into examples or logs.
+The development server defaults to `http://localhost:3000`. Configuration requirements vary by feature. `pnpm run doctor` reports configuration issues; production mode deliberately rejects placeholders, unsafe partial OAuth settings, invalid schemas, and missing required security integrations. Review `.env.example` and `docs/OPERATOR_RUNBOOK.md`; do not copy real credentials into examples or logs.
 
 ### Production build
 
@@ -190,38 +204,37 @@ pnpm start
 
 The complete current example is `.env.example`; validate names and constraints in the runtime config before deployment. Common variables include:
 
-| Variable group                                                                          | Purpose                                                                                                                                                                                       |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`, `DATABASE_POOL_*`                                                       | MySQL/TiDB connection and bounded pool settings.                                                                                                                                              |
-| `PUBLIC_APP_ORIGIN`                                                                     | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                                                                                               |
-| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                           | Signed session configuration and application binding.                                                                                                                                         |
-| `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` | Hosted identity and administrator bootstrap. Production requires the OAuth API's exact HTTPS origin in the comma-separated origin-only allowlist; redirects are disabled for OAuth API calls. |
-| `ERASURE_IDENTITY_HMAC_KEYS`                                                            | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.                                                                                       |
-| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                      | Optional server-side AI/provider integration.                                                                                                                                                 |
-| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*`   | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed.                                                                                 |
-| `STRIPE_*`                                                                              | Legacy checkout and webhook integration; not authorization to charge users.                                                                                                                   |
-| `AUTONOMOUS_SCHEDULER_ENABLED`                                                          | Review-first candidate workflow automation.                                                                                                                                                   |
-| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                      | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off.                                                                                 |
-| `FILE_MALWARE_SCAN_*` and storage variables                                             | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner.       |
+| Variable group                                                                          | Purpose                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `DATABASE_POOL_*`                                                       | MySQL/TiDB connection and bounded pool settings.                                                                                                                                        |
+| `PUBLIC_APP_ORIGIN`                                                                     | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                                                                                         |
+| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                           | Signed session configuration and application binding.                                                                                                                                   |
+| `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` | Hosted identity and administrator bootstrap. Production requires the OAuth API origin to be explicitly allowlisted over HTTPS.                                                          |
+| `ERASURE_IDENTITY_HMAC_KEYS`                                                            | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.                                                                                 |
+| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                      | Optional server-side AI/provider integration.                                                                                                                                           |
+| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*`   | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed.                                                                           |
+| `STRIPE_*`                                                                              | Legacy checkout and webhook integration; not authorization to charge users.                                                                                                             |
+| `AUTONOMOUS_SCHEDULER_ENABLED`                                                          | Review-first candidate workflow automation.                                                                                                                                             |
+| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                      | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off.                                                                           |
+| `FILE_MALWARE_SCAN_*` and storage variables                                             | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner. |
 
 See [`.env.example`](.env.example), [security policy](SECURITY.md), [detailed security controls](docs/SECURITY.md), and [private Hetzner runbook](deploy/hetzner/README.md). Deployment secrets are not required for ordinary documentation or unit-test work.
 
 ## Useful Commands
 
-| Command                                                      | Purpose                                                                                                                   |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                                   | Start Vite/Express development mode.                                                                                      |
-| `pnpm check`                                                 | TypeScript check.                                                                                                         |
-| `pnpm test`                                                  | Regular Vitest suite; opt-in MySQL suites are separate.                                                                   |
-| `pnpm test:database`                                         | Approved isolated-MySQL acceptance suite (requires explicit test configuration).                                          |
-| `pnpm test:e2e`                                              | Authenticated Chromium journey on a loopback MySQL database named `hire_ai_e2e`; refuses other database hosts or schemas. |
-| `pnpm run doctor`                                            | Validate runtime and security configuration.                                                                              |
-| `pnpm security:audit`                                        | Audit dependencies at moderate-or-higher severity.                                                                        |
-| `pnpm build` / `pnpm start`                                  | Build and start the production application.                                                                               |
-| `pnpm db:generate` / `pnpm db:migrate`                       | Generate or apply committed schema migrations.                                                                            |
-| `pnpm db:backup`, `pnpm db:backup:verify`, `pnpm db:restore` | Create, verify, and explicitly restore database backup bundles.                                                           |
-| `pnpm db:audit-schema`, `pnpm db:audit-query-plans`          | Run production-schema and query-plan audits after build.                                                                  |
-| `pnpm start:windows`, `pnpm start:ngrok`                     | Audited Windows startup or optional ngrok tunnel readiness.                                                               |
+| Command                                                      | Purpose                                                                          |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `pnpm dev`                                                   | Start Vite/Express development mode.                                             |
+| `pnpm check`                                                 | TypeScript check.                                                                |
+| `pnpm test`                                                  | Regular Vitest suite; opt-in MySQL suites are separate.                          |
+| `pnpm test:database`                                         | Approved isolated-MySQL acceptance suite (requires explicit test configuration). |
+| `pnpm run doctor`                                            | Validate runtime and security configuration.                                     |
+| `pnpm security:audit`                                        | Audit dependencies at moderate-or-higher severity.                               |
+| `pnpm build` / `pnpm start`                                  | Build and start the production application.                                      |
+| `pnpm db:generate` / `pnpm db:migrate`                       | Generate or apply committed schema migrations.                                   |
+| `pnpm db:backup`, `pnpm db:backup:verify`, `pnpm db:restore` | Create, verify, and explicitly restore database backup bundles.                  |
+| `pnpm db:audit-schema`, `pnpm db:audit-query-plans`          | Run production-schema and query-plan audits after build.                         |
+| `pnpm start:windows`, `pnpm start:ngrok`                     | Audited Windows startup or optional ngrok tunnel readiness.                      |
 
 Use only disposable, isolated databases for acceptance tests and restore drills. Never point test or restore tooling at a live database without following the operator runbook and an explicit recovery plan.
 
@@ -229,15 +242,15 @@ Use only disposable, isolated databases for acceptance tests and restore drills.
 
 The primary API is tRPC at `/api/trpc`; router definitions are in `server/routers.ts`. Major groups cover authentication, profile, jobs, applications, automation, alerts, connectors, interview preparation, workspaces, privacy, success fees, admin, audit, and system status.
 
-Additional HTTP routes include hosted OAuth login/callback, connector OAuth callback, signed Stripe webhook, readiness/health routes, and an optional disabled-by-default HAI bridge. The bridge provides bearer-protected aggregate status through `/api/hai/a2a` and bounded, read-only remote-job search through `/api/hai/jobs/search`; both endpoints reject mutation authority. These routes have different authentication and configuration requirements. See [docs/API_REFERENCE.md](docs/API_REFERENCE.md) and [docs/WINDOWS_NGROK_HAI.md](docs/WINDOWS_NGROK_HAI.md) for details.
+Additional HTTP routes include hosted OAuth login/callback, connector OAuth callback, signed Stripe webhook, readiness/health routes, and optional bearer-protected read-only `/api/hai/a2a`. These routes have different authentication and configuration requirements. See [docs/API_REFERENCE.md](docs/API_REFERENCE.md) for details.
 
 ## Security And Privacy
 
-Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI bridge. HAI job search is limited to current canonical public listings that pass server-enforced remote-only and safety filters; it does not provide application submission or user-profile access. Public HAI origins require HTTPS and exact allowlisting. HAI and search request budgets are process-local; a multi-replica deployment needs shared atomic limits. These are code-level controls, not a substitute for independent testing or operational configuration.
+Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status and remote-job search route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
 
-GitHub's live repository settings and alert inventory were checked on 2026-10-15 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. CodeQL's weekly default setup scans GitHub Actions, JavaScript/TypeScript, and Python; 29 code-scanning alerts were open on `main` (2 critical, 23 high, 4 medium) at the time of the check. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure. No open Dependabot or secret-scanning alerts were returned by GitHub on 2026-10-15 UTC. Generic non-provider secret scanning and provider-token validity checks are unavailable for this user-owned repository under GitHub's current eligibility requirements. If validity checks become available later, enabling them would send detected credentials to their issuers; the setting is therefore left off. Neither feature is represented as enabled. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [non-provider patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-non-provider-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
+GitHub's repository security settings and alert inventories were checked on 2026-10-15 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. The live alert lists contained 0 open Dependabot alerts, 0 open secret-scanning alerts, and 29 open CodeQL alerts on `main` (2 critical, 23 high, 4 medium). These CodeQL findings remain to be triaged; no alert is described as fixed or dismissed here. Generic-pattern secret scanning is not available for this user-owned repository on its current GitHub plan. Secret validity checks are disabled; GitHub sends supported detected credentials to their issuers to check whether they remain active. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
 
-At the 2026-10-15 UTC check, those 29 open CodeQL alerts on `main` had not been represented as fixed. `main` requires pull requests, all seven required status checks (`hetzner-bootstrap`, `build-and-test`, `windows-runtime`, `database-acceptance`, `container-runtime`, `browser-e2e`, and `CodeQL`), resolved review conversations, and an up-to-date base. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to the eight workflow actions, tokens default to read-only, workflows cannot create or approve pull requests, and all workflow actions are pinned to full commit SHAs with repository SHA-pinning enforcement enabled. Settings and alert totals can change; use GitHub as the live source of truth.
+As of the 2026-10-15 UTC check, `main` requires pull requests, an up-to-date base, all seven named CI checks (`hetzner-bootstrap`, `build-and-test`, `windows-runtime`, `database-acceptance`, `container-runtime`, `browser-e2e`, and `CodeQL`), and resolved review conversations. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to eight selected actions, tokens default to read-only, pull-request approval is disabled, and action references must be pinned to full commit SHAs. Settings and alert totals can change; use GitHub as the live source of truth.
 
 Report vulnerabilities through GitHub's private vulnerability reporting for this repository; do not disclose exploitable details in public issues. See the root [SECURITY.md](SECURITY.md) for reporting instructions and [docs/SECURITY.md](docs/SECURITY.md) for controls and outstanding production reviews.
 
@@ -245,7 +258,7 @@ Before real users, deployment owners must complete threat modeling, dependency/l
 
 ## CI, Releases, And Container Package
 
-Pull requests and pushes to `main` run six CI jobs: Hetzner bootstrap validation, build/type-check/tests, Windows runtime, isolated database acceptance, authenticated browser E2E, and container runtime. GitHub Actions is the source of truth for a particular commit's results.
+Pull requests and pushes to `main` run five CI jobs: Hetzner bootstrap validation, build/type-check/tests, Windows runtime, isolated database acceptance, and container runtime. GitHub Actions is the source of truth for a particular commit's results.
 
 Published GitHub Releases trigger a workflow that builds and publishes the application container to GitHub Container Registry (`ghcr.io/robert-velhorst/013-hire-ai`) using the repository's Dockerfile. The first preview release, [`v0.1.0-alpha.1`](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1), was published on 2026-10-13, and its image-publishing workflow succeeded. The public OCI manifest was verified for Linux AMD64; the [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) is available. This is a self-hostable **preview artifact**, not a managed Hire.AI service. Treat database migrations, secrets, data backups, TLS, OAuth callbacks, storage, scanning, monitoring, and legal approval as operator responsibilities. Pin a release tag or image digest rather than relying on a mutable tag.
 
@@ -253,7 +266,7 @@ Published GitHub Releases trigger a workflow that builds and publishes the appli
 docker pull ghcr.io/robert-velhorst/013-hire-ai:v0.1.0-alpha.1
 ```
 
-The command above pulls the first published alpha image. Before using a later release, verify that its publishing workflow succeeded and the package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
+The command above pulls the first published alpha image. Its OCI index digest at verification was `sha256:78088b48741842ec51300dba02bcf01d411f9ba90fc2b516eb005553e0a095ba`; use `ghcr.io/robert-velhorst/013-hire-ai@sha256:78088b48741842ec51300dba02bcf01d411f9ba90fc2b516eb005553e0a095ba` when an immutable reference is required. Before using a later release, verify that its publishing workflow succeeded and the package is public. See [deploy/hetzner/README.md](deploy/hetzner/README.md) for the private deployment approach. A GitHub Release is not a production launch.
 
 ## Business And Technical Documentation
 
