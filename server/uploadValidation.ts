@@ -195,6 +195,8 @@ async function scanWithHttp(input: {
       ["localhost", "127.0.0.1", "[::1]", "::1"].includes(
         parsedEndpoint.hostname.toLowerCase()
       );
+    // The HTTPS helper rejects non-public DNS answers and pins the socket lookup.
+    // codeql[js/request-forgery]
     const response = isLoopbackHttp
       ? await fetch(parsedEndpoint, { ...request, redirect: "error" })
       : await fetchPublicHttpsUrl(parsedEndpoint.toString(), request);
