@@ -52,7 +52,7 @@ docker compose --env-file release.env -f compose.yaml -f compose.app.yaml up -d 
 curl --fail http://127.0.0.1:3000/readyz
 ```
 
-Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. The current server trusts loopback proxies only; a Docker bridge proxy needs an explicitly reviewed configuration. Do not use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
+Do not open the public firewall based only on a passing doctor or readiness endpoint. Validate actual sign-in, candidate isolation, private storage/scanning, origin protection and proxy trust first. Production requires `TRUSTED_PROXY_IPS` containing only the exact immediate proxy peer IPs observed in this deployment; it rejects CIDRs, wildcards and hostnames. Do not guess the Docker peer address or use unrestricted proxy trust. Keep the existing admin-only firewall until those checks and domain/TLS are ready.
 
 ## Recovery And Remaining Work
 

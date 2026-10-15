@@ -76,6 +76,11 @@ describe("production container packaging", () => {
       ""
     );
     expect(missingCopies(omittedPolicyCopy)).toContain("shared/malwareScannerEndpointPolicy.mjs");
+    const omittedProxyPolicyCopy = dockerfile.replace(
+      /^COPY --from=build \/app\/shared\/trustedProxyPolicy\.mjs \.\/shared\/trustedProxyPolicy\.mjs\r?\n?/m,
+      ""
+    );
+    expect(missingCopies(omittedProxyPolicyCopy)).toContain("shared/trustedProxyPolicy.mjs");
   });
 
   it("excludes the development-only Vite server from the production server bundle", () => {

@@ -8,6 +8,7 @@ import {
   readBoundedIntegerValue,
   resolveProductionRuntime,
 } from "./env";
+import { resolveTrustedProxyPolicy } from "@shared/trustedProxyPolicy.mjs";
 
 describe("runtime mode resolution", () => {
   it("uses explicit runtime modes when they are present", () => {
@@ -19,6 +20,40 @@ describe("runtime mode resolution", () => {
   it("treats the bundled server entry point as production when NODE_ENV is absent", () => {
     expect(resolveProductionRuntime(undefined, "file:///workspace/dist/index.js")).toBe(true);
     expect(resolveProductionRuntime(undefined, "file:///workspace/server/_core/env.ts")).toBe(false);
+  });
+});
+
+describe("trusted proxy configuration", () => {
+  it("defaults to loopback proxies outside production", () => {
+    expect(resolveTrustedProxyPolicy(undefined, false)).toEqual({
+      addresses: ["127.0.0.1", "::1"],
+      issue: null,
+    });
+  });
+
+  it("requires exact peer addresses in production", () => {
+    expect(resolveTrustedProxyPolicy(undefined, true).issue).toContain(
+      "required in production"
+    );
+    expect(resolveTrustedProxyPolicy("10.0.0.8,2001:db8::1", true)).toEqual({
+      addresses: ["10.0.0.8", "2001:db8::1"],
+      issue: null,
+    });
+  });
+
+  it.each([
+    "10.0.0.0/24",
+    "*",
+    "localhost",
+    "0.0.0.0",
+    "::",
+    "0:0:0:0:0:0:0:0",
+    "::ffff:0:0",
+    "10.0.0.8,",
+    "10.0.0.8,10.0.0.8",
+    Array.from({ length: 17 }, (_, index) => `10.0.0.${index + 1}`).join(","),
+  ])("rejects unsafe trusted peer configuration: %s", value => {
+    expect(resolveTrustedProxyPolicy(value, true).issue).toBeTruthy();
   });
 });
 

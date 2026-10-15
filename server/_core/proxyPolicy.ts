@@ -1,12 +1,18 @@
 import type { Express } from "express";
+import {
+  DEFAULT_TRUSTED_PROXY_IPS,
+  isTrustedProxyAddress,
+} from "@shared/trustedProxyPolicy.mjs";
 
-export const TRUSTED_PROXY_RANGE = "loopback";
-
-/**
- * The Windows/ngrok deployment terminates TLS in a local ngrok process. Trust
- * forwarded metadata only when the immediate peer is loopback; direct network
- * clients cannot promote their own forwarded headers to trusted request state.
- */
-export function applyTrustedProxyPolicy(app: Express) {
-  app.set("trust proxy", TRUSTED_PROXY_RANGE);
+export function applyTrustedProxyPolicy(
+  app: Express,
+  trustedProxyIps: readonly string[] = DEFAULT_TRUSTED_PROXY_IPS
+) {
+  if (trustedProxyIps.length === 0) {
+    throw new Error("At least one exact trusted proxy IP is required.");
+  }
+  const addresses = [...trustedProxyIps];
+  app.set("trust proxy", (address: string) =>
+    isTrustedProxyAddress(address, addresses)
+  );
 }
