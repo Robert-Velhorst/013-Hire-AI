@@ -195,11 +195,16 @@ async function scanWithHttp(input: {
       ["localhost", "127.0.0.1", "[::1]", "::1"].includes(
         parsedEndpoint.hostname.toLowerCase()
       );
-    // The HTTPS helper rejects non-public DNS answers and pins the socket lookup.
-    // codeql[js/request-forgery]
-    const response = isLoopbackHttp
-      ? await fetch(parsedEndpoint, { ...request, redirect: "error" })
-      : await fetchPublicHttpsUrl(parsedEndpoint.toString(), request);
+    let response: Response;
+    if (isLoopbackHttp) {
+      response = await fetch(parsedEndpoint, { ...request, redirect: "error" });
+    } else {
+      // This exact scanner origin was allowlisted above. The HTTPS helper rejects
+      // every non-public DNS answer and pins validated IPs to the TLS request.
+      // codeql[js/request-forgery]
+
+      response = await fetchPublicHttpsUrl(parsedEndpoint.toString(), request);
+    }
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
       throw new Error("scanner_status");
