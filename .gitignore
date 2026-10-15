@@ -112,3 +112,5 @@ temp/
 .playwright-cli/
 output/
 test-results/
+playwright-report/
+playwright/.cache/

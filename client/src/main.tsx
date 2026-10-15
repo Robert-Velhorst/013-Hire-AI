@@ -7,10 +7,13 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import { reportApiMutationFailure, reportApiQueryFailure } from "./lib/apiErrorReporting";
 import { resolveAnalyticsScriptUrl } from "./lib/analyticsConfig";
+import { clearLegacyAuthUserInfo } from "./lib/legacyAuthStorage";
 import { createHireTrpcClient } from "./lib/trpcClient";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+clearLegacyAuthUserInfo();
 
 const loadAnalytics = () => {
   const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;

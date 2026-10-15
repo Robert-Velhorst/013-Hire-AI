@@ -293,7 +293,19 @@ export const appRouter = router({
   system: systemRouter,
   workspaces: workspacesRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(({ ctx }) => {
+      const user = ctx.user;
+      if (!user) return null;
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        locale: user.locale,
+        accountStatus: user.accountStatus,
+        tosAcceptedAt: user.tosAcceptedAt,
+      };
+    }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       try {
@@ -2207,7 +2219,31 @@ export const appRouter = router({
           });
         }
       }),
-    updateStatus: protectedProcedure
+      sendApprovedApplicationByEmail: protectedProcedure
+        .input(z.object({
+          approvalId: z.number().int().positive(),
+          provider: z.enum(["gmail", "outlook"]),
+        }))
+        .mutation(async ({ ctx, input }) => {
+          assertJobSearchTermsAccepted(ctx.user);
+          const { sendApprovedApplicationByEmail, ApplicationEmailDeliveryError } = await import("./applicationEmailDelivery");
+          try {
+            return await sendApprovedApplicationByEmail({
+              approvalId: input.approvalId,
+              provider: input.provider,
+              userId: ctx.user.id,
+            });
+          } catch (error) {
+            const knownFailure = error instanceof ApplicationEmailDeliveryError;
+            throw new TRPCError({
+              code: knownFailure ? "PRECONDITION_FAILED" : "INTERNAL_SERVER_ERROR",
+              message: knownFailure
+                ? error.message
+                : "Application email delivery failed unexpectedly. Check the application ledger before trying again.",
+            });
+          }
+        }),
+      updateStatus: protectedProcedure
       .input(
         z.object({
           applicationId: z.number().int().positive(),
