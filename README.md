@@ -114,17 +114,17 @@ MySQL / TiDB
 
 ### Integration support
 
-| Service               | Codebase capability                               | What is still needed for live use                                                          |
-| --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Gmail                 | OAuth policy, bounded inbox-response discovery, and gated application-email sending with a versioned resume attachment | Google app, approved scopes/callback, explicit send consent, and live delivery/outcome acceptance. |
-| Google Drive          | Consent-scoped resume candidate discovery         | Google app/scopes, private-storage decision, real-account acceptance.                      |
-| Dropbox               | Consent-scoped document candidate discovery       | Dropbox app/scopes and real-account acceptance.                                            |
-| Outlook / Microsoft   | OAuth policy, inbox-response discovery, cleanup guidance, and gated application-email sending with a versioned resume attachment | Microsoft app/scopes and live read, send, revoke, and cleanup acceptance. |
-| LinkedIn              | Profile reference/OAuth policy                    | Approved integration; no unattended LinkedIn job scraping is claimed.                      |
-| GitHub                | Profile evidence connector policy                 | OAuth app, scopes, and account acceptance.                                                 |
-| Stripe                | Legacy checkout/webhook code and payment ledger   | Separate legal/commercial approval and live test; not the approved pricing implementation. |
-| S3-compatible storage | Private document storage integration              | Bucket, access policy, retention plan, recovery test, and malware scanner.                 |
-| AI provider           | Server-side adapter boundary                      | Provider credentials, data-processing review, budget limits, and live acceptance.          |
+| Service               | Codebase capability                                                                                                              | What is still needed for live use                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Gmail                 | OAuth policy, bounded inbox-response discovery, and gated application-email sending with a versioned resume attachment           | Google app, approved scopes/callback, explicit send consent, and live delivery/outcome acceptance. |
+| Google Drive          | Consent-scoped resume candidate discovery                                                                                        | Google app/scopes, private-storage decision, real-account acceptance.                              |
+| Dropbox               | Consent-scoped document candidate discovery                                                                                      | Dropbox app/scopes and real-account acceptance.                                                    |
+| Outlook / Microsoft   | OAuth policy, inbox-response discovery, cleanup guidance, and gated application-email sending with a versioned resume attachment | Microsoft app/scopes and live read, send, revoke, and cleanup acceptance.                          |
+| LinkedIn              | Profile reference/OAuth policy                                                                                                   | Approved integration; no unattended LinkedIn job scraping is claimed.                              |
+| GitHub                | Profile evidence connector policy                                                                                                | OAuth app, scopes, and account acceptance.                                                         |
+| Stripe                | Legacy checkout/webhook code and payment ledger                                                                                  | Separate legal/commercial approval and live test; not the approved pricing implementation.         |
+| S3-compatible storage | Private document storage integration                                                                                             | Bucket, access policy, retention plan, recovery test, and malware scanner.                         |
+| AI provider           | Server-side adapter boundary                                                                                                     | Provider credentials, data-processing review, budget limits, and live acceptance.                  |
 
 No integration is live merely because its code or environment-variable names exist. Credentials should only be supplied through a managed secret store and after user consent and provider approval.
 
@@ -190,38 +190,38 @@ pnpm start
 
 The complete current example is `.env.example`; validate names and constraints in the runtime config before deployment. Common variables include:
 
-| Variable group                                                                          | Purpose                                                                                                                                                                                 |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`, `DATABASE_POOL_*`                                                       | MySQL/TiDB connection and bounded pool settings.                                                                                                                                        |
-| `PUBLIC_APP_ORIGIN`                                                                     | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                                                                                         |
-| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                           | Signed session configuration and application binding.                                                                                                                                   |
+| Variable group                                                                          | Purpose                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`, `DATABASE_POOL_*`                                                       | MySQL/TiDB connection and bounded pool settings.                                                                                                                                              |
+| `PUBLIC_APP_ORIGIN`                                                                     | Canonical public HTTPS origin used for OAuth callbacks; required in production.                                                                                                               |
+| `JWT_SECRET`, `SESSION_TTL_MS`, `VITE_APP_ID`                                           | Signed session configuration and application binding.                                                                                                                                         |
 | `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OAUTH_PORTAL_URL`, `OWNER_OPEN_ID` | Hosted identity and administrator bootstrap. Production requires the OAuth API's exact HTTPS origin in the comma-separated origin-only allowlist; redirects are disabled for OAuth API calls. |
-| `ERASURE_IDENTITY_HMAC_KEYS`                                                            | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.                                                                                 |
-| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                      | Optional server-side AI/provider integration.                                                                                                                                           |
-| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*`   | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed.                                                                           |
-| `STRIPE_*`                                                                              | Legacy checkout and webhook integration; not authorization to charge users.                                                                                                             |
-| `AUTONOMOUS_SCHEDULER_ENABLED`                                                          | Review-first candidate workflow automation.                                                                                                                                             |
-| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                      | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off.                                                                           |
-| `FILE_MALWARE_SCAN_*` and storage variables                                             | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner. |
+| `ERASURE_IDENTITY_HMAC_KEYS`                                                            | Stable ordered keys for irreversible identity tombstones; append during rotation and retain prior keys.                                                                                       |
+| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`                                      | Optional server-side AI/provider integration.                                                                                                                                                 |
+| `CONNECTOR_OAUTH_*`, `GOOGLE_*`, `DROPBOX_*`, `MICROSOFT_*`, `LINKEDIN_*`, `GITHUB_*`   | Consent-scoped external account connections. Empty means disabled; partial/unsafe configuration fails closed.                                                                                 |
+| `STRIPE_*`                                                                              | Legacy checkout and webhook integration; not authorization to charge users.                                                                                                                   |
+| `AUTONOMOUS_SCHEDULER_ENABLED`                                                          | Review-first candidate workflow automation.                                                                                                                                                   |
+| `JOB_SCRAPING_SCHEDULER_ENABLED`, `JOB_SCRAPING_*`                                      | Source scheduler, interval, concurrency, timeouts, cycle budget, optional allow-list. Scheduler defaults off.                                                                                 |
+| `FILE_MALWARE_SCAN_*` and storage variables                                             | Private resume storage and production upload scanning. Configured scanner origins must be explicitly allowlisted; production requires HTTPS except for an allowlisted loopback scanner.       |
 
 See [`.env.example`](.env.example), [security policy](SECURITY.md), [detailed security controls](docs/SECURITY.md), and [private Hetzner runbook](deploy/hetzner/README.md). Deployment secrets are not required for ordinary documentation or unit-test work.
 
 ## Useful Commands
 
-| Command                                                      | Purpose                                                                          |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `pnpm dev`                                                   | Start Vite/Express development mode.                                             |
-| `pnpm check`                                                 | TypeScript check.                                                                |
-| `pnpm test`                                                  | Regular Vitest suite; opt-in MySQL suites are separate.                          |
-| `pnpm test:database`                                         | Approved isolated-MySQL acceptance suite (requires explicit test configuration). |
+| Command                                                      | Purpose                                                                                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                                   | Start Vite/Express development mode.                                                                                      |
+| `pnpm check`                                                 | TypeScript check.                                                                                                         |
+| `pnpm test`                                                  | Regular Vitest suite; opt-in MySQL suites are separate.                                                                   |
+| `pnpm test:database`                                         | Approved isolated-MySQL acceptance suite (requires explicit test configuration).                                          |
 | `pnpm test:e2e`                                              | Authenticated Chromium journey on a loopback MySQL database named `hire_ai_e2e`; refuses other database hosts or schemas. |
-| `pnpm run doctor`                                            | Validate runtime and security configuration.                                     |
-| `pnpm security:audit`                                        | Audit dependencies at moderate-or-higher severity.                               |
-| `pnpm build` / `pnpm start`                                  | Build and start the production application.                                      |
-| `pnpm db:generate` / `pnpm db:migrate`                       | Generate or apply committed schema migrations.                                   |
-| `pnpm db:backup`, `pnpm db:backup:verify`, `pnpm db:restore` | Create, verify, and explicitly restore database backup bundles.                  |
-| `pnpm db:audit-schema`, `pnpm db:audit-query-plans`          | Run production-schema and query-plan audits after build.                         |
-| `pnpm start:windows`, `pnpm start:ngrok`                     | Audited Windows startup or optional ngrok tunnel readiness.                      |
+| `pnpm run doctor`                                            | Validate runtime and security configuration.                                                                              |
+| `pnpm security:audit`                                        | Audit dependencies at moderate-or-higher severity.                                                                        |
+| `pnpm build` / `pnpm start`                                  | Build and start the production application.                                                                               |
+| `pnpm db:generate` / `pnpm db:migrate`                       | Generate or apply committed schema migrations.                                                                            |
+| `pnpm db:backup`, `pnpm db:backup:verify`, `pnpm db:restore` | Create, verify, and explicitly restore database backup bundles.                                                           |
+| `pnpm db:audit-schema`, `pnpm db:audit-query-plans`          | Run production-schema and query-plan audits after build.                                                                  |
+| `pnpm start:windows`, `pnpm start:ngrok`                     | Audited Windows startup or optional ngrok tunnel readiness.                                                               |
 
 Use only disposable, isolated databases for acceptance tests and restore drills. Never point test or restore tooling at a live database without following the operator runbook and an explicit recovery plan.
 
@@ -281,4 +281,3 @@ The command above pulls the first published alpha image. Before using a later re
 ## License
 
 The `package.json` metadata declares `MIT`, but this repository currently has no root `LICENSE` file. Confirm the intended licensing and add the complete license text before encouraging third-party redistribution; this preview release does not resolve that documentation gap.
-
