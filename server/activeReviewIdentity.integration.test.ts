@@ -18,38 +18,44 @@ import {
 const runIntegration = process.env.HIRE_AI_DATABASE_ACCEPTANCE === "true";
 const userId = 1_781_013_081;
 const adminId = 1_781_013_082;
+const normalizeMigrationSql = (statement: string) =>
+  statement.replaceAll("`", "").replace(/\r\n/g, "\n").trim();
 const adminFixtureBackfill = `UPDATE hire_ai_active_review_backfill_fixture AS older
-      JOIN hire_ai_active_review_backfill_fixture AS newer
-        ON newer.user_id = older.user_id
-        AND newer.entity_type = older.entity_type
-        AND newer.entity_id = older.entity_id
-        AND newer.category = older.category
-        AND newer.status IN ('open', 'in_progress')
-        AND (newer.updated_at > older.updated_at OR (newer.updated_at = older.updated_at AND newer.id > older.id))
-      SET older.status = 'dismissed', older.resolved_at = COALESCE(older.resolved_at, CURRENT_TIMESTAMP),
-        older.resolution = COALESCE(older.resolution, 'Duplicate active review superseded during migration; historical record retained.')
-      WHERE older.status IN ('open', 'in_progress')`;
+JOIN hire_ai_active_review_backfill_fixture AS newer
+  ON newer.user_id = older.user_id
+  AND newer.entity_type = older.entity_type
+  AND newer.entity_id = older.entity_id
+  AND newer.category = older.category
+  AND newer.status IN ('open', 'in_progress')
+  AND (
+    newer.updated_at > older.updated_at
+    OR (newer.updated_at = older.updated_at AND newer.id > older.id)
+  )
+SET older.status = 'dismissed',
+    older.resolved_at = COALESCE(older.resolved_at, CURRENT_TIMESTAMP),
+    older.resolution = COALESCE(
+      older.resolution,
+      'Duplicate active review superseded during migration; historical record retained.'
+    )
+WHERE older.status IN ('open', 'in_progress');`;
 const approvalFixtureBackfill = `UPDATE hire_ai_active_approval_backfill_fixture AS older
-      JOIN hire_ai_active_approval_backfill_fixture AS newer
-        ON newer.user_id = older.user_id
-        AND newer.entity_type = older.entity_type
-        AND newer.entity_id = older.entity_id
-        AND newer.approval_type = older.approval_type
-        AND newer.status = 'pending'
-        AND (newer.updated_at > older.updated_at OR (newer.updated_at = older.updated_at AND newer.id > older.id))
-      SET older.status = 'cancelled', older.decided_at = COALESCE(older.decided_at, CURRENT_TIMESTAMP),
-        older.decision_note = COALESCE(older.decision_note, 'Duplicate pending approval superseded during migration; historical record retained.')
-      WHERE older.status = 'pending'`;
-const normalizeBackfillSql = (statement: string) =>
-  statement
-    .replaceAll("`", "")
-    .replaceAll("hire_ai_active_review_backfill_fixture", "admin_review_items")
-    .replaceAll("hire_ai_active_approval_backfill_fixture", "application_approvals")
-    .replace(/\s+/g, " ")
-    .replace(/\s*\(\s*/g, "(")
-    .replace(/\s*\)\s*/g, ")")
-    .trim()
-    .replace(/;$/, "");
+JOIN hire_ai_active_approval_backfill_fixture AS newer
+  ON newer.user_id = older.user_id
+  AND newer.entity_type = older.entity_type
+  AND newer.entity_id = older.entity_id
+  AND newer.approval_type = older.approval_type
+  AND newer.status = 'pending'
+  AND (
+    newer.updated_at > older.updated_at
+    OR (newer.updated_at = older.updated_at AND newer.id > older.id)
+  )
+SET older.status = 'cancelled',
+    older.decided_at = COALESCE(older.decided_at, CURRENT_TIMESTAMP),
+    older.decision_note = COALESCE(
+      older.decision_note,
+      'Duplicate pending approval superseded during migration; historical record retained.'
+    )
+WHERE older.status = 'pending';`;
 
 describe("active identity migration backfill SQL", () => {
   it("keeps fixture statements aligned with the migration", () => {
@@ -64,8 +70,10 @@ describe("active identity migration backfill SQL", () => {
 
     expect(adminBackfill).toBeDefined();
     expect(approvalBackfill).toBeDefined();
-    expect(normalizeBackfillSql(adminBackfill!)).toBe(normalizeBackfillSql(adminFixtureBackfill));
-    expect(normalizeBackfillSql(approvalBackfill!)).toBe(normalizeBackfillSql(approvalFixtureBackfill));
+    expect(normalizeMigrationSql(adminBackfill!.replaceAll("`admin_review_items`", "hire_ai_active_review_backfill_fixture")))
+      .toBe(normalizeMigrationSql(adminFixtureBackfill));
+    expect(normalizeMigrationSql(approvalBackfill!.replaceAll("`application_approvals`", "hire_ai_active_approval_backfill_fixture")))
+      .toBe(normalizeMigrationSql(approvalFixtureBackfill));
   });
 });
 
