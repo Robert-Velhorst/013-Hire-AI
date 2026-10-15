@@ -23,6 +23,7 @@ import {
   adminReviewItems,
   applicationApprovals,
   applicationCampaigns,
+  userResumes,
   interviewPreparation,
   jobMatches,
   decisionMakers,
@@ -59,6 +60,7 @@ import {
   type EducationEntry,
   type UserSkill,
   type UserProject,
+  type UserResume,
   type SuccessFee,
   type FeePayment,
 } from "../drizzle/schema";
@@ -2457,6 +2459,7 @@ const userApplicationSelection = {
     platformId: jobs.platformId,
     platformName: jobPlatforms.name,
     applicationUrl: jobs.applicationUrl,
+    applicationEmail: jobs.applicationEmail,
     sourceUrl: jobs.sourceUrl,
   },
 };
@@ -3316,6 +3319,7 @@ export async function createApplicationAttempt(attempt: InsertApplicationAttempt
 
 async function readApplicationLedgerArtifacts(applicationId: number, userId: number, bounded: boolean): Promise<{
   material: ApplicationMaterial | null;
+  resume: Pick<UserResume, "id" | "fileName" | "version"> | null;
   interviewPreparation: InterviewPreparation | null;
   attempts: ApplicationAttempt[];
   employerResponses: EmployerResponse[];
@@ -3356,6 +3360,7 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
       : { items: events, hasMore: false };
     return {
       material: material as ApplicationMaterial | null,
+      resume: null,
       interviewPreparation: preparation as InterviewPreparation | null,
       attempts: attemptsWindow.items as ApplicationAttempt[],
       employerResponses: responsesWindow.items as EmployerResponse[],
@@ -3420,6 +3425,13 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
     bounded ? responsesQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses + 1) : responsesQuery,
     bounded ? eventsQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents + 1) : eventsQuery,
   ]);
+  const resumeRows = materialRows[0]?.resumeId
+    ? await db
+      .select({ id: userResumes.id, fileName: userResumes.fileName, version: userResumes.version })
+      .from(userResumes)
+      .where(and(eq(userResumes.id, materialRows[0].resumeId), eq(userResumes.userId, userId)))
+      .limit(1)
+    : [];
 
   const attemptsWindow = bounded
     ? takeApplicationLedgerWindow(attempts, APPLICATION_LEDGER_WINDOW_LIMITS.attempts)
@@ -3433,6 +3445,7 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
 
   return {
     material: materialRows[0] || null,
+    resume: resumeRows[0] || null,
     interviewPreparation: preparationRows[0] || null,
     attempts: attemptsWindow.items,
     employerResponses: responsesWindow.items,
