@@ -109,7 +109,7 @@ describe("sensitive upload validation", () => {
 
   it("uses canonical Defender roots and ignores malformed platform directory names", () => {
     const locations = getWindowsDefenderLocations({
-      runtimePath: "D:\\HireAI\\node.exe",
+      runtimePath: "C:\\Program Files\\nodejs\\node.exe",
       systemRoot: "C:\\Windows",
     });
     expect(locations).toEqual({
@@ -130,6 +130,15 @@ describe("sensitive upload validation", () => {
       "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.9.1-0\\MpCmdRun.exe",
       "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
     ]);
+  });
+
+  it("rejects a SystemRoot on a different volume than the running runtime", () => {
+    expect(
+      getWindowsDefenderLocations({
+        runtimePath: "C:\\Program Files\\nodejs\\node.exe",
+        systemRoot: "E:\\Windows",
+      })
+    ).toBeNull();
   });
 
   it("uses an authenticated bounded HTTP scanner request", async () => {

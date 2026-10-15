@@ -13,10 +13,14 @@ export function getWindowsDefenderLocations(input = {}) {
   ).root;
   const systemRoot = input.systemRoot ?? process.env.SystemRoot;
   const systemVolumeRoot = systemRoot ? parseWindowsPath(systemRoot).root : "";
-  const volumeRoot = isDriveRoot(systemVolumeRoot)
-    ? systemVolumeRoot
-    : runtimeVolumeRoot;
-  if (!isDriveRoot(volumeRoot)) return null;
+  if (
+    !isDriveRoot(runtimeVolumeRoot) ||
+    !isDriveRoot(systemVolumeRoot) ||
+    runtimeVolumeRoot.toLowerCase() !== systemVolumeRoot.toLowerCase()
+  ) {
+    return null;
+  }
+  const volumeRoot = runtimeVolumeRoot;
 
   const getLocalDirectory = (value, fallback) => {
     if (!value) return fallback;
