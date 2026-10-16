@@ -8,6 +8,7 @@ import { sdk } from "./_core/sdk";
 import { createDocumentBodyAdmission } from "./_core/bodyParsers";
 import { reserveSensitiveUploadScanPermit } from "./uploadValidation";
 import { HttpError } from "../shared/_core/errors";
+import { createRateLimitMiddleware, SENSITIVE_ROUTE_RATE_LIMITS } from "./_core/apiRateLimit";
 
 const DOCUMENT_UPLOAD_PATH = "/api/document-uploads/:kind";
 const MAX_METADATA_HEADER_BYTES = 6 * 1024;
@@ -214,7 +215,8 @@ async function handleDocumentUpload(req: Request, res: Response) {
 }
 
 export function registerDocumentUploadRoutes(app: Express) {
-  app.post(DOCUMENT_UPLOAD_PATH, (req, res) => {
+  const uploadRateLimit = createRateLimitMiddleware(SENSITIVE_ROUTE_RATE_LIMITS.documentUpload);
+  app.post(DOCUMENT_UPLOAD_PATH, uploadRateLimit, (req, res) => {
     void handleDocumentUpload(req, res).catch(() => {
       if (!res.destroyed && !res.headersSent) {
         res.status(500).json({ error: "Document upload failed." });

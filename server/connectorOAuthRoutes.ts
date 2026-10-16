@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { createRateLimitMiddleware, SENSITIVE_ROUTE_RATE_LIMITS } from "./_core/apiRateLimit";
 import {
   encryptConnectorToken,
   exchangeConnectorAuthorizationCode,
@@ -91,7 +92,8 @@ function completeRedirect(provider: string, status: "connected" | "denied" | "fa
 }
 
 export function registerConnectorOAuthRoutes(app: Express) {
-  app.get("/api/connectors/oauth/callback", async (req: Request, res: Response) => {
+  const connectorOAuthRateLimit = createRateLimitMiddleware(SENSITIVE_ROUTE_RATE_LIMITS.connectorOAuth);
+  app.get("/api/connectors/oauth/callback", connectorOAuthRateLimit, async (req: Request, res: Response) => {
     const state = getQueryParam(req, "state");
     const code = getQueryParam(req, "code");
     const providerError = getQueryParam(req, "error");
