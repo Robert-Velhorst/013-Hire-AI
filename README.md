@@ -157,8 +157,7 @@ Dockerfile              multi-stage production container build
 ```powershell
 git clone https://github.com/Robert-Velhorst/013-Hire-AI.git
 cd 013-Hire-AI
-corepack enable
-corepack prepare pnpm@11.16.0 --activate
+npm install --global pnpm@11.16.0
 pnpm install --frozen-lockfile
 Copy-Item .env.example .env
 ```
