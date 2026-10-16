@@ -24,24 +24,29 @@ function registerRoutes() {
   return { app, routes };
 }
 
-function request(overrides: {
-  method?: string;
-  remoteAddress?: string;
-  host?: string;
-  origin?: string;
-  protocol?: string;
-  headers?: Record<string, string>;
-} = {}) {
+function request(
+  overrides: {
+    method?: string;
+    remoteAddress?: string;
+    host?: string;
+    origin?: string;
+    protocol?: string;
+    headers?: Record<string, string>;
+    query?: Record<string, unknown>;
+  } = {}
+) {
   const headers = overrides.headers ?? {};
   return {
     method: overrides.method ?? "POST",
     protocol: overrides.protocol ?? "http",
     socket: { remoteAddress: overrides.remoteAddress ?? "127.0.0.1" },
     headers,
-    query: {},
+    query: overrides.query ?? {},
     get(name: string) {
-      if (name.toLowerCase() === "host") return overrides.host ?? "localhost:3000";
-      if (name.toLowerCase() === "origin") return overrides.origin ?? "http://localhost:3000";
+      if (name.toLowerCase() === "host")
+        return overrides.host ?? "localhost:3000";
+      if (name.toLowerCase() === "origin")
+        return overrides.origin ?? "http://localhost:3000";
       return headers[name.toLowerCase()];
     },
   } as unknown as Request;
@@ -57,18 +62,24 @@ function response() {
   return res as unknown as Response & typeof res;
 }
 
-async function withLoopbackServer<T>(app: Express, callback: (origin: string) => Promise<T>) {
+async function withLoopbackServer<T>(
+  app: Express,
+  callback: (origin: string) => Promise<T>
+) {
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve, reject) => {
     server.once("listening", resolve);
     server.once("error", reject);
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("QA test server did not bind a TCP port.");
+  if (!address || typeof address === "string")
+    throw new Error("QA test server did not bind a TCP port.");
   try {
     return await callback(`http://127.0.0.1:${address.port}`);
   } finally {
-    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) =>
+      server.close(error => (error ? reject(error) : resolve()))
+    );
   }
 }
 
@@ -86,16 +97,19 @@ describe("development authentication routes", () => {
     { enabled: false, production: true, host: "127.0.0.1" },
     { enabled: true, production: true, host: "127.0.0.1" },
     { enabled: true, production: false, host: "0.0.0.0" },
-  ])("does not register QA routes unless explicitly enabled on a non-production loopback bind", ({ enabled, production, host }) => {
-    ENV.devQaAuthEnabled = enabled;
-    ENV.isProduction = production;
-    process.env.HOST = host;
+  ])(
+    "does not register QA routes unless explicitly enabled on a non-production loopback bind",
+    ({ enabled, production, host }) => {
+      ENV.devQaAuthEnabled = enabled;
+      ENV.isProduction = production;
+      process.env.HOST = host;
 
-    const { app, routes } = registerRoutes();
+      const { app, routes } = registerRoutes();
 
-    expect(routes.size).toBe(0);
-    expect(app.get).not.toHaveBeenCalled();
-  });
+      expect(routes.size).toBe(0);
+      expect(app.get).not.toHaveBeenCalled();
+    }
+  );
 
   it("registers only POST routes in explicit loopback QA mode", () => {
     ENV.devQaAuthEnabled = true;
@@ -118,30 +132,71 @@ describe("development authentication routes", () => {
     ENV.isProduction = false;
     process.env.HOST = "127.0.0.1";
     const user = { openId: "dev-review-queue-user", name: "Review Queue QA" };
-    vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue(user as never);
-    vi.spyOn(sdk, "createSessionToken").mockResolvedValue("qa-session" as never);
+    vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue(
+      user as never
+    );
+    vi.spyOn(sdk, "createSessionToken").mockResolvedValue(
+      "qa-session" as never
+    );
     const { routes } = registerRoutes();
     const res = response();
 
     await routes.get("/api/dev/login")!(request(), res);
 
     expect(devSeeds.seedDevReviewQueueUser).toHaveBeenCalledOnce();
-    expect(sdk.createSessionToken).toHaveBeenCalledWith(user.openId, expect.objectContaining({
-      name: user.name,
-      expiresInMs: 6 * 60 * 60 * 1000,
-    }));
+    expect(sdk.createSessionToken).toHaveBeenCalledWith(
+      user.openId,
+      expect.objectContaining({
+        name: user.name,
+        expiresInMs: 6 * 60 * 60 * 1000,
+      })
+    );
     expect(res.cookie).toHaveBeenCalled();
     expect(res.redirect).toHaveBeenCalledWith(302, "/dashboard");
   });
+
+  it.each([
+    ["same-origin path", "/jobs?sort=new#today", "/jobs?sort=new#today"],
+    ["absolute URL", "https://attacker.example/path", "/dashboard"],
+    ["protocol-relative URL", "//attacker.example/path", "/dashboard"],
+    ["backslash-normalized URL", "/\\\\attacker.example/path", "/dashboard"],
+  ])(
+    "uses a same-origin redirect for %s",
+    async (_case, redirect, expected) => {
+      ENV.devQaAuthEnabled = true;
+      ENV.isProduction = false;
+      process.env.HOST = "127.0.0.1";
+      vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue({
+        openId: "dev-review-queue-user",
+        name: "Review Queue QA",
+      } as never);
+      vi.spyOn(sdk, "createSessionToken").mockResolvedValue(
+        "qa-session" as never
+      );
+      const { routes } = registerRoutes();
+      const res = response();
+
+      await routes.get("/api/dev/login")!(
+        request({ query: { redirect } }),
+        res
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith(302, expected);
+    }
+  );
 
   it("integrates loopback-only sign-in with real HTTP method, origin, host, and proxy checks", async () => {
     ENV.devQaAuthEnabled = true;
     ENV.isProduction = false;
     process.env.HOST = "127.0.0.1";
     const user = { openId: "dev-review-queue-user", name: "Review Queue QA" };
-    const seedUser = vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue(user as never);
+    const seedUser = vi
+      .spyOn(devSeeds, "seedDevReviewQueueUser")
+      .mockResolvedValue(user as never);
     const seedAdmin = vi.spyOn(devSeeds, "seedDevAdminUser");
-    const createSession = vi.spyOn(sdk, "createSessionToken").mockResolvedValue("qa-session" as never);
+    const createSession = vi
+      .spyOn(sdk, "createSessionToken")
+      .mockResolvedValue("qa-session" as never);
     const app = express();
     registerDevAuthRoutes(app);
 
@@ -155,8 +210,13 @@ describe("development authentication routes", () => {
       expect(signIn.headers.get("location")).toBe("/dashboard");
       expect(signIn.headers.get("set-cookie")).toContain("app_session_id=");
 
-      const getRequest = await fetch(`${origin}/api/dev/login`, { redirect: "manual" });
-      const missingOrigin = await fetch(`${origin}/api/dev/login`, { method: "POST", redirect: "manual" });
+      const getRequest = await fetch(`${origin}/api/dev/login`, {
+        redirect: "manual",
+      });
+      const missingOrigin = await fetch(`${origin}/api/dev/login`, {
+        method: "POST",
+        redirect: "manual",
+      });
       const crossOrigin = await fetch(`${origin}/api/dev/login`, {
         method: "POST",
         headers: { Origin: "https://attacker.example" },
@@ -169,12 +229,20 @@ describe("development authentication routes", () => {
       });
       const publicHost = await fetch(`${origin}/api/dev/login-admin`, {
         method: "POST",
-        headers: { Host: "hire.example.com", Origin: "http://hire.example.com" },
+        headers: {
+          Host: "hire.example.com",
+          Origin: "http://hire.example.com",
+        },
         redirect: "manual",
       });
 
-      expect([getRequest.status, missingOrigin.status, crossOrigin.status, forwarded.status, publicHost.status])
-        .toEqual([404, 404, 404, 404, 404]);
+      expect([
+        getRequest.status,
+        missingOrigin.status,
+        crossOrigin.status,
+        forwarded.status,
+        publicHost.status,
+      ]).toEqual([404, 404, 404, 404, 404]);
     });
 
     expect(seedUser).toHaveBeenCalledOnce();
@@ -187,8 +255,12 @@ describe("development authentication routes", () => {
     ENV.isProduction = false;
     process.env.HOST = "127.0.0.1";
     const user = { openId: "dev-review-queue-user", name: "Review Queue QA" };
-    const seedUser = vi.spyOn(devSeeds, "seedDevReviewQueueUser").mockResolvedValue(user as never);
-    const createSession = vi.spyOn(sdk, "createSessionToken").mockResolvedValue("qa-session" as never);
+    const seedUser = vi
+      .spyOn(devSeeds, "seedDevReviewQueueUser")
+      .mockResolvedValue(user as never);
+    const createSession = vi
+      .spyOn(sdk, "createSessionToken")
+      .mockResolvedValue("qa-session" as never);
     const app = express();
     registerDevAuthRoutes(app);
 
@@ -213,28 +285,46 @@ describe("development authentication routes", () => {
   it.each([
     ["GET", request({ method: "GET" })],
     ["non-loopback peer", request({ remoteAddress: "203.0.113.10" })],
-    ["forwarded request", request({ headers: { "x-forwarded-for": "127.0.0.1" } })],
-    ["forwarded host", request({ headers: { "x-forwarded-host": "localhost:3000" } })],
-    ["forwarded protocol", request({ headers: { "x-forwarded-proto": "http" } })],
+    [
+      "forwarded request",
+      request({ headers: { "x-forwarded-for": "127.0.0.1" } }),
+    ],
+    [
+      "forwarded host",
+      request({ headers: { "x-forwarded-host": "localhost:3000" } }),
+    ],
+    [
+      "forwarded protocol",
+      request({ headers: { "x-forwarded-proto": "http" } }),
+    ],
     ["forwarded prefix", request({ headers: { "x-forwarded-prefix": "/" } })],
-    ["standard forwarded request", request({ headers: { forwarded: "for=127.0.0.1" } })],
+    [
+      "standard forwarded request",
+      request({ headers: { forwarded: "for=127.0.0.1" } }),
+    ],
     ["cross-origin request", request({ origin: "https://attacker.example" })],
-    ["non-loopback host", request({ host: "hire.example.com", origin: "http://hire.example.com" })],
-  ])("rejects %s before seeding any user or issuing a session", async (_case, req) => {
-    ENV.devQaAuthEnabled = true;
-    ENV.isProduction = false;
-    process.env.HOST = "127.0.0.1";
-    const seedUser = vi.spyOn(devSeeds, "seedDevReviewQueueUser");
-    const seedAdmin = vi.spyOn(devSeeds, "seedDevAdminUser");
-    const createSession = vi.spyOn(sdk, "createSessionToken");
-    const { routes } = registerRoutes();
-    const res = response();
+    [
+      "non-loopback host",
+      request({ host: "hire.example.com", origin: "http://hire.example.com" }),
+    ],
+  ])(
+    "rejects %s before seeding any user or issuing a session",
+    async (_case, req) => {
+      ENV.devQaAuthEnabled = true;
+      ENV.isProduction = false;
+      process.env.HOST = "127.0.0.1";
+      const seedUser = vi.spyOn(devSeeds, "seedDevReviewQueueUser");
+      const seedAdmin = vi.spyOn(devSeeds, "seedDevAdminUser");
+      const createSession = vi.spyOn(sdk, "createSessionToken");
+      const { routes } = registerRoutes();
+      const res = response();
 
-    await routes.get("/api/dev/login-admin")!(req, res);
+      await routes.get("/api/dev/login-admin")!(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(seedUser).not.toHaveBeenCalled();
-    expect(seedAdmin).not.toHaveBeenCalled();
-    expect(createSession).not.toHaveBeenCalled();
-  });
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(seedUser).not.toHaveBeenCalled();
+      expect(seedAdmin).not.toHaveBeenCalled();
+      expect(createSession).not.toHaveBeenCalled();
+    }
+  );
 });

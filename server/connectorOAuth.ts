@@ -236,6 +236,34 @@ export function getConnectorOAuthAvailability(
   };
 }
 
+export function hashConnectorOAuthStateNonce(
+  nonce: string,
+  stateSecret = getDefaultEnvironment().connectorOAuthStateSecret
+) {
+  // The keyed digest indexes a 128-bit random OAuth nonce, not a user password.
+  // codeql[js/insufficient-password-hash]
+  return createHmac("sha256", stateSecret).update(`connector-state-nonce:${nonce}`).digest("hex");
+}
+
+export function createConnectorOAuthSessionBinding(
+  sessionCookie: string,
+  stateSecret = getDefaultEnvironment().connectorOAuthStateSecret
+) {
+  if (!sessionCookie || !isValidConnectorOAuthStateSecret(stateSecret)) {
+    throw new Error("Connector OAuth session binding is not configured.");
+  }
+  return createHmac("sha256", stateSecret).update(`connector-session:${sessionCookie}`).digest("hex");
+}
+
+export function getConnectorOAuthCallbackOrigin(
+  environment = getDefaultEnvironment()
+) {
+  if (!isValidConnectorOAuthRedirectUri(environment.connectorOAuthRedirectUri)) {
+    throw new Error("Connector OAuth callback origin is invalid.");
+  }
+  return new URL(environment.connectorOAuthRedirectUri).origin;
+}
+
 export function buildConnectorAuthorizationUrl(config: ConnectorOAuthConfig, state: string) {
   const url = new URL(config.authorizationEndpoint);
   url.searchParams.set("client_id", config.clientId);
@@ -250,6 +278,8 @@ export function buildConnectorAuthorizationUrl(config: ConnectorOAuthConfig, sta
 }
 
 function stateSignature(encodedPayload: string, stateSecret: string) {
+  // OAuth state is authenticated protocol data and is never used as password storage.
+  // codeql[js/insufficient-password-hash]
   return createHmac("sha256", stateSecret).update(encodedPayload).digest("base64url");
 }
 

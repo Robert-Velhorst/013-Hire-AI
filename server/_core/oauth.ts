@@ -6,11 +6,22 @@ import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { ENV } from "./env";
-import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
+import {
+  OAUTH_LOGIN_STATE_TTL_MS,
+  createOAuthLoginState,
+  verifyOAuthLoginState,
+} from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { isDirectLoopbackDevQaRequest } from "./devAuthPolicy";
+import { createRateLimitMiddleware } from "./apiRateLimit";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
+
+export const OAUTH_ROUTE_RATE_LIMIT_POLICY = Object.freeze({
+  windowMs: 60_000,
+  maxRequests: 30,
+  maxClients: 10_000,
+});
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -18,7 +29,10 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
-  app.get("/api/oauth/login", (req: Request, res: Response) => {
+  const oauthRateLimit = createRateLimitMiddleware(
+    OAUTH_ROUTE_RATE_LIMIT_POLICY
+  );
+  app.get("/api/oauth/login", oauthRateLimit, (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
         if (!ENV.isProduction && isDirectLoopbackDevQaRequest(req)) {
@@ -59,55 +73,71 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/oauth/callback", async (req: Request, res: Response) => {
-    const code = getQueryParam(req, "code");
-    const state = getQueryParam(req, "state");
+  app.get(
+    "/api/oauth/callback",
+    oauthRateLimit,
+    async (req: Request, res: Response) => {
+      const code = getQueryParam(req, "code");
+      const state = getQueryParam(req, "state");
 
-    if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
-      return;
-    }
-
-    const browserNonce = parseCookieHeader(req.headers.cookie || "")[OAUTH_STATE_COOKIE_NAME] || "";
-    res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
-      ...getSessionCookieOptions(req),
-      path: "/api/oauth/callback",
-    });
-    const verifiedState = verifyOAuthLoginState(state, browserNonce, ENV.cookieSecret);
-    if (!verifiedState) {
-      res.status(400).json({ error: "OAuth state is invalid or expired" });
-      return;
-    }
-
-    try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, verifiedState.redirectUri);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-
-      if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
+      if (!code || !state) {
+        res.status(400).json({ error: "code and state are required" });
         return;
       }
 
-      await db.upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-        lastSignedIn: new Date(),
+      const browserNonce =
+        parseCookieHeader(req.headers.cookie || "")[OAUTH_STATE_COOKIE_NAME] ||
+        "";
+      res.clearCookie(OAUTH_STATE_COOKIE_NAME, {
+        ...getSessionCookieOptions(req),
+        path: "/api/oauth/callback",
       });
+      const verifiedState = verifyOAuthLoginState(
+        state,
+        browserNonce,
+        ENV.cookieSecret
+      );
+      if (!verifiedState) {
+        res.status(400).json({ error: "OAuth state is invalid or expired" });
+        return;
+      }
 
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
-        expiresInMs: ENV.sessionTtlMs,
-      });
+      try {
+        const tokenResponse = await sdk.exchangeCodeForToken(
+          code,
+          verifiedState.redirectUri
+        );
+        const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
 
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ENV.sessionTtlMs });
+        if (!userInfo.openId) {
+          res.status(400).json({ error: "openId missing from user info" });
+          return;
+        }
 
-      res.redirect(302, "/");
-    } catch {
-      logOperationalFailure("OAuth", "Callback");
-      res.status(500).json({ error: "OAuth callback failed" });
+        await db.upsertUser({
+          openId: userInfo.openId,
+          name: userInfo.name || null,
+          email: userInfo.email ?? null,
+          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+          lastSignedIn: new Date(),
+        });
+
+        const sessionToken = await sdk.createSessionToken(userInfo.openId, {
+          name: userInfo.name || "",
+          expiresInMs: ENV.sessionTtlMs,
+        });
+
+        const cookieOptions = getSessionCookieOptions(req);
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: ENV.sessionTtlMs,
+        });
+
+        res.redirect(302, "/");
+      } catch {
+        logOperationalFailure("OAuth", "Callback");
+        res.status(500).json({ error: "OAuth callback failed" });
+      }
     }
-  });
+  );
 }

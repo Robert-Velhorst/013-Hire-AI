@@ -7,6 +7,7 @@ import {
   exchangeConnectorAuthorizationCode,
   getConnectorOAuthAvailability,
   getConnectorOAuthConfig,
+  hashConnectorOAuthStateNonce,
   refreshConnectorAccessToken,
   verifyConnectorOAuthState,
   type ConnectorOAuthEnvironment,
@@ -30,6 +31,15 @@ const environment: ConnectorOAuthEnvironment = {
 };
 
 describe("external connector OAuth boundary", () => {
+  it("keys persisted OAuth nonce digests with the state secret", () => {
+    const nonce = "one-time-random-state-nonce";
+    const digest = hashConnectorOAuthStateNonce(nonce, environment.connectorOAuthStateSecret);
+
+    expect(digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(hashConnectorOAuthStateNonce(nonce, environment.connectorOAuthStateSecret)).toBe(digest);
+    expect(hashConnectorOAuthStateNonce(nonce, `${environment.connectorOAuthStateSecret}-other`)).not.toBe(digest);
+  });
+
   it("requires provider credentials, callback, state signing, and token encryption before OAuth is available", () => {
     expect(getConnectorOAuthAvailability("gmail", environment)).toMatchObject({
       provider: "gmail",
