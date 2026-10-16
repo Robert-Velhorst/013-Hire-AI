@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readMigrationFiles } from "drizzle-orm/migrator";
@@ -24,6 +24,41 @@ describe("Drizzle migration journal", () => {
       journal.entries.map((_, index) => index)
     );
     expect(journal.entries.map((entry) => entry.tag)).toEqual(migrationTags);
+  });
+
+  it("keeps the latest migration aligned with the Drizzle snapshot chain", () => {
+    const metadataDirectory = resolve(process.cwd(), "drizzle", "meta");
+    const journal = JSON.parse(
+      readFileSync(resolve(metadataDirectory, "_journal.json"), "utf8")
+    ) as MigrationJournal;
+    const latestEntry = journal.entries.at(-1);
+    expect(latestEntry, "the migration journal is empty").toBeDefined();
+    if (!latestEntry) return;
+
+    const snapshotPath = resolve(
+      metadataDirectory,
+      `${String(latestEntry.idx).padStart(4, "0")}_snapshot.json`
+    );
+    expect(existsSync(snapshotPath), `${latestEntry.tag} is missing its schema snapshot`).toBe(true);
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as {
+      dialect: string;
+      id: string;
+      prevId?: string;
+    };
+    expect(snapshot.dialect).toBe("mysql");
+
+    const previousEntry = [...journal.entries.slice(0, -1)].reverse().find((entry) =>
+      existsSync(resolve(metadataDirectory, `${String(entry.idx).padStart(4, "0")}_snapshot.json`))
+    );
+    if (previousEntry) {
+      const previousSnapshot = JSON.parse(
+        readFileSync(
+          resolve(metadataDirectory, `${String(previousEntry.idx).padStart(4, "0")}_snapshot.json`),
+          "utf8"
+        )
+      ) as { id: string };
+      expect(snapshot.prevId).toBe(previousSnapshot.id);
+    }
   });
 
   it("keeps migration generation separate from deployment", () => {

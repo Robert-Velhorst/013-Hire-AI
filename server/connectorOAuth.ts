@@ -1,5 +1,4 @@
 import {
-  createHash,
   createCipheriv,
   createDecipheriv,
   createHmac,
@@ -237,8 +236,11 @@ export function getConnectorOAuthAvailability(
   };
 }
 
-export function hashConnectorOAuthStateNonce(nonce: string) {
-  return createHash("sha256").update(nonce).digest("hex");
+export function hashConnectorOAuthStateNonce(
+  nonce: string,
+  stateSecret = getDefaultEnvironment().connectorOAuthStateSecret
+) {
+  return createHmac("sha256", stateSecret).update(`connector-state-nonce:${nonce}`).digest("hex");
 }
 
 export function createConnectorOAuthSessionBinding(
