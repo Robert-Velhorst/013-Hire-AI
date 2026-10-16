@@ -1135,7 +1135,7 @@ export const appRouter = router({
     importCloudResume: protectedProcedure
       .input(z.object({
         candidateId: z.string().min(40).max(64).regex(/^[A-Za-z0-9_-]+$/),
-      }))
+      }).strict())
       .mutation(async ({ ctx, input }) => {
         const {
           completeCloudResumeCandidate,
