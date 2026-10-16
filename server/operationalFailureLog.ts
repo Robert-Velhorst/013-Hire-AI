@@ -5,13 +5,15 @@ export type OperationalFailureSignal = {
   firstOccurredAt: string;
   lastOccurredAt: string;
 };
+type InMemoryOperationalFailureSignal = OperationalFailureSignal & { id: number };
 
 const MAX_FAILURE_BUCKETS = 100;
 const PERSISTENCE_DELAY_MS = 1_000;
 const PERSISTENCE_RETRY_MS = 5_000;
 const processStartedAt = new Date().toISOString();
-const failureSignals = new Map<string, OperationalFailureSignal>();
+const failureSignals = new Map<string, InMemoryOperationalFailureSignal>();
 const pendingPersistence = new Map<string, OperationalFailureSignal>();
+let nextFailureSignalId = 1;
 type PersistenceSink = (signals: OperationalFailureSignal[]) => Promise<void>;
 let persistenceSink: PersistenceSink | null = null;
 let persistenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,7 +59,7 @@ function normalizeLabel(value: string): string {
   return normalized || "Unknown";
 }
 
-function mergeSignal(target: Map<string, OperationalFailureSignal>, signal: OperationalFailureSignal) {
+function mergeSignal<T extends OperationalFailureSignal>(target: Map<string, T>, signal: T) {
   const key = `${signal.scope}\u0000${signal.operation}`;
   const existing = target.get(key);
   if (existing) {
@@ -116,6 +118,7 @@ function recordOperationalFailure(scope: string, operation: string, occurredAt =
     return;
   }
   failureSignals.set(key, {
+    id: nextFailureSignalId++,
     scope: safeScope,
     operation: safeOperation,
     count: 1,
@@ -151,24 +154,35 @@ export async function flushOperationalFailurePersistence(): Promise<void> {
   if (pendingPersistence.size > 0) schedulePersistence();
 }
 
-export function getOperationalFailureSnapshot(limit = 20) {
+export function getOperationalFailureSnapshot(limit = 20, cursorId?: number) {
   const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-  const signals = Array.from(failureSignals.values())
-    .sort((left, right) => right.lastOccurredAt.localeCompare(left.lastOccurredAt))
-    .slice(0, boundedLimit)
-    .map((signal) => ({ ...signal }));
+  const ordered = Array.from(failureSignals.values())
+    .sort((left, right) => right.id - left.id);
+  const remaining = ordered.filter((signal) => cursorId === undefined || signal.id < cursorId);
+  const page = remaining.slice(0, boundedLimit + 1);
+  const hasMore = page.length > boundedLimit;
+  const signals = page.slice(0, boundedLimit).map((signal) => ({ ...signal }));
+  const latestAt = ordered.reduce<string | null>(
+    (latest, signal) => latest === null || signal.lastOccurredAt > latest ? signal.lastOccurredAt : latest,
+    null
+  );
   return {
     processStartedAt,
     totalFailures: Array.from(failureSignals.values())
       .reduce((total, signal) => total + signal.count, 0),
     uniqueSignals: failureSignals.size,
     signals,
+    limit: boundedLimit,
+    hasMore,
+    nextCursor: hasMore && signals.length > 0 ? signals[signals.length - 1]!.id : null,
+    latestAt,
   };
 }
 
 export function clearOperationalFailuresForTests(): void {
   failureSignals.clear();
   pendingPersistence.clear();
+  nextFailureSignalId = 1;
   configureOperationalFailurePersistence(null);
 }
 

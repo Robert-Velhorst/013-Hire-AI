@@ -1,16 +1,31 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+const { fetchAllowlistedHttpsUrlMock } = vi.hoisted(() => ({
+  fetchAllowlistedHttpsUrlMock: vi.fn(),
+}));
+vi.mock("./_core/publicUrl", () => ({
+  fetchAllowlistedHttpsUrl: fetchAllowlistedHttpsUrlMock,
+}));
 import {
   RESUME_MIME_TYPES,
   resolveMalwareScanMode,
   scanSensitiveUpload,
   validateUploadedFile,
+  windowsDefenderScanPath,
 } from "./uploadValidation";
 
 const originalFetch = globalThis.fetch;
 
+beforeEach(() => {
+  fetchAllowlistedHttpsUrlMock.mockResolvedValue(
+    Response.json({ clean: true, provider: "test-scanner" })
+  );
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
   globalThis.fetch = originalFetch;
+  fetchAllowlistedHttpsUrlMock.mockReset();
 });
 
 describe("sensitive upload validation", () => {
@@ -85,6 +100,7 @@ describe("sensitive upload validation", () => {
     expect(
       resolveMalwareScanMode({
         endpoint: "https://scanner.example.test",
+        allowedOrigins: "https://scanner.example.test",
         platform: "linux",
       })
     ).toBe("http");
@@ -96,8 +112,17 @@ describe("sensitive upload validation", () => {
     );
   });
 
+  it("uses a fixed Defender scan filename instead of the uploaded filename", () => {
+    const directory = join("temporary", "hire-ai-scan-1");
+    expect(windowsDefenderScanPath(directory)).toBe(
+      join(directory, "upload.bin")
+    );
+  });
+
   it("uses an authenticated bounded HTTP scanner request", async () => {
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     vi.stubEnv("FILE_MALWARE_SCAN_TOKEN", "scanner-secret");
     globalThis.fetch = vi
       .fn()
@@ -116,7 +141,7 @@ describe("sensitive upload validation", () => {
       })
     ).resolves.toEqual({ scanned: true, provider: "test-scanner" });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("https://scanner.example.test/scan"),
+      new URL("http://127.0.0.1:8080/scan"),
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -125,11 +150,73 @@ describe("sensitive upload validation", () => {
         }),
       })
     );
+    expect(fetchAllowlistedHttpsUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("routes public HTTPS scanner requests through the pinned outbound helper", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+      "https://scanner.example.test"
+    );
+    const data = Buffer.from("safe document");
+
+    await expect(
+      scanSensitiveUpload({
+        data,
+        fileName: "candidate resume.txt",
+        mimeType: "text/plain",
+      })
+    ).resolves.toMatchObject({ scanned: true });
+
+    expect(fetchAllowlistedHttpsUrlMock).toHaveBeenCalledWith(
+      "https://scanner.example.test/scan",
+      "https://scanner.example.test",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-file-name": "candidate_resume.txt",
+        }),
+        body: data,
+      })
+    );
+    expect(fetchAllowlistedHttpsUrlMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not contact an HTTPS scanner whose origin is not allowlisted", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_URL",
+      "https://other-scanner.example.test/scan"
+    );
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+      "https://scanner.example.test"
+    );
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(
+      scanSensitiveUpload({
+        data: Buffer.from("safe document"),
+        fileName: "candidate.txt",
+        mimeType: "text/plain",
+      })
+    ).resolves.toEqual({ scanned: false, provider: "not_configured" });
+
+    expect(fetchAllowlistedHttpsUrlMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects an unclean or malformed scanner verdict without exposing scanner details", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
     vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+      "https://scanner.example.test"
+    );
+    fetchAllowlistedHttpsUrlMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           clean: false,
@@ -137,7 +224,7 @@ describe("sensitive upload validation", () => {
         }),
         { status: 200 }
       )
-    ) as typeof fetch;
+    );
     await expect(
       scanSensitiveUpload({
         data: Buffer.from("unsafe"),
@@ -146,11 +233,9 @@ describe("sensitive upload validation", () => {
       })
     ).rejects.toThrow("rejected by the malware scanner");
 
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response("not-json", { status: 200 })
-      ) as typeof fetch;
+    fetchAllowlistedHttpsUrlMock.mockResolvedValueOnce(
+      new Response("not-json", { status: 200 })
+    );
     await expect(
       scanSensitiveUpload({
         data: Buffer.from("unknown"),
@@ -161,19 +246,22 @@ describe("sensitive upload validation", () => {
   });
 
   it("bounds concurrent scanner work", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
     vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+      "https://scanner.example.test"
+    );
     vi.stubEnv("FILE_MALWARE_SCAN_MAX_CONCURRENCY", "1");
     let releaseFirst!: (response: Response) => void;
     const firstResponse = new Promise<Response>(resolve => {
       releaseFirst = resolve;
     });
-    const fetchMock = vi
-      .fn()
+    const fetchMock = fetchAllowlistedHttpsUrlMock
       .mockImplementationOnce(() => firstResponse)
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ clean: true }), { status: 200 })
       );
-    globalThis.fetch = fetchMock as typeof fetch;
 
     const first = scanSensitiveUpload({
       data: Buffer.from("first"),
@@ -191,7 +279,8 @@ describe("sensitive upload validation", () => {
       fileName: "overflow.txt",
       mimeType: "text/plain",
     });
-    const overflowRejected = expect(overflow).rejects.toThrow("scanner is busy");
+    const overflowRejected =
+      expect(overflow).rejects.toThrow("scanner is busy");
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await overflowRejected;
@@ -204,48 +293,79 @@ describe("sensitive upload validation", () => {
   });
 
   it("cancels oversized chunked scanner responses before reading the full body", async () => {
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
     vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    vi.stubEnv(
+      "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+      "https://scanner.example.test"
+    );
     vi.stubEnv("FILE_MALWARE_SCAN_MAX_CONCURRENCY", "1");
     const cancel = vi.fn();
     let chunks = 0;
-    const response = new Response(new ReadableStream<Uint8Array>({
-      pull(controller) {
-        chunks += 1;
-        controller.enqueue(new Uint8Array(16 * 1024).fill(32));
-        if (chunks === 16) controller.close();
-      },
-      cancel,
-    }));
-    globalThis.fetch = vi.fn().mockResolvedValueOnce(response)
-      .mockResolvedValueOnce(Response.json({ clean: true })) as typeof fetch;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          chunks += 1;
+          controller.enqueue(new Uint8Array(16 * 1024).fill(32));
+          if (chunks === 16) controller.close();
+        },
+        cancel,
+      })
+    );
+    fetchAllowlistedHttpsUrlMock
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce(Response.json({ clean: true }));
 
-    await expect(scanSensitiveUpload({
-      data: Buffer.from("synthetic resume"), fileName: "resume.txt", mimeType: "text/plain",
-    })).rejects.toThrow("could not verify this upload");
+    await expect(
+      scanSensitiveUpload({
+        data: Buffer.from("synthetic resume"),
+        fileName: "resume.txt",
+        mimeType: "text/plain",
+      })
+    ).rejects.toThrow("could not verify this upload");
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(chunks).toBeLessThan(16);
     expect(response.body!.locked).toBe(false);
-    await expect(scanSensitiveUpload({
-      data: Buffer.from("next resume"), fileName: "next.txt", mimeType: "text/plain",
-    })).resolves.toMatchObject({ scanned: true });
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    await expect(
+      scanSensitiveUpload({
+        data: Buffer.from("next resume"),
+        fileName: "next.txt",
+        mimeType: "text/plain",
+      })
+    ).resolves.toMatchObject({ scanned: true });
+    expect(fetchAllowlistedHttpsUrlMock).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["oversized-header", "http-error"])("cancels unused scanner bodies on %s", async (failure) => {
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    const cancel = vi.fn();
-    const response = new Response(new ReadableStream({ cancel }), {
-      status: failure === "http-error" ? 503 : 200,
-      headers: failure === "oversized-header" ? { "content-length": String(65 * 1024) } : {},
-    });
-    globalThis.fetch = vi.fn().mockResolvedValue(response) as typeof fetch;
+  it.each(["oversized-header", "http-error"])(
+    "cancels unused scanner bodies on %s",
+    async failure => {
+      vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+      vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+      vi.stubEnv(
+        "FILE_MALWARE_SCAN_ALLOWED_ORIGINS",
+        "https://scanner.example.test"
+      );
+      const cancel = vi.fn();
+      const response = new Response(new ReadableStream({ cancel }), {
+        status: failure === "http-error" ? 503 : 200,
+        headers:
+          failure === "oversized-header"
+            ? { "content-length": String(65 * 1024) }
+            : {},
+      });
+      fetchAllowlistedHttpsUrlMock.mockResolvedValue(response);
 
-    await expect(scanSensitiveUpload({
-      data: Buffer.from("synthetic resume"), fileName: "resume.txt", mimeType: "text/plain",
-    })).rejects.toThrow("could not verify this upload");
+      await expect(
+        scanSensitiveUpload({
+          data: Buffer.from("synthetic resume"),
+          fileName: "resume.txt",
+          mimeType: "text/plain",
+        })
+      ).rejects.toThrow("could not verify this upload");
 
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(response.body!.locked).toBe(false);
-  });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(response.body!.locked).toBe(false);
+    }
+  );
 });

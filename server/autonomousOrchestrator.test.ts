@@ -160,6 +160,30 @@ describe("autonomous orchestrator", () => {
     expect(plan.decisions[0].blockers.join(" ")).toContain("USD");
   });
 
+  it("requires salary clarification before applying when a candidate has an expectation", () => {
+    const jobWithoutSalary: Job = {
+      ...baseJob,
+      salaryMin: null,
+      salaryMax: null,
+      salaryCurrency: null,
+    };
+    const plan = buildAutonomousPlan([jobWithoutSalary], profile, [], {
+      mode: "auto_apply",
+      requireHumanReview: false,
+      minMatchScore: 0,
+      dailyApplicationLimit: 2,
+    });
+
+    expect(plan.decisions[0].action).toBe("queue_for_review");
+    expect(plan.decisions[0].reviewRequired).toBe(true);
+    expect(plan.decisions[0].blockers).toContain(
+      "Salary range is not disclosed and must be clarified against the user's stated expectation"
+    );
+    expect(plan.decisions[0].automationNotes.join(" ")).toContain("Request the salary range from the employer before applying");
+    expect(plan.decisions[0].automationNotes.join(" ")).toContain("No employer message or application is sent automatically");
+    expect(plan.nextActions.join(" ")).toContain("ask the candidate before proceeding if the employer does not respond");
+  });
+
   it("keeps hybrid and on-site roles out of the remote-only campaign by default", () => {
     const hybridJob: Job = {
       ...baseJob,

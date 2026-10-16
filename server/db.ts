@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
+import { isEmploymentSearchOnHold } from "@shared/employmentSearchControl.mjs";
 import {
   InsertUser,
   users,
@@ -22,6 +24,7 @@ import {
   adminReviewItems,
   applicationApprovals,
   applicationCampaigns,
+  userResumes,
   interviewPreparation,
   jobMatches,
   decisionMakers,
@@ -58,6 +61,7 @@ import {
   type EducationEntry,
   type UserSkill,
   type UserProject,
+  type UserResume,
   type SuccessFee,
   type FeePayment,
 } from "../drizzle/schema";
@@ -508,6 +512,51 @@ export async function withOAuthIdentitySerialization<T>(
   }
 }
 
+/** Serialize job persistence across application replicas sharing this database. */
+export async function withJobPersistenceSerialization<T>(
+  operation: (database: MySql2Database | null) => Promise<T>
+): Promise<T> {
+  const database = await getDb();
+  if (!database) return operation(null);
+  if (!_pool) throw new Error("A persistent database pool is required for job persistence.");
+
+  const databaseUrl = new URL(ENV.databaseUrl);
+  const lockSuffix = createHash("sha256").update(databaseUrl.pathname).digest("hex").slice(0, 32);
+  const lockName = `hireai:jobpersist:${lockSuffix}`;
+  const connection = await _pool.getConnection();
+  let lockAcquired = false;
+  let connectionUsable = true;
+  try {
+    const [rows] = await connection.query(
+      "SELECT GET_LOCK(?, 10) AS acquired",
+      [lockName]
+    );
+    lockAcquired = Number((rows as Array<{ acquired: number | null }>)[0]?.acquired) === 1;
+    if (!lockAcquired) {
+      throw new Error("Could not acquire the job persistence serialization lock.");
+    }
+    return await operation(drizzle(connection));
+  } finally {
+    try {
+      if (lockAcquired) {
+        const [rows] = await connection.query(
+          "SELECT RELEASE_LOCK(?) AS released",
+          [lockName]
+        );
+        if (Number((rows as Array<{ released: number | null }>)[0]?.released) !== 1) {
+          throw new Error("Job persistence serialization lock cleanup failed.");
+        }
+      }
+    } catch (error) {
+      connection.destroy();
+      connectionUsable = false;
+      throw error;
+    } finally {
+      if (connectionUsable) connection.release();
+    }
+  }
+}
+
 /** Drain the explicit SQL pool after HTTP requests and workers have stopped. */
 export async function closeDatabaseConnection(): Promise<void> {
   if (_poolClose) return _poolClose;
@@ -549,38 +598,64 @@ export async function persistOperationalFailureSignals(signals: OperationalFailu
     });
 }
 
-export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
+export async function getOperationalFailureMonitoringSnapshot(limit = 20, cursorId?: number) {
   const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
   const db = await getDb();
-  if (!db) return getOperationalFailureSnapshot(boundedLimit);
+  if (!db) return getOperationalFailureSnapshot(boundedLimit, cursorId);
+  const rowsQuery = db.select({
+    id: operationalFailureSignals.id,
+    scope: operationalFailureSignals.scope,
+    operation: operationalFailureSignals.operation,
+    count: operationalFailureSignals.count,
+    firstOccurredAt: operationalFailureSignals.firstOccurredAt,
+    lastOccurredAt: operationalFailureSignals.lastOccurredAt,
+  })
+    .from(operationalFailureSignals)
+    .orderBy(desc(operationalFailureSignals.id))
+    .limit(boundedLimit + 1);
   const [summaryRows, rows] = await Promise.all([
     db.select({
       totalFailures: sql<number>`COALESCE(SUM(${operationalFailureSignals.count}), 0)`,
       uniqueSignals: sql<number>`COUNT(*)`,
       firstOccurredAt: sql<Date | null>`MIN(${operationalFailureSignals.firstOccurredAt})`,
+      latestAt: sql<Date | null>`MAX(${operationalFailureSignals.lastOccurredAt})`,
     }).from(operationalFailureSignals),
-    db.select({
-      scope: operationalFailureSignals.scope,
-      operation: operationalFailureSignals.operation,
-      count: operationalFailureSignals.count,
-      firstOccurredAt: operationalFailureSignals.firstOccurredAt,
-      lastOccurredAt: operationalFailureSignals.lastOccurredAt,
-    })
-      .from(operationalFailureSignals)
-      .orderBy(desc(operationalFailureSignals.lastOccurredAt))
-      .limit(boundedLimit),
+    cursorId === undefined
+      ? rowsQuery
+      : db.select({
+        id: operationalFailureSignals.id,
+        scope: operationalFailureSignals.scope,
+        operation: operationalFailureSignals.operation,
+        count: operationalFailureSignals.count,
+        firstOccurredAt: operationalFailureSignals.firstOccurredAt,
+        lastOccurredAt: operationalFailureSignals.lastOccurredAt,
+      })
+        .from(operationalFailureSignals)
+        .where(lt(operationalFailureSignals.id, cursorId))
+        .orderBy(desc(operationalFailureSignals.id))
+        .limit(boundedLimit + 1),
   ]);
+  const hasMore = rows.length > boundedLimit;
+  const pageRows = rows.slice(0, boundedLimit);
   return {
     processStartedAt: summaryRows[0]?.firstOccurredAt
       ? new Date(summaryRows[0].firstOccurredAt).toISOString()
       : new Date().toISOString(),
     totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
     uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
-    signals: rows.map((signal) => ({
+    signals: pageRows.map((signal) => ({
       ...signal,
       firstOccurredAt: signal.firstOccurredAt.toISOString(),
       lastOccurredAt: signal.lastOccurredAt.toISOString(),
     })),
+    limit: boundedLimit,
+    hasMore,
+    nextCursor: hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1]!.id : null,
+    latestAt: summaryRows[0]?.latestAt
+      ? summaryRows[0].latestAt instanceof Date
+        ? summaryRows[0].latestAt.toISOString()
+        : new Date(String(summaryRows[0].latestAt)).toISOString()
+      : null,
   };
 }
 
@@ -591,7 +666,7 @@ export async function getOperationalFailureAggregateSnapshot() {
     return {
       totalFailures: snapshot.totalFailures,
       uniqueSignals: snapshot.uniqueSignals,
-      latestAt: snapshot.signals[0]?.lastOccurredAt ?? null,
+      latestAt: snapshot.latestAt,
     };
   }
   const rows = await db.select({
@@ -1284,7 +1359,8 @@ export async function getJobById(jobId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-const searchTerm = (value: string) => `%${value.trim().replace(/[%_]/g, "\\$&")}%`;
+export const searchTerm = (value: string) =>
+  `%${value.trim().replace(/[\\%_]/g, "\\$&")}%`;
 
 export async function searchJobs(filters: {
   title?: string;
@@ -1462,7 +1538,8 @@ export async function getProfilesWithAutonomousPreferences(afterUserId = 0, requ
     return Array.from(memoryProfiles.values())
       .filter((profile) => {
         try {
-          return JSON.parse(profile.preferences || "{}").autonomousEnabled === true;
+          return JSON.parse(profile.preferences || "{}").autonomousEnabled === true &&
+            !isEmploymentSearchOnHold(profile.preferences);
         } catch {
           return false;
         }
@@ -1486,6 +1563,7 @@ export async function getProfilesWithAutonomousPreferences(afterUserId = 0, requ
     .where(and(
       gt(userProfiles.userId, afterUserId),
       eq(userProfiles.autonomousEnabled, 1),
+      sql`CASE WHEN JSON_VALID(${userProfiles.preferences}) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(${userProfiles.preferences}, '$.employmentSearchHold')), 'false') ELSE 'false' END <> 'true'`,
       eq(users.accountStatus, "active"),
       sql`${users.tosAcceptedAt} IS NOT NULL`
     ))
@@ -1768,10 +1846,21 @@ function autonomousPreferenceEnabled(preferences: string | null | undefined) {
   }
 }
 
-export async function upsertUserProfile(profile: InsertUserProfile) {
+export async function upsertUserProfile(
+  profile: InsertUserProfile,
+  options: { allowEmploymentSearchRestart?: boolean } = {}
+) {
   const db = await getDb();
   if (!db) {
     const existing = memoryProfiles.get(profile.userId);
+    if (
+      profile.preferences !== undefined &&
+      isEmploymentSearchOnHold(existing?.preferences) &&
+      !options.allowEmploymentSearchRestart &&
+      !isEmploymentSearchOnHold(profile.preferences)
+    ) {
+      throw new Error("A reasoned restart is required before clearing an employment search hold.");
+    }
     memoryProfiles.set(profile.userId, {
       id: existing?.id || memoryProfiles.size + 1,
       userId: profile.userId,
@@ -1804,6 +1893,34 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
     ? profile
     : { ...profile, autonomousEnabled: autonomousPreferenceEnabled(profile.preferences) };
   const { id: _id, userId: _userId, ...updates } = normalizedProfile;
+
+  if (profile.preferences !== undefined) {
+    await db.transaction(async (tx) => {
+      // Serialize preference replacement with hire reports and reasoned restarts.
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, profile.userId)).for("update");
+      const [existing] = await tx
+        .select({ preferences: userProfiles.preferences })
+        .from(userProfiles)
+        .where(eq(userProfiles.userId, profile.userId))
+        .limit(1);
+      if (
+        isEmploymentSearchOnHold(existing?.preferences) &&
+        !options.allowEmploymentSearchRestart &&
+        !isEmploymentSearchOnHold(profile.preferences)
+      ) {
+        throw new Error("A reasoned restart is required before clearing an employment search hold.");
+      }
+
+      await tx
+        .insert(userProfiles)
+        .values(normalizedProfile)
+        .onDuplicateKeyUpdate({
+          set: Object.keys(updates).length > 0 ? updates : { userId: profile.userId },
+        });
+    });
+    return;
+  }
+
   await db
     .insert(userProfiles)
     .values(normalizedProfile)
@@ -1814,7 +1931,8 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
 
 export async function patchUserProfilePreferences(
   userId: number,
-  patch: Record<string, boolean | number | string>
+  patch: Record<string, boolean | number | string>,
+  options: { allowEmploymentSearchRestart?: boolean } = {}
 ) {
   const db = await getDb();
   if (!db) {
@@ -1826,8 +1944,15 @@ export async function patchUserProfilePreferences(
     } catch {
       current = {};
     }
+    if (
+      isEmploymentSearchOnHold(current) &&
+      !options.allowEmploymentSearchRestart &&
+      (patch.autonomousEnabled === true || patch.employmentSearchHold === false)
+    ) {
+      throw new Error("A reasoned restart is required before enabling job search after a reported hire.");
+    }
     const preferences = JSON.stringify({ ...current, ...patch });
-    await upsertUserProfile({ userId, preferences });
+    await upsertUserProfile({ userId, preferences }, options);
     return preferences;
   }
 
@@ -1845,6 +1970,13 @@ export async function patchUserProfilePreferences(
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) current = parsed;
     } catch {
       current = {};
+    }
+    if (
+      isEmploymentSearchOnHold(current) &&
+      !options.allowEmploymentSearchRestart &&
+      (patch.autonomousEnabled === true || patch.employmentSearchHold === false)
+    ) {
+      throw new Error("A reasoned restart is required before enabling job search after a reported hire.");
     }
     const preferences = JSON.stringify({ ...current, ...patch });
     const autonomousEnabled = autonomousPreferenceEnabled(preferences);
@@ -2389,6 +2521,7 @@ const userApplicationSelection = {
     platformId: jobs.platformId,
     platformName: jobPlatforms.name,
     applicationUrl: jobs.applicationUrl,
+    applicationEmail: jobs.applicationEmail,
     sourceUrl: jobs.sourceUrl,
   },
 };
@@ -2577,38 +2710,90 @@ export async function getUserHaiStatusCounts(userId: number): Promise<HaiStatusC
     };
   }
 
-  const [applicationRows, approvalRows, connectorRows, feeRows] = await Promise.all([
-    db.select({
-      total: sql<number>`COUNT(*)`,
-      prepared: sql<number>`COALESCE(SUM(${applications.status} = 'pending'), 0)`,
-      submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
-      interviews: sql<number>`COALESCE(SUM(${applications.status} = 'interview'), 0)`,
-      offers: sql<number>`COALESCE(SUM(${applications.status} IN ('offer', 'accepted')), 0)`,
-    }).from(applications).where(eq(applications.userId, userId)),
-    db.select({ count: sql<number>`COUNT(*)` })
-      .from(applicationApprovals)
-      .where(and(eq(applicationApprovals.userId, userId), eq(applicationApprovals.status, "pending"))),
-    db.select({
-      connected: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} = 'connected'), 0)`,
-      needsAttention: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} IN ('needs_reauth', 'connection_requested')), 0)`,
-    }).from(userConnectorAccounts).where(eq(userConnectorAccounts.userId, userId)),
-    db.select({ count: sql<number>`COUNT(*)` })
-      .from(successFees)
-      .where(and(eq(successFees.userId, userId), eq(successFees.status, "active"))),
-  ]);
-  const applicationCounts = applicationRows[0];
+  const applicationCounts = db
+    .select({
+      userId: applications.userId,
+      total: sql<number>`COUNT(*)`.as("total"),
+      prepared: sql<number>`SUM(${applications.status} = 'pending')`.as("prepared"),
+      submitted: sql<number>`SUM(${applications.status} <> 'pending')`.as("submitted"),
+      interviews: sql<number>`SUM(${applications.status} = 'interview')`.as("interviews"),
+      offers: sql<number>`SUM(${applications.status} IN ('offer', 'accepted'))`.as("offers"),
+    })
+    .from(applications)
+    .where(eq(applications.userId, userId))
+    .groupBy(applications.userId)
+    .as("hai_application_counts");
+  const approvalCounts = db
+    .select({
+      userId: applicationApprovals.userId,
+      pending: sql<number>`COUNT(*)`.as("pending"),
+    })
+    .from(applicationApprovals)
+    .where(and(eq(applicationApprovals.userId, userId), eq(applicationApprovals.status, "pending")))
+    .groupBy(applicationApprovals.userId)
+    .as("hai_approval_counts");
+  const connectorCounts = db
+    .select({
+      userId: userConnectorAccounts.userId,
+      connected: sql<number>`SUM(${userConnectorAccounts.status} = 'connected')`.as("connected"),
+      needsAttention: sql<number>`SUM(${userConnectorAccounts.status} IN ('needs_reauth', 'connection_requested'))`.as("needs_attention"),
+    })
+    .from(userConnectorAccounts)
+    .where(eq(userConnectorAccounts.userId, userId))
+    .groupBy(userConnectorAccounts.userId)
+    .as("hai_connector_counts");
+  const successFeeCounts = db
+    .select({
+      userId: successFees.userId,
+      active: sql<number>`COUNT(*)`.as("active"),
+    })
+    .from(successFees)
+    .where(and(eq(successFees.userId, userId), eq(successFees.status, "active")))
+    .groupBy(successFees.userId)
+    .as("hai_success_fee_counts");
+
+  const [counts] = await db
+    .select({
+      applicationsTotal: sql<number>`COALESCE(${applicationCounts.total}, 0)`,
+      applicationsPrepared: sql<number>`COALESCE(${applicationCounts.prepared}, 0)`,
+      applicationsSubmitted: sql<number>`COALESCE(${applicationCounts.submitted}, 0)`,
+      applicationsInterviews: sql<number>`COALESCE(${applicationCounts.interviews}, 0)`,
+      applicationsOffers: sql<number>`COALESCE(${applicationCounts.offers}, 0)`,
+      pendingApprovals: sql<number>`COALESCE(${approvalCounts.pending}, 0)`,
+      connectedProviders: sql<number>`COALESCE(${connectorCounts.connected}, 0)`,
+      connectorsNeedingAttention: sql<number>`COALESCE(${connectorCounts.needsAttention}, 0)`,
+      activeSuccessFees: sql<number>`COALESCE(${successFeeCounts.active}, 0)`,
+    })
+    .from(users)
+    .leftJoin(applicationCounts, eq(users.id, applicationCounts.userId))
+    .leftJoin(approvalCounts, eq(users.id, approvalCounts.userId))
+    .leftJoin(connectorCounts, eq(users.id, connectorCounts.userId))
+    .leftJoin(successFeeCounts, eq(users.id, successFeeCounts.userId))
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!counts) {
+    return {
+      applications: { total: 0, prepared: 0, submitted: 0, interviews: 0, offers: 0 },
+      pendingApprovals: 0,
+      connectedProviders: 0,
+      connectorsNeedingAttention: 0,
+      activeSuccessFees: 0,
+    };
+  }
+
   return {
     applications: {
-      total: Number(applicationCounts.total),
-      prepared: Number(applicationCounts.prepared),
-      submitted: Number(applicationCounts.submitted),
-      interviews: Number(applicationCounts.interviews),
-      offers: Number(applicationCounts.offers),
+      total: Number(counts.applicationsTotal),
+      prepared: Number(counts.applicationsPrepared),
+      submitted: Number(counts.applicationsSubmitted),
+      interviews: Number(counts.applicationsInterviews),
+      offers: Number(counts.applicationsOffers),
     },
-    pendingApprovals: Number(approvalRows[0].count),
-    connectedProviders: Number(connectorRows[0].connected),
-    connectorsNeedingAttention: Number(connectorRows[0].needsAttention),
-    activeSuccessFees: Number(feeRows[0].count),
+    pendingApprovals: Number(counts.pendingApprovals),
+    connectedProviders: Number(counts.connectedProviders),
+    connectorsNeedingAttention: Number(counts.connectorsNeedingAttention),
+    activeSuccessFees: Number(counts.activeSuccessFees),
   };
 }
 
@@ -3248,6 +3433,7 @@ export async function createApplicationAttempt(attempt: InsertApplicationAttempt
 
 async function readApplicationLedgerArtifacts(applicationId: number, userId: number, bounded: boolean): Promise<{
   material: ApplicationMaterial | null;
+  resume: Pick<UserResume, "id" | "fileName" | "version"> | null;
   interviewPreparation: InterviewPreparation | null;
   attempts: ApplicationAttempt[];
   employerResponses: EmployerResponse[];
@@ -3288,6 +3474,7 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
       : { items: events, hasMore: false };
     return {
       material: material as ApplicationMaterial | null,
+      resume: null,
       interviewPreparation: preparation as InterviewPreparation | null,
       attempts: attemptsWindow.items as ApplicationAttempt[],
       employerResponses: responsesWindow.items as EmployerResponse[],
@@ -3352,6 +3539,13 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
     bounded ? responsesQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.employerResponses + 1) : responsesQuery,
     bounded ? eventsQuery.limit(APPLICATION_LEDGER_WINDOW_LIMITS.auditEvents + 1) : eventsQuery,
   ]);
+  const resumeRows = materialRows[0]?.resumeId
+    ? await db
+      .select({ id: userResumes.id, fileName: userResumes.fileName, version: userResumes.version })
+      .from(userResumes)
+      .where(and(eq(userResumes.id, materialRows[0].resumeId), eq(userResumes.userId, userId)))
+      .limit(1)
+    : [];
 
   const attemptsWindow = bounded
     ? takeApplicationLedgerWindow(attempts, APPLICATION_LEDGER_WINDOW_LIMITS.attempts)
@@ -3365,6 +3559,7 @@ async function readApplicationLedgerArtifacts(applicationId: number, userId: num
 
   return {
     material: materialRows[0] || null,
+    resume: resumeRows[0] || null,
     interviewPreparation: preparationRows[0] || null,
     attempts: attemptsWindow.items,
     employerResponses: responsesWindow.items,

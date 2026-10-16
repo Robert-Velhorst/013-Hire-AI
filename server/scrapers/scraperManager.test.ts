@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   claimPlatformScrapeAttempt: vi.fn(),
   getDb: vi.fn(),
   recordPlatformScrapeOutcome: vi.fn(),
+  withJobPersistenceSerialization: vi.fn(),
 }));
 
 vi.mock("../db", () => ({
@@ -18,6 +19,7 @@ vi.mock("../db", () => ({
   ensureScraperPlatformCatalog: mocks.ensureScraperPlatformCatalog,
   getDb: mocks.getDb,
   recordPlatformScrapeOutcome: mocks.recordPlatformScrapeOutcome,
+  withJobPersistenceSerialization: mocks.withJobPersistenceSerialization,
 }));
 
 function createScraper(platformId: number) {
@@ -38,6 +40,9 @@ describe("scraper manager platform restrictions", () => {
     mocks.claimPlatformScrapeAttempt.mockResolvedValue(true);
     mocks.getDb.mockResolvedValue(null);
     mocks.recordPlatformScrapeOutcome.mockResolvedValue(undefined);
+    mocks.withJobPersistenceSerialization.mockImplementation(async (operation) =>
+      operation(await mocks.getDb())
+    );
   });
 
   it("ensures the source catalog before initializing configured scrapers", async () => {
@@ -47,6 +52,25 @@ describe("scraper manager platform restrictions", () => {
 
     expect(mocks.ensureScraperPlatformCatalog).toHaveBeenCalledOnce();
     expect(manager.getInitializedPlatforms()).toContain("RemoteOK");
+  });
+
+  it("serializes concurrent persistence calls across manager instances", async () => {
+    let activeLookups = 0;
+    let maxConcurrentLookups = 0;
+    mocks.getDb.mockImplementation(async () => {
+      activeLookups += 1;
+      maxConcurrentLookups = Math.max(maxConcurrentLookups, activeLookups);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeLookups -= 1;
+      return null;
+    });
+
+    await Promise.all([
+      new ScraperManager().saveJobs([]),
+      new ScraperManager().saveJobs([]),
+    ]);
+
+    expect(maxConcurrentLookups).toBe(1);
   });
 
   it("tracks account-only sources without initializing a scraper for them", async () => {
@@ -241,6 +265,7 @@ describe("scraper manager platform restrictions", () => {
     expect(activeSignal?.aborted).toBe(true);
     expect(queued.scrape).not.toHaveBeenCalled();
     expect(saveJobs).not.toHaveBeenCalled();
+    expect(mocks.recordPlatformScrapeOutcome).not.toHaveBeenCalled();
   });
 
   it("serializes overlapping runs for the same platform", async () => {
@@ -399,6 +424,27 @@ describe("scraper manager platform restrictions", () => {
     expect(manager.getExecutionPolicy()).toEqual({
       scrapeTimeoutMs: 12_345,
       maxConcurrentScrapes: 4,
+      serializedPerPlatform: true,
+    });
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "uses safe execution defaults for non-finite configuration value %s",
+    (value) => {
+      const manager = new ScraperManager({ scrapeTimeoutMs: value, maxConcurrentScrapes: value });
+      expect(manager.getExecutionPolicy()).toEqual({
+        scrapeTimeoutMs: 90_000,
+        maxConcurrentScrapes: 3,
+        serializedPerPlatform: true,
+      });
+    },
+  );
+
+  it("keeps execution settings within their configured resource bounds", () => {
+    const manager = new ScraperManager({ scrapeTimeoutMs: 900_000, maxConcurrentScrapes: 100 });
+    expect(manager.getExecutionPolicy()).toEqual({
+      scrapeTimeoutMs: 300_000,
+      maxConcurrentScrapes: 10,
       serializedPerPlatform: true,
     });
   });
@@ -664,3 +710,4 @@ describe("scraper manager platform restrictions", () => {
     }));
   });
 });
+

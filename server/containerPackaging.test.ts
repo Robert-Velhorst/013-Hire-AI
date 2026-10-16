@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { posix, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("production container packaging", () => {
@@ -16,9 +16,10 @@ describe("production container packaging", () => {
     const packageManager = packageJson.packageManager;
 
     expect(packageManager).toMatch(/^pnpm@\d+\.\d+\.\d+$/);
-    expect(dockerfile).toContain(
-      `corepack prepare ${packageManager} --activate`
-    );
+    expect(
+      dockerfile.includes(`corepack prepare ${packageManager} --activate`)
+        || dockerfile.includes(`npm install --global ${packageManager}`)
+    ).toBe(true);
     expect(dockerfile).toContain(
       "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./"
     );
@@ -57,6 +58,25 @@ describe("production container packaging", () => {
     );
     expect(migrator).toContain("SELECT GET_LOCK(?, ?) AS acquired");
     expect(migrator).toContain("SELECT RELEASE_LOCK(?)");
+  });
+
+  it("copies all relative modules imported by the production doctor into the runtime image", () => {
+    const dockerfile = readFileSync(resolve(process.cwd(), "Dockerfile"), "utf8");
+    const doctor = readFileSync(resolve(process.cwd(), "scripts", "doctor.mjs"), "utf8");
+    const imports = [...doctor.matchAll(/(?:from\s+|import\s+)["'](\.{1,2}\/[^"']+)["']/g)]
+      .map(match => posix.normalize(posix.join("scripts", match[1]!)));
+    const missingCopies = (imageDockerfile: string) => imports.filter(importPath =>
+      !imageDockerfile.includes(`COPY --from=build /app/${importPath} ./${importPath}`)
+    );
+
+    expect(imports.length).toBeGreaterThan(0);
+    expect(missingCopies(dockerfile)).toEqual([]);
+
+    const omittedPolicyCopy = dockerfile.replace(
+      /^COPY --from=build \/app\/shared\/malwareScannerEndpointPolicy\.mjs \.\/shared\/malwareScannerEndpointPolicy\.mjs\r?\n?/m,
+      ""
+    );
+    expect(missingCopies(omittedPolicyCopy)).toContain("shared/malwareScannerEndpointPolicy.mjs");
   });
 
   it("excludes the development-only Vite server from the production server bundle", () => {

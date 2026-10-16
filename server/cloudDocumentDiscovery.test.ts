@@ -183,6 +183,57 @@ describe("cloud resume discovery", () => {
     );
   });
 
+  it("finds Dropbox resumes beyond the first page of unrelated documents", async () => {
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("dropbox"));
+    mocks.getConnectorAuthorization.mockResolvedValue({
+      userId: 501,
+      provider: "dropbox",
+      encryptedAccessToken: "encrypted-access",
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: new Date("2026-07-13T13:00:00.000Z"),
+      tokenType: "Bearer",
+      grantedScopes: "[]",
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: Array.from({ length: 100 }, (_, index) => ({
+          ".tag": "file",
+          path_lower: `/portfolio-${index}.pdf`,
+          name: `portfolio-${index}.pdf`,
+          size: 100,
+        })),
+        has_more: true,
+        cursor: "cursor-page-2",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: [{
+          ".tag": "file",
+          path_lower: "/documents/robert-cv.pdf",
+          name: "Robert CV.pdf",
+          size: 120,
+          client_modified: "2026-07-12T10:00:00Z",
+        }],
+        has_more: false,
+        cursor: "cursor-page-3",
+      }), { status: 200 }));
+
+    const result = await discoverCloudResumeDocuments(501, "dropbox", discoveryOptions(fetcher));
+
+    expect(result).toMatchObject({ scannedCount: 101, truncated: false });
+    expect(result.documents).toEqual([expect.objectContaining({
+      provider: "dropbox",
+      name: "Robert CV.pdf",
+      candidateId: expect.any(String),
+    })]);
+    expect(fetcher).toHaveBeenNthCalledWith(2,
+      "https://api.dropboxapi.com/2/files/list_folder/continue",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ cursor: "cursor-page-2" }),
+      })
+    );
+  });
+
   it("reports truncation when the provider scan budget is exhausted", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = new URL(String(input));
@@ -199,6 +250,47 @@ describe("cloud resume discovery", () => {
 
     expect(result).toMatchObject({ scannedCount: 500, truncated: true, documents: [] });
     expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it("hard-limits oversized Dropbox continuation pages to the remaining scan budget", async () => {
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("dropbox"));
+    mocks.getConnectorAuthorization.mockResolvedValue({
+      userId: 501,
+      provider: "dropbox",
+      encryptedAccessToken: "encrypted-access",
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: new Date("2026-07-13T13:00:00.000Z"),
+      tokenType: "Bearer",
+      grantedScopes: "[]",
+    });
+    const unrelated = Array.from({ length: 100 }, (_, index) => ({
+      ".tag": "file",
+      path_lower: `/portfolio-${index}.pdf`,
+      name: `portfolio-${index}.pdf`,
+      size: 100,
+    }));
+    const oversizedContinuation = Array.from({ length: 600 }, (_, index) => ({
+      ".tag": "file",
+      path_lower: `/resume-${index}.pdf`,
+      name: index >= 400 ? `Resume ${index}.pdf` : `portfolio-${index}.pdf`,
+      size: 100,
+    }));
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: unrelated,
+        has_more: true,
+        cursor: "cursor-2",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: oversizedContinuation,
+        has_more: false,
+      }), { status: 200 }));
+
+    const result = await discoverCloudResumeDocuments(501, "dropbox", discoveryOptions(fetcher));
+
+    expect(result).toMatchObject({ scannedCount: 500, truncated: true, documents: [] });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(mocks.storeCloudResumeCandidates).toHaveBeenCalledWith(501, "dropbox", [], now);
   });
 
   it("reports truncation when a single provider page exceeds the supported-candidate cap", async () => {

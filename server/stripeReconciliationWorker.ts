@@ -4,6 +4,7 @@ import { stripeReconciliationCommands, successFees, users } from "../drizzle/sch
 import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
 import { logOperationalFailure } from "./operationalFailureLog";
+import { isStripeBillingConfigured } from "@shared/stripeBillingPolicy.mjs";
 
 const COMMAND_LEASE_MS = 2 * 60 * 1000;
 const RETRY_BASE_MS = 30_000;
@@ -159,6 +160,7 @@ async function processCommand(command: StripeReconciliationCommand) {
 }
 
 export async function reconcileStripeCommandsOnce() {
+  if (!isStripeBillingConfigured(process.env)) return 0;
   let processed = 0;
   while (processed < COMMANDS_PER_CYCLE) {
     const command = await claimNextCommand();
@@ -174,7 +176,7 @@ export class StripeReconciliationWorker {
   private activeCycle: Promise<void> | null = null;
 
   start() {
-    if (this.interval) return;
+    if (this.interval || !isStripeBillingConfigured(process.env)) return;
     this.scheduleCycle();
     this.interval = setInterval(() => this.scheduleCycle(), 30_000);
     this.interval.unref();

@@ -1,4 +1,5 @@
 import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
+import { cleanScrapedHtmlToText } from "./htmlText";
 
 /**
  * We Work Remotely scraper
@@ -156,15 +157,6 @@ export class WeWorkRemotelyScraper extends BaseScraper {
   }
 
   private cleanHtml(html: string): string {
-    return html
-      .replace(/<[^>]*>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\s+/g, " ")
-      .trim();
+    return cleanScrapedHtmlToText(html);
   }
 }

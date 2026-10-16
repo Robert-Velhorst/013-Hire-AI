@@ -24,7 +24,30 @@ function isPrivateAddress(address) {
   return false;
 }
 
-export function validateHaiConnectorUrl(value) {
+function parseAllowedOrigins(value) {
+  if (typeof value !== "string" || !value.trim()) return [];
+  const origins = [];
+  for (const entry of value.split(",")) {
+    let url;
+    try {
+      url = new URL(entry.trim());
+    } catch {
+      return null;
+    }
+    if (
+      url.protocol !== "https:"
+      || url.username
+      || url.password
+      || url.pathname !== "/"
+      || url.search
+      || url.hash
+    ) return null;
+    origins.push(url.origin);
+  }
+  return [...new Set(origins)];
+}
+
+export function validateHaiConnectorUrl(value, allowedOriginsValue = "") {
   if (value !== value.trim()) {
     return "HAI_CONNECTOR_URL must not contain surrounding whitespace.";
   }
@@ -33,7 +56,7 @@ export function validateHaiConnectorUrl(value) {
   try {
     url = new URL(value);
   } catch {
-    return "HAI_CONNECTOR_URL must be a valid local HTTP(S) URL.";
+    return "HAI_CONNECTOR_URL must be a valid local or allowlisted HTTPS URL.";
   }
 
   if (
@@ -43,13 +66,23 @@ export function validateHaiConnectorUrl(value) {
     || url.search
     || url.hash
   ) {
-    return "HAI_CONNECTOR_URL must be a plain local HTTP(S) URL without credentials, query data, or fragments.";
+    return "HAI_CONNECTOR_URL must not contain credentials, query data, or fragments.";
   }
 
   const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   const allowedName = LOCAL_ENDPOINT_NAMES.has(hostname);
-  if (!allowedName && !isPrivateAddress(hostname)) {
-    return "HAI_CONNECTOR_URL must use localhost, a private-network address, host.docker.internal, gateway, or the Hire.AI Docker service name app.";
+  const localEndpoint = allowedName || isPrivateAddress(hostname);
+  if (!localEndpoint && url.protocol !== "https:") {
+    return "Public HAI connector endpoints must use HTTPS.";
+  }
+  if (!localEndpoint) {
+    const allowedOrigins = parseAllowedOrigins(allowedOriginsValue);
+    if (!allowedOrigins) {
+      return "HAI_CONNECTOR_ALLOWED_ORIGINS must contain only HTTPS origins without paths or credentials.";
+    }
+    if (!allowedOrigins.includes(url.origin)) {
+      return "Public HAI connector endpoint origin is not explicitly allowlisted.";
+    }
   }
   if (url.pathname !== "/api/hai/a2a") {
     return "HAI_CONNECTOR_URL must use the exact /api/hai/a2a endpoint path.";

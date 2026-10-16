@@ -3,6 +3,9 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
+import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
+import { inspectStripeBillingPolicy } from "../shared/stripeBillingPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -33,16 +36,24 @@ const requiredProductionEnv = [
   "ERASURE_IDENTITY_HMAC_KEYS",
   "VITE_APP_ID",
   "OAUTH_SERVER_URL",
+  "OAUTH_SERVER_ALLOWED_ORIGINS",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
 ];
 const missing = requiredProductionEnv.filter((name) => !String(process.env[name] || "").trim());
 check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
-  missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+  missing.length > 0
+    ? `${missing.length} required production variable(s) are not configured: ${missing.join(", ")}`
+    : "required variables configured"
+);
+
+const stripeBillingPolicy = inspectStripeBillingPolicy(process.env);
+check(
+  "Stripe billing",
+  stripeBillingPolicy.issue ? (isProduction ? "fail" : "warn") : "pass",
+  stripeBillingPolicy.issue ?? (stripeBillingPolicy.enabled ? "explicitly enabled" : "disabled by default")
 );
 
 function windowsDefenderAvailable() {
@@ -62,23 +73,21 @@ function windowsDefenderAvailable() {
 
 const malwareScanMode = String(process.env.FILE_MALWARE_SCAN_MODE || "auto").trim().toLowerCase();
 const malwareScanUrl = String(process.env.FILE_MALWARE_SCAN_URL || "").trim();
+const malwareScanAllowedOrigins = String(process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS || "");
 const malwareScanTimeout = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_TIMEOUT_MS || "30000"), 10);
 const malwareScanConcurrency = Number.parseInt(String(process.env.FILE_MALWARE_SCAN_MAX_CONCURRENCY || "2"), 10);
 const malwareModeValid = ["auto", "http", "windows_defender"].includes(malwareScanMode);
 const malwareTimeoutValid = Number.isInteger(malwareScanTimeout) && malwareScanTimeout >= 1_000 && malwareScanTimeout <= 120_000;
 const malwareConcurrencyValid = Number.isInteger(malwareScanConcurrency) && malwareScanConcurrency >= 1 && malwareScanConcurrency <= 8;
-let malwareScanUrlValid = !malwareScanUrl;
-try {
-  if (malwareScanUrl) {
-    const parsed = new URL(malwareScanUrl);
-    malwareScanUrlValid = ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
-  }
-} catch { malwareScanUrlValid = false; }
+const malwareScannerPolicy = inspectMalwareScannerPolicy({
+  mode: malwareScanMode,
+  endpoint: malwareScanUrl,
+  allowedOrigins: malwareScanAllowedOrigins,
+});
 const defenderAvailable = windowsDefenderAvailable();
-const scannerAvailable = malwareModeValid && malwareTimeoutValid && malwareConcurrencyValid && malwareScanUrlValid && (
-  (malwareScanMode === "http" && Boolean(malwareScanUrl))
-  || (malwareScanMode === "windows_defender" && defenderAvailable)
-  || (malwareScanMode === "auto" && (Boolean(malwareScanUrl) || defenderAvailable))
+const scannerAvailable = malwareTimeoutValid && malwareConcurrencyValid && (
+  malwareScannerPolicy.mode === "http" ||
+  (malwareScannerPolicy.mode === "windows_defender" && defenderAvailable)
 );
 
 const oauthPortalUrl = String(process.env.OAUTH_PORTAL_URL || process.env.VITE_OAUTH_PORTAL_URL || "").trim();
@@ -101,6 +110,26 @@ check(
     : oauthPortalValid
       ? "trusted runtime URL configured"
       : "OAUTH_PORTAL_URL must be HTTPS or loopback HTTP without credentials, query parameters, or fragments"
+);
+
+const oauthServerUrl = String(process.env.OAUTH_SERVER_URL || "").trim();
+const oauthServerAllowedOrigins = String(process.env.OAUTH_SERVER_ALLOWED_ORIGINS || "");
+let oauthServerValid = false;
+try {
+  const oauthApi = requireAllowedServiceBaseUrl(oauthServerUrl, oauthServerAllowedOrigins);
+  if (isProduction && oauthApi.protocol !== "https:") {
+    throw new Error("Production OAuth API must use HTTPS.");
+  }
+  oauthServerValid = true;
+} catch { oauthServerValid = false; }
+check(
+  "OAuth API",
+  !oauthServerUrl && !isProduction ? "warn" : oauthServerValid ? "pass" : "fail",
+  !oauthServerUrl && !isProduction
+    ? "not configured outside production"
+    : oauthServerValid
+      ? "trusted API origin explicitly allowlisted"
+      : "OAUTH_SERVER_URL must use HTTPS (or loopback HTTP) and match an origin-only OAUTH_SERVER_ALLOWED_ORIGINS entry"
 );
 
 const jwtSecret = String(process.env.JWT_SECRET || "");
@@ -229,14 +258,13 @@ check(
 );
 check(
   "document malware scanning",
-  !malwareModeValid || !malwareScanUrlValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) ? "fail" : scannerAvailable ? "pass" : "warn",
-  !malwareModeValid ? "mode must be auto, http, or windows_defender"
-    : !malwareScanUrlValid ? "scanner URL must be HTTP(S) without embedded credentials"
-      : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
-        : !malwareConcurrencyValid ? "concurrency must be 1-8"
-          : malwareScanUrl && malwareScanMode !== "windows_defender" ? `bounded HTTP scanner configured (${malwareScanConcurrency} concurrent)`
-            : defenderAvailable && malwareScanMode !== "http" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
-              : "scanner required before production document uploads"
+  !malwareModeValid || !malwareTimeoutValid || !malwareConcurrencyValid || (isProduction && !scannerAvailable) || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? "fail" : scannerAvailable ? "pass" : "warn",
+  !malwareModeValid || (malwareScannerPolicy.issue && Boolean(malwareScanUrl)) ? malwareScannerPolicy.issue
+    : !malwareTimeoutValid ? "timeout must be 1000-120000ms"
+      : !malwareConcurrencyValid ? "concurrency must be 1-8"
+        : scannerAvailable && malwareScannerPolicy.mode === "http" ? `bounded, explicitly allowlisted HTTP scanner configured (${malwareScanConcurrency} concurrent)`
+          : scannerAvailable && malwareScannerPolicy.mode === "windows_defender" ? `Windows Defender scanner available (${malwareScanConcurrency} concurrent)`
+            : "scanner required before production document uploads"
 );
 
 const scrapingEnabled = String(process.env.JOB_SCRAPING_SCHEDULER_ENABLED || "").trim().toLowerCase() === "true";
@@ -264,6 +292,7 @@ const haiToken = String(process.env.HAI_CONNECTOR_TOKEN || "");
 const haiUserIdValue = String(process.env.HAI_CONNECTOR_USER_ID || "");
 const haiUserId = /^[1-9]\d*$/.test(haiUserIdValue) ? Number(haiUserIdValue) : NaN;
 const haiUrl = String(process.env.HAI_CONNECTOR_URL || "");
+const haiAllowedOrigins = String(process.env.HAI_CONNECTOR_ALLOWED_ORIGINS || "");
 let haiDetail = "disabled";
 let haiStatus = "pass";
 if (haiEnabled) {
@@ -272,14 +301,16 @@ if (haiEnabled) {
   else if (/\s|[\u0000-\u001f\u007f]/.test(haiToken)) errors.push("token without whitespace or control characters");
   else if (haiToken === "replace-with-at-least-32-random-characters") errors.push("non-placeholder token");
   if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0) errors.push("positive user ID");
-  const endpointError = validateHaiConnectorUrl(haiUrl);
+  const endpointError = validateHaiConnectorUrl(haiUrl, haiAllowedOrigins);
   if (endpointError) {
     if (endpointError.includes("/api/hai/a2a")) errors.push("exact /api/hai/a2a endpoint");
-    else if (endpointError.includes("valid local HTTP(S) URL")) errors.push("valid connector URL");
-    else errors.push("plain local/private connector URL");
+    else if (endpointError.includes("ALLOWED_ORIGINS")) errors.push("valid HAI_CONNECTOR_ALLOWED_ORIGINS HTTPS origins");
+    else if (endpointError.includes("not explicitly allowlisted")) errors.push("explicitly allowlisted public HTTPS connector origin");
+    else if (endpointError.includes("Public HAI connector endpoints must use HTTPS")) errors.push("HTTPS for public connector endpoints");
+    else errors.push("valid local/private or allowlisted HTTPS connector URL");
   }
   haiStatus = errors.length > 0 ? "fail" : "pass";
-  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured read-only local bridge";
+  haiDetail = errors.length > 0 ? `missing or invalid: ${errors.join(", ")}` : "configured authenticated read-only bridge";
 }
 check("HAI connector", haiStatus, haiDetail);
 
