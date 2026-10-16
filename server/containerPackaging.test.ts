@@ -16,9 +16,10 @@ describe("production container packaging", () => {
     const packageManager = packageJson.packageManager;
 
     expect(packageManager).toMatch(/^pnpm@\d+\.\d+\.\d+$/);
-    expect(dockerfile).toContain(
-      `corepack prepare ${packageManager} --activate`
-    );
+    const installsPinnedPackageManager =
+      dockerfile.includes(`corepack prepare ${packageManager} --activate`) ||
+      dockerfile.includes(`npm install --global ${packageManager}`);
+    expect(installsPinnedPackageManager).toBe(true);
     expect(dockerfile).toContain(
       "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./"
     );
