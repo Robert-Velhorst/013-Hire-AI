@@ -13,6 +13,7 @@ import {
   autonomousRunStates,
   cloudResumeCandidates,
   connectorAuthorizations,
+  connectorOAuthIntents,
   connectorRevocationObligations,
   erasedOAuthIdentities,
   stripeReconciliationCommands,
@@ -44,7 +45,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 
-export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-13.v2";
+export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-16.v1";
 
 export type PrivacyRetentionAction = "erase" | "scrub_and_retain" | "retain";
 
@@ -75,6 +76,7 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "social_media_profiles", action: "erase", reason: erasableReason, tableRef: socialMediaProfiles, userColumn: socialMediaProfiles.userId },
   { table: "user_connector_accounts", action: "erase", reason: erasableReason, tableRef: userConnectorAccounts, userColumn: userConnectorAccounts.userId, providerRevocationRequired: true },
   { table: "connector_authorizations", action: "erase", reason: "Encrypted grants must be revoked with the provider before local deletion.", tableRef: connectorAuthorizations, userColumn: connectorAuthorizations.userId, providerRevocationRequired: true },
+  { table: "connector_oauth_intents", action: "erase", reason: "One-time connector authorization intents contain session-binding metadata and are deleted during account erasure.", tableRef: connectorOAuthIntents, userColumn: connectorOAuthIntents.userId },
   { table: "connector_revocation_obligations", action: "erase", reason: "Minimal provider-cleanup evidence is removed only after every provider revocation obligation is completed.", tableRef: connectorRevocationObligations, userColumn: connectorRevocationObligations.userId, providerRevocationRequired: true },
   { table: "applications", action: "scrub_and_retain", reason: ledgerReason, tableRef: applications, userColumn: applications.userId },
   { table: "application_decisions", action: "erase", reason: erasableReason, tableRef: applicationDecisions, userColumn: applicationDecisions.userId },

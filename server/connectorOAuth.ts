@@ -1,4 +1,5 @@
 import {
+  createHash,
   createCipheriv,
   createDecipheriv,
   createHmac,
@@ -234,6 +235,29 @@ export function getConnectorOAuthAvailability(
     provider,
     available: policy.issues.length === 0 && policy.configuredProviders.includes(provider),
   };
+}
+
+export function hashConnectorOAuthStateNonce(nonce: string) {
+  return createHash("sha256").update(nonce).digest("hex");
+}
+
+export function createConnectorOAuthSessionBinding(
+  sessionCookie: string,
+  stateSecret = getDefaultEnvironment().connectorOAuthStateSecret
+) {
+  if (!sessionCookie || !isValidConnectorOAuthStateSecret(stateSecret)) {
+    throw new Error("Connector OAuth session binding is not configured.");
+  }
+  return createHmac("sha256", stateSecret).update(`connector-session:${sessionCookie}`).digest("hex");
+}
+
+export function getConnectorOAuthCallbackOrigin(
+  environment = getDefaultEnvironment()
+) {
+  if (!isValidConnectorOAuthRedirectUri(environment.connectorOAuthRedirectUri)) {
+    throw new Error("Connector OAuth callback origin is invalid.");
+  }
+  return new URL(environment.connectorOAuthRedirectUri).origin;
 }
 
 export function buildConnectorAuthorizationUrl(config: ConnectorOAuthConfig, state: string) {

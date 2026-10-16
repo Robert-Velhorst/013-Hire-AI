@@ -15,6 +15,7 @@ import {
   autonomousRunStates,
   cloudResumeCandidates,
   connectorAuthorizations,
+  connectorOAuthIntents,
   connectorRevocationObligations,
   educationEntries,
   employerResponses,
@@ -56,6 +57,7 @@ export const privacyFinalizerPolicyTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_oauth_intents",
   "connector_revocation_obligations",
   "applications",
   "application_decisions",
@@ -384,6 +386,11 @@ export async function finalizePrivacyErasure(
           "social_media_profiles",
           socialMediaProfiles,
           socialMediaProfiles.userId,
+        ],
+        [
+          "connector_oauth_intents",
+          connectorOAuthIntents,
+          connectorOAuthIntents.userId,
         ],
         [
           "connector_authorizations",

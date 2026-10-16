@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { parse as parseCookieHeader } from "cookie";
 import {
   isCanonicalBase64Payload,
   MAX_DOCUMENT_UPLOAD_BASE64_LENGTH,
@@ -503,9 +504,13 @@ export const appRouter = router({
         const {
           buildConnectorAuthorizationUrl,
           createConnectorOAuthState,
+          createConnectorOAuthSessionBinding,
           getConnectorOAuthAvailability,
+          getConnectorOAuthCallbackOrigin,
           getConnectorOAuthConfig,
           isOAuthConnectorProvider,
+          verifyConnectorOAuthState,
+          hashConnectorOAuthStateNonce,
         } = await import("./connectorOAuth");
         if (!isOAuthConnectorProvider(input.provider)) {
           throw new TRPCError({
@@ -528,8 +533,44 @@ export const appRouter = router({
           });
         }
 
+        const sessionCookie = parseCookieHeader(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+        if (!sessionCookie) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "An active browser session is required." });
+        }
+        let requestOrigin: string;
+        try {
+          const host = ctx.req.get("host");
+          if (!host) throw new Error("Missing request host");
+          requestOrigin = new URL(`${ctx.req.protocol}://${host}`).origin;
+        } catch {
+          throw new TRPCError({ code: "FORBIDDEN", message: "The connector authorization origin is not allowed." });
+        }
+        const callbackOrigin = getConnectorOAuthCallbackOrigin();
+        if (requestOrigin !== callbackOrigin) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "The connector authorization origin is not allowed." });
+        }
+
         const { getUserConnectorAccount, requestUserConnectorConnection, createAuditEvent } = await import("./db");
         const existingAccount = await getUserConnectorAccount(ctx.user.id, input.provider);
+        const state = createConnectorOAuthState({
+          provider: input.provider,
+          userId: ctx.user.id,
+          consentScopes,
+        });
+        const verifiedState = verifyConnectorOAuthState(state);
+        if (!verifiedState) throw new Error("Could not verify the connector OAuth state just created.");
+        const sessionBinding = createConnectorOAuthSessionBinding(sessionCookie);
+        const expiresAt = new Date(verifiedState.expiresAt);
+        const { createConnectorOAuthIntent } = await import("./db");
+        await createConnectorOAuthIntent({
+          stateNonceHash: hashConnectorOAuthStateNonce(verifiedState.nonce),
+          userId: ctx.user.id,
+          provider: input.provider,
+          consentScopes: JSON.stringify(consentScopes),
+          sessionBinding,
+          applicationOrigin: requestOrigin,
+          expiresAt,
+        });
         // Preserve a verified mailbox while the user completes an optional
         // consent upgrade. A cancelled upgrade must not interrupt monitoring.
         const account = existingAccount?.status === "connected"
@@ -539,11 +580,6 @@ export const appRouter = router({
             provider: input.provider,
             consentScopes,
           });
-        const state = createConnectorOAuthState({
-          provider: input.provider,
-          userId: ctx.user.id,
-          consentScopes,
-        });
         await createAuditEvent({
           userId: ctx.user.id,
           entityType: "user",

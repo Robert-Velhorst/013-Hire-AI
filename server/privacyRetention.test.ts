@@ -19,6 +19,7 @@ const expectedUserOwnedTables = [
   "social_media_profiles",
   "user_connector_accounts",
   "connector_authorizations",
+  "connector_oauth_intents",
   "connector_revocation_obligations",
   "applications",
   "application_decisions",

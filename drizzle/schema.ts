@@ -259,6 +259,23 @@ export const connectorAuthorizations = mysqlTable("connector_authorizations", {
   index("connector_authorizations_refresh_lease_idx").on(table.refreshLeaseExpiresAt),
 ]);
 
+/** One-time OAuth handoffs bound to the initiating browser session. */
+export const connectorOAuthIntents = mysqlTable("connector_oauth_intents", {
+  id: int("id").autoincrement().primaryKey(),
+  stateNonceHash: varchar("state_nonce_hash", { length: 64 }).notNull(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["gmail", "google_drive", "dropbox", "outlook", "linkedin", "github"]).notNull(),
+  consentScopes: text("consent_scopes").notNull(),
+  sessionBinding: varchar("session_binding", { length: 64 }).notNull(),
+  applicationOrigin: varchar("application_origin", { length: 512 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("connector_oauth_intents_nonce_hash_unique").on(table.stateNonceHash),
+  index("connector_oauth_intents_expiry_idx").on(table.expiresAt, table.consumedAt),
+]);
+
 /** Provider-side access cleanup survives deletion of the encrypted local grant. */
 export const connectorRevocationObligations = mysqlTable("connector_revocation_obligations", {
   id: int("id").autoincrement().primaryKey(),
@@ -1092,6 +1109,8 @@ export type UserConnectorAccount = typeof userConnectorAccounts.$inferSelect;
 export type ConnectorAuthorization = Omit<typeof connectorAuthorizations.$inferSelect, "accessTokenLifetime"> & {
   accessTokenLifetime?: "expiring" | "non_expiring" | "unknown";
 };
+export type ConnectorOAuthIntent = typeof connectorOAuthIntents.$inferSelect;
+export type InsertConnectorOAuthIntent = typeof connectorOAuthIntents.$inferInsert;
 export type Application = typeof applications.$inferSelect;
 export type ApplicationDecision = typeof applicationDecisions.$inferSelect;
 export type ApplicationMaterial = typeof applicationMaterials.$inferSelect;

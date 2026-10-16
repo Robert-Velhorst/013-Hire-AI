@@ -12,6 +12,7 @@ import {
   socialMediaProfiles,
   userConnectorAccounts,
   connectorAuthorizations,
+  connectorOAuthIntents,
   applications,
   applicationDecisions,
   applicationMaterials,
@@ -41,6 +42,8 @@ import {
   type SocialMediaProfile,
   type UserConnectorAccount,
   type ConnectorAuthorization,
+  type ConnectorOAuthIntent,
+  type InsertConnectorOAuthIntent,
   type Application,
   type ApplicationDecision,
   type ApplicationMaterial,
@@ -145,6 +148,7 @@ const memoryProfiles = new Map<number, UserProfile>();
 const memorySocialMediaProfiles: (InsertSocialMediaProfile & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryConnectorAccounts: (InsertUserConnectorAccount & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryConnectorAuthorizations: (InsertConnectorAuthorization & { id: number; createdAt: Date; updatedAt: Date })[] = [];
+const memoryConnectorOAuthIntents: ConnectorOAuthIntent[] = [];
 const memoryApplications: (InsertApplication & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryApplicationDecisions: (InsertApplicationDecision & { id: number; createdAt: Date; updatedAt: Date })[] = [];
 const memoryApplicationMaterials: (InsertApplicationMaterial & { id: number; createdAt: Date; updatedAt: Date })[] = [];
@@ -2145,6 +2149,76 @@ export async function requestUserConnectorConnection(input: {
     lastVerifiedAt: null,
     disconnectedAt: null,
   });
+}
+
+export async function createConnectorOAuthIntent(
+  input: Omit<InsertConnectorOAuthIntent, "id" | "createdAt" | "consumedAt">
+) {
+  const now = new Date();
+  const database = await getDb();
+  if (!database) {
+    for (let index = memoryConnectorOAuthIntents.length - 1; index >= 0; index -= 1) {
+      if (memoryConnectorOAuthIntents[index]!.expiresAt <= now) memoryConnectorOAuthIntents.splice(index, 1);
+    }
+    const intent: ConnectorOAuthIntent = {
+      ...input,
+      id: memoryConnectorOAuthIntents.length + 1,
+      consumedAt: null,
+      createdAt: now,
+    };
+    memoryConnectorOAuthIntents.push(intent);
+    return intent;
+  }
+  await database.delete(connectorOAuthIntents)
+    .where(lt(connectorOAuthIntents.expiresAt, now))
+    .limit(100);
+  const inserted = await database.insert(connectorOAuthIntents).values(input);
+  const id = Number(inserted[0].insertId);
+  const rows = await database.select().from(connectorOAuthIntents)
+    .where(eq(connectorOAuthIntents.id, id)).limit(1);
+  if (!rows[0]) throw new Error("Connector OAuth intent was not persisted.");
+  return rows[0];
+}
+
+export async function consumeConnectorOAuthIntent(input: {
+  stateNonceHash: string;
+  userId: number;
+  provider: InsertConnectorOAuthIntent["provider"];
+  consentScopes: string;
+  sessionBinding: string;
+  applicationOrigin: string;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const database = await getDb();
+  if (!database) {
+    const intent = memoryConnectorOAuthIntents.find((candidate) =>
+      candidate.stateNonceHash === input.stateNonceHash &&
+      candidate.userId === input.userId &&
+      candidate.provider === input.provider &&
+      candidate.consentScopes === input.consentScopes &&
+      candidate.sessionBinding === input.sessionBinding &&
+      candidate.applicationOrigin === input.applicationOrigin &&
+      candidate.expiresAt > now &&
+      candidate.consumedAt === null
+    );
+    if (!intent) return false;
+    intent.consumedAt = now;
+    return true;
+  }
+  const result = await database.update(connectorOAuthIntents)
+    .set({ consumedAt: now })
+    .where(and(
+      eq(connectorOAuthIntents.stateNonceHash, input.stateNonceHash),
+      eq(connectorOAuthIntents.userId, input.userId),
+      eq(connectorOAuthIntents.provider, input.provider),
+      eq(connectorOAuthIntents.consentScopes, input.consentScopes),
+      eq(connectorOAuthIntents.sessionBinding, input.sessionBinding),
+      eq(connectorOAuthIntents.applicationOrigin, input.applicationOrigin),
+      gt(connectorOAuthIntents.expiresAt, now),
+      isNull(connectorOAuthIntents.consumedAt)
+    ));
+  return Number(result[0].affectedRows) === 1;
 }
 
 export async function disconnectUserConnectorAccount(userId: number, provider: InsertUserConnectorAccount["provider"]) {

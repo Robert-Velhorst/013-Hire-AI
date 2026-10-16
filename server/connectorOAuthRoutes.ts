@@ -1,12 +1,19 @@
 import type { Express, Request, Response } from "express";
+import { COOKIE_NAME } from "@shared/const";
+import { parse as parseCookieHeader } from "cookie";
 import {
+  createConnectorOAuthSessionBinding,
   encryptConnectorToken,
   exchangeConnectorAuthorizationCode,
+  getConnectorOAuthCallbackOrigin,
   getConnectorOAuthConfig,
+  hashConnectorOAuthStateNonce,
   isOAuthConnectorProvider,
   verifyConnectorOAuthState,
 } from "./connectorOAuth";
+import { sdk } from "./_core/sdk";
 import {
+  consumeConnectorOAuthIntent,
   createAuditEvent,
   getUserConnectorAccount,
   upsertConnectorAuthorization,
@@ -106,8 +113,49 @@ export function registerConnectorOAuthRoutes(app: Express) {
       return;
     }
 
+    let sessionCookie: string;
+    let sessionUserId: number;
+    let applicationOrigin: string;
+    try {
+      sessionCookie = parseCookieHeader(req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+      if (!sessionCookie) throw new Error("Missing browser session.");
+      const sessionUser = await sdk.authenticateRequest(req);
+      if (sessionUser.id !== verifiedState.userId || sessionUser.accountStatus !== "active") {
+        throw new Error("Session owner is not active.");
+      }
+      sessionUserId = sessionUser.id;
+      const host = req.get("host");
+      if (!host) throw new Error("Missing request host.");
+      applicationOrigin = new URL(`${req.protocol}://${host}`).origin;
+      if (applicationOrigin !== getConnectorOAuthCallbackOrigin()) {
+        throw new Error("Callback origin does not match.");
+      }
+    } catch {
+      res.status(400).json({ error: "Invalid connector authorization state." });
+      return;
+    }
+
     const provider = verifiedState.provider;
     const consentScopes = connectorConsentScopes(provider, verifiedState.consentScopes);
+    let consumed: boolean;
+    try {
+      consumed = await consumeConnectorOAuthIntent({
+        stateNonceHash: hashConnectorOAuthStateNonce(verifiedState.nonce),
+        userId: sessionUserId,
+        provider,
+        consentScopes: JSON.stringify(consentScopes),
+        sessionBinding: createConnectorOAuthSessionBinding(sessionCookie),
+        applicationOrigin,
+      });
+    } catch {
+      res.status(503).json({ error: "Connector authorization is temporarily unavailable." });
+      return;
+    }
+    if (!consumed) {
+      res.status(400).json({ error: "Invalid or expired connector authorization state." });
+      return;
+    }
+
     const account = await getUserConnectorAccount(verifiedState.userId, provider);
     if (account?.status === "disabled") {
       res.redirect(302, completeRedirect(provider, "denied"));
