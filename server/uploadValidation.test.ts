@@ -106,8 +106,8 @@ describe("sensitive upload validation", () => {
 
   it("uses an authenticated bounded HTTP scanner request", async () => {
     vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.test");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     vi.stubEnv("FILE_MALWARE_SCAN_TOKEN", "scanner-secret");
     globalThis.fetch = vi
       .fn()
@@ -126,7 +126,7 @@ describe("sensitive upload validation", () => {
       })
     ).resolves.toEqual({ scanned: true, provider: "test-scanner" });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("https://scanner.example.test/scan"),
+      new URL("http://127.0.0.1:8080/scan"),
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -139,8 +139,8 @@ describe("sensitive upload validation", () => {
 
   it("rejects an unclean or malformed scanner verdict without exposing scanner details", async () => {
     vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.test");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     globalThis.fetch = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -174,8 +174,8 @@ describe("sensitive upload validation", () => {
 
   it("bounds concurrent scanner work", async () => {
     vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.test");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     vi.stubEnv("FILE_MALWARE_SCAN_MAX_CONCURRENCY", "1");
     let releaseFirst!: (response: Response) => void;
     const firstResponse = new Promise<Response>(resolve => {
@@ -219,8 +219,8 @@ describe("sensitive upload validation", () => {
 
   it("cancels oversized chunked scanner responses before reading the full body", async () => {
     vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.test");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     vi.stubEnv("FILE_MALWARE_SCAN_MAX_CONCURRENCY", "1");
     const cancel = vi.fn();
     let chunks = 0;
@@ -250,8 +250,8 @@ describe("sensitive upload validation", () => {
 
   it.each(["oversized-header", "http-error"])("cancels unused scanner bodies on %s", async (failure) => {
     vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
-    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
-    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.test");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "http://127.0.0.1:8080/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "http://127.0.0.1:8080");
     const cancel = vi.fn();
     const response = new Response(new ReadableStream({ cancel }), {
       status: failure === "http-error" ? 503 : 200,

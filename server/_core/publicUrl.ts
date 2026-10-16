@@ -32,7 +32,10 @@ for (const [network, prefix] of [
   ["::1", 128],
   ["fc00::", 7],
   ["fe80::", 10],
+  ["fec0::", 10],
   ["ff00::", 8],
+  ["64:ff9b::", 96],
+  ["64:ff9b:1::", 48],
   ["2001:db8::", 32],
   ["2001::", 32],
   ["2002::", 16],
@@ -126,7 +129,9 @@ export function createPinnedLookup(addresses: LookupAddress[]): LookupFunction {
 
 export async function fetchPublicHttpsUrl(
   value: string,
-  init: Pick<RequestInit, "headers" | "method" | "signal"> = {},
+  init: Pick<RequestInit, "headers" | "method" | "signal"> & {
+    body?: string | Uint8Array;
+  } = {},
   lookup: AddressLookup = defaultLookup
 ): Promise<Response> {
   const { url, addresses } = await resolvePublicHttpsUrl(value, lookup);
@@ -149,6 +154,6 @@ export async function fetchPublicHttpsUrl(
       }));
     });
     request.once("error", reject);
-    request.end();
+    request.end(init.body);
   });
 }

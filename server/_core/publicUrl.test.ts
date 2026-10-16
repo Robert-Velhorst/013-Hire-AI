@@ -15,6 +15,9 @@ describe("public outbound URL policy", () => {
     "192.168.1.20",
     "::1",
     "fc00::1",
+    "fec0::1",
+    "64:ff9b::a00:1",
+    "64:ff9b:1::a00:1",
     "::ffff:7f00:1",
   ])("rejects a URL resolving to blocked address %s", async (address) => {
     const lookup = vi.fn().mockResolvedValue([{ address, family: address.includes(":") ? 6 : 4 }]);
@@ -69,4 +72,29 @@ describe("public outbound URL policy", () => {
       { address: "2606:4700:4700::1111", family: 6 },
     ]);
   });
+  it.each([
+    "http://media.example/audio.mp3",
+    "https://user:password@media.example/audio.mp3",
+    "https://127.0.0.1/audio.mp3",
+    "https://localhost/audio.mp3",
+  ])("rejects unsafe URL syntax %s", async (value) => {
+    await expect(requirePublicHttpsUrl(value)).rejects.toThrow();
+  });
+
+  it("rejects empty DNS results", async () => {
+    await expect(
+      requirePublicHttpsUrl("https://media.example/audio.mp3", vi.fn().mockResolvedValue([]))
+    ).rejects.toThrow(/public address/i);
+  });
+
+  it("fails closed when the socket requests an address family not in the validated set", async () => {
+    const lookup = createPinnedLookup([{ address: "1.1.1.1", family: 4 }]);
+    await expect(new Promise((resolve, reject) => {
+      lookup("media.example", { family: 6 }, (error, address) => {
+        if (error) reject(error);
+        else resolve(address);
+      });
+    })).rejects.toMatchObject({ code: "ENOTFOUND" });
+  });
+
 });
