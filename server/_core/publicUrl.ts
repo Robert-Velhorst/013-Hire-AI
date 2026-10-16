@@ -137,7 +137,7 @@ export async function resolvePublicHttpsUrl(
 
 export async function resolveAllowlistedHttpsUrl(
   value: string,
-  allowedOrigin: string,
+  allowedOrigins: string,
   lookup: AddressLookup = defaultLookup
 ) {
   let url: URL;
@@ -146,6 +146,7 @@ export async function resolveAllowlistedHttpsUrl(
   } catch {
     throw new Error("Remote URL is invalid.");
   }
+  const parsedAllowedOrigins = parseAllowedHttpsOrigins(allowedOrigins);
   if (
     url.protocol !== "https:" ||
     url.username ||
@@ -153,7 +154,7 @@ export async function resolveAllowlistedHttpsUrl(
     url.search ||
     url.hash ||
     value.length > 2_000 ||
-    url.origin !== allowedOrigin
+    !parsedAllowedOrigins.includes(url.origin)
   ) {
     throw new Error(
       "Remote URL must match an explicitly allowlisted HTTPS origin."
@@ -176,6 +177,35 @@ export async function resolveAllowlistedHttpsUrl(
     );
   }
   return { url, addresses };
+}
+
+function parseAllowedHttpsOrigins(value: string) {
+  const entries = value
+    .split(",")
+    .map(entry => entry.trim())
+    .filter(Boolean);
+  if (!entries.length) {
+    throw new Error("At least one HTTPS scanner origin must be allowlisted.");
+  }
+  return entries.map(entry => {
+    let origin: URL;
+    try {
+      origin = new URL(entry);
+    } catch {
+      throw new Error("The HTTPS scanner allowlist is invalid.");
+    }
+    if (
+      origin.protocol !== "https:" ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== "/" ||
+      origin.search ||
+      origin.hash
+    ) {
+      throw new Error("The HTTPS scanner allowlist is invalid.");
+    }
+    return origin.origin;
+  });
 }
 
 export async function requirePublicHttpsUrl(
@@ -212,13 +242,14 @@ export function createPinnedLookup(addresses: LookupAddress[]): LookupFunction {
   }) as LookupFunction;
 }
 
-async function fetchPinnedHttpsUrl(
-  url: URL,
-  addresses: LookupAddress[],
+export async function fetchPublicHttpsUrl(
+  value: string,
   init: Pick<RequestInit, "headers" | "method" | "signal"> & {
     body?: string | Uint8Array;
-  }
-) {
+  } = {},
+  lookup: AddressLookup = defaultLookup
+): Promise<Response> {
+  const { url, addresses } = await resolvePublicHttpsUrl(value, lookup);
   return await new Promise<Response>((resolve, reject) => {
     const request = httpsRequest(
       url,
@@ -250,20 +281,9 @@ async function fetchPinnedHttpsUrl(
   });
 }
 
-export async function fetchPublicHttpsUrl(
-  value: string,
-  init: Pick<RequestInit, "headers" | "method" | "signal"> & {
-    body?: string | Uint8Array;
-  } = {},
-  lookup: AddressLookup = defaultLookup
-): Promise<Response> {
-  const { url, addresses } = await resolvePublicHttpsUrl(value, lookup);
-  return await fetchPinnedHttpsUrl(url, addresses, init);
-}
-
 export async function fetchAllowlistedHttpsUrl(
   value: string,
-  allowedOrigin: string,
+  allowedOrigins: string,
   init: Pick<RequestInit, "headers" | "method" | "signal"> & {
     body?: string | Uint8Array;
   } = {},
@@ -271,8 +291,36 @@ export async function fetchAllowlistedHttpsUrl(
 ): Promise<Response> {
   const { url, addresses } = await resolveAllowlistedHttpsUrl(
     value,
-    allowedOrigin,
+    allowedOrigins,
     lookup
   );
-  return await fetchPinnedHttpsUrl(url, addresses, init);
+  return await new Promise<Response>((resolve, reject) => {
+    const request = httpsRequest(
+      url,
+      {
+        method: init.method ?? "GET",
+        headers: Object.fromEntries(new Headers(init.headers).entries()),
+        lookup: createPinnedLookup(addresses),
+        signal: init.signal ?? undefined,
+      },
+      response => {
+        const headers = new Headers();
+        for (let index = 0; index < response.rawHeaders.length; index += 2) {
+          headers.append(
+            response.rawHeaders[index],
+            response.rawHeaders[index + 1]
+          );
+        }
+        resolve(
+          new Response(Readable.toWeb(response) as ReadableStream<Uint8Array>, {
+            status: response.statusCode ?? 500,
+            statusText: response.statusMessage,
+            headers,
+          })
+        );
+      }
+    );
+    request.once("error", reject);
+    request.end(init.body);
+  });
 }

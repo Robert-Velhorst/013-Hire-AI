@@ -202,7 +202,7 @@ async function scanWithHttp(input: {
       ? await fetch(parsedEndpoint, { ...request, redirect: "error" })
       : await fetchAllowlistedHttpsUrl(
           parsedEndpoint.toString(),
-          parsedEndpoint.origin,
+          process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS ?? "",
           request
         );
     if (!response.ok) {
