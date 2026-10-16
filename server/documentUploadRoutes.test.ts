@@ -104,6 +104,23 @@ function uploadHeaders(
 }
 
 describe("bounded raw document upload routes", () => {
+  it("limits upload attempts per client in addition to streaming and concurrency bounds", async () => {
+    const baseUrl = await startServer();
+    const statuses: number[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const response = await fetch(`${baseUrl}/api/document-uploads/resume-parse`, {
+        method: "POST",
+        headers: uploadHeaders(),
+        body: new Blob(["short resume"]),
+      });
+      statuses.push(response.status);
+    }
+
+    expect(statuses.slice(0, 6)).toEqual(Array(6).fill(200));
+    expect(statuses[6]).toBe(429);
+    expect(mocks.parseFile).toHaveBeenCalledTimes(6);
+  });
+
   it("streams chunked bytes and dispatches resume parsing without a JSON envelope", async () => {
     const baseUrl = await startServer();
     const response = await new Promise<{ status: number; body: string }>(

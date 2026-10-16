@@ -12,6 +12,7 @@ import {
 } from "../drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getStripeClient } from "./stripeClient";
+import { isStripeBillingEnabled } from "@shared/stripeBillingPolicy.mjs";
 import {
   claimStripeWebhookEvent,
   failStripeWebhookEvent,
@@ -135,9 +136,17 @@ async function addAudit(
 }
 
 export function registerStripeWebhook(app: Express) {
+  const parseWebhookBody = express.raw({ type: "application/json", limit: "64kb" });
   app.post(
     "/api/stripe/webhook",
-    express.raw({ type: "application/json" }),
+    (req, res, next) => {
+      if (!isStripeBillingEnabled(process.env)) {
+        res.setHeader("Cache-Control", "no-store");
+        res.sendStatus(404);
+        return;
+      }
+      parseWebhookBody(req, res, next);
+    },
     async (req, res) => {
       const signature = req.headers["stripe-signature"] as string | undefined;
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;

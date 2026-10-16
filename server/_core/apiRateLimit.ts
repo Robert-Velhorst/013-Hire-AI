@@ -7,6 +7,13 @@ export const API_RATE_LIMIT_POLICY = Object.freeze({
   maxClients: 10_000,
 });
 
+export const SENSITIVE_ROUTE_RATE_LIMITS = Object.freeze({
+  oauth: Object.freeze({ windowMs: 60_000, maxRequests: 20, maxClients: 5_000 }),
+  connectorOAuth: Object.freeze({ windowMs: 60_000, maxRequests: 30, maxClients: 5_000 }),
+  documentUpload: Object.freeze({ windowMs: 60_000, maxRequests: 6, maxClients: 2_000 }),
+  resumeParse: Object.freeze({ windowMs: 60_000, maxRequests: 12, maxClients: 2_000 }),
+});
+
 type ClientWindow = {
   count: number;
   resetAt: number;

@@ -56,6 +56,7 @@ import {
 import { MAX_FOLLOW_UP_MESSAGE_CHARS } from "./messageSanitization";
 import { SUPPORTED_LOCALES } from "@shared/localization";
 import { isKnownSalaryCurrency } from "@shared/salaryCurrency";
+import { isEmploymentSearchOnHold } from "@shared/employmentSearchControl.mjs";
 
 const boundedPageSize = z.number().int().min(1).max(100);
 const boundedOffset = z.number().int().min(0).max(100_000);
@@ -69,6 +70,17 @@ const boundedUploadBase64 = z.string()
   .min(4)
   .max(MAX_DOCUMENT_UPLOAD_BASE64_LENGTH)
   .refine(isCanonicalBase64Payload, "Invalid base64 document payload.");
+
+async function assertEmploymentSearchNotOnHold(userId: number) {
+  const { getUserProfile } = await import("./db");
+  const profile = await getUserProfile(userId);
+  if (isEmploymentSearchOnHold(profile?.preferences)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Job search is paused after a reported hire. Restart it with a reason before running applications.",
+    });
+  }
+}
 const boundedFileName = z.string().trim().min(1).max(255);
 const boundedMimeType = z.string().trim().min(1).max(120);
 const boundedProfilePayload = z.string().max(50_000);
@@ -899,6 +911,16 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        if (input.preferences !== undefined) {
+          const { getUserProfile } = await import("./db");
+          const profile = await getUserProfile(ctx.user.id);
+          if (isEmploymentSearchOnHold(profile?.preferences)) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: "Use the reasoned restart action to change job-search preferences after a reported hire.",
+            });
+          }
+        }
         const { validateLinkedInUrl, validateGitHubUrl, validatePortfolioUrl } = await import("./socialConnections");
         const { upsertUserProfile } = await import("./db");
         const invalidConnection =
@@ -937,8 +959,44 @@ export const appRouter = router({
         scanFrequency: z.enum(["continuous", "hourly", "daily", "twice-daily"]).optional(),
       }).strict())
       .mutation(async ({ ctx, input }) => {
-        const { patchUserProfilePreferences } = await import("./db");
+        const { getUserProfile, patchUserProfilePreferences } = await import("./db");
+        const profile = await getUserProfile(ctx.user.id);
+        if (input.autonomousEnabled === true && isEmploymentSearchOnHold(profile?.preferences)) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Provide a reason through the job-search restart action before enabling automation again.",
+          });
+        }
         const preferences = await patchUserProfilePreferences(ctx.user.id, input);
+        return { success: true, preferences };
+      }),
+
+    resumeAfterEmploymentChange: protectedProcedure
+      .input(z.object({
+        reason: z.string().trim().min(20).max(1000),
+      }).strict())
+      .mutation(async ({ ctx, input }) => {
+        assertJobSearchTermsAccepted(ctx.user);
+        const { createAuditEvent, getUserProfile, patchUserProfilePreferences } = await import("./db");
+        const profile = await getUserProfile(ctx.user.id);
+        if (!isEmploymentSearchOnHold(profile?.preferences)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Job search is not paused after a reported hire." });
+        }
+        const preferences = await patchUserProfilePreferences(ctx.user.id, {
+          autonomousEnabled: true,
+          employmentSearchHold: false,
+          employmentSearchResumeReason: input.reason,
+        }, { allowEmploymentSearchRestart: true });
+        await createAuditEvent({
+          userId: ctx.user.id,
+          entityType: "user",
+          entityId: ctx.user.id,
+          action: "employment_search_resumed",
+          actor: "user",
+          source: "profile.resumeAfterEmploymentChange",
+          afterState: JSON.stringify({ reason: input.reason, autonomousEnabled: true }),
+          riskLevel: "high",
+        });
         return { success: true, preferences };
       }),
 
@@ -3753,6 +3811,7 @@ export const appRouter = router({
         createFollowUps: z.boolean().optional(),
       }).optional())
       .mutation(async ({ ctx, input }) => {
+        await assertEmploymentSearchNotOnHold(ctx.user.id);
         const { runAutonomousForUser } = await import("./autonomousService");
         return await runAutonomousForUser(ctx.user.id, input || {});
       }),
@@ -3820,6 +3879,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        await assertEmploymentSearchNotOnHold(ctx.user.id);
         assertJobSearchTermsAccepted(ctx.user);
         const {
           getJobById,
