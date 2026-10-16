@@ -20,8 +20,9 @@ describe("single-provider connector account wiring", () => {
     }
 
     const routers = readFileSync(resolve(process.cwd(), "server", "routers.ts"), "utf8");
-    expect(routers).toContain("getUserConnectorAccount(ctx.user.id, input.provider)");
-    expect(routers).toContain("getUserConnectorAccount(ctx.user.id, candidate.provider)");
+    const compactRouters = routers.replace(/\s+/g, "");
+    expect(compactRouters).toContain("getUserConnectorAccount(ctx.user.id,input.provider)");
+    expect(compactRouters).toContain("getUserConnectorAccount(ctx.user.id,candidate.provider)");
 
     const database = readFileSync(resolve(process.cwd(), "server", "db.ts"), "utf8");
     const lookup = database.slice(

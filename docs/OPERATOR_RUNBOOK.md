@@ -13,9 +13,9 @@ pnpm dev
 
 The server exposes `/healthz` and `/readyz`. Development can use in-memory persistence for review, but it is not durable and must not be treated as production data.
 
-For native production startup on Windows 11, use `npm.cmd run start:windows`. It builds, runs the production doctor, binds to loopback by default, and waits for readiness bound to its own live child rather than any existing service on the port. The temporary `HIRE_AI_RUNTIME_INSTANCE_ID` is launcher-owned; do not persist it in `.env` or treat it as an access credential. For a reserved ngrok origin and the local/private HAI A2A connector, follow `docs/WINDOWS_NGROK_HAI.md`; public health and Agent Card availability are necessary checks, not provider acceptance evidence.
+For native production startup on Windows 11, use `npm.cmd run start:windows`. It builds, runs the production doctor, binds to loopback by default, and waits for readiness bound to its own live child rather than any existing service on the port. The temporary `HIRE_AI_RUNTIME_INSTANCE_ID` is launcher-owned; do not persist it in `.env` or treat it as an access credential. For a reserved ngrok origin and the optional HAI A2A connector (local/private or exact-origin public HTTPS), follow `docs/WINDOWS_NGROK_HAI.md`; public health and Agent Card availability are necessary checks, not provider acceptance evidence.
 
-Generate `JWT_SECRET` with a cryptographically secure secret manager or random-byte generator and inject it at runtime. Production accepts 32-4096 characters with no surrounding whitespace or control characters; checked-in and local-development placeholders are rejected. Rotating this value invalidates every existing session, so schedule rotation and require users to sign in again. `pnpm run doctor` reports only whether the policy passes and never prints the value.
+Generate `JWT_SECRET` with a cryptographically secure secret manager or random-byte generator and inject it at runtime. Production accepts 32-4096 characters with no surrounding whitespace or control characters; checked-in and local-development placeholders are rejected. Rotating this value invalidates every existing session, so schedule rotation and require users to sign in again. `pnpm run doctor` lists missing production variable names but never prints configured values.
 
 Set `OAUTH_PORTAL_URL` at runtime to the trusted Manus login portal base URL. Set `OAUTH_SERVER_URL` to the OAuth API base URL and `OAUTH_SERVER_ALLOWED_ORIGINS` to its exact HTTPS origin (comma-separated only if multiple origins are genuinely required). Production requires the API URL to use HTTPS and match that allowlist; loopback HTTP is available only for local operation. Credentials, query parameters, and fragments are rejected. The browser opens `/api/oauth/login`, and the server derives the current direct or trusted-ngrok callback origin, creates signed browser-bound state, and redirects to the portal. The legacy `VITE_OAUTH_PORTAL_URL` name remains a migration alias, but new deployments must not bake portal configuration into the browser bundle.
 
@@ -55,13 +55,13 @@ updates unstarted. Production rejects an unavailable scanner; development retain
 its existing explicitly unconfigured-scanner behavior. A successful scan is not
 a guarantee that a document is harmless or that extracted statements are true.
 
-When an HTTP scanner is configured, production requires its exact origin in
-`FILE_MALWARE_SCAN_ALLOWED_ORIGINS`. Use HTTPS for remote scanners. HTTP is
-accepted only for a loopback scanner on the same host, and that origin must also
-be explicitly allowlisted. Origin entries contain only scheme, hostname and
-optional port, with no path, query, fragment or credentials. The production
-doctor and application startup both enforce this policy before uploads are
-accepted.
+When an HTTP scanner is configured, every remote scanner requires its exact
+origin in `FILE_MALWARE_SCAN_ALLOWED_ORIGINS`, including in development. Use
+HTTPS for remote scanners. Unallowlisted HTTP is accepted only for a loopback
+scanner during local development; production also requires loopback to be
+allowlisted. Origin entries contain only scheme, hostname and optional port,
+with no path, query, fragment or credentials. The doctor and application
+startup both enforce this policy before uploads are accepted.
 
 The storage boundary still independently scans sensitive uploads. This protects
 direct upload callers as well as imports, but means a successful imported resume

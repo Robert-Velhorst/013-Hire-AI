@@ -4,7 +4,7 @@ Hire.AI is an early-stage, self-hostable preview application for discovering ful
 
 The product is intended for people looking for any kind of work that can be performed fully remotely, across professions and experience levels. The aim is to reduce repetitive effort and focus on a small number of well-matched applications. The candidate conducts the interview; Hire.AI's intended assistance ends at interview preparation and the interview itself. Negotiations, offers, employment contracts, and decisions after the interview remain with the candidate.
 
-> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and end-to-end employer application submission are not complete. The software does not currently apply to jobs on a candidate's behalf.
+> **Project status: preview, not a public production service.** The first pre-release and GHCR container image are published, but that does not mean a hosted service is available. Production identity, live provider accounts, public HTTPS deployment, legal/privacy acceptance, and live provider acceptance are not complete. Code includes a narrowly gated Gmail/Outlook application-email path; it is not live-provider or production accepted. Employer portals and ATS forms remain a user handoff.
 
 **Quick links:** [first preview release](https://github.com/Robert-Velhorst/013-Hire-AI/releases/tag/v0.1.0-alpha.1) · [container package](https://github.com/users/Robert-Velhorst/packages/container/package/013-hire-ai) · [security reporting](https://github.com/Robert-Velhorst/013-Hire-AI/security/advisories/new) · [production acceptance checklist](docs/PRODUCTION_ACCEPTANCE.md)
 
@@ -13,18 +13,18 @@ The product is intended for people looking for any kind of work that can be perf
 - **For job seekers:** one place for a profile, resume versions, remote job listings, match explanations, saved jobs, application records, employer responses, and interview preparation.
 - **For developers:** a TypeScript monorepo with a React web client, Express/tRPC API, Drizzle/MySQL data layer, scraper adapters, Docker packaging, and Windows launch tooling.
 - **For operators:** migration, health, backup/restore, schema-audit, privacy, and deployment documentation, plus CI for Linux, Windows, MySQL, and container paths.
-- **Current authority boundary:** review-first. Hire.AI may prepare work and create auditable review records; it does not currently submit employer applications through third-party portals.
-- **Source coverage:** a catalog of 90 job sources and nine policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
+- **Current authority boundary:** review-first. For a current, clearly fully remote listing with an application email and prepared versioned resume, the candidate can review an exact Gmail/Outlook draft, approve it, and separately choose **Send now**. The address comes from the posting and is not independently verified. Employer portals and ATS forms remain a user handoff; ambiguous sends are blocked from automatic retry.
+- **Source coverage:** a catalog of 90 job sources and eight policy-enabled API/RSS discovery sources. These counts do not mean every source is live, legally approved, or globally comprehensive. “All remote jobs worldwide” is the long-term ambition, not current coverage.
 - **Hosting direction:** online, multi-user deployment at Hetzner. A GitHub release or container image does not mean the hosted service is live or production-ready.
 
 ## What Works Today
 
 | Area | Available in this preview | Important boundary |
 | --- | --- | --- |
-| Job discovery | Bounded API/RSS collection from nine policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
+| Job discovery | Bounded API/RSS collection from eight policy-enabled sources, plus a catalog of 90 sources for provenance and future evaluation. | This is not a scrape of every job board. Catalog presence does not mean a live adapter, permission to collect, or global coverage. |
 | Comparison | Normalized listings, source attribution, freshness information, and links between likely duplicate postings. | A duplicate link is evidence for review, not proof that two listings are identical. Missing or conflicting conditions remain uncertain. |
 | Candidate workspace | Profiles, resume versions, preferences, job filters, match explanations, saved jobs, and application records. | Matching supports decisions; it does not guarantee qualification, an interview, or a job. |
-| Application workflow | Prepare and review application material, preserve decisions, and hand off to the employer's application process. | The candidate submits the application. End-to-end submission to employer or ATS forms is not currently delivered. |
+| Application workflow | Prepare and review application material; for eligible postings, send an explicitly approved email with the selected versioned resume attached through Gmail or Outlook. | Requires configured mailbox scopes and live provider acceptance. The listing email is not independently verified, provider acceptance does not guarantee recipient delivery, and employer/ATS forms remain a user handoff. |
 | Responses and interviews | Track response evidence, follow-up state, scheduling information, and interview preparation. | The candidate conducts the interview and makes every decision after it. Connected inbox features need provider configuration and live acceptance. |
 | Hosting and integrations | Docker and Hetzner deployment material, plus optional connector code. | The published container is for preview/self-hosting. No public hosted service or generally accepted live integration is available. |
 
@@ -39,7 +39,7 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 - User accounts, signed sessions, terms acceptance, account status, and session revocation.
 - Candidate profiles with experience, education, skills, projects, preferences, social references, and versioned resumes.
 - Job catalog, filters, saved jobs, source records, freshness indicators, match explanations, and duplicate relationships.
-- Application ledger, decisions, prepared materials, review/handoff records, employer-response records, interview scheduling/preparation, and follow-up tracking.
+- Application ledger, decisions, prepared materials, review/handoff records, a gated Gmail/Outlook email submission path, employer-response records, interview scheduling/preparation, and follow-up tracking.
 - Opt-in, review-first automation with source limits, evidence gates, audit records, and operational health tracking.
 - English and Dutch localization across major user workflows.
 - Admin tools for reviews, operating queues, source health, account controls, and privacy operations.
@@ -48,7 +48,8 @@ The approved direction is recorded in [docs/PRODUCT_DIRECTION.md](docs/PRODUCT_D
 
 ### Not currently delivered as an end-to-end service
 
-- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; the current application path is review and user handoff.
+- Automatic submission into employer or applicant-tracking-system forms. Browser automation scaffolding is disabled; those applications remain a user handoff. The limited email path only applies to eligible listings with a listed email and still requires exact-content approval followed by a separate send action.
+- Live acceptance of the email submission path. Gmail/Outlook scopes, OAuth apps, mailbox permissions, real-account delivery and outcome reconciliation must be configured and verified before production use. The recipient address is listing-sourced, not independently verified.
 - Complete coverage of all job boards or permission to scrape every public website. Catalog entries may be manual, unavailable, account-mediated, or awaiting provider approval.
 - Live or accepted production use of all OAuth, email, document-storage, payment, malware-scanning, or AI providers.
 - A guarantee of a job, interview, uninterrupted employment, or fully correct classification of every listing.
@@ -58,12 +59,11 @@ The intended autonomous journey may discover, qualify, prepare and, after explic
 
 ## Job Sources And Deduplication
 
-The current code policy enables unattended discovery from these nine API/RSS sources:
+The current code policy enables unattended discovery from these eight API/RSS sources:
 
 | Source           | Collection method / important limit                                         |
 | ---------------- | --------------------------------------------------------------------------- |
 | RemoteOK         | Public job API; preserves source attribution and listing details.           |
-| Remotive         | Public remote-job API.                                                      |
 | Jobicy           | Public documented API with bounded polling.                                 |
 | Arbeitnow        | Public API; accepts records explicitly marked remote.                       |
 | Arbeitnow UK     | Bounded UK API page; requires explicit remote status and provider backlink. |
@@ -71,6 +71,8 @@ The current code policy enables unattended discovery from these nine API/RSS sou
 | We Work Remotely | Public RSS category feeds.                                                  |
 | NoDesk           | Public RSS feed.                                                            |
 | ProBlogger       | Public RSS feed.                                                            |
+
+Remotive remains cataloged, but unattended ingestion is paused until written approval or an appropriate private API agreement is in place. Its [public API terms](https://remotive.com/remote-jobs/api) restrict using listings to collect signups and point to a private paid API for that use; its [Terms of Use](https://support.remotive.com/en/article/terms-of-service-u4kbkf/) also restrict automated extraction and redistribution. The eight enabled sources are still not universal coverage.
 
 The source catalog currently represents 90 platforms for provenance and possible expansion. It includes regional/local sources and platforms such as LinkedIn Jobs, Wellfound, Glassdoor, and freelance marketplaces, but inclusion is not permission to scrape or evidence of a working adapter. Working Nomads is specifically excluded from automatic ingestion pending written authorization. The scheduler is disabled by default. Operators must review provider terms, rate limits, attribution, robots/API guidance, and regional privacy obligations before enabling a source.
 
@@ -85,7 +87,7 @@ The job-search model supports filters for keywords, company, location, job type,
 1. **Create a profile.** Add work history, education, skills, preferences, and a resume. Optional imports require configured integrations and user authorization.
 2. **Discover and compare jobs.** Search configured sources, apply available filters, inspect source/freshness information, and see match evidence and linked duplicates.
 3. **Review a possible application.** Hire.AI checks profile readiness, job freshness, duplicate history, and safety conditions. Missing decisive vacancy information should be resolved before an application proceeds.
-4. **Prepare materials.** The application can maintain drafts and review records. Today the candidate completes the employer-side form and records reliable submission evidence.
+4. **Prepare materials.** Review the exact recipient, subject, message, and resume attachment. If the current listing provides an application email, a connected Gmail/Outlook account has explicit send consent, and the role is clearly fully remote, the candidate may request approval and then separately choose **Send now**. Employer/ATS forms still require the candidate to complete the external form and record submission evidence.
 5. **Track responses and prepare for interviews.** Connected inbox capabilities may surface response candidates when configured. Interview invitations must be backed by recorded evidence. The candidate attends the interview and decides everything afterwards.
 6. **Pause or restart.** Automation is intended to stop when employment is reported. Restart requires a reason and updated criteria; misuse controls and human review are part of the product direction.
 
@@ -129,10 +131,10 @@ MySQL / TiDB
 
 | Service               | Codebase capability                               | What is still needed for live use                                                          |
 | --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Gmail                 | OAuth policy and bounded inbox-response discovery | Google app, approved scopes/callback, consent, real-account acceptance.                    |
+| Gmail                 | OAuth policy, bounded inbox-response discovery, and approved application-email sending with a versioned resume attachment | Google app, approved scopes/callback, send consent, real-account delivery and uncertain-outcome acceptance. |
 | Google Drive          | Consent-scoped resume candidate discovery         | Google app/scopes, private-storage decision, real-account acceptance.                      |
 | Dropbox               | Consent-scoped document candidate discovery       | Dropbox app/scopes and real-account acceptance.                                            |
-| Outlook / Microsoft   | OAuth policy and cleanup guidance                 | Microsoft app/scopes plus tested read, revoke, and cleanup flows.                          |
+| Outlook / Microsoft   | OAuth policy, cleanup guidance, inbox-response discovery, and approved application-email sending with a versioned resume attachment | Microsoft app/scopes, explicit send consent, and tested read, send, revoke, and cleanup flows. |
 | LinkedIn              | Profile reference/OAuth policy                    | Approved integration; no unattended LinkedIn job scraping is claimed.                      |
 | GitHub                | Profile evidence connector policy                 | OAuth app, scopes, and account acceptance.                                                 |
 | Stripe                | Legacy checkout/webhook code and payment ledger   | Separate legal/commercial approval and live test; not the approved pricing implementation. |
@@ -247,9 +249,9 @@ Additional HTTP routes include hosted OAuth login/callback, connector OAuth call
 
 Hire.AI handles resumes, employment history, salary expectations, provider grants, and other sensitive data. Security controls include signed HttpOnly sessions, active-account and role checks, owner-scoped mutations, encrypted connector grants, fail-closed OAuth setup, upload bounds and malware-scanner requirements, global and sensitive-route request budgets, provider-input limits, audit and idempotency controls, constrained security headers, and a read-only/disabled-by-default HAI status and remote-job search route. The request budgets are process-local; a multi-replica deployment needs a shared atomic limiter. These are code-level controls, not a substitute for independent testing or operational configuration.
 
-GitHub's repository security settings and alert inventories were checked on 2026-10-14 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. The live alert lists contained 0 open Dependabot alerts, 0 open secret-scanning alerts, and 35 open CodeQL alerts on `main` (7 critical, 24 high, 4 medium). The latest CodeQL analyses on pull request [#132](https://github.com/Robert-Velhorst/013-Hire-AI/pull/132) passed; the 35 existing alerts on `main` remain to be triaged. No CodeQL alerts are described as fixed or dismissed here. Generic non-provider secret scanning and secret validity checks are unavailable for this user-owned repository on its current GitHub plan; validity checks would also transmit detected credentials to their issuers. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
+GitHub's repository security settings and alert inventories were checked on 2026-10-16 UTC. Dependabot alerts and security updates, provider-pattern secret scanning, push protection, private vulnerability reporting, and CodeQL default setup are enabled. The live alert lists contained 0 open Dependabot alerts, 0 open secret-scanning alerts, and 27 open CodeQL alerts on `main` (2 critical, 21 high, 4 medium). These CodeQL findings remain to be triaged; no alert is described as fixed or dismissed here. Generic-pattern secret scanning is not available for this user-owned repository on its current GitHub plan. Secret validity checks are disabled; GitHub sends supported detected credentials to their issuers to check whether they remain active. See the [Security tab](https://github.com/Robert-Velhorst/013-Hire-AI/security) and GitHub guidance on [secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/supported-secret-scanning-patterns), [generic patterns](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns), and [validity checks](https://docs.github.com/en/code-security/concepts/secret-security/validity-checks).
 
-As of the 2026-10-14 UTC check, the 35 open CodeQL alerts on `main` remained unresolved and require triage. Pull request #132's latest CodeQL analyses passed. `main` requires pull requests, all five CI checks, resolved review conversations, and an up-to-date base. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to the eight workflow actions, tokens default to read-only, and workflows cannot approve pull requests. Settings and alert totals can change; use GitHub as the live source of truth.
+As of the 2026-10-16 UTC check, `main` requires pull requests, an up-to-date base, all seven named CI checks (`hetzner-bootstrap`, `build-and-test`, `windows-runtime`, `database-acceptance`, `container-runtime`, `browser-e2e`, and `CodeQL`), and resolved review conversations. Administrators are included; force pushes and branch deletion are disabled. No approving-review count is required for this single-maintainer repository. GitHub Actions is restricted to eight selected actions, tokens default to read-only, pull-request approval is disabled, and action references must be pinned to full commit SHAs. Settings and alert totals can change; use GitHub as the live source of truth.
 
 Report vulnerabilities through GitHub's private vulnerability reporting for this repository; do not disclose exploitable details in public issues. See the root [SECURITY.md](SECURITY.md) for reporting instructions and [docs/SECURITY.md](docs/SECURITY.md) for controls and outstanding production reviews.
 

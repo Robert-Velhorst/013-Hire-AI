@@ -37,6 +37,11 @@ const MAILBOX_SEND_CONSENT: Partial<Record<ProfileEvidenceProviderId, string>> =
   outlook: "mail.messages.send",
 };
 
+const CALENDAR_WRITE_CONSENT: Partial<Record<ProfileEvidenceProviderId, string>> = {
+  gmail: "calendar.events.write",
+  outlook: "calendar.events.write",
+};
+
 export function getMailboxSendConsentScope(provider: ProfileEvidenceProviderId) {
   return MAILBOX_SEND_CONSENT[provider] ?? null;
 }
@@ -44,6 +49,15 @@ export function getMailboxSendConsentScope(provider: ProfileEvidenceProviderId) 
 export function needsMailboxSendConsent(provider: Pick<ProfileEvidenceProvider, "id" | "connectionStatus" | "consentScopes">) {
   const sendScope = getMailboxSendConsentScope(provider.id);
   return provider.connectionStatus === "connected" && sendScope !== null && !provider.consentScopes?.includes(sendScope);
+}
+
+export function getCalendarWriteConsentScope(provider: ProfileEvidenceProviderId) {
+  return CALENDAR_WRITE_CONSENT[provider] ?? null;
+}
+
+export function needsCalendarWriteConsent(provider: Pick<ProfileEvidenceProvider, "id" | "connectionStatus" | "consentScopes">) {
+  const calendarScope = getCalendarWriteConsentScope(provider.id);
+  return provider.connectionStatus === "connected" && calendarScope !== null && !provider.consentScopes?.includes(calendarScope);
 }
 
 export const CONNECTOR_VERIFICATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;

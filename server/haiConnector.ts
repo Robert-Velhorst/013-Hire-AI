@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import {
+  type ActiveJobPageCursor,
   getActiveJobPage,
   getApplicationCampaign,
   getAutonomousRunState,
@@ -7,18 +8,15 @@ import {
   getUserHaiStatusCounts,
   getUserById,
 } from "./db";
-import {
-  defaultHaiConnectorConfig,
-  type HaiConnectorConfig,
-  validateHaiConnectorConfig,
-} from "./haiConnectorConfig";
+import { defaultHaiConnectorConfig, type HaiConnectorConfig, validateHaiConnectorConfig } from "./haiConnectorConfig";
 import { defaultJobSearchFilters } from "@shared/jobSearchFilters";
 
 export type { HaiConnectorConfig } from "./haiConnectorConfig";
 
 export const HAI_CONNECTOR_PROTOCOL_VERSION = "1.0";
-export const HAI_CONNECTOR_AGENT_VERSION = "1.2.1";
+export const HAI_CONNECTOR_AGENT_VERSION = "1.3.0";
 const HAI_REMOTE_JOB_RESULT_LIMIT = 10;
+const HAI_REMOTE_JOB_MAX_PAGES = 3;
 
 export type HaiJobSearchSnapshot = {
   generatedAt: string;
@@ -79,17 +77,25 @@ function safeJobUrl(value: string | null | undefined) {
 }
 
 export async function buildHaiRemoteJobResults(query: string): Promise<HaiRemoteJob[]> {
-  const page = await getActiveJobPage({
-    limit: HAI_REMOTE_JOB_RESULT_LIMIT,
-    filters: {
-      ...defaultJobSearchFilters,
-      query,
-      remoteOnly: true,
-      listingSafety: "clear",
-    },
-  });
+  const jobs = [];
+  let cursor: ActiveJobPageCursor | undefined;
+  for (let pageIndex = 0; pageIndex < HAI_REMOTE_JOB_MAX_PAGES && jobs.length < HAI_REMOTE_JOB_RESULT_LIMIT; pageIndex += 1) {
+    const page = await getActiveJobPage({
+      limit: HAI_REMOTE_JOB_RESULT_LIMIT,
+      cursor,
+      filters: {
+        ...defaultJobSearchFilters,
+        query,
+        remoteOnly: true,
+        listingSafety: "clear",
+      },
+    });
+    jobs.push(...page.items);
+    cursor = page.nextCursor ?? undefined;
+    if (!cursor) break;
+  }
 
-  return page.items.map(job => ({
+  return jobs.slice(0, HAI_REMOTE_JOB_RESULT_LIMIT).map(job => ({
     id: job.id,
     title: job.title,
     company: job.company,
@@ -105,11 +111,12 @@ export async function buildHaiRemoteJobResults(query: string): Promise<HaiRemote
 }
 
 export function parseHaiRemoteJobSearchQuery(message: string) {
-  const match = message.trim().match(
-    /^(?:find|search)(?:\s+me)?(?:\s+for)?\s+remote\s+jobs(?:\s+(?:for|about|matching))?(?:\s*:\s*|\s+)?([\s\S]*)$/i
-  );
+  const match = message.trim().match(/^(?:find|search)(?:\s+me)?(?:\s+for)?\s+remote\s+jobs(?:\s+(?:for|about|matching))?(?:\s*:\s*|\s+)?([\s\S]*)$/i);
   if (!match) return null;
-  return (match[1] ?? "").trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
+  return (match[1] ?? "")
+    .trim()
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+/g, " ");
 }
 
 function constantTimeTokenMatch(expected: string, actual: string) {
@@ -131,7 +138,9 @@ export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobS
     campaign?.status === "paused" ? "Resume the paused campaign before scheduled preparation can continue." : "",
     counts.applications.interviews > 0 ? `Review ${counts.applications.interviews} active interview application${counts.applications.interviews === 1 ? "" : "s"}.` : "",
     runtimeSignals.totalFailures > 0 ? "Review aggregate runtime failure signals in Hire.AI administration." : "",
-  ].filter(Boolean).slice(0, 4);
+  ]
+    .filter(Boolean)
+    .slice(0, 4);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -153,7 +162,8 @@ export async function buildHaiJobSearchSnapshot(userId: number): Promise<HaiJobS
       latestAt: runtimeSignals.latestAt,
     },
     nextActions,
-    scope: "Read-only aggregate Hire.AI status. No personal profile, job, document, message, credential, payment amount, raw audit data, or individual runtime failure label is included.",
+    scope:
+      "Read-only aggregate Hire.AI status. No personal profile, job, document, message, credential, payment amount, raw audit data, or individual runtime failure label is included.",
   };
 }
 
@@ -186,7 +196,7 @@ export class HaiConnectorService {
       configured: this.configured,
       provider: "HAI A2A read-only job discovery and status connector",
       endpoint: this.configured ? this.config.endpointUrl : undefined,
-      configError: this.config.enabled ? this.configError ?? undefined : undefined,
+      configError: this.config.enabled ? (this.configError ?? undefined) : undefined,
       capabilities: ["authenticated aggregate status", "deduplicated remote job search", "A2A 1.0-shaped Agent Card and SendMessage response"],
       restrictions: ["one configured user", "read-only", "no personal data", "no provider calls", "no application, approval, message, billing, or workflow mutation"],
     };
@@ -197,11 +207,21 @@ export class HaiConnectorService {
     return {
       name: "Hire.AI remote job discovery",
       description: "Local, token-authenticated access to deduplicated remote job listings and aggregate Hire.AI status. This connector cannot execute or approve work.",
-      supportedInterfaces: [{ url: this.config.endpointUrl, protocolBinding: "JSONRPC", protocolVersion: HAI_CONNECTOR_PROTOCOL_VERSION }],
+      supportedInterfaces: [
+        {
+          url: this.config.endpointUrl,
+          protocolBinding: "JSONRPC",
+          protocolVersion: HAI_CONNECTOR_PROTOCOL_VERSION,
+        },
+      ],
       version: HAI_CONNECTOR_AGENT_VERSION,
-      capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: false },
+      capabilities: {
+        streaming: false,
+        pushNotifications: false,
+        extendedAgentCard: false,
+      },
       defaultInputModes: ["text/plain"],
-      defaultOutputModes: ["application/json"],
+      defaultOutputModes: ["application/json", "text/plain"],
       skills: [
         {
           id: "hire_ai_read_only_status",
@@ -213,15 +233,21 @@ export class HaiConnectorService {
         {
           id: "hire_ai_remote_job_search",
           name: "Hire.AI remote job search",
-          description: "Searches current, deduplicated, remote-only listings with clear listing-safety status. Returns at most 10 public job fields and screened HTTPS links; no candidate data is shared.",
+          description:
+            "Searches current, deduplicated, remote-only listings with clear listing-safety status. Returns at most 10 public job fields and screened HTTPS links; no candidate data is shared.",
           tags: ["remote-jobs", "job-search", "read-only"],
           examples: ["Find remote jobs for a product designer."],
         },
       ],
       securitySchemes: {
-        haiLocalBearer: { httpAuthSecurityScheme: { scheme: "Bearer", description: "Configured local HAI connector token." } },
+        haiBearer: {
+          httpAuthSecurityScheme: {
+            scheme: "Bearer",
+            description: "Configured HAI connector token.",
+          },
+        },
       },
-      securityRequirements: [{ schemes: { haiLocalBearer: [] } }],
+      securityRequirements: [{ schemes: { haiBearer: [] } }],
     };
   }
 

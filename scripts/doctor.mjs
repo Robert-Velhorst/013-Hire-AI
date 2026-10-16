@@ -3,6 +3,10 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
+import {
+  getWindowsDefenderExecutableCandidates,
+  getWindowsDefenderLocations,
+} from "../shared/windowsDefenderPaths.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -71,7 +75,7 @@ check(
       ? "warn"
       : "pass",
   missing.length > 0
-    ? `${missing.length} required production variable(s) are not configured`
+    ? `${missing.length} required production variable(s) are not configured: ${missing.join(", ")}`
     : "required variables configured"
 );
 
@@ -100,37 +104,18 @@ check(
 
 function windowsDefenderAvailable() {
   if (process.platform !== "win32") return false;
-  const systemDrive = path.win32.parse(process.execPath).root;
-  if (!systemDrive) return false;
-  const candidates = [
-    path.win32.join(
-      systemDrive,
-      "Program Files",
-      "Windows Defender",
-      "MpCmdRun.exe"
-    ),
-  ];
-  const platformRoot = path.win32.join(
-    systemDrive,
-    "ProgramData",
-    "Microsoft",
-    "Windows Defender",
-    "Platform"
+  const locations = getWindowsDefenderLocations();
+  if (!locations) return false;
+  const versions = fs.existsSync(locations.platformRoot)
+    ? fs
+        .readdirSync(locations.platformRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+    : [];
+  const candidates = getWindowsDefenderExecutableCandidates(
+    locations,
+    versions
   );
-  if (fs.existsSync(platformRoot)) {
-    const versions = fs
-      .readdirSync(platformRoot, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name)
-      .sort((left, right) =>
-        right.localeCompare(left, undefined, { numeric: true })
-      );
-    candidates.unshift(
-      ...versions.map(version =>
-        path.win32.join(platformRoot, version, "MpCmdRun.exe")
-      )
-    );
-  }
   return candidates.some(candidate => fs.existsSync(candidate));
 }
 
@@ -194,6 +179,14 @@ try {
         );
       }
     );
+    const scannerOriginAllowlisted = allowedOrigins.some(
+      origin => origin.origin === parsed.origin
+    );
+    const localDevelopmentScanner =
+      !isProduction &&
+      parsed.protocol === "http:" &&
+      loopback &&
+      malwareScanAllowedOrigins.length === 0;
     malwareScanUrlValid =
       !parsed.username &&
       !parsed.password &&
@@ -204,9 +197,8 @@ try {
       (parsed.protocol === "https:" ||
         (parsed.protocol === "http:" && loopback)) &&
       allowedOriginsValid &&
-      (!isProduction ||
-        (malwareScanAllowedOrigins.length > 0 &&
-          allowedOrigins.some(origin => origin.origin === parsed.origin)));
+      (scannerOriginAllowlisted || localDevelopmentScanner) &&
+      (!isProduction || malwareScanAllowedOrigins.length > 0);
   }
 } catch {
   malwareScanUrlValid = false;
@@ -614,19 +606,24 @@ if (haiEnabled) {
     errors.push("non-placeholder token");
   if (!Number.isSafeInteger(haiUserId) || haiUserId <= 0)
     errors.push("positive user ID");
-  const endpointError = validateHaiConnectorUrl(haiUrl);
+  const endpointError = validateHaiConnectorUrl(
+    haiUrl,
+    String(process.env.PUBLIC_APP_ORIGIN || "")
+  );
   if (endpointError) {
     if (endpointError.includes("/api/hai/a2a"))
       errors.push("exact /api/hai/a2a endpoint");
-    else if (endpointError.includes("valid local HTTP(S) URL"))
+    else if (endpointError.includes("valid local HTTP(S)"))
       errors.push("valid connector URL");
-    else errors.push("plain local/private connector URL");
+    else if (endpointError.includes("PUBLIC_APP_ORIGIN"))
+      errors.push("public HTTPS connector URL matching PUBLIC_APP_ORIGIN");
+    else errors.push("valid local/private or approved public HTTPS connector URL");
   }
   haiStatus = errors.length > 0 ? "fail" : "pass";
   haiDetail =
     errors.length > 0
       ? `missing or invalid: ${errors.join(", ")}`
-      : "configured read-only local bridge";
+      : "configured read-only bridge";
 }
 check("HAI connector", haiStatus, haiDetail);
 

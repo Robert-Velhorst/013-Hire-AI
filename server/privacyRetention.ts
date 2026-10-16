@@ -3,6 +3,7 @@ import {
   adminReviewItems,
   applicationApprovals,
   applicationAttempts,
+  applicationEmailDeliveries,
   applicationCampaigns,
   applicationDecisions,
   applicationMaterials,
@@ -23,6 +24,7 @@ import {
   followUps,
   inboxResponseCandidates,
   interviewPreparation,
+  interviewCalendarSyncs,
   interviewSchedules,
   jobAlerts,
   jobMatches,
@@ -44,7 +46,7 @@ import {
 } from "../drizzle/schema";
 import { getDb } from "./db";
 
-export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-13.v2";
+export const PRIVACY_RETENTION_POLICY_VERSION = "2026-10-15.v2";
 
 export type PrivacyRetentionAction = "erase" | "scrub_and_retain" | "retain";
 
@@ -84,11 +86,13 @@ export const directPrivacyRetentionPolicy: DirectPolicyEntry[] = [
   { table: "audit_events", action: "scrub_and_retain", reason: "Security and consequential-action evidence requires bounded retention with payload scrubbing.", tableRef: auditEvents, userColumn: auditEvents.userId },
   { table: "admin_review_items", action: "scrub_and_retain", reason: "Compliance decision evidence requires bounded retention with free-text scrubbing.", tableRef: adminReviewItems, userColumn: adminReviewItems.userId },
   { table: "application_approvals", action: "scrub_and_retain", reason: ledgerReason, tableRef: applicationApprovals, userColumn: applicationApprovals.userId },
+  { table: "application_email_deliveries", action: "erase", reason: erasableReason, tableRef: applicationEmailDeliveries, userColumn: applicationEmailDeliveries.userId },
   { table: "application_campaigns", action: "erase", reason: erasableReason, tableRef: applicationCampaigns, userColumn: applicationCampaigns.userId },
   { table: "autonomous_run_states", action: "erase", reason: erasableReason, tableRef: autonomousRunStates, userColumn: autonomousRunStates.userId },
   { table: "cloud_resume_candidates", action: "erase", reason: "Ephemeral cloud object selectors are deleted after import, expiry, or account erasure.", tableRef: cloudResumeCandidates, userColumn: cloudResumeCandidates.userId },
   { table: "job_matches", action: "erase", reason: erasableReason, tableRef: jobMatches, userColumn: jobMatches.userId },
   { table: "interview_preparation", action: "erase", reason: erasableReason, tableRef: interviewPreparation, userColumn: interviewPreparation.userId },
+  { table: "interview_calendar_syncs", action: "erase", reason: "User-owned calendar sync metadata is deleted with the account. The event itself remains in the connected calendar unless removed there first.", tableRef: interviewCalendarSyncs, userColumn: interviewCalendarSyncs.userId },
   { table: "inbox_response_candidates", action: "erase", reason: erasableReason, tableRef: inboxResponseCandidates, userColumn: inboxResponseCandidates.userId },
   { table: "user_resumes", action: "erase", reason: erasableReason, tableRef: userResumes, userColumn: userResumes.userId, privateObjectColumns: ["file_key"] },
   { table: "saved_jobs", action: "erase", reason: erasableReason, tableRef: savedJobs, userColumn: savedJobs.userId },

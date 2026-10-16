@@ -39,8 +39,8 @@ function defaultConnectorConsentScopes(provider: ConnectorCallbackProvider) {
 
 function allowedConnectorConsentScopes(provider: ConnectorCallbackProvider) {
   const baselineScopes = defaultConnectorConsentScopes(provider);
-  if (provider === "gmail") return [...baselineScopes, "email.messages.send"];
-  if (provider === "outlook") return [...baselineScopes, "mail.messages.send"];
+  if (provider === "gmail") return [...baselineScopes, "email.messages.send", "calendar.events.write"];
+  if (provider === "outlook") return [...baselineScopes, "mail.messages.send", "calendar.events.write"];
   return baselineScopes;
 }
 
@@ -83,6 +83,12 @@ export function getMissingProviderScopes(
   }
   if (provider === "outlook" && consentScopes.includes("mail.messages.send")) {
     required.push("Mail.Send");
+  }
+  if (provider === "gmail" && consentScopes.includes("calendar.events.write")) {
+    required.push("https://www.googleapis.com/auth/calendar.events");
+  }
+  if (provider === "outlook" && consentScopes.includes("calendar.events.write")) {
+    required.push("Calendars.ReadWrite");
   }
   return required.filter((scope) => !granted.has(scope));
 }

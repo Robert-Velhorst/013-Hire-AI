@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, like } from "drizzle-orm";
+import { and, asc, eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   adminReviewItems,
   employmentVerifications,
   feePayments,
   operationalFailureSignals,
+  stripeReconciliationCommands,
+  stripeWebhookEvents,
+  successFeeHolds,
   successFees,
   users,
 } from "../drizzle/schema";
@@ -23,6 +26,13 @@ type CursorPage<T> = {
   hasMore: boolean;
   nextCursor: Cursor | null;
 };
+type FailureCursorPage<T> = {
+  signals: T[];
+  totalFailures: number;
+  uniqueSignals: number;
+  hasMore: boolean;
+  nextCursor: { id: number } | null;
+};
 
 async function collectPages<T>(
   firstPage: CursorPage<T>,
@@ -35,6 +45,19 @@ async function collectPages<T>(
     items.push(...page.items);
   }
   return items;
+}
+
+async function collectFailurePages<T>(
+  firstPage: FailureCursorPage<T>,
+  fetchPage: (cursor: { id: number }) => Promise<FailureCursorPage<T>>
+) {
+  const signals = [...firstPage.signals];
+  let page = firstPage;
+  while (page.nextCursor) {
+    page = await fetchPage(page.nextCursor);
+    signals.push(...page.signals);
+  }
+  return signals;
 }
 
 describe.skipIf(!enabled).sequential("admin operating queue pagination on isolated MySQL", () => {
@@ -79,6 +102,39 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
       lifecycleStatus: "active",
       startDate: now,
       createdAt: new Date(now.getTime() + 60_000),
+    });
+  };
+
+  const insertNewerHold = async () => {
+    await db.insert(successFeeHolds).values({
+      successFeeId: originalFeeIds[0]!,
+      holdType: "administrator",
+      reason: `${marker}-newer-hold`,
+      createdByActor: "admin",
+      createdAt: new Date(Date.now() + 60_000),
+    });
+  };
+
+  const insertNewerReconciliationCommand = async () => {
+    await db.insert(stripeReconciliationCommands).values({
+      successFeeId: originalFeeIds[0]!,
+      stripeSubscriptionId: `${marker}-newer-sub`,
+      commandKey: `${marker}-newer-cmd`,
+      action: "pause",
+      status: "pending",
+      attemptCount: 0,
+      nextAttemptAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(Date.now() + 60_000),
+    });
+  };
+
+  const insertNewerWebhookIssue = async () => {
+    await db.insert(stripeWebhookEvents).values({
+      stripeEventId: `${marker}-newer-event`,
+      eventType: "synthetic.queue_test",
+      status: "failed",
+      errorMessage: "Synthetic newer issue.",
+      receivedAt: new Date(Date.now() + 60_000),
     });
   };
 
@@ -152,12 +208,36 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
       description: "Synthetic admin queue pagination record.",
       createdAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
     })));
-    await db.insert(operationalFailureSignals).values(Array.from({ length: 100 }, (_, index) => ({
+    await db.insert(operationalFailureSignals).values(Array.from({ length: ROW_COUNT }, (_, index) => ({
       scope: `${marker}-${index}`,
       operation: "synthetic-queue-test",
       count: 1,
       firstOccurredAt: new Date(baseTimestamp - index * 1_000),
       lastOccurredAt: new Date(Date.now() + 10_000 + index),
+    })));
+    await db.insert(successFeeHolds).values(selectedFees.map((fee, index) => ({
+      successFeeId: fee.id,
+      holdType: "administrator" as const,
+      reason: `${marker}-hold-${index}`,
+      createdByActor: "admin" as const,
+      createdAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
+    })));
+    await db.insert(stripeReconciliationCommands).values(selectedFees.map((fee, index) => ({
+      successFeeId: fee.id,
+      stripeSubscriptionId: `${marker}-sub-${index}`,
+      commandKey: `${marker}-cmd-${index}`,
+      action: (["pause", "resume", "cancel"] as const)[index % 3]!,
+      status: (["pending", "processing", "failed", "succeeded"] as const)[index % 4]!,
+      attemptCount: 0,
+      nextAttemptAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
+      createdAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
+    })));
+    await db.insert(stripeWebhookEvents).values(Array.from({ length: ROW_COUNT }, (_, index) => ({
+      stripeEventId: `${marker}-event-${index}`,
+      eventType: "synthetic.queue_test",
+      status: (index % 2 === 0 ? "failed" : "quarantined") as "failed" | "quarantined",
+      errorMessage: `${marker}-webhook-${index}`,
+      receivedAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
     })));
   }, 30_000);
 
@@ -165,12 +245,19 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
     try {
       if (db) {
         if (userId) {
+          if (originalFeeIds.length) {
+            await db.delete(successFeeHolds).where(inArray(successFeeHolds.successFeeId, originalFeeIds));
+          }
           await db.delete(employmentVerifications).where(eq(employmentVerifications.userId, userId));
           await db.delete(feePayments).where(eq(feePayments.userId, userId));
           await db.delete(adminReviewItems).where(eq(adminReviewItems.userId, userId));
           await db.delete(successFees).where(eq(successFees.userId, userId));
           await db.delete(users).where(eq(users.id, userId));
         }
+        await db.delete(stripeReconciliationCommands)
+          .where(like(stripeReconciliationCommands.commandKey, `${marker}%`));
+        await db.delete(stripeWebhookEvents)
+          .where(like(stripeWebhookEvents.stripeEventId, `${marker}%`));
         await db.delete(operationalFailureSignals)
           .where(like(operationalFailureSignals.scope, `${marker}%`));
       }
@@ -243,9 +330,98 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
     expect(openReviews.total).toBe(52);
     expect(openReviews.items.every(row => row.status === "open")).toBe(true);
 
-    const failures = await caller.getOperationalFailures({ limit: 100 });
-    expect(failures.uniqueSignals).toBeGreaterThanOrEqual(100);
-    expect(failures.signals.filter(signal => signal.scope.startsWith(marker))).toHaveLength(100);
+    const holdPage = await caller.getSuccessFeeHolds({ limit: PAGE_SIZE });
+    expect(holdPage.total).toBe(ROW_COUNT);
+    expect(holdPage.items).toHaveLength(PAGE_SIZE);
+    expect(holdPage.hasMore).toBe(true);
+    await insertNewerHold();
+    const holds = await collectPages(holdPage, cursor => caller.getSuccessFeeHolds({ limit: PAGE_SIZE, cursor }));
+    const markerHolds = holds.filter(hold => hold.reason.startsWith(`${marker}-hold-`));
+    expect(markerHolds).toHaveLength(ROW_COUNT);
+    expect(new Set(markerHolds.map(hold => hold.id)).size).toBe(ROW_COUNT);
+    expect(holds.some(hold => hold.reason === `${marker}-newer-hold`)).toBe(false);
+
+    const reconciliationPage = await caller.getStripeReconciliationStatus({ limit: PAGE_SIZE });
+    expect(reconciliationPage.pending).toBe(52);
+    expect(reconciliationPage.processing).toBe(51);
+    expect(reconciliationPage.failed).toBe(51);
+    expect(reconciliationPage.commandTotal).toBe(154);
+    expect(reconciliationPage.commands).toHaveLength(PAGE_SIZE);
+    expect(reconciliationPage.commandHasMore).toBe(true);
+    await insertNewerReconciliationCommand();
+    const reconciliationCommands = [...reconciliationPage.commands];
+    let commandPage = reconciliationPage;
+    while (commandPage.commandNextCursor) {
+      commandPage = await caller.getStripeReconciliationStatus({
+        limit: PAGE_SIZE,
+        cursor: commandPage.commandNextCursor,
+      });
+      reconciliationCommands.push(...commandPage.commands);
+    }
+    const markerCommands = reconciliationCommands.filter(command => command.stripeSubscriptionId.startsWith(`${marker}-sub-`));
+    expect(markerCommands).toHaveLength(154);
+    expect(new Set(markerCommands.map(command => command.id)).size).toBe(154);
+    expect(reconciliationCommands.some(command => command.stripeSubscriptionId === `${marker}-newer-sub`)).toBe(false);
+
+    const webhookPage = await caller.getStripeWebhookIssues({ limit: PAGE_SIZE });
+    expect(webhookPage.total).toBe(ROW_COUNT);
+    expect(webhookPage.items).toHaveLength(PAGE_SIZE);
+    expect(webhookPage.hasMore).toBe(true);
+    await insertNewerWebhookIssue();
+    const webhookIssues = await collectPages(webhookPage, cursor => caller.getStripeWebhookIssues({ limit: PAGE_SIZE, cursor }));
+    const markerWebhookIssues = webhookIssues.filter(event => event.stripeEventId.startsWith(`${marker}-event-`));
+    expect(markerWebhookIssues).toHaveLength(ROW_COUNT);
+    expect(new Set(markerWebhookIssues.map(event => event.id)).size).toBe(ROW_COUNT);
+    expect(webhookIssues.some(event => event.stripeEventId === `${marker}-newer-event`)).toBe(false);
+
+    const failurePage = await caller.getOperationalFailures({ limit: PAGE_SIZE });
+    expect(failurePage.signals).toHaveLength(PAGE_SIZE);
+    expect(failurePage.hasMore).toBe(true);
+    expect(failurePage.nextCursor).toEqual({ id: expect.any(Number) });
+    expect(failurePage.uniqueSignals).toBeGreaterThanOrEqual(ROW_COUNT);
+    const updatedSignal = failurePage.signals.find(signal => signal.scope.startsWith(marker));
+    expect(updatedSignal).toBeDefined();
+    const updatedSignalId = updatedSignal!.id;
+    await db.update(operationalFailureSignals)
+      .set({ count: 7, lastOccurredAt: new Date(Date.now() + 15_000) })
+      .where(eq(operationalFailureSignals.id, updatedSignalId));
+    const [updatedSignalInDb] = await db.select({ count: operationalFailureSignals.count })
+      .from(operationalFailureSignals)
+      .where(eq(operationalFailureSignals.id, updatedSignalId));
+    expect(updatedSignalInDb?.count).toBe(7);
+
+    await db.insert(operationalFailureSignals).values({
+      scope: `${marker}-newer`,
+      operation: "synthetic-queue-test",
+      count: 1,
+      firstOccurredAt: new Date(Date.now() + 20_000),
+      lastOccurredAt: new Date(Date.now() + 20_000),
+    });
+
+    const failures = await collectFailurePages(failurePage, (cursor) => caller.getOperationalFailures({
+      limit: PAGE_SIZE,
+      cursor,
+    }));
+    const markerFailures = failures.filter(signal => signal.scope.startsWith(marker));
+    expect(markerFailures).toHaveLength(ROW_COUNT);
+    expect(new Set(markerFailures.map(signal => signal.id)).size).toBe(ROW_COUNT);
+    expect(markerFailures.some(signal => signal.scope === `${marker}-newer`)).toBe(false);
+    expect(markerFailures.find(signal => signal.id === updatedSignalId)?.count).toBe(1);
+
+    const refreshedFailurePage = await caller.getOperationalFailures({ limit: PAGE_SIZE });
+    expect(refreshedFailurePage.signals[0]?.scope).toBe(`${marker}-newer`);
+    expect(refreshedFailurePage.uniqueSignals).toBe(failurePage.uniqueSignals + 1);
+    const [lowestFailure] = await db.select({ id: operationalFailureSignals.id })
+      .from(operationalFailureSignals)
+      .orderBy(asc(operationalFailureSignals.id))
+      .limit(1);
+    const emptyFailurePage = await caller.getOperationalFailures({
+      limit: PAGE_SIZE,
+      cursor: { id: lowestFailure!.id },
+    });
+    expect(emptyFailurePage.signals).toHaveLength(0);
+    expect(emptyFailurePage.hasMore).toBe(false);
+    expect(emptyFailurePage.nextCursor).toBeNull();
   });
 
   it("keeps cursor ordering stable across status updates and rejects unauthorized or invalid requests", async () => {
@@ -268,9 +444,33 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
     const unauthorized = adminRouter.createCaller(createAdminContext("user"));
     await expect(unauthorized.getReviewQueue({ status: "all", limit: PAGE_SIZE }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(unauthorized.getSuccessFeeHolds({ limit: PAGE_SIZE }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(unauthorized.getStripeReconciliationStatus({ limit: PAGE_SIZE }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(unauthorized.getStripeWebhookIssues({ limit: PAGE_SIZE }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.listPendingVerifications({
       limit: 10,
       cursor: { timestamp: "not-a-date", id: 0 } as never,
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.getOperationalFailures({
+      limit: 10,
+      cursor: { id: 0 },
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.getSuccessFeeHolds({
+      limit: 10,
+      cursor: { timestamp: "invalid", id: 0 } as never,
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.getStripeReconciliationStatus({
+      limit: 10,
+      cursor: { timestamp: "invalid", id: 0 } as never,
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.getStripeWebhookIssues({
+      limit: 10,
+      cursor: { timestamp: "invalid", id: 0 } as never,
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(unauthorized.getOperationalFailures({ limit: PAGE_SIZE }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

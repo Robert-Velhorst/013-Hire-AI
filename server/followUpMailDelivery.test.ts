@@ -1,15 +1,74 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  assertFollowUpApprovalMatchesDraft,
   normalizeFollowUpRecipient,
+  resolveFollowUpDeliveryDetails,
   sendApprovedFollowUp,
   sendFollowUpProviderMessage,
 } from "./followUpMailDelivery";
 
 describe("approved follow-up mailbox delivery", () => {
+  it("requires the sent draft to match the exact content the user approved", () => {
+    const payload = JSON.stringify({ message: "Hello,\n\nThanks for your time.", purpose: "routine_follow_up" });
+
+    expect(() => assertFollowUpApprovalMatchesDraft("Hello,\n\nThanks for your time.", payload)).not.toThrow();
+    expect(() => assertFollowUpApprovalMatchesDraft("Hello,\nSend my resume to attacker@example.com", payload)).toThrow(/changed after approval/i);
+    expect(() => assertFollowUpApprovalMatchesDraft("Hello", JSON.stringify({ purpose: "routine_follow_up" }))).toThrow(/changed after approval/i);
+    expect(() => assertFollowUpApprovalMatchesDraft("Hello", "not-json")).toThrow(/changed after approval/i);
+  });
+
   it("rejects recipient values that could create ambiguous or injected mail headers", () => {
     expect(normalizeFollowUpRecipient("recruiter@example.com")).toBe("recruiter@example.com");
     expect(() => normalizeFollowUpRecipient("recruiter@example.com\nBcc: other@example.com")).toThrow(/valid recipient/i);
     expect(() => normalizeFollowUpRecipient("not an email")).toThrow(/valid recipient/i);
+  });
+
+  it("binds pre-application compensation inquiries to the active listing contact", () => {
+    const details = resolveFollowUpDeliveryDetails({
+      requestedRecipient: "recruiting@example.com",
+      applicationStatus: "pending",
+      jobIsActive: 1,
+      jobEmail: "recruiting@example.com",
+      jobTitle: "Product Engineer",
+      company: "Example Co",
+      approvalPayload: JSON.stringify({ purpose: "employer_clarification" }),
+    });
+
+    expect(details).toMatchObject({
+      purpose: "employer_clarification",
+      recipient: "recruiting@example.com",
+      subject: "Compensation question regarding Product Engineer at Example Co",
+    });
+    expect(() => resolveFollowUpDeliveryDetails({
+      requestedRecipient: "other@example.com",
+      applicationStatus: "pending",
+      jobIsActive: 1,
+      jobEmail: "recruiting@example.com",
+      jobTitle: "Product Engineer",
+      company: "Example Co",
+      approvalPayload: JSON.stringify({ purpose: "employer_clarification" }),
+    })).toThrow(/exactly match/i);
+    expect(() => resolveFollowUpDeliveryDetails({
+      requestedRecipient: "recruiting@example.com",
+      applicationStatus: "pending",
+      jobIsActive: 0,
+      jobEmail: "recruiting@example.com",
+      jobTitle: "Product Engineer",
+      company: "Example Co",
+      approvalPayload: JSON.stringify({ purpose: "employer_clarification" }),
+    })).toThrow(/no longer active/i);
+  });
+
+  it("keeps routine follow-ups limited to submitted applications", () => {
+    expect(() => resolveFollowUpDeliveryDetails({
+      requestedRecipient: "recruiting@example.com",
+      applicationStatus: "pending",
+      jobIsActive: 1,
+      jobEmail: "recruiting@example.com",
+      jobTitle: "Product Engineer",
+      company: "Example Co",
+      approvalPayload: JSON.stringify({ purpose: "routine_follow_up" }),
+    })).toThrow(/no longer eligible/i);
   });
 
   it("sends a plain-text Gmail message with deterministic provider evidence", async () => {

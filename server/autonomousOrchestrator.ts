@@ -28,6 +28,11 @@ export const AUTONOMOUS_SCAN_FREQUENCY_MS = {
   daily: 24 * 60 * 60 * 1000,
 } as const;
 
+export const SALARY_DISCLOSURE_BLOCKER =
+  "Salary is not disclosed and requires employer clarification before application preparation";
+export const SALARY_CLARIFICATION_NOTE =
+  "Application preparation is paused until compensation is clarified; an employer inquiry is not sent automatically yet.";
+
 export function getAutonomousScanIntervalMs(frequency?: AutonomousPreferences["scanFrequency"]) {
   return AUTONOMOUS_SCAN_FREQUENCY_MS[frequency || "daily"];
 }
@@ -237,7 +242,9 @@ export function scoreJobForProfile(job: Job, profile?: Partial<UserProfile> | nu
     job.salaryCurrency,
     profile?.salaryExpectationCurrency
   );
-  if (hasSalaryExpectation && hasJobSalary && !salaryCurrenciesComparable) {
+  if (hasSalaryExpectation && !hasJobSalary) {
+    blockers.push(SALARY_DISCLOSURE_BLOCKER);
+  } else if (hasSalaryExpectation && hasJobSalary && !salaryCurrenciesComparable) {
     blockers.push(
       `Salary is listed in ${normalizeSalaryCurrency(job.salaryCurrency) ?? "an unknown currency"} and needs review against the ${normalizeSalaryCurrency(profile?.salaryExpectationCurrency) ?? "unspecified"} expectation`
     );
@@ -417,8 +424,10 @@ export function buildAutonomousPlan(
 
       let action: AutonomousJobDecision["action"] = "skip";
       const resumeMissing = blockers.includes("Resume is required before autonomous submission");
+      const salaryDisclosureRequired = blockers.includes(SALARY_DISCLOSURE_BLOCKER);
       const hardBlockers = blockers.filter((blocker) =>
         blocker !== "Resume is required before autonomous submission" &&
+        blocker !== SALARY_DISCLOSURE_BLOCKER &&
         !blocker.startsWith("Salary is listed in ")
       );
       const salaryCurrencyReviewRequired = blockers.some((blocker) => blocker.startsWith("Salary is listed in "));
@@ -426,7 +435,10 @@ export function buildAutonomousPlan(
       if (listingSafety.status === "blocked") {
         action = "blocked";
       } else if (score >= minMatchScore && hardBlockers.length === 0) {
-        if (resumeMissing) {
+        if (salaryDisclosureRequired) {
+          action = "blocked";
+          automationNotes.push(SALARY_CLARIFICATION_NOTE);
+        } else if (resumeMissing) {
           action = "blocked";
           automationNotes.push("An active versioned resume is required before Hire.AI can prepare application materials for this role.");
         } else if (listingSafety.status === "review" || remoteEligibilityUnknown || salaryCurrencyReviewRequired) {
@@ -495,7 +507,18 @@ export function buildAutonomousPlan(
     nextActions.push("Upload and select an active versioned resume before autonomous application preparation can run.");
   }
   if (blocked > 0) {
-    nextActions.push(`Resolve profile evidence to reconsider ${blocked} high-fit role${blocked === 1 ? "" : "s"}.`);
+    nextActions.push(
+      `Resolve the listed blockers to reconsider ${blocked} high-fit role${blocked === 1 ? "" : "s"}.`
+    );
+  }
+  const salaryClarifications = decisions.filter((decision) =>
+    decision.action === "blocked" &&
+    decision.automationNotes.includes(SALARY_CLARIFICATION_NOTE)
+  ).length;
+  if (salaryClarifications > 0) {
+    nextActions.push(
+      `Employer compensation clarification is required for ${salaryClarifications} role${salaryClarifications === 1 ? "" : "s"}; no inquiry is sent automatically.`
+    );
   }
   if (queuedForReview > 0) {
     nextActions.push(`Review ${queuedForReview} high-fit jobs before submission.`);

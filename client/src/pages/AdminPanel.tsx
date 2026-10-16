@@ -116,7 +116,7 @@ function AdminCursorPaginator({
   onPrevious,
   onNext,
 }: {
-  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: { timestamp: Date; id: number } | null } | undefined;
+  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: { timestamp?: Date; id: number } | null } | undefined;
   pageNumber: number;
   testId: string;
   locale: string;
@@ -215,25 +215,36 @@ export default function AdminPanel() {
   const [overdueCursorHistory, setOverdueCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const [verificationCursorHistory, setVerificationCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const [reviewCursorHistory, setReviewCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [failureCursorHistory, setFailureCursorHistory] = useState<Array<{ id: number } | undefined>>([undefined]);
+  const [stripeCommandCursorHistory, setStripeCommandCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [stripeWebhookCursorHistory, setStripeWebhookCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [feeHoldCursorHistory, setFeeHoldCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
   const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, { enabled: isAdmin });
   const { data: operatingCounts, refetch: refetchOperatingCounts } = trpc.admin.getOperatingCounts.useQuery(undefined, { enabled: isAdmin });
-  const { data: stripeReconciliation, refetch: refetchStripeReconciliation } = trpc.admin.getStripeReconciliationStatus.useQuery(undefined, {
+  const stripeCommandCursor = stripeCommandCursorHistory[stripeCommandCursorHistory.length - 1];
+  const { data: stripeReconciliation, refetch: refetchStripeReconciliation } = trpc.admin.getStripeReconciliationStatus.useQuery({
+    limit: 50,
+    ...(stripeCommandCursor ? { cursor: stripeCommandCursor } : {}),
+  }, {
     enabled: isAdmin,
     refetchInterval: 30_000,
   });
+  const stripeWebhookCursor = stripeWebhookCursorHistory[stripeWebhookCursorHistory.length - 1];
   const { data: stripeWebhookIssues, refetch: refetchStripeWebhookIssues } = trpc.admin.getStripeWebhookIssues.useQuery(
-    { limit: 50 },
+    { limit: 50, ...(stripeWebhookCursor ? { cursor: stripeWebhookCursor } : {}) },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
+  const feeHoldCursor = feeHoldCursorHistory[feeHoldCursorHistory.length - 1];
   const { data: successFeeHolds, refetch: refetchSuccessFeeHolds } = trpc.admin.getSuccessFeeHolds.useQuery(
-    { limit: 100 },
+    { limit: 50, ...(feeHoldCursor ? { cursor: feeHoldCursor } : {}) },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
+  const failureCursor = failureCursorHistory[failureCursorHistory.length - 1];
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
-    { limit: 100 },
+    { limit: 50, ...(failureCursor ? { cursor: failureCursor } : {}) },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
   const feeCursor = feeCursorHistory[feeCursorHistory.length - 1];
@@ -731,6 +742,22 @@ export default function AdminPanel() {
               )}
             </div>
           </div>
+          <AdminCursorPaginator
+            page={{
+              items: operationalFailures?.signals ?? [],
+              total: operationalFailures?.uniqueSignals ?? 0,
+              hasMore: operationalFailures?.hasMore ?? false,
+              nextCursor: operationalFailures?.nextCursor ?? null,
+            }}
+            pageNumber={failureCursorHistory.length}
+            testId="admin-failures"
+            locale={locale}
+            onPrevious={() => setFailureCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+            onNext={() => operationalFailures?.nextCursor && setFailureCursorHistory((history) => [
+              ...history,
+              { id: operationalFailures.nextCursor!.id },
+            ])}
+          />
         </section>
 
         {/* Stats Row */}
@@ -831,6 +858,19 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                <AdminCursorPaginator
+                  page={stripeReconciliation ? {
+                    items: stripeReconciliation.commands,
+                    total: stripeReconciliation.commandTotal,
+                    hasMore: stripeReconciliation.commandHasMore,
+                    nextCursor: stripeReconciliation.commandNextCursor,
+                  } : undefined}
+                  pageNumber={stripeCommandCursorHistory.length}
+                  testId="admin-stripe-commands"
+                  locale={locale}
+                  onPrevious={() => setStripeCommandCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                  onNext={() => stripeReconciliation?.commandNextCursor && setStripeCommandCursorHistory((history) => [...history, stripeReconciliation.commandNextCursor!])}
+                />
               </CardContent>
             </Card>
             <section aria-labelledby="stripe-webhook-issues-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
@@ -840,7 +880,7 @@ export default function AdminPanel() {
                   <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("stripeWebhookIssuesDetail")}</p>
                 </div>
                 <Badge variant="outline" className="w-fit border-orange-500/30 text-orange-300">
-                  {stripeWebhookIssues?.length ?? 0}
+                  {stripeWebhookIssues?.total ?? 0}
                 </Badge>
               </div>
               <div className="mt-3 overflow-x-auto">
@@ -856,7 +896,7 @@ export default function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stripeWebhookIssues?.map(event => (
+                    {stripeWebhookIssues?.items.map(event => (
                       <tr key={event.id} className="border-b border-slate-800/50">
                         <td className="py-3 pr-4 font-mono text-xs text-slate-300">{event.stripeEventId}</td>
                         <td className="py-3 pr-4 font-mono text-xs text-slate-400">{event.eventType}</td>
@@ -882,12 +922,20 @@ export default function AdminPanel() {
                         </td>
                       </tr>
                     ))}
-                    {stripeWebhookIssues?.length === 0 && (
+                    {stripeWebhookIssues?.items.length === 0 && (
                       <tr><td colSpan={6} className="py-6 text-center text-xs text-slate-500">{fc("stripeWebhookEmpty")}</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              <AdminCursorPaginator
+                page={stripeWebhookIssues}
+                pageNumber={stripeWebhookCursorHistory.length}
+                testId="admin-stripe-webhooks"
+                locale={locale}
+                onPrevious={() => setStripeWebhookCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                onNext={() => stripeWebhookIssues?.nextCursor && setStripeWebhookCursorHistory((history) => [...history, stripeWebhookIssues.nextCursor!])}
+              />
             </section>
             <section aria-labelledby="success-fee-holds-heading" className="mt-4 border-y border-slate-800 bg-slate-950/35 px-4 py-4">
               <div className="flex items-start justify-between gap-3">
@@ -895,7 +943,7 @@ export default function AdminPanel() {
                   <h2 id="success-fee-holds-heading" className="text-sm font-semibold text-white">{fc("successFeeHolds")}</h2>
                   <p className="mt-1 max-w-3xl text-xs text-slate-400">{fc("successFeeHoldsDetail")}</p>
                 </div>
-                <Badge variant="outline" className="w-fit border-red-500/30 text-red-300">{successFeeHolds?.length ?? 0}</Badge>
+                <Badge variant="outline" className="w-fit border-red-500/30 text-red-300">{successFeeHolds?.total ?? 0}</Badge>
               </div>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -909,7 +957,7 @@ export default function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {successFeeHolds?.map((hold) => {
+                    {successFeeHolds?.items.map((hold) => {
                       const requiresDedicatedWorkflow = hold.holdType === "payment" || hold.holdType === "account";
                       const evidence = holdResolutionEvidence[hold.id] ?? "";
                       return (
@@ -944,10 +992,18 @@ export default function AdminPanel() {
                         </tr>
                       );
                     })}
-                    {successFeeHolds?.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-500">{fc("successFeeHoldsEmpty")}</td></tr>}
+                    {successFeeHolds?.items.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-500">{fc("successFeeHoldsEmpty")}</td></tr>}
                   </tbody>
                 </table>
               </div>
+              <AdminCursorPaginator
+                page={successFeeHolds}
+                pageNumber={feeHoldCursorHistory.length}
+                testId="admin-success-fee-holds"
+                locale={locale}
+                onPrevious={() => setFeeHoldCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+                onNext={() => successFeeHolds?.nextCursor && setFeeHoldCursorHistory((history) => [...history, successFeeHolds.nextCursor!])}
+              />
             </section>
           </TabsContent>
 

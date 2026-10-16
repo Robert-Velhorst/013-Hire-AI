@@ -1,5 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Activity, Heart, TrendingUp, Briefcase, Send, Eye, Calendar, Target, Settings, Search, FileText, Rocket, User, Bell, RefreshCw, Clock, CheckCircle, XCircle, MessageSquare, Building2, MapPin, DollarSign, ExternalLink, Loader2, AlertCircle, Mail, Pause, Play, Shield } from "lucide-react";
@@ -28,7 +30,6 @@ import {
 } from "@/lib/operatingReviewQueue";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -59,6 +60,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
   const [showTos, setShowTos] = useState(false);
   const [showDashboardReviewQueue, setShowDashboardReviewQueue] = useState(false);
+  const [resumeCampaignDialogOpen, setResumeCampaignDialogOpen] = useState(false);
+  const [resumeReason, setResumeReason] = useState("");
+  const [resumeCriteriaConfirmed, setResumeCriteriaConfirmed] = useState(false);
 
   // Fetch real data from API
   const { data: operatingLedger, isLoading: appsLoading, refetch: refetchOperatingLedger } = trpc.applications.getOperatingLedger.useQuery(undefined, {
@@ -101,10 +105,15 @@ export default function Dashboard() {
     },
   });
   const setCampaignStatus = trpc.applications.setCampaignStatus.useMutation({
-    onSuccess: async ({ campaign }) => {
+    onSuccess: async ({ campaign }, variables) => {
+      if (campaign.status === "active" && variables.reason) {
+        setResumeCampaignDialogOpen(false);
+        setResumeReason("");
+        setResumeCriteriaConfirmed(false);
+      }
       toast.success(campaign.status === "paused"
-        ? "Campaign paused. New autonomous work is stopped."
-        : "Campaign resumed. Autonomous work can run under the current policy.");
+        ? t("campaignPausedToast")
+        : t("campaignResumedToast"));
       await refetchOperatingLedger();
     },
     onError: (error) => toast.error(error.message || "Unable to update campaign status"),
@@ -158,8 +167,22 @@ export default function Dashboard() {
   };
   const toggleCampaignStatus = () => {
     if (!operatingLedger) return;
+    if (operatingLedger.campaign.status === "active") {
+      setCampaignStatus.mutate({ status: "paused" });
+      return;
+    }
+    setResumeReason("");
+    setResumeCriteriaConfirmed(false);
+    setResumeCampaignDialogOpen(true);
+  };
+
+  const resumeCampaign = () => {
+    const reason = resumeReason.trim();
+    if (reason.length < 20 || !resumeCriteriaConfirmed) return;
     setCampaignStatus.mutate({
-      status: operatingLedger.campaign.status === "active" ? "paused" : "active",
+      status: "active",
+      reason,
+      criteriaConfirmed: true,
     });
   };
 
@@ -408,7 +431,7 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2 sm:flex-row lg:w-60 lg:flex-col">
                   <Button
                     data-testid="command-center-primary"
-                    className="bg-cyan-600 hover:bg-cyan-500"
+                    className="bg-cyan-700 hover:bg-cyan-800"
                     onClick={() => runCommandCenterAction(commandCenterSummary.primaryRoute)}
                     disabled={runAutonomousAgent.isPending && commandCenterSummary.primaryRoute === "/dashboard"}
                   >
@@ -456,7 +479,7 @@ export default function Dashboard() {
                     className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-left transition hover:border-cyan-500/50 hover:bg-slate-900"
                     onClick={() => runCommandCenterAction(String(route))}
                   >
-                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="text-xs text-slate-400">{label}</p>
                     <p className="mt-1 text-lg font-semibold text-white">{value}</p>
                   </button>
                 ))}
@@ -465,8 +488,56 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {appsLoading && !operatingLedger && (
+          <Card
+            role="status"
+            aria-label="Loading operating ledger"
+            aria-busy="true"
+            className="mb-8 min-h-[38rem] bg-slate-900/50 border-slate-800/50 md:min-h-[34rem] lg:min-h-[30rem] xl:min-h-[28rem]"
+          >
+            <CardHeader>
+              <div className="space-y-3">
+                <div aria-hidden="true" className="h-6 w-48 animate-pulse rounded bg-slate-700/60" />
+                <div aria-hidden="true" className="h-4 w-72 max-w-full animate-pulse rounded bg-slate-800" />
+              </div>
+            </CardHeader>
+            <CardContent aria-hidden="true" className="space-y-5">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-8">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div key={index} className="space-y-2 border-l border-slate-700 pl-3">
+                    <div className="h-3 w-20 animate-pulse rounded bg-slate-800" />
+                    <div className="h-6 w-12 animate-pulse rounded bg-slate-700/60" />
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                <div className="space-y-3">
+                  <div className="h-3 w-44 animate-pulse rounded bg-slate-800" />
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <div key={index} className="h-8 animate-pulse rounded bg-slate-800/70" />
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <div key={index} className="h-9 animate-pulse rounded bg-slate-800" />
+                  ))}
+                </div>
+              </div>
+              <div className="h-px bg-slate-800" />
+              <div className="space-y-4">
+                <div className="h-5 w-40 animate-pulse rounded bg-slate-800" />
+                <div className="grid gap-3 md:grid-cols-2">
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <div key={index} className="h-24 animate-pulse rounded border border-slate-800 bg-slate-950/40" />
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {operatingLedger && (
-          <Card className="bg-slate-900/50 border-slate-800/50 mb-8">
+          <Card className="mb-8 min-h-[38rem] bg-slate-900/50 border-slate-800/50 md:min-h-[34rem] lg:min-h-[30rem] xl:min-h-[28rem]">
             <CardHeader>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -505,7 +576,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-8">
                 {operatingMetricItems.map(([label, value]) => (
                   <div key={label} className="border-l border-slate-700 pl-3">
-                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="text-xs text-slate-400">{label}</p>
                     <p className="text-xl font-semibold text-white">{value}</p>
                   </div>
                 ))}
@@ -513,7 +584,7 @@ export default function Dashboard() {
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Next operating actions</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Next operating actions</p>
                   {operatingLedger.nextActions.slice(0, 4).map((action) => (
                     <div key={action} className="flex items-start gap-2 text-sm text-slate-300">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
@@ -582,7 +653,7 @@ export default function Dashboard() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-white">Interview notifications</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-400">
                         Shown only after a recorded employer interview invitation.
                       </p>
                     </div>
@@ -606,7 +677,7 @@ export default function Dashboard() {
                               Verified interview invite
                             </Badge>
                           </div>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-slate-400">
                             {notification.job?.company || "Employer"}
                             {notification.job?.location ? ` - ${notification.job.location}` : ""}
                           </p>
@@ -645,7 +716,7 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-white">Review Queue</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-400">
                       Consequential actions stay in the dedicated queue until you are ready to review them.
                     </p>
                   </div>
@@ -694,7 +765,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <Button
-                      className="shrink-0 bg-cyan-600 hover:bg-cyan-500"
+                      className="shrink-0 bg-cyan-700 hover:bg-cyan-800"
                       onClick={() => setLocation("/review-queue")}
                     >
                       Review {reviewQueueCount} item{reviewQueueCount === 1 ? "" : "s"}
@@ -726,7 +797,7 @@ export default function Dashboard() {
                                 {approval.riskLevel}
                               </Badge>
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-xs text-slate-400">
                               {formatLocalizedApprovalType(approval.approvalType)}
                             </p>
                             {approval.description && (
@@ -791,7 +862,7 @@ export default function Dashboard() {
                             Inbox response candidate
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {candidate.job?.company || "Employer"}
                           {candidate.job?.location ? ` - ${candidate.job.location}` : ""}
                         </p>
@@ -845,7 +916,7 @@ export default function Dashboard() {
                             </Badge>
                           )}
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {formatLocalizedDecision(decision.decision)}
                           {decision.applicationId ? ` - Application #${decision.applicationId}` : ""}
                           {decision.matchScore != null ? ` - ${decision.matchScore}% match` : ""}
@@ -910,7 +981,7 @@ export default function Dashboard() {
                             {control.badgeLabel}
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {item.job?.company || "Employer"}{item.job?.location ? ` - ${item.job.location}` : ""}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-300">
@@ -941,7 +1012,7 @@ export default function Dashboard() {
                             {String(item.responseType || "response").replace(/_/g, " ")}
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {item.job?.company || "Employer"}{item.job?.location ? ` - ${item.job.location}` : ""}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-300">
@@ -972,7 +1043,7 @@ export default function Dashboard() {
                             {String(item.messageType || "follow-up").replace(/_/g, " ")}
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {item.job?.company || "Employer"}{item.job?.location ? ` - ${item.job.location}` : ""}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-300">
@@ -1004,7 +1075,7 @@ export default function Dashboard() {
                             Delivery uncertain
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-400">
                           {item.deliveryProvider ? `${item.deliveryProvider} ` : ""}{item.deliveryRecipient || "connected mailbox"}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm text-slate-300">
@@ -1140,7 +1211,7 @@ export default function Dashboard() {
                 ["Overdue", successFeeCompliance.overdueVerifications],
               ].map(([label, value]) => (
                 <div key={label} className="border-l border-slate-700 pl-3">
-                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="text-xs text-slate-400">{label}</p>
                   <p className="text-xl font-semibold text-white">{value}</p>
                 </div>
               ))}
@@ -1177,7 +1248,7 @@ export default function Dashboard() {
                   <span>{successFeeComplianceAction.detail}</span>
                 </div>
                 {successFeeCompliance.nextVerificationDue && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-400">
                     Next verification: {formatCalendarDate(successFeeCompliance.nextVerificationDue, locale)}
                     {successFeeCompliance.daysUntilNextVerification !== null
                       ? ` (${successFeeCompliance.daysUntilNextVerification} days)`
@@ -1241,7 +1312,7 @@ export default function Dashboard() {
                   ["Stale", autonomousPlan.summary.expiredJobsSkipped || 0],
                 ].map(([label, value]) => (
                   <div key={label} className="border-l border-slate-700 pl-3">
-                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="text-xs text-slate-400">{label}</p>
                     <p className="text-xl font-semibold text-white">{value}</p>
                   </div>
                 ))}
@@ -1312,23 +1383,23 @@ export default function Dashboard() {
                     <span className="text-slate-300">Readiness score</span>
                     <span className="font-semibold text-white">{profileReadiness.score}%</span>
                   </div>
-                  <Progress value={profileReadiness.score} className="h-2" />
+                  <Progress aria-label="Profile readiness" value={profileReadiness.score} className="h-2" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
-                    <p className="text-xs text-slate-500">Blockers</p>
+                    <p className="text-xs text-slate-400">Blockers</p>
                     <p className="text-xl font-semibold text-white">{profileReadiness.blockers.length}</p>
                   </div>
                   <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
-                    <p className="text-xs text-slate-500">Warnings</p>
+                    <p className="text-xs text-slate-400">Warnings</p>
                     <p className="text-xl font-semibold text-white">{profileReadiness.warnings.length}</p>
                   </div>
                 </div>
 
                 {profileReadiness.nextActions.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Next fixes</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Next fixes</p>
                     {profileReadiness.nextActions.slice(0, 3).map((action) => (
                       <div key={action} className="flex items-start gap-2 text-sm text-slate-300">
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
@@ -1449,7 +1520,7 @@ export default function Dashboard() {
                     style={{ width: `${Math.min(submittedApplicationCount * 2, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   {submittedApplicationCount === 0 ? "No confirmed submissions yet" : "Confirmed employer submissions"}
                 </p>
               </div>
@@ -1465,7 +1536,7 @@ export default function Dashboard() {
                     style={{ width: `${applicationPerformance.responseRate}%` }}
                   />
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   {applicationPerformance.responseDetail}
                 </p>
               </div>
@@ -1481,7 +1552,7 @@ export default function Dashboard() {
                     style={{ width: `${applicationPerformance.interviewRate}%` }}
                   />
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   {applicationPerformance.interviewDetail}
                 </p>
               </div>
@@ -1524,7 +1595,7 @@ export default function Dashboard() {
                         <p className="text-xs text-slate-400 truncate">
                           {formatDashboardActivityTarget(app.job, locale)}
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           {app.status === "pending" ? "Queued" : "Applied"}{" "}
                           {new Date(app.appliedDate || app.createdAt).toLocaleDateString(locale)}
                         </p>
@@ -1536,7 +1607,7 @@ export default function Dashboard() {
                 <div className="text-center py-8">
                   <Briefcase className="h-12 w-12 text-slate-700 mx-auto mb-3" />
                   <p className="text-slate-400 mb-2">No activity yet</p>
-                  <p className="text-sm text-slate-500">Start applying to jobs to see your activity here</p>
+                  <p className="text-sm text-slate-400">Start applying to jobs to see your activity here</p>
                   <Button
                     variant="outline"
                     className="mt-4 border-slate-700 text-slate-300"
@@ -1570,18 +1641,29 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="bg-slate-800/50 border border-slate-700 mb-4">
-                <TabsTrigger value="all" className="data-[state=active]:bg-slate-700">
-                  All ({totalApplications})
-                </TabsTrigger>
-                <TabsTrigger value="active" className="data-[state=active]:bg-blue-900/50">
-                  Active ({activeApplications})
-                </TabsTrigger>
-                <TabsTrigger value="interviewing" className="data-[state=active]:bg-amber-900/50">
-                  Interviewing ({interviewInvites})
-                </TabsTrigger>
-              </TabsList>
+            <div
+              role="group"
+              aria-label="Filter applications"
+              className="mb-4 inline-flex flex-wrap gap-1 rounded-md border border-slate-700 bg-slate-800/50 p-1"
+            >
+              {[
+                ["all", `All (${totalApplications})`],
+                ["active", `Active (${activeApplications})`],
+                ["interviewing", `Interviewing (${interviewInvites})`],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={activeTab === value}
+                  onClick={() => setActiveTab(value)}
+                  className={`min-h-9 rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+                    activeTab === value ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-700/60"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
               <div className="space-y-3">
                 {appsLoading ? (
@@ -1625,7 +1707,7 @@ export default function Dashboard() {
                                     {app.job?.location || "Remote"}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <div className="flex items-center gap-2 text-xs text-slate-400">
                                   <Calendar className="w-3 h-3" />
                                   {app.status === "pending" ? "Queued" : "Applied"}{" "}
                                   {new Date(app.appliedDate || app.createdAt).toLocaleDateString(locale)}
@@ -1654,9 +1736,74 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-            </Tabs>
           </CardContent>
         </Card>
+
+        <Dialog
+          open={resumeCampaignDialogOpen}
+          onOpenChange={(open) => {
+            if (!setCampaignStatus.isPending) setResumeCampaignDialogOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-lg bg-slate-900 border-slate-700 text-white">
+            <DialogHeader>
+              <DialogTitle>{t("resumeCampaignTitle")}</DialogTitle>
+              <DialogDescription className="text-slate-300">
+                {t("resumeCampaignDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="campaign-resume-reason" className="text-sm font-medium text-slate-200">
+                  {t("resumeReasonLabel")}
+                </label>
+                <Textarea
+                  id="campaign-resume-reason"
+                  value={resumeReason}
+                  onChange={(event) => setResumeReason(event.target.value.slice(0, 500))}
+                  placeholder={t("resumeReasonPlaceholder")}
+                  maxLength={500}
+                  rows={3}
+                  aria-describedby="campaign-resume-reason-count"
+                  className="border-slate-700 bg-slate-950 text-white placeholder:text-slate-500"
+                />
+                <p id="campaign-resume-reason-count" className="text-xs text-slate-400">
+                  {resumeReason.trim().length}/500
+                  {resumeReason.trim().length > 0 && resumeReason.trim().length < 20
+                    ? ` · ${t("resumeReasonTooShort")}`
+                    : ""}
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="campaign-resume-criteria-confirmed"
+                  checked={resumeCriteriaConfirmed}
+                  onCheckedChange={(checked) => setResumeCriteriaConfirmed(checked === true)}
+                  className="mt-0.5 border-slate-500"
+                />
+                <label htmlFor="campaign-resume-criteria-confirmed" className="text-sm leading-5 text-slate-200">
+                  {t("resumeCriteriaConfirmation")}
+                </label>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setResumeCampaignDialogOpen(false)}
+                  disabled={setCampaignStatus.isPending}
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  onClick={resumeCampaign}
+                  disabled={setCampaignStatus.isPending || resumeReason.trim().length < 20 || !resumeCriteriaConfirmed}
+                >
+                  {setCampaignStatus.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {t("resumeCampaignConfirm")}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Application Detail Dialog */}
         <Dialog open={!!selectedApplication} onOpenChange={() => setSelectedApplication(null)}>

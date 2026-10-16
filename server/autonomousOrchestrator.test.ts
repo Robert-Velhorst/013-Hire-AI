@@ -86,6 +86,9 @@ describe("autonomous orchestrator", () => {
     const plan = buildAutonomousPlan([{
       ...baseJob,
       description: "Deposit the company check, retain a fee, and transfer the remaining funds.",
+      salaryMin: null,
+      salaryMax: null,
+      salaryCurrency: null,
     }], profile, [], {
       mode: "auto_apply",
       requireHumanReview: false,
@@ -94,6 +97,7 @@ describe("autonomous orchestrator", () => {
 
     expect(plan.decisions[0].action).toBe("blocked");
     expect(plan.decisions[0].blockers.join(" ")).toContain("check handling");
+    expect(plan.nextActions.join(" ")).not.toContain("Employer compensation clarification");
   });
 
   it("queues ambiguous listing-safety signals for review instead of applying", () => {
@@ -158,6 +162,98 @@ describe("autonomous orchestrator", () => {
     expect(plan.decisions[0].action).toBe("queue_for_review");
     expect(plan.decisions[0].blockers.join(" ")).toContain("EUR");
     expect(plan.decisions[0].blockers.join(" ")).toContain("USD");
+  });
+
+  it("parks a high-fit job with undisclosed salary before preparing application materials", () => {
+    const plan = buildAutonomousPlan(
+      [{
+        ...baseJob,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+      }],
+      profile,
+      [],
+      {
+        mode: "auto_apply",
+        requireHumanReview: false,
+        minMatchScore: 0,
+        dailyApplicationLimit: 2,
+      }
+    );
+
+    expect(plan.decisions[0].action).toBe("blocked");
+    expect(plan.decisions[0].blockers).toContain(
+      "Salary is not disclosed and requires employer clarification before application preparation"
+    );
+    expect(plan.decisions[0].automationNotes).toContain(
+      "Application preparation is paused until compensation is clarified; an employer inquiry is not sent automatically yet."
+    );
+    expect(plan.summary.queuedForApply).toBe(0);
+    expect(plan.summary.queuedForReview).toBe(0);
+    expect(plan.summary.blocked).toBe(1);
+    expect(plan.nextActions).toContain(
+      "Employer compensation clarification is required for 1 role; no inquiry is sent automatically."
+    );
+    expect(getExecutableDecisions(plan)).toMatchObject({
+      autoApply: [],
+      review: [],
+      manual: [],
+    });
+  });
+
+  it("does not impose salary disclosure gates when the candidate has no salary expectation", () => {
+    const plan = buildAutonomousPlan(
+      [{
+        ...baseJob,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+      }],
+      {
+        ...profile,
+        salaryExpectationMin: null,
+        salaryExpectationMax: null,
+      },
+      [],
+      {
+        mode: "auto_apply",
+        requireHumanReview: true,
+        minMatchScore: 0,
+      }
+    );
+
+    expect(plan.decisions[0].blockers).not.toContain(
+      "Salary is not disclosed and requires employer clarification before application preparation"
+    );
+    expect(plan.summary.blocked).toBe(0);
+  });
+
+  it("does not request salary clarification for roles excluded by a hard remote-only rule", () => {
+    const plan = buildAutonomousPlan(
+      [{
+        ...baseJob,
+        location: "Hybrid - Amsterdam, Netherlands",
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+      }],
+      profile,
+      [],
+      {
+        mode: "auto_apply",
+        requireHumanReview: false,
+        minMatchScore: 0,
+      }
+    );
+
+    expect(plan.decisions[0].action).toBe("skip");
+    expect(plan.decisions[0].blockers).toContain(
+      "Remote-only policy excludes hybrid and on-site roles"
+    );
+    expect(plan.nextActions).not.toContain(
+      "Employer compensation clarification is required for 1 role; no inquiry is sent automatically."
+    );
   });
 
   it("keeps hybrid and on-site roles out of the remote-only campaign by default", () => {

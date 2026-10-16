@@ -10,6 +10,9 @@ vi.mock("./resumeStorage", async (importOriginal) => ({
   getActiveResume: mocks.getActiveResume,
 }));
 import {
+  createApplication,
+  createApplicationAttempt,
+  createApplicationMaterial,
   getApplicationLedgerArtifacts,
   getAuditEventsForEntity,
   getAuditEventsForUser,
@@ -213,6 +216,109 @@ describe("automation application preparation route", () => {
       approval.applicationId === first.applicationRecordId &&
       approval.approvalType === "application_submission"
     )).toHaveLength(1);
+  });
+
+  it("repairs missing approval and audit artifacts after a partial automation preparation", async () => {
+    const userId = 98416;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+    });
+    const existing = await createApplication({ userId, jobId: 1, status: "pending" });
+    const applicationId = Number(existing.insertId);
+    await createApplicationMaterial({
+      applicationId,
+      resumeId: 73501,
+      coverLetter: "Previously prepared synthetic material.",
+    });
+    await createApplicationAttempt({
+      applicationId,
+      userId,
+      jobId: 1,
+      attemptType: "prepare",
+      status: "review_required",
+      confirmationText: "Prepared before an interrupted request.",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    const result = await caller.automation.applyToJob({ jobId: 1 });
+    const artifacts = await getApplicationLedgerArtifacts(applicationId, userId);
+    const approvals = await listUserApplicationApprovals(userId, "all");
+
+    expect(result).toMatchObject({ applicationRecordId: applicationId, existing: true });
+    expect(artifacts.attempts.filter(attempt => attempt.attemptType === "prepare")).toHaveLength(1);
+    expect(artifacts.auditEvents.filter(event => event.action === "application_prepared_by_automation")).toHaveLength(1);
+    expect(approvals.filter(approval => approval.applicationId === applicationId && approval.approvalType === "application_submission")).toHaveLength(1);
+  });
+
+  it("repairs missing approval and audit artifacts after a partial direct preparation", async () => {
+    const userId = 98417;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+    });
+    const existing = await createApplication({ userId, jobId: 1, status: "pending" });
+    const applicationId = Number(existing.insertId);
+    await createApplicationMaterial({
+      applicationId,
+      resumeId: 73501,
+      coverLetter: "Previously prepared synthetic material.",
+    });
+    await createApplicationAttempt({
+      applicationId,
+      userId,
+      jobId: 1,
+      attemptType: "prepare",
+      status: "review_required",
+      confirmationText: "Prepared before an interrupted request.",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    const result = await caller.applications.create({ jobId: 1 });
+    const artifacts = await getApplicationLedgerArtifacts(applicationId, userId);
+    const approvals = await listUserApplicationApprovals(userId, "all");
+
+    expect(result).toMatchObject({ success: true, applicationRecordId: applicationId, existing: true });
+    expect(artifacts.attempts.filter(attempt => attempt.attemptType === "prepare")).toHaveLength(1);
+    expect(artifacts.auditEvents.filter(event => event.action === "application_prepared")).toHaveLength(1);
+    expect(approvals.filter(approval => approval.applicationId === applicationId && approval.approvalType === "application_submission")).toHaveLength(1);
+  });
+
+  it("blocks preparation when an application for the same job already progressed", async () => {
+    const userId = 98413;
+    await upsertUserProfile({
+      userId,
+      resumeUrl: "https://example.com/resume.pdf",
+      skills: "TypeScript, React, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote, worldwide",
+    });
+    const existing = await createApplication({
+      userId,
+      jobId: 1,
+      status: "applied",
+      appliedDate: new Date(),
+      notes: "Candidate submitted externally.",
+      isAutoApplied: 0,
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(caller.automation.applyToJob({ jobId: 1 })).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: expect.stringContaining("already applied"),
+    });
+
+    const artifacts = await getApplicationLedgerArtifacts(Number(existing.insertId), userId);
+    expect(artifacts.attempts).toHaveLength(0);
+    expect(artifacts.auditEvents).toHaveLength(0);
+    expect(await listUserApplicationApprovals(userId, "all")).toHaveLength(0);
   });
 
   it("deduplicates concurrent requests for the same prepared application", async () => {

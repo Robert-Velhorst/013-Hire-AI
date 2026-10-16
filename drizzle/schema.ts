@@ -374,7 +374,7 @@ export const applicationDecisions = mysqlTable("application_decisions", {
 export const applicationMaterials = mysqlTable("application_materials", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("application_id").notNull(),
-  resumeId: int("resume_id"),
+  resumeId: int("resume_id").references(() => userResumes.id, { onDelete: "set null" }),
   customResume: text("custom_resume"),
   coverLetter: text("cover_letter"),
   customAnswers: text("custom_answers"),
@@ -654,7 +654,8 @@ export const applicationApprovals = mysqlTable("application_approvals", {
     "offer_attribution",
     "interview_schedule",
     "profile_claim",
-    "billing_action"
+    "billing_action",
+    "application_email_submission"
   ]).notNull(),
   status: mysqlEnum("status", ["pending", "approved", "rejected", "cancelled"]).default("pending").notNull(),
   activeIdentity: varchar("active_identity", { length: 180 }).generatedAlwaysAs(sql`CASE
@@ -902,6 +903,52 @@ export const userResumes = mysqlTable("user_resumes", {
 ]);
 
 /**
+ * Email application delivery state is separate from follow-ups and portal handoffs.
+ * One row per application prevents duplicate submissions after ambiguous provider outcomes.
+ */
+export const applicationEmailDeliveries = mysqlTable("application_email_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  applicationId: int("application_id").notNull().references(() => applications.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["gmail", "outlook"]).notNull(),
+  status: mysqlEnum("status", [
+    "draft",
+    "pending_approval",
+    "ready",
+    "sending",
+    "sent",
+    "failed",
+    "unknown",
+    "cancelled",
+  ]).default("draft").notNull(),
+  recipient: varchar("recipient", { length: 320 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  message: text("message").notNull(),
+  // Snapshot metadata is retained for the audit record; resume deletion must
+  // remain governed by the user's retention and privacy controls.
+  resumeId: int("resume_id").notNull(),
+  resumeVersion: int("resume_version").notNull(),
+  resumeFileKey: varchar("resume_file_key", { length: 500 }).notNull(),
+  resumeFileName: varchar("resume_file_name", { length: 255 }).notNull(),
+  resumeMimeType: varchar("resume_mime_type", { length: 100 }).notNull(),
+  resumeSize: int("resume_size", { unsigned: true }).notNull(),
+  resumeSha256: varchar("resume_sha256", { length: 64 }).notNull(),
+  messageSha256: varchar("message_sha256", { length: 64 }).notNull(),
+  attemptKey: varchar("attempt_key", { length: 64 }),
+  providerMessageId: varchar("provider_message_id", { length: 320 }),
+  failureMessage: varchar("failure_message", { length: 500 }),
+  attemptCount: int("attempt_count", { unsigned: true }).default(0).notNull(),
+  approvedAt: timestamp("approved_at"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("application_email_deliveries_application_unique").on(table.applicationId),
+  uniqueIndex("application_email_deliveries_attempt_key_unique").on(table.attemptKey),
+  index("application_email_deliveries_user_status_idx").on(table.userId, table.status, table.updatedAt),
+]);
+
+/**
  * Saved Jobs (Bookmarks)
  * Stores jobs saved by users for later review
  */
@@ -969,6 +1016,27 @@ export const interviewSchedules = mysqlTable("interview_schedules", {
   ),
   index("interview_schedules_status_scheduled_idx").on(table.status, table.scheduledAt),
   index("interview_schedules_status_updated_id_idx").on(table.status, table.updatedAt, table.id),
+]);
+
+/** User-approved calendar event delivery; provider credentials remain in connector_authorizations. */
+export const interviewCalendarSyncs = mysqlTable("interview_calendar_syncs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  interviewId: int("interview_id").notNull().references(() => interviewSchedules.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["gmail", "outlook"]).notNull(),
+  status: mysqlEnum("status", ["pending", "synced", "failed", "unknown", "cancelled"]).default("pending").notNull(),
+  providerEventId: varchar("provider_event_id", { length: 255 }),
+  idempotencyKey: varchar("idempotency_key", { length: 80 }).notNull(),
+  lastErrorCode: mysqlEnum("last_error_code", ["provider_rejected", "network_failure", "credential_unavailable"]),
+  attemptCount: int("attempt_count").default(0).notNull(),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  syncedAt: timestamp("synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => [
+  uniqueIndex("interview_calendar_syncs_user_interview_provider_unique").on(table.userId, table.interviewId, table.provider),
+  uniqueIndex("interview_calendar_syncs_idempotency_key_unique").on(table.idempotencyKey),
+  index("interview_calendar_syncs_user_status_updated_idx").on(table.userId, table.status, table.updatedAt, table.id),
 ]);
 
 /**
@@ -1174,6 +1242,7 @@ export const successFeeHolds = mysqlTable("success_fee_holds", {
 }, (table) => [
   index("success_fee_holds_fee_active_idx").on(table.successFeeId, table.resolvedAt, table.id),
   index("success_fee_holds_type_active_idx").on(table.holdType, table.resolvedAt, table.id),
+  index("success_fee_holds_active_created_id_idx").on(table.resolvedAt, table.createdAt, table.id),
 ]);
 
 /**
@@ -1242,6 +1311,7 @@ export const stripeReconciliationCommands = mysqlTable("stripe_reconciliation_co
   uniqueIndex("stripe_reconciliation_command_key_unique").on(table.commandKey),
   index("stripe_reconciliation_status_next_id_idx").on(table.status, table.nextAttemptAt, table.id),
   index("stripe_reconciliation_fee_created_idx").on(table.successFeeId, table.createdAt, table.id),
+  index("stripe_reconciliation_status_created_id_idx").on(table.status, table.createdAt, table.id),
 ]);
 
 /**

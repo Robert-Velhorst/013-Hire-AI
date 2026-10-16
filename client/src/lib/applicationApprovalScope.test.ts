@@ -9,13 +9,13 @@ describe("application approval query scope", () => {
     const procedure = router.slice(
       router.indexOf("listApprovals: protectedProcedure"),
       router.indexOf("resolveApproval: protectedProcedure")
-    );
+    ).replace(/\s+/g, "");
 
     expect(page).toContain("applicationIds: approvalApplicationIds");
     expect(page).toContain("approvalApplicationIds.length > 0");
     expect(page).toContain(")).slice(0, 250)");
     expect(procedure).toContain(".max(250)");
-    expect(procedure).toContain("listUserApplicationApprovalsForApplications(ctx.user.id, input.applicationIds)");
+    expect(procedure).toContain("listUserApplicationApprovalsForApplications(ctx.user.id,input.applicationIds)");
     expect(procedure).not.toContain("listUserApplicationApprovals(ctx.user.id");
   });
 });

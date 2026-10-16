@@ -5,9 +5,12 @@ import {
   getExecutableDecisions,
   isJobCurrentForAutonomousProcessing,
   parseAutonomousPreferences,
+  SALARY_CLARIFICATION_NOTE,
+  SALARY_DISCLOSURE_BLOCKER,
 } from "./autonomousOrchestrator";
 import {
   createApplication,
+  createAutonomousPreparationApplication,
   createApplicationApproval,
   createApplicationAttempt,
   createApplicationDecision,
@@ -54,6 +57,7 @@ import { buildEvidenceBoundApplicationDraft, type EvidenceBoundApplicationDraft 
 import { monitorInboxResponses } from "./inboxResponseMonitoring";
 import type { AutonomousJobSourceEligibility } from "./autonomousSourceEligibility";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
+import { normalizeFollowUpRecipient } from "./followUpMailDelivery";
 
 export interface AutonomousRunResult extends AutonomousPlan {
   operatingApplicationsLoaded: number;
@@ -62,6 +66,9 @@ export interface AutonomousRunResult extends AutonomousPlan {
   queuedReviewRecords: number;
   queuedManualRecords: number;
   queuedFollowUps: number;
+  queuedEmployerClarificationDrafts?: number;
+  skippedDuplicateEmployerClarifications?: number;
+  skippedEmployerClarificationsMissingContact?: number;
   skippedDuplicateFollowUps: number;
   skippedSafetyBlockedFollowUps: number;
   skippedResumeEvidenceActions: number;
@@ -84,6 +91,20 @@ const activeRuns = new AutonomousRunRegistry<AutonomousRunResult | null>();
 export const AUTONOMOUS_RUN_FAILURE =
   "Autonomous work could not complete. Review the operating ledger before retrying.";
 
+const EMPLOYER_CLARIFICATION_APPLICATION_NOTE =
+  "Autonomous compensation clarification pending. No application has been submitted or prepared.";
+const MAX_EMPLOYER_CLARIFICATION_DRAFTS_PER_RUN = 5;
+
+function buildEmployerCompensationClarification(job: { title: string }) {
+  return [
+    "Hello,",
+    "",
+    `I am interested in the ${job.title} role. Before applying, could you please share the compensation range, currency, and pay period for this position?`,
+    "",
+    "This information will help me determine whether the role is a suitable fit. Thank you for your time.",
+  ].join("\n");
+}
+
 function persistableRunSummary(result: AutonomousRunResult) {
   return {
     operatingApplicationsLoaded: result.operatingApplicationsLoaded,
@@ -92,6 +113,9 @@ function persistableRunSummary(result: AutonomousRunResult) {
     queuedReviewRecords: result.queuedReviewRecords,
     queuedManualRecords: result.queuedManualRecords,
     queuedFollowUps: result.queuedFollowUps,
+    queuedEmployerClarificationDrafts: result.queuedEmployerClarificationDrafts ?? 0,
+    skippedDuplicateEmployerClarifications: result.skippedDuplicateEmployerClarifications ?? 0,
+    skippedEmployerClarificationsMissingContact: result.skippedEmployerClarificationsMissingContact ?? 0,
     skippedDuplicateFollowUps: result.skippedDuplicateFollowUps,
     skippedSafetyBlockedFollowUps: result.skippedSafetyBlockedFollowUps,
     skippedResumeEvidenceActions: result.skippedResumeEvidenceActions,
@@ -603,7 +627,7 @@ async function executeAutonomousRun(
       }
       const job = currentJob.job;
       const draft = buildEvidenceBoundApplicationDraft(profileForMatching, job);
-      const result = await createApplication({
+      const result = await createAutonomousPreparationApplication({
         userId,
         jobId: decision.jobId,
         status: "pending",
@@ -681,7 +705,7 @@ async function executeAutonomousRun(
       }
       const job = currentJob.job;
       const draft = buildEvidenceBoundApplicationDraft(profileForMatching, job);
-      const result = await createApplication({
+      const result = await createAutonomousPreparationApplication({
         userId,
         jobId: decision.jobId,
         status: "pending",
@@ -759,7 +783,7 @@ async function executeAutonomousRun(
       }
       const job = currentJob.job;
       const draft = buildEvidenceBoundApplicationDraft(profileForMatching, job);
-      const result = await createApplication({
+      const result = await createAutonomousPreparationApplication({
         userId,
         jobId: decision.jobId,
         status: "pending",
@@ -817,6 +841,82 @@ async function executeAutonomousRun(
   }
 
   let queuedFollowUps = 0;
+  let queuedEmployerClarificationDrafts = 0;
+  let skippedDuplicateEmployerClarifications = 0;
+  let skippedEmployerClarificationsMissingContact = 0;
+
+  const clarificationDecisions = plan.decisions.filter((decision) =>
+    decision.action === "blocked" &&
+    decision.blockers.includes(SALARY_DISCLOSURE_BLOCKER) &&
+    decision.automationNotes.includes(SALARY_CLARIFICATION_NOTE) &&
+    !userDecisionJobIds.has(decision.jobId)
+  );
+  let clarificationSlots = Math.min(
+    MAX_EMPLOYER_CLARIFICATION_DRAFTS_PER_RUN,
+    Math.max(0, plan.summary.dailyRemaining - queuedApplicationRecords - queuedReviewRecords - queuedManualRecords)
+  );
+  for (const decision of clarificationDecisions) {
+    assertLeaseActive();
+    if (clarificationSlots <= 0) break;
+    try {
+      const currentJob = await getCurrentJobForAutonomousDecision(decision.jobId);
+      if (!currentJob.job) {
+        if (currentJob.blockedByEmptySource) skippedEmptySourceActions += 1;
+        else skippedStaleJobActions += 1;
+        continue;
+      }
+      if (!currentJob.job.applicationEmail) {
+        skippedEmployerClarificationsMissingContact += 1;
+        continue;
+      }
+      try {
+        normalizeFollowUpRecipient(currentJob.job.applicationEmail);
+      } catch {
+        skippedEmployerClarificationsMissingContact += 1;
+        continue;
+      }
+
+      const existingApplication = applications.find((application) => application.jobId === decision.jobId);
+      let applicationId: number;
+      if (existingApplication) {
+        if (
+          existingApplication.status !== "pending" ||
+          !existingApplication.notes?.includes(EMPLOYER_CLARIFICATION_APPLICATION_NOTE)
+        ) {
+          continue;
+        }
+        applicationId = existingApplication.id;
+      } else {
+        const result = await createApplication({
+          userId,
+          jobId: decision.jobId,
+          status: "pending",
+          notes: EMPLOYER_CLARIFICATION_APPLICATION_NOTE,
+          isAutoApplied: 0,
+        });
+        if (!wasNewApplication(result)) continue;
+        applicationId = Number(result.insertId);
+      }
+
+      const priorFollowUps = await getUserFollowUpsForApplications(userId, [applicationId]);
+      if (priorFollowUps.length > 0) {
+        skippedDuplicateEmployerClarifications += 1;
+        continue;
+      }
+
+      await createFollowUp({
+        applicationId,
+        message: buildEmployerCompensationClarification(currentJob.job),
+        purpose: "employer_clarification",
+      }, userId);
+      clarificationSlots -= 1;
+      queuedEmployerClarificationDrafts += 1;
+      completedActions += 1;
+    } catch {
+      recordFailure(`Job ${decision.jobId} compensation clarification draft`);
+    }
+  }
+
   let skippedDuplicateFollowUps = 0;
   let skippedSafetyBlockedFollowUps = 0;
   if (resolvedPreferences.createFollowUps) {
@@ -909,6 +1009,9 @@ async function executeAutonomousRun(
     queuedReviewRecords,
     queuedManualRecords,
     queuedFollowUps,
+    queuedEmployerClarificationDrafts,
+    skippedDuplicateEmployerClarifications,
+    skippedEmployerClarificationsMissingContact,
     skippedDuplicateFollowUps,
     skippedSafetyBlockedFollowUps,
     skippedResumeEvidenceActions,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAuditEventsForUser: vi.fn(),
+  getInterviewCalendarSyncsForPrivacyExport: vi.fn(),
   getAllEducationEntriesForPrivacyExport: vi.fn(),
   getAllUserProjectsForPrivacyExport: vi.fn(),
   getAllUserSkillsForPrivacyExport: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./db", () => ({
   getAuditEventsForUser: mocks.getAuditEventsForUser,
+  getInterviewCalendarSyncsForPrivacyExport: mocks.getInterviewCalendarSyncsForPrivacyExport,
   getAllEducationEntriesForPrivacyExport: mocks.getAllEducationEntriesForPrivacyExport,
   getAllUserProjectsForPrivacyExport: mocks.getAllUserProjectsForPrivacyExport,
   getAllUserSkillsForPrivacyExport: mocks.getAllUserSkillsForPrivacyExport,
@@ -62,13 +64,20 @@ describe("privacy data export", () => {
       status: "completed",
       completionEvidence: "user_attested_manual_removal",
     }]);
+    mocks.getInterviewCalendarSyncsForPrivacyExport.mockResolvedValue([{
+      interviewId: 8,
+      provider: "gmail",
+      status: "synced",
+      providerEventId: "calendar-event-8",
+    }]);
 
     const result = await buildPrivacyDataExport(17);
 
     expect(result.schemaVersion).toBe(2);
     expect(result.connectorRevocationHistory).toEqual([expect.objectContaining({ provider: "linkedin" })]);
+    expect(result.interviewCalendarSyncs).toEqual([expect.objectContaining({ providerEventId: "calendar-event-8" })]);
     expect(result.connectorAccounts[0]).not.toHaveProperty("encryptedAccessToken");
     expect(result.resumes[0]).not.toHaveProperty("fileUrl");
-    expect(result.excluded).toHaveLength(2);
+    expect(result.excluded).toHaveLength(3);
   });
 });

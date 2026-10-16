@@ -1,6 +1,6 @@
 # Hetzner Hosting
 
-Decision recorded on 2026-09-04: Robert selected Hetzner for online, multi-user Hire.AI and subsequently confirmed that he created the account. On 2026-09-05, after reporting a EUR 25 credit top-up, he explicitly authorized buying the discussed plan. The server was purchased through the authenticated Hetzner Console. OS preparation, an on-server application image build and a private database installation have since been verified below. The application is not serving users; domain and production provider configuration remain open.
+Decision recorded on 2026-09-04: Robert selected Hetzner for online, multi-user Hire.AI and subsequently confirmed that he created the account. On 2026-09-05, after reporting a EUR 25 credit top-up, he explicitly authorized buying the discussed plan. The server was purchased through the authenticated Hetzner Console. OS preparation, an on-server application image build and a private database installation were verified at that time. The selected hostname is `013-hire.ai.noodzakelijkonline.de`, and DNS resolves to `159.69.55.178`; the application is not verified as serving users, and production provider configuration remains open. See the dated reachability observations below and in [Production Acceptance](PRODUCTION_ACCEPTANCE.md).
 
 ## Purchased Server
 
@@ -43,6 +43,13 @@ This supersedes only the 2026-09-05 observation that administrator-side TCP
 connections to ports 80 and 443 timed out. The earlier result is retained as a
 dated historical observation.
 
+On 2026-10-15, a later administrator-workstation probe resolved the same
+hostname to `159.69.55.178` and connected on TCP/22, while TCP/80 and TCP/443
+failed. HTTPS to an unrelated control site succeeded from that workstation. No
+SSH authentication or firewall change was attempted. This newer observation
+supersedes the 2026-10-14 web-port/TLS result only for that probe path and time;
+it does not establish the cause or the current state from another network.
+
 ## Verified OS Preparation
 
 On 2026-09-05 (Europe/Amsterdam; the server reports UTC), authenticated administration confirmed Ubuntu 24.04.4, approximately 1.9 GiB RAM, no swap and approximately 35 GiB available on the root filesystem. The initial `/opt` directory was empty and only SSH and the system resolver were listening on TCP. These are host observations, not an application capacity test.
@@ -66,7 +73,7 @@ Continued on 2026-09-05 using the approved server, without enabling paid backups
 - The initializer tests passed for repeat-run preservation, owner-only permissions, rejection of inconsistent existing configuration and rejection of a symlinked secrets directory. Merged Compose assertions verified loopback-only application publishing, no database publishing, a read-only application filesystem, dropped capabilities and disabled schedulers.
 - On 2026-09-05, additional path-safety tests first reproduced unsafe ancestor traversal and unintended permission changes in disposable test directories. The repaired initializer then passed all six test groups on this Ubuntu host: unsafe/non-canonical paths, symlink ancestors, existing non-private directories, untrusted ancestor ownership/permissions, credential preservation and inconsistent/symlink secret locations. System-path tests intercept the first write and never modify the named system directories. The updated initializer and both test scripts were copied to `/opt/hire-ai`; rerunning the real initializer preserved all five credential/environment files byte-for-byte, and MySQL remained `running/healthy`. The Linux CI job now includes both suites, but this workflow change has not yet been published or run on GitHub.
 - The production doctor and default application entry command both exited with status 1 as expected: seven required provider variables remain absent (`VITE_APP_ID`, `OAUTH_SERVER_URL`, `OAUTH_SERVER_ALLOWED_ORIGINS`, `OWNER_OPEN_ID`, `BUILT_IN_FORGE_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`), the OAuth portal is not configured and the Linux document scanner is missing. No fake values were supplied. Database/session settings passed their configuration checks.
-- `.env.production` is deliberately absent until actual provider configuration is supplied. The application Compose configuration refuses to start without it. The application is not running or publicly reachable. Domain/TLS, real sign-in, provider behavior, candidate isolation, document scanning/storage, capacity and recovery still need acceptance.
+- `.env.production` is deliberately absent until actual provider configuration is supplied. The application Compose configuration refuses to start without it. The application is not verified as running or publicly reachable. DNS is configured, but TLS, real sign-in, provider behavior, candidate isolation, document scanning/storage, capacity and recovery still need acceptance.
 
 ## Account Setup For Robert
 
@@ -74,7 +81,7 @@ Authenticated Console access and purchasing were verified. The checklist below r
 
 1. Open [Hetzner Accounts](https://accounts.hetzner.com/login), choose **Register now**, enter your own account and billing details, and confirm your email address. Complete any verification directly with Hetzner, not in chat.
 2. Enable two-factor authentication and store recovery information privately. Handle payment details directly in your account.
-3. The CPX12 purchase and quote are recorded above. Domain and secure deployment access remain open. Do not paste passwords, API tokens, private SSH keys or identity documents into chat or repository files.
+3. The CPX12 purchase and quote are recorded above, and the selected hostname/DNS record are documented above. Secure authenticated host access and deployment remain open. Do not paste passwords, API tokens, private SSH keys or identity documents into chat or repository files.
 
 Registration requirements and navigation are documented in [Hetzner's account guide](https://docs.hetzner.com/general/billing-and-account-management/account-getting-started/).
 
@@ -107,8 +114,8 @@ Network and application requirements:
 
 ## Provisioning And Release Sequence
 
-1. Account access, CPX12 purchase and infrastructure start are complete. Select the domain and establish secure administration without exposing credentials.
-2. OS access, the private database, image build and locally generated secrets are verified above. Complete TLS and real provider settings. The admin-only firewall remains applied; public web rules must wait for the intended deployment. The [Hetzner Compose files](../deploy/hetzner/README.md) define the private installation, not a completed public release.
+1. Account access, CPX12 purchase and infrastructure start are complete. The selected hostname and DNS A record are documented above. Establish secure administration without exposing credentials.
+2. OS access, the private database, image build and locally generated secrets were verified above on 2026-09-05. Complete TLS and real provider settings. The admin-only firewall was verified on that date; its current state and public web rules require authenticated inspection before any change. The [Hetzner Compose files](../deploy/hetzner/README.md) define the private installation, not a completed public release.
 3. Build an immutable image from the reviewed revision, run migrations explicitly, and validate its runtime schema using the commands in the [Operator Runbook](OPERATOR_RUNBOOK.md#deployment).
 4. Verify readiness and real sign-in, account isolation, private resume upload/scanning, provider callbacks and error recovery. Never use the sample-data preview as this evidence.
 5. Perform an off-host database and object-storage backup/restore drill against an isolated target. Hetzner server backups do **not** include attached Volumes; they do not replace a separate private-object and database recovery plan. See [Hetzner backup scope](https://docs.hetzner.com/cloud/servers/backups-snapshots/overview/).
@@ -116,4 +123,4 @@ Network and application requirements:
 
 ## Current Boundary
 
-The server image build, private database migrations/schema and post-reboot database health are verified. The application correctly refuses startup with the currently missing production configuration. No healthy application service, DNS, TLS, real identity/provider journey, load or backup/restore acceptance has been demonstrated. The domain remains undecided. The work remains local and on the authorized host, not a newly published Git revision.
+The server image build, private database migrations/schema and post-reboot database health were verified on 2026-09-05. They are historical host evidence, not proof of current application health. The selected hostname has a documented DNS A record, but the latest administrator-workstation probe did not reach ports 80/443. No healthy application service, TLS, real identity/provider journey, load or backup/restore acceptance has been demonstrated. The work remains local and on the authorized host, not a newly published Git revision.

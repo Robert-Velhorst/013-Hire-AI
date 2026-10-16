@@ -64,7 +64,11 @@ describe("uncertain follow-up mailbox delivery", () => {
         jobTitle: "Product Engineer",
         company: "Example Co",
       }],
-      [{ id: 89, status: "approved" }],
+      [{
+        id: 89,
+        status: "approved",
+        payload: JSON.stringify({ message: "Hello,\n\nI wanted to follow up.", purpose: "routine_follow_up" }),
+      }],
       [{ applicationId: 73 }],
     ];
     const where = vi.fn(async () => [{ affectedRows: 1 }]);

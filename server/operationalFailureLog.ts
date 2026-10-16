@@ -11,6 +11,8 @@ const PERSISTENCE_DELAY_MS = 1_000;
 const PERSISTENCE_RETRY_MS = 5_000;
 const processStartedAt = new Date().toISOString();
 const failureSignals = new Map<string, OperationalFailureSignal>();
+const failureSignalIds = new Map<string, number>();
+let nextFailureSignalId = 1;
 const pendingPersistence = new Map<string, OperationalFailureSignal>();
 type PersistenceSink = (signals: OperationalFailureSignal[]) => Promise<void>;
 let persistenceSink: PersistenceSink | null = null;
@@ -122,6 +124,7 @@ function recordOperationalFailure(scope: string, operation: string, occurredAt =
     firstOccurredAt: timestamp,
     lastOccurredAt: timestamp,
   });
+  failureSignalIds.set(key, nextFailureSignalId++);
 }
 
 export function configureOperationalFailurePersistence(sink: PersistenceSink | null): void {
@@ -166,8 +169,35 @@ export function getOperationalFailureSnapshot(limit = 20) {
   };
 }
 
+export function getOperationalFailureSnapshotPage(limit = 20, cursorId?: number) {
+  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const rows = Array.from(failureSignals.entries())
+    .map(([key, signal]) => ({ ...signal, id: failureSignalIds.get(key)! }))
+    .filter((signal) => cursorId === undefined || signal.id < cursorId)
+    .sort((left, right) => right.id - left.id);
+  const page = rows.slice(0, boundedLimit + 1);
+  const signals = page.slice(0, boundedLimit);
+  const hasMore = page.length > boundedLimit;
+  return {
+    processStartedAt,
+    totalFailures: Array.from(failureSignals.values())
+      .reduce((total, signal) => total + signal.count, 0),
+    uniqueSignals: failureSignals.size,
+    signals: signals.map((signal) => ({
+      ...signal,
+      firstOccurredAt: new Date(signal.firstOccurredAt).toISOString(),
+      lastOccurredAt: new Date(signal.lastOccurredAt).toISOString(),
+    })),
+    limit: boundedLimit,
+    hasMore,
+    nextCursor: hasMore && signals.length > 0 ? { id: signals[signals.length - 1]!.id } : null,
+  };
+}
+
 export function clearOperationalFailuresForTests(): void {
   failureSignals.clear();
+  failureSignalIds.clear();
+  nextFailureSignalId = 1;
   pendingPersistence.clear();
   configureOperationalFailurePersistence(null);
 }

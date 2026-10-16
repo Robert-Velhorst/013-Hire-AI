@@ -5,6 +5,7 @@ import {
   adminReviewItems,
   applicationApprovals,
   applicationAttempts,
+  applicationEmailDeliveries,
   applicationCampaigns,
   applicationDecisions,
   applicationMaterials,
@@ -21,6 +22,7 @@ import {
   followUps,
   inboxResponseCandidates,
   interviewPreparation,
+  interviewCalendarSyncs,
   interviewSchedules,
   jobAlerts,
   jobMatches,
@@ -66,11 +68,13 @@ export const privacyFinalizerPolicyTables = [
   "audit_events",
   "admin_review_items",
   "application_approvals",
+  "application_email_deliveries",
   "application_campaigns",
   "autonomous_run_states",
   "cloud_resume_candidates",
   "job_matches",
   "interview_preparation",
+  "interview_calendar_syncs",
   "follow_ups",
   "inbox_response_candidates",
   "user_resumes",
@@ -302,6 +306,12 @@ export async function finalizePrivacyErasure(
 
       if (applicationIds.length > 0) {
         await remove(
+          "application_email_deliveries",
+          tx
+            .delete(applicationEmailDeliveries)
+            .where(inArray(applicationEmailDeliveries.applicationId, applicationIds))
+        );
+        await remove(
           "application_materials",
           tx
             .delete(applicationMaterials)
@@ -401,6 +411,7 @@ export async function finalizePrivacyErasure(
           userConnectorAccounts.userId,
         ],
         ["user_profiles", userProfiles, userProfiles.userId],
+        ["interview_calendar_syncs", interviewCalendarSyncs, interviewCalendarSyncs.userId],
       ] as const;
       for (const [name, table, userColumn] of erasableDirect) {
         await remove(name, tx.delete(table).where(eq(userColumn, run.userId)));

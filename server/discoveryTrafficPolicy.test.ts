@@ -124,4 +124,28 @@ describe("discovery traffic policy", () => {
     });
     expect(localScanner.status).toBe(0);
   });
+
+  it("requires remote scanner allowlists in development while permitting local loopback", () => {
+    const env = {
+      ...process.env,
+      NODE_ENV: "development",
+      FILE_MALWARE_SCAN_MODE: "http",
+      FILE_MALWARE_SCAN_URL: "https://scanner.example.test/scan",
+      FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "",
+    };
+    const remote = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+      cwd: process.cwd(), env, encoding: "utf8",
+    });
+    expect(remote.stdout).toContain("FAIL document malware scanning");
+
+    const local = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+      cwd: process.cwd(),
+      env: {
+        ...env,
+        FILE_MALWARE_SCAN_URL: "http://127.0.0.1:39999/scan",
+      },
+      encoding: "utf8",
+    });
+    expect(local.stdout).toContain("PASS document malware scanning");
+  });
 });

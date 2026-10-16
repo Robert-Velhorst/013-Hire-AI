@@ -147,6 +147,20 @@ const OPTIONAL_PROVIDER_SEND_SCOPES: Partial<Record<OAuthConnectorProvider, {
   },
 };
 
+const OPTIONAL_PROVIDER_CALENDAR_SCOPES: Partial<Record<OAuthConnectorProvider, {
+  consentScope: string;
+  providerScope: string;
+}>> = {
+  gmail: {
+    consentScope: "calendar.events.write",
+    providerScope: "https://www.googleapis.com/auth/calendar.events",
+  },
+  outlook: {
+    consentScope: "calendar.events.write",
+    providerScope: "Calendars.ReadWrite",
+  },
+};
+
 export function getProviderScopesForConnectorConsent(
   provider: OAuthConnectorProvider,
   consentScopes: readonly string[] = []
@@ -155,6 +169,10 @@ export function getProviderScopesForConnectorConsent(
   const optionalSendScope = OPTIONAL_PROVIDER_SEND_SCOPES[provider];
   if (optionalSendScope && consentScopes.includes(optionalSendScope.consentScope)) {
     scopes.push(optionalSendScope.providerScope);
+  }
+  const optionalCalendarScope = OPTIONAL_PROVIDER_CALENDAR_SCOPES[provider];
+  if (optionalCalendarScope && consentScopes.includes(optionalCalendarScope.consentScope)) {
+    scopes.push(optionalCalendarScope.providerScope);
   }
   return scopes;
 }

@@ -1,12 +1,14 @@
 # Source Intelligence
 
-Updated: 2026-10-09.
+Updated: 2026-10-15.
 
 ## Purpose And Product Boundary
 
 Hire.AI aims to handle the work before a job interview: finding suitable vacancies, preparing and submitting authorized applications, following up, scheduling, and preparing the candidate. The candidate conducts the interview. Current employer-portal submission remains a controlled handoff, not an implemented universal unattended service.
 
-The source register is an incremental foundation for global coverage, not an exhaustive inventory of every platform. It contains 90 entries, including 28 newly added public-API and regional entries. Nine sources are enabled by current collection policy. A listed platform is not automatically a working integration.
+The source register is an incremental foundation for global coverage, not an exhaustive inventory of every platform. It contains 90 entries, including 28 newly added public-API and regional entries. Eight sources are enabled by current collection policy. A listed platform is not automatically a working integration.
+
+Remotive remains cataloged but is excluded from unattended ingestion. Its published [API terms](https://remotive.com/remote-jobs/api) restrict displaying listings to collect signups and direct this use to a private paid API; its [Terms of Use](https://support.remotive.com/en/article/terms-of-service-u4kbkf/) restrict automated extraction and redistribution. Re-enable collection only after provider approval or a suitable agreement is documented.
 
 ## User Workflow
 

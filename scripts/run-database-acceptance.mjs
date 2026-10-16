@@ -3,6 +3,9 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import mysql from "mysql2/promise";
+import { readMigrationFiles } from "drizzle-orm/migrator";
+import { planPendingMigrations } from "./database-migration-plan.mjs";
 import { verifyDatabaseAcceptanceReport } from "./database-acceptance-report.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -32,6 +35,47 @@ async function findIntegrationSuites(directory, relativeToRoot = "") {
   return files.flat().sort();
 }
 
+async function assertAcceptanceMigrationsCurrent(databaseUrl) {
+  const migrations = readMigrationFiles({
+    migrationsFolder: path.join(root, "drizzle"),
+  });
+  const connection = await mysql.createConnection({
+    uri: databaseUrl,
+    connectTimeout: 15_000,
+  });
+  try {
+    const [rows] = await connection.query(
+      "SELECT hash, created_at FROM `__drizzle_migrations`"
+    );
+    const migrationRows = Array.isArray(rows) ? rows : [];
+    const latestCreatedAt = migrationRows.reduce(
+      (latest, row) => Math.max(latest, Number(row.created_at) || 0),
+      0
+    );
+    const pending = planPendingMigrations(
+      migrations,
+      migrationRows.map(row => String(row.hash)),
+      latestCreatedAt
+    );
+    if (pending.length > 0) {
+      throw new Error(
+        "Acceptance database is missing " +
+          pending.length +
+          " migration(s). Run pnpm db:migrate against this isolated database, then retry."
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Acceptance database is missing")) {
+      throw error;
+    }
+    throw new Error(
+      "Could not verify the acceptance database migration ledger. Create and migrate the isolated database with `pnpm db:migrate` before running acceptance tests."
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
 let allowed = false;
 try {
   const target = new URL(process.env.DATABASE_URL || "");
@@ -51,7 +95,7 @@ if (!allowed) {
   process.exitCode = 1;
 } else {
   let temporaryDirectory;
-  let reportPath = process.env.HIRE_AI_DATABASE_ACCEPTANCE_REPORT;
+  let reportPath;
   try {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     const suites = manifest.suites;
@@ -95,14 +139,12 @@ if (!allowed) {
       );
     }
 
-    if (!reportPath) {
-      temporaryDirectory = await mkdtemp(
-        path.join(os.tmpdir(), "hire-ai-db-acceptance-")
-      );
-      reportPath = path.join(temporaryDirectory, "report.json");
-    } else {
-      reportPath = path.resolve(root, reportPath);
-    }
+    await assertAcceptanceMigrationsCurrent(process.env.DATABASE_URL);
+
+    temporaryDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "hire-ai-db-acceptance-")
+    );
+    reportPath = path.join(temporaryDirectory, "report.json");
 
     console.log(
       `Running ${approvedSuites.length} approved integration suites against isolated MySQL.`

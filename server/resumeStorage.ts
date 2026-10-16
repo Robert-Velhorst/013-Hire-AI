@@ -5,8 +5,16 @@
 
 import { storageDelete, storagePut, storageGet } from "./storage";
 import { getDb } from "./db";
-import { userProfiles, userResumes, users } from "../drizzle/schema";
-import { eq, desc, and, lt, or } from "drizzle-orm";
+import {
+  applicationApprovals,
+  applicationEmailDeliveries,
+  applicationMaterials,
+  auditEvents,
+  userProfiles,
+  userResumes,
+  users,
+} from "../drizzle/schema";
+import { eq, desc, and, inArray, lt, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { RESUME_MIME_TYPES, validateUploadedFile } from "./uploadValidation";
 import { logOperationalFailure } from "./operationalFailureLog";
@@ -356,8 +364,82 @@ export async function deleteResumeVersion(userId: number, version: number, resum
   const resume = await getResumeVersion(userId, version);
   if (!resume || resume.id !== resumeId) return false;
 
-  // Remove the private object first. Keep the ledger record if storage cleanup
-  // fails so the file remains discoverable and can be retried by the user.
+  const cleanup = await db.transaction(async (tx) => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for("update");
+    const target = await tx.select({ id: userResumes.id, fileKey: userResumes.fileKey })
+      .from(userResumes)
+      .where(and(eq(userResumes.userId, userId), eq(userResumes.id, resume.id), eq(userResumes.fileKey, resume.fileKey)))
+      .limit(1)
+      .for("update");
+    if (!target[0]) return false;
+    const deliveries = await tx.select().from(applicationEmailDeliveries)
+      .where(and(
+        eq(applicationEmailDeliveries.userId, userId),
+        eq(applicationEmailDeliveries.resumeId, resume.id)
+      ))
+      .for("update");
+    if (deliveries.some((delivery) => delivery.status === "sending")) {
+      throw new Error("This resume cannot be deleted while its approved application email is being sent.");
+    }
+    const applicationIds = deliveries.map((delivery) => delivery.applicationId);
+    await tx.update(applicationMaterials).set({ resumeId: null })
+      .where(eq(applicationMaterials.resumeId, resume.id));
+    await tx.update(applicationEmailDeliveries).set({ status: "cancelled" }).where(and(
+      eq(applicationEmailDeliveries.userId, userId),
+      eq(applicationEmailDeliveries.resumeId, resume.id),
+      inArray(applicationEmailDeliveries.status, ["draft", "pending_approval", "ready", "failed", "cancelled"])
+    ));
+    await tx.update(applicationEmailDeliveries).set({
+      resumeFileKey: "",
+      resumeFileName: "[deleted]",
+      resumeMimeType: "application/octet-stream",
+      resumeSize: 0,
+      resumeSha256: "",
+      messageSha256: "",
+      failureMessage: null,
+    }).where(and(
+      eq(applicationEmailDeliveries.userId, userId),
+      eq(applicationEmailDeliveries.resumeId, resume.id)
+    ));
+    if (applicationIds.length > 0) {
+      const revoked = await tx.update(applicationApprovals).set({
+        status: "cancelled",
+        decidedBy: "user",
+        decisionNote: "The approved resume was deleted; this email approval is no longer valid.",
+        decidedAt: new Date(),
+        payload: null,
+      }).where(and(
+        eq(applicationApprovals.userId, userId),
+        eq(applicationApprovals.approvalType, "application_email_submission"),
+        inArray(applicationApprovals.applicationId, applicationIds),
+        inArray(applicationApprovals.status, ["pending", "approved"])
+      ));
+      await tx.update(applicationApprovals).set({ payload: null }).where(and(
+        eq(applicationApprovals.userId, userId),
+        eq(applicationApprovals.approvalType, "application_email_submission"),
+        inArray(applicationApprovals.applicationId, applicationIds)
+      ));
+      await tx.insert(auditEvents).values({
+        userId,
+        entityType: "user",
+        entityId: userId,
+        action: "resume_version_deleted_email_drafts_revoked",
+        actor: "user",
+        source: "resumeStorage.deleteResumeVersion",
+        afterState: JSON.stringify({
+          resumeVersion: version,
+          affectedEmailDrafts: deliveries.filter((delivery) => !["sent", "unknown"].includes(delivery.status)).length,
+          revokedApprovals: Number(revoked[0].affectedRows),
+        }),
+        riskLevel: "high",
+      });
+    }
+    return true;
+  });
+  if (!cleanup) return false;
+
+  // Invalidate unsent drafts before deleting storage so a concurrent send
+  // cannot reserve the file while the user's deletion is in progress.
   await storageDelete(resume.fileKey);
 
   return await db.transaction(async (tx) => {

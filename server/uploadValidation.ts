@@ -7,6 +7,12 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
+import {
+  getWindowsDefenderExecutableCandidates,
+  getWindowsDefenderLocations,
+} from "@shared/windowsDefenderPaths.mjs";
+
+export { getWindowsDefenderExecutableCandidates, getWindowsDefenderLocations };
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
 const DEFAULT_SCAN_TIMEOUT_MS = 30_000;
@@ -113,25 +119,17 @@ async function acquireScanPermit() {
 }
 
 async function findWindowsDefenderExecutable() {
-  const candidates = [
-    process.env.ProgramFiles
-      ? join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe")
-      : "",
-  ].filter(Boolean);
-  const platformRoot = process.env.ProgramData
-    ? join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform")
-    : "";
-  if (platformRoot && existsSync(platformRoot)) {
-    const versions = (await readdir(platformRoot, { withFileTypes: true }))
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name)
-      .sort((left, right) =>
-        right.localeCompare(left, undefined, { numeric: true })
-      );
-    candidates.unshift(
-      ...versions.map(version => join(platformRoot, version, "MpCmdRun.exe"))
-    );
-  }
+  const locations = getWindowsDefenderLocations();
+  if (!locations) return null;
+  const versions = existsSync(locations.platformRoot)
+    ? (await readdir(locations.platformRoot, { withFileTypes: true }))
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+    : [];
+  const candidates = getWindowsDefenderExecutableCandidates(
+    locations,
+    versions
+  );
   return candidates.find(candidate => existsSync(candidate)) ?? null;
 }
 

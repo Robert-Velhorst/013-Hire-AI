@@ -12,6 +12,14 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $node = Get-Command node.exe -ErrorAction Stop
 $npm = Get-Command npm.cmd -ErrorAction Stop
+$environmentNames = @('NODE_ENV', 'PORT', 'HOST')
+$previousEnvironment = @{}
+foreach ($name in $environmentNames) {
+    $previousEnvironment[$name] = @{
+        wasSet = Test-Path "Env:$name"
+        value = [Environment]::GetEnvironmentVariable($name, 'Process')
+    }
+}
 
 Push-Location $repoRoot
 try {
@@ -121,5 +129,12 @@ try {
         }
     }
 } finally {
+    foreach ($name in $environmentNames) {
+        if ($previousEnvironment[$name].wasSet) {
+            [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name].value, 'Process')
+        } else {
+            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+        }
+    }
     Pop-Location
 }

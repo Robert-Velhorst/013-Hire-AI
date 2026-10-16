@@ -36,6 +36,9 @@ describe("production container packaging", () => {
       "COPY --from=build /app/scripts/doctor.mjs ./scripts/doctor.mjs"
     );
     expect(dockerfile).toContain(
+      "COPY --from=build /app/shared/windowsDefenderPaths.mjs ./shared/windowsDefenderPaths.mjs"
+    );
+    expect(dockerfile).toContain(
       "COPY --from=build /app/scripts/database-migrate.mjs ./scripts/database-migrate.mjs"
     );
     expect(dockerfile).toContain(

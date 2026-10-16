@@ -13,6 +13,7 @@ import { getInterviewSchedulingControl, type InterviewSchedulingRequirement } fr
 import { getOfferOperatingSummary, type OfferOperatingStatus } from "@/lib/offerOperatingSummary";
 import { getApplicationNextActions, type ApplicationNextActionId } from "@/lib/applicationNextActions";
 import { getApplicationEvidenceGateSummary } from "@/lib/applicationEvidenceGates";
+import { createInterviewCalendarFile } from "@/lib/interviewCalendar";
 import { getSafeExternalUrl, openExternalUrl } from "@/lib/externalUrl";
 import { formatJobSalary } from "@/lib/jobSalary";
 import { formatCalendarDate } from "@/lib/calendarDate";
@@ -21,6 +22,7 @@ import { APPLICATION_LEDGER_WINDOW_LIMITS } from "@shared/applicationLedgerWindo
 import { useLocation } from "wouter";
 import AppHeader from "@/components/AppHeader";
 import { ReportHireDialog } from "@/components/ReportHireDialog";
+import { ApplicationEmailSubmissionPanel } from "@/components/ApplicationEmailSubmissionPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +39,7 @@ import { toast } from "sonner";
 import {
   Activity,
   Send,
+  CalendarPlus,
   Clock,
   CheckCircle,
   XCircle,
@@ -175,7 +178,7 @@ export default function Applications() {
   const [activeTab, setActiveTab] = useState<ApplicationPipelineTab>("all");
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [followUpApplicationId, setFollowUpApplicationId] = useState<number | null>(null);
-  const [followUpDraftPurpose, setFollowUpDraftPurpose] = useState<"routine_follow_up" | "employer_reply">("routine_follow_up");
+  const [followUpDraftPurpose, setFollowUpDraftPurpose] = useState<"routine_follow_up" | "employer_reply" | "employer_clarification">("routine_follow_up");
   const [followUpSourceResponseId, setFollowUpSourceResponseId] = useState<number | null>(null);
   const [confirmingFollowUpSentId, setConfirmingFollowUpSentId] = useState<number | null>(null);
   const [followUpDeliveryConfirmation, setFollowUpDeliveryConfirmation] = useState("");
@@ -231,6 +234,7 @@ export default function Applications() {
     () => applicationPages?.pages.map((page) => page.items).flat() ?? [],
     [applicationPages]
   );
+  const { data: connectorAccounts = [] } = trpc.connectors.list.useQuery(undefined, { enabled: Boolean(user) });
   const { data: applicationSummary } = trpc.applications.getSummary.useQuery();
   const { data: deepLinkedApplication } = trpc.applications.getById.useQuery(
     { applicationId: applicationDeepLink?.applicationId ?? 1 },
@@ -296,6 +300,29 @@ export default function Applications() {
     [interviewPages]
   );
   const activeInterviewWindowTruncated = interviewPages?.pages[0]?.activeHasMore === true;
+  const calendarInterviewIds = useMemo(
+    () => Array.from(new Set(interviews.map((interview: any) => interview.id)
+      .filter((id: unknown): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0))).slice(0, 50),
+    [interviews]
+  );
+  const {
+    data: interviewCalendarSyncStatuses = [],
+    refetch: refetchInterviewCalendarSyncStatuses,
+  } = trpc.applications.getInterviewCalendarSyncStatuses.useQuery(
+    { interviewIds: calendarInterviewIds.length > 0 ? calendarInterviewIds : [1] },
+    { enabled: Boolean(selectedApplication) && calendarInterviewIds.length > 0 },
+  );
+  const interviewCalendarSyncStatusMap = useMemo(
+    () => new Map(interviewCalendarSyncStatuses.map((record) => [`${record.interviewId}:${record.provider}`, record])),
+    [interviewCalendarSyncStatuses]
+  );
+  const syncInterviewCalendarMutation = trpc.applications.syncInterviewCalendar.useMutation({
+    onSuccess: async ({ status }) => {
+      toast.success(t(status === "synced" ? "calendarSyncSynced" : "calendarSyncCancelled"));
+      await refetchInterviewCalendarSyncStatuses();
+    },
+    onError: (error) => toast.error(error.message || t("calendarSyncFailed")),
+  });
   const {
     data: approvals,
     refetch: refetchApprovals,
@@ -383,7 +410,13 @@ export default function Applications() {
   });
   const createFollowUpMutation = trpc.applications.createFollowUp.useMutation({
     onSuccess: () => {
-      toast.success(t(followUpDraftPurpose === "employer_reply" ? "employerReplyDraftSaved" : "followUpDraftSaved"));
+      toast.success(t(
+        followUpDraftPurpose === "employer_reply"
+          ? "employerReplyDraftSaved"
+          : followUpDraftPurpose === "employer_clarification"
+            ? "employerClarificationDraftSaved"
+            : "followUpDraftSaved"
+      ));
       setFollowUpDraft("");
       setFollowUpApplicationId(null);
       setFollowUpDraftPurpose("routine_follow_up");
@@ -680,6 +713,8 @@ export default function Applications() {
       approval.entityId === followUpId &&
       approval.approvalType === "follow_up_send"
     );
+  const confirmingEmployerClarification =
+    getFollowUpApproval(confirmingFollowUpSentId || -1)?.title === "Clarify compensation before applying";
 
   const getApplicationSubmissionApproval = (applicationId: number) =>
     approvals?.find((approval) =>
@@ -956,10 +991,10 @@ export default function Applications() {
       return;
     }
 
-    const followUp = followUps.find((item: any) => !item.sentDate);
-    const approval = followUp
-      ? approvals?.find((item: any) => item.entityType === "follow_up" && item.entityId === followUp.id && item.approvalType === "follow_up_send")
-      : null;
+    const followUp = followUps.find((item: any) =>
+      !item.sentDate && getFollowUpApproval(item.id)?.status === "approved"
+    );
+    const approval = followUp ? getFollowUpApproval(followUp.id) : null;
 
     setPendingFollowUpSendApplicationId(null);
     if (!followUp || approval?.status !== "approved") {
@@ -968,7 +1003,11 @@ export default function Applications() {
     }
 
     setFollowUpDeliveryConfirmation("");
-    setFollowUpMailRecipient("");
+    setFollowUpMailRecipient(
+      approval?.title === "Clarify compensation before applying"
+        ? selectedApplication.job?.applicationEmail || ""
+        : ""
+    );
     setConfirmingFollowUpSentId(followUp.id);
   }, [approvals, followUps, pendingFollowUpSendApplicationId, selectedApplication?.id]);
 
@@ -1044,6 +1083,51 @@ export default function Applications() {
       interviewerTitle: interviewerTitle.trim() || undefined,
       notes: interviewNotes.trim() || undefined,
     });
+  };
+
+  const downloadInterviewCalendarEvent = (interview: any) => {
+    try {
+      const { content, filename } = createInterviewCalendarFile({
+        id: interview.id,
+        company: selectedApplication?.job?.company,
+        jobTitle: selectedApplication?.job?.title,
+        interviewType: interview.interviewType,
+        scheduledAt: interview.scheduledAt,
+        duration: interview.duration,
+        location: interview.location,
+        meetingLink: interview.meetingLink,
+        interviewerName: interview.interviewerName,
+        interviewerTitle: interview.interviewerTitle,
+      });
+      const url = URL.createObjectURL(new Blob([content], { type: "text/calendar;charset=utf-8" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("calendarExportFailed"));
+    }
+  };
+
+  const hasCalendarWriteConsent = (provider: "gmail" | "outlook") => {
+    const account = connectorAccounts.find((item) => item.provider === provider);
+    if (!account || account.status !== "connected") return false;
+    try {
+      const scopes = account.consentScopes ? JSON.parse(account.consentScopes) : [];
+      return Array.isArray(scopes) && scopes.includes("calendar.events.write");
+    } catch {
+      return false;
+    }
+  };
+
+  const syncInterviewWithProvider = (interview: any, provider: "gmail" | "outlook") => {
+    const current = interviewCalendarSyncStatusMap.get(`${interview.id}:${provider}`);
+    const confirmedNoDuplicate = current?.status === "unknown"
+      ? window.confirm(t("calendarUnknownRetryConfirm"))
+      : false;
+    if (current?.status === "unknown" && !confirmedNoDuplicate) return;
+    syncInterviewCalendarMutation.mutate({ interviewId: interview.id, provider, confirmedNoDuplicate });
   };
 
   const pipelineSummary = getApplicationPipelineControlSummary(applications || [], approvals || []);
@@ -1747,6 +1831,46 @@ export default function Applications() {
                                   {activeInterview && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                       <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => downloadInterviewCalendarEvent(interview)}
+                                      >
+                                        <CalendarPlus className="mr-1 h-4 w-4" />
+                                        {t("addToCalendar")}
+                                      </Button>
+                                      {(["gmail", "outlook"] as const).map((provider) => {
+                                        if (!hasCalendarWriteConsent(provider)) return null;
+                                        const syncStatus = interviewCalendarSyncStatusMap.get(`${interview.id}:${provider}`);
+                                        return (
+                                          <div key={provider} className="flex items-center gap-2">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              disabled={syncInterviewCalendarMutation.isPending}
+                                              onClick={() => syncInterviewWithProvider(interview, provider)}
+                                            >
+                                              {syncInterviewCalendarMutation.isPending && syncInterviewCalendarMutation.variables?.interviewId === interview.id && syncInterviewCalendarMutation.variables.provider === provider
+                                                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                                : <CalendarPlus className="mr-1 h-4 w-4" />}
+                                              {t(provider === "gmail" ? "syncGoogleCalendar" : "syncOutlookCalendar")}
+                                            </Button>
+                                            {syncStatus && (
+                                              <span className="text-xs text-slate-400" role="status">
+                                                {t(syncStatus.status === "synced" ? "calendarSyncSynced"
+                                                  : syncStatus.status === "unknown" ? "calendarSyncUnknown"
+                                                    : syncStatus.status === "cancelled" ? "calendarSyncCancelled"
+                                                      : syncStatus.status === "pending" ? "calendarSyncPending" : "calendarSyncFailed")}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                      {!hasCalendarWriteConsent("gmail") && !hasCalendarWriteConsent("outlook") && (
+                                        <Button variant="ghost" size="sm" onClick={() => setLocation("/profile")}>
+                                          {t("calendarSyncUnavailable")}
+                                        </Button>
+                                      )}
+                                      <Button
                                         variant="ghost"
                                         size="sm"
                                         disabled={updateInterviewStatusMutation.isPending}
@@ -1770,6 +1894,28 @@ export default function Applications() {
                                         <XCircle className="mr-1 h-4 w-4" />
                                         {t("cancel")}
                                       </Button>
+                                    </div>
+                                  )}
+                                  {interview.status === "cancelled" && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {(["gmail", "outlook"] as const).map((provider) => {
+                                        const syncStatus = interviewCalendarSyncStatusMap.get(`${interview.id}:${provider}`);
+                                        if (!["synced", "unknown"].includes(syncStatus?.status || "") || !hasCalendarWriteConsent(provider)) return null;
+                                        return (
+                                          <Button
+                                            key={provider}
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={syncInterviewCalendarMutation.isPending}
+                                            onClick={() => syncInterviewWithProvider(interview, provider)}
+                                          >
+                                            {syncInterviewCalendarMutation.isPending && syncInterviewCalendarMutation.variables?.interviewId === interview.id && syncInterviewCalendarMutation.variables.provider === provider
+                                              ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                              : <Calendar className="mr-1 h-4 w-4" />}
+                                            {t(provider === "gmail" ? "removeFromGoogleCalendar" : "removeFromOutlookCalendar")}
+                                          </Button>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                   {interview.status === "completed" && (
@@ -1911,6 +2057,11 @@ export default function Applications() {
                         </div>
                       </>
                     )}
+
+                    <ApplicationEmailSubmissionPanel
+                      applicationId={selectedApplication.id}
+                      applicationStatus={selectedApplication.status}
+                    />
 
                     {(ledgerArtifactsLoading || ledgerArtifacts?.material || ledgerArtifacts?.interviewPreparation || (ledgerArtifacts?.attempts?.length || 0) > 0 || (ledgerArtifacts?.employerResponses?.length || 0) > 0 || (ledgerArtifacts?.auditEvents?.length || 0) > 0) && (
                       <>
@@ -2236,6 +2387,11 @@ export default function Applications() {
                                     >
                                       {getFollowUpStateLabel(followUp)}
                                     </Badge>
+                                    {approval?.title === "Clarify compensation before applying" && (
+                                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                                        {t("compensationClarificationTitle")}
+                                      </Badge>
+                                    )}
                                     {followUp.deliveryState && followUp.deliveryState !== "draft" && (
                                       <Badge
                                         data-testid="follow-up-delivery-state"
@@ -3054,9 +3210,15 @@ export default function Applications() {
                   type="email"
                   value={followUpMailRecipient}
                   onChange={(event) => setFollowUpMailRecipient(event.target.value)}
+                  readOnly={confirmingEmployerClarification}
                   className="border-slate-700 bg-slate-800 text-white"
                   placeholder="recruiter@company.com"
                 />
+                {confirmingEmployerClarification && (
+                  <p className="text-xs leading-5 text-slate-400 sm:col-span-2">
+                    {t("employerClarificationRecipientBound")}
+                  </p>
+                )}
               </div>
               <Button
                 type="button"

@@ -41,6 +41,7 @@ describe("private storage deletion", () => {
     vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://storage.example.local/api/");
     vi.stubEnv("BUILT_IN_FORGE_API_KEY", "storage-test-key");
     vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.local/scan");
+    vi.stubEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS", "https://scanner.example.local");
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ clean: true, provider: "test" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ url: "https://private.example/resume" }), { status: 200 }));

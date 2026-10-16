@@ -203,6 +203,17 @@ Use this information to:
 4. **Approve Or Skip**: Approve a manual employer handoff only after reviewing the record
 5. **Confirm Delivery**: Complete the external application yourself, then record deterministic confirmation evidence in Hire.AI
 
+### Application Email For Eligible Listings
+
+For an active, clearly fully remote listing that includes an application email, Hire.AI can prepare an email using the application cover letter and the versioned resume attached to that application. This narrow path requires a connected Gmail or Outlook account with explicit send consent.
+
+1. Open the pending application and inspect the listing-sourced recipient, subject, message, and resume attachment.
+2. Edit and save the draft if needed, then request approval for the exact content.
+3. Approve or reject the displayed recipient, message, and resume. Approval does not send anything.
+4. After approval, choose **Send approved email now** as a separate action.
+
+The email address is copied from the job posting and is not independently verified as belonging to the employer. The provider accepting a send request does not guarantee delivery to the recipient. If the provider outcome is uncertain, Hire.AI blocks retry until the mailbox is checked. Employer portals and ATS forms are not submitted by this email feature.
+
 ### Supported ATS Systems
 
 | ATS | Handoff Level | Notes |
@@ -229,7 +240,7 @@ Use this information to:
 - If an available provider revocation endpoint fails, the connector stays disabled and the encrypted grant is retained only for a later cleanup retry. The failure is recorded as high-risk audit evidence and no token value is exposed.
 - Resume versions, offer letters, and verification documents are stored as private object references, never as public asset URLs. Downloads are requested through the authenticated backend and use a fresh storage-provider URL.
 - Uploads are limited to 10 MiB and checked against allowed MIME types and file signatures. Sensitive files are scanned before storage: Microsoft Defender is used on standalone Windows, while cloud deployments use the configured HTTP scanner. A missing, timed-out, malformed, or unclean production verdict rejects the upload.
-- Deleting a resume version first removes its private storage object. Its ledger record is removed only after that cleanup succeeds; a failed deletion leaves the record intact so the user can retry.
+- Deleting a resume version first revokes associated pending email approvals, cancels unsent drafts, clears their stored file references, and detaches application material from that resume. A resume cannot be deleted during an active send. Hire.AI then removes the private storage object; if cleanup fails, the resume record remains so deletion can be retried.
 - Offer and quarterly-verification documents are compliance evidence. They remain retained while the associated success-fee obligation, verification review, payment recovery, dispute, or legal review is open. They require an operator-controlled retention decision once those obligations are closed.
 - Settings can open one idempotent account-deletion review at a time. The request can be cancelled while open and remains visible as a status; submitting it does not immediately erase data.
 - An admin resolution records the retention decision and audit trail only. Account-level connector cleanup is implemented, but bulk provider revocation, private-object deletion, database erasure, and any legally required retained evidence remain separate erasure-execution work.

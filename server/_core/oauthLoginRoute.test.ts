@@ -8,17 +8,23 @@ import { sdk } from "./sdk";
 const originalPortalUrl = ENV.oAuthPortalUrl;
 const originalCookieSecret = ENV.cookieSecret;
 const originalAppId = ENV.appId;
+const originalQaAuthEnabled = ENV.devQaAuthEnabled;
+const originalHost = process.env.HOST;
 
 describe("primary OAuth login route", () => {
   afterEach(() => {
     ENV.oAuthPortalUrl = originalPortalUrl;
     ENV.cookieSecret = originalCookieSecret;
     ENV.appId = originalAppId;
+    ENV.devQaAuthEnabled = originalQaAuthEnabled;
+    if (originalHost === undefined) delete process.env.HOST;
+    else process.env.HOST = originalHost;
     vi.restoreAllMocks();
   });
 
-  it("keeps local QA login behind the same initiation route when no portal is configured", async () => {
+  it("does not expose local QA sign-in unless explicitly enabled", async () => {
     ENV.oAuthPortalUrl = "";
+    ENV.devQaAuthEnabled = false;
     const routes = new Map<string, (req: Request, res: Response) => Promise<void> | void>();
     registerOAuthRoutes({
       get: vi.fn((path: string, ...handlers: unknown[]) => routes.set(
@@ -27,13 +33,45 @@ describe("primary OAuth login route", () => {
       )),
     } as unknown as Express);
     const redirect = vi.fn();
+    const status = vi.fn().mockReturnThis();
+    const json = vi.fn();
 
     await routes.get("/api/oauth/login")?.(
       {} as Request,
-      { redirect, status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+      { redirect, status, json } as unknown as Response
     );
 
-    expect(redirect).toHaveBeenCalledWith(302, "/api/dev/login");
+    expect(status).toHaveBeenCalledWith(503);
+    expect(json).toHaveBeenCalledWith({ error: "OAuth login is not configured" });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("shows a local QA sign-in form only for direct loopback requests when enabled", async () => {
+    ENV.oAuthPortalUrl = "";
+    ENV.devQaAuthEnabled = true;
+    process.env.HOST = "127.0.0.1";
+    const routes = new Map<string, (req: Request, res: Response) => Promise<void> | void>();
+    registerOAuthRoutes({
+      get: vi.fn((path: string, ...handlers: unknown[]) => routes.set(
+        path,
+        handlers.at(-1) as (req: Request, res: Response) => Promise<void> | void
+      )),
+    } as unknown as Express);
+    const html = vi.fn();
+    const type = vi.fn().mockReturnThis();
+
+    await routes.get("/api/oauth/login")?.(
+      {
+        protocol: "http",
+        socket: { remoteAddress: "127.0.0.1" },
+        headers: {},
+        get: vi.fn((name: string) => name.toLowerCase() === "host" ? "localhost:3000" : undefined),
+      } as unknown as Request,
+      { status: vi.fn().mockReturnThis(), type, send: html } as unknown as Response
+    );
+
+    expect(type).toHaveBeenCalledWith("html");
+    expect(html).toHaveBeenCalledWith(expect.stringContaining('<form method="post" action="/api/dev/login">'));
   });
 
   it("issues browser-bound state and exchanges the callback with its verified redirect URI", async () => {

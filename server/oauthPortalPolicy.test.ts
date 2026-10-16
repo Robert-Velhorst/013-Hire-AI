@@ -109,6 +109,23 @@ describe("OAuth endpoint production policy", () => {
     expect(result.stdout).toContain("PASS OAuth portal: trusted runtime URL configured");
   }, 15_000);
 
+  it("lists missing production variable names without printing configured values", () => {
+    const env = { ...productionEnv };
+    delete env.DATABASE_URL;
+    delete env.PUBLIC_APP_ORIGIN;
+    const result = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+      cwd: process.cwd(),
+      env,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("DATABASE_URL");
+    expect(result.stdout).toContain("PUBLIC_APP_ORIGIN");
+    expect(result.stdout).not.toContain("user:password");
+    expect(result.stdout).not.toContain("whsec_doctor");
+  }, 15_000);
+
   it.each([
     "",
     "http://auth.example.test",

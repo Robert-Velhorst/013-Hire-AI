@@ -29,8 +29,10 @@ describe("resume version integrity", () => {
     );
     expect(deletion).toContain("await db.transaction(async (tx) =>");
     expect(deletion).toContain('.where(eq(users.id, userId)).for("update")');
-    expect(deletion.indexOf("await storageDelete(resume.fileKey)")).toBeLessThan(
-      deletion.indexOf("await db.transaction(async (tx) =>")
+    expect(deletion).toContain('delivery.status === "sending"');
+    expect(deletion).toContain('status: "cancelled"');
+    expect(deletion.indexOf("const cleanup = await db.transaction(async (tx) =>")).toBeLessThan(
+      deletion.indexOf("await storageDelete(resume.fileKey)")
     );
   });
 

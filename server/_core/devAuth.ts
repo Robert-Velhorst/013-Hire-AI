@@ -1,12 +1,13 @@
 import { COOKIE_NAME } from "@shared/const";
 import type { Express, Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { getUserByOpenId, upsertUser } from "../db";
 import { seedDevAdminUser, seedDevReviewQueueUser } from "../devReviewQueueSeed";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
+import { isDevQaAuthDeploymentEnabled, isDevQaAuthWriteRequest } from "./devAuthPolicy";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
-import { getSafeRedirectPath } from "./safeRedirect";
 
 const DEV_SESSION_MS = 1000 * 60 * 60 * 6;
 const DEV_SESSION_SECRET = "hire-ai-review-queue-local-dev-secret";
@@ -23,11 +24,19 @@ function ensureDevSessionConfig() {
 }
 
 export function registerDevAuthRoutes(app: Express) {
-  if (ENV.isProduction) {
-    return;
-  }
+  if (!isDevQaAuthDeploymentEnabled()) return;
+  const devQaAuthRateLimit = rateLimit({
+    windowMs: 60_000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 
-  app.get("/api/dev/login", async (req: Request, res: Response) => {
+  app.post("/api/dev/login", devQaAuthRateLimit, async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevReviewQueueUser();
@@ -40,14 +49,18 @@ export function registerDevAuthRoutes(app: Express) {
         ...getSessionCookieOptions(req),
         maxAge: DEV_SESSION_MS,
       });
-      res.redirect(302, getSafeRedirectPath(req.query.redirect, "/dashboard"));
+      res.redirect(302, "/dashboard");
     } catch {
       logOperationalFailure("DevAuth", "Development session creation");
       res.status(500).json({ error: "Unable to create development session" });
     }
   });
 
-  app.get("/api/dev/login-suspended", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-suspended", devQaAuthRateLimit, async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       await upsertUser({
@@ -69,14 +82,18 @@ export function registerDevAuthRoutes(app: Express) {
         ...getSessionCookieOptions(req),
         maxAge: DEV_SESSION_MS,
       });
-      res.redirect(302, getSafeRedirectPath(req.query.redirect, "/dashboard"));
+      res.redirect(302, "/dashboard");
     } catch {
       logOperationalFailure("DevAuth", "Suspended development session creation");
       res.status(500).json({ error: "Unable to create suspended development session" });
     }
   });
 
-  app.get("/api/dev/login-review-queue", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-review-queue", devQaAuthRateLimit, async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevReviewQueueUser();
@@ -96,7 +113,11 @@ export function registerDevAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/dev/login-admin", async (req: Request, res: Response) => {
+  app.post("/api/dev/login-admin", devQaAuthRateLimit, async (req: Request, res: Response) => {
+    if (!isDevQaAuthWriteRequest(req)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
     try {
       ensureDevSessionConfig();
       const user = await seedDevAdminUser();

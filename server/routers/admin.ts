@@ -8,7 +8,7 @@ import {
   getDb,
   getAdminMemoryFallback,
   getAdminReviewEvidenceSnapshot,
-  getOperationalFailureMonitoringSnapshot,
+  getOperationalFailureMonitoringPage,
   listActiveAdminReviewItemsForEntity,
   resolveAdminReviewItem,
 } from "../db";
@@ -48,9 +48,12 @@ function stripeActionForFeeStatus(currentStatus: string, requestedStatus: string
 
 export const adminRouter = router({
   getOperationalFailures: adminProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }).optional())
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(20),
+      cursor: z.object({ id: z.number().int().positive() }).strict().optional(),
+    }).optional())
     .query(async ({ input }) => {
-      return await getOperationalFailureMonitoringSnapshot(input?.limit ?? 20);
+      return await getOperationalFailureMonitoringPage(input?.limit ?? 20, input?.cursor);
     }),
 
   getReviewQueue: adminProcedure
@@ -100,11 +103,23 @@ export const adminRouter = router({
     }),
 
   getSuccessFeeHolds: adminProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional())
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      return await db.select({
+      const cursor = input?.cursor;
+      const limit = input?.limit ?? 50;
+      const conditions = [
+        isNull(successFeeHolds.resolvedAt),
+        ...(cursor ? [or(
+          lt(successFeeHolds.createdAt, cursor.timestamp),
+          and(eq(successFeeHolds.createdAt, cursor.timestamp), lt(successFeeHolds.id, cursor.id))
+        )!] : []),
+      ];
+      const [rows, totalRows] = await Promise.all([db.select({
         id: successFeeHolds.id,
         successFeeId: successFeeHolds.successFeeId,
         holdType: successFeeHolds.holdType,
@@ -117,9 +132,16 @@ export const adminRouter = router({
       })
         .from(successFeeHolds)
         .innerJoin(successFees, eq(successFeeHolds.successFeeId, successFees.id))
-        .where(isNull(successFeeHolds.resolvedAt))
+        .where(and(...conditions))
         .orderBy(desc(successFeeHolds.createdAt), desc(successFeeHolds.id))
-        .limit(input?.limit ?? 50);
+        .limit(limit + 1),
+      db.select({ count: sql<number>`COUNT(*)` })
+        .from(successFeeHolds)
+        .where(isNull(successFeeHolds.resolvedAt))]);
+      return createAdminCursorPage(rows, limit, Number(totalRows[0]?.count ?? 0), (hold) => ({
+        timestamp: hold.createdAt,
+        id: hold.id,
+      }));
     }),
 
   getOperatingCounts: adminProcedure.query(async () => {
@@ -184,10 +206,24 @@ export const adminRouter = router({
     };
   }),
 
-  getStripeReconciliationStatus: adminProcedure.query(async () => {
+  getStripeReconciliationStatus: adminProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }).optional())
+    .query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [counts, commands] = await Promise.all([
+    const limit = input?.limit ?? 50;
+    const activeStatuses = ["pending", "processing", "failed"] as const;
+    const conditions = [
+      inArray(stripeReconciliationCommands.status, activeStatuses),
+      ...(input?.cursor ? [or(
+        lt(stripeReconciliationCommands.createdAt, input.cursor.timestamp),
+        and(eq(stripeReconciliationCommands.createdAt, input.cursor.timestamp), lt(stripeReconciliationCommands.id, input.cursor.id))
+      )!] : []),
+    ];
+    const [counts, commands, commandTotalRows] = await Promise.all([
       db.select({
         pending: sql<number>`SUM(CASE WHEN ${stripeReconciliationCommands.status} = 'pending' THEN 1 ELSE 0 END)`,
         processing: sql<number>`SUM(CASE WHEN ${stripeReconciliationCommands.status} = 'processing' THEN 1 ELSE 0 END)`,
@@ -205,24 +241,48 @@ export const adminRouter = router({
         lastAttemptAt: stripeReconciliationCommands.lastAttemptAt,
         createdAt: stripeReconciliationCommands.createdAt,
       }).from(stripeReconciliationCommands)
-        .where(inArray(stripeReconciliationCommands.status, ["pending", "processing", "failed"]))
+        .where(and(...conditions))
         .orderBy(desc(stripeReconciliationCommands.createdAt), desc(stripeReconciliationCommands.id))
-        .limit(50),
+        .limit(limit + 1),
+      db.select({ count: sql<number>`COUNT(*)` }).from(stripeReconciliationCommands)
+        .where(inArray(stripeReconciliationCommands.status, activeStatuses)),
     ]);
+    const commandPage = createAdminCursorPage(
+      commands,
+      limit,
+      Number(commandTotalRows[0]?.count ?? 0),
+      (command) => ({ timestamp: command.createdAt, id: command.id })
+    );
     return {
       pending: Number(counts[0]?.pending ?? 0),
       processing: Number(counts[0]?.processing ?? 0),
       failed: Number(counts[0]?.failed ?? 0),
-      commands,
+      commands: commandPage.items,
+      commandTotal: commandPage.total,
+      commandHasMore: commandPage.hasMore,
+      commandNextCursor: commandPage.nextCursor,
     };
   }),
 
   getStripeWebhookIssues: adminProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional())
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      cursor: adminTimestampIdCursorSchema.optional(),
+    }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      return await db.select({
+      const limit = input?.limit ?? 50;
+      const cursor = input?.cursor;
+      const issueStatus = inArray(stripeWebhookEvents.status, ["failed", "quarantined"]);
+      const conditions = [
+        issueStatus,
+        ...(cursor ? [or(
+          lt(stripeWebhookEvents.receivedAt, cursor.timestamp),
+          and(eq(stripeWebhookEvents.receivedAt, cursor.timestamp), lt(stripeWebhookEvents.id, cursor.id))
+        )!] : []),
+      ];
+      const [rows, totalRows] = await Promise.all([db.select({
         id: stripeWebhookEvents.id,
         stripeEventId: stripeWebhookEvents.stripeEventId,
         eventType: stripeWebhookEvents.eventType,
@@ -231,9 +291,14 @@ export const adminRouter = router({
         receivedAt: stripeWebhookEvents.receivedAt,
         updatedAt: stripeWebhookEvents.updatedAt,
       }).from(stripeWebhookEvents)
-        .where(inArray(stripeWebhookEvents.status, ["failed", "quarantined"]))
-        .orderBy(desc(stripeWebhookEvents.updatedAt), desc(stripeWebhookEvents.id))
-        .limit(input?.limit ?? 50);
+        .where(and(...conditions))
+        .orderBy(desc(stripeWebhookEvents.receivedAt), desc(stripeWebhookEvents.id))
+        .limit(limit + 1),
+      db.select({ count: sql<number>`COUNT(*)` }).from(stripeWebhookEvents).where(issueStatus)]);
+      return createAdminCursorPage(rows, limit, Number(totalRows[0]?.count ?? 0), (event) => ({
+        timestamp: event.receivedAt,
+        id: event.id,
+      }));
     }),
 
   reopenQuarantinedStripeWebhook: adminProcedure

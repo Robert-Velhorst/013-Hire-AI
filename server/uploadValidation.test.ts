@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ENV } from "./_core/env";
 import {
   RESUME_MIME_TYPES,
+  getWindowsDefenderExecutableCandidates,
+  getWindowsDefenderLocations,
   resolveMalwareScanMode,
   sanitizeUploadFileName,
   scanSensitiveUpload,
@@ -8,9 +11,17 @@ import {
 } from "./uploadValidation";
 
 const originalFetch = globalThis.fetch;
+const originalMalwareScanAllowedOrigins = [...ENV.malwareScanAllowedOrigins];
+const originalIsProduction = ENV.isProduction;
+
+beforeEach(() => {
+  ENV.malwareScanAllowedOrigins = ["https://scanner.example.test"];
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  ENV.malwareScanAllowedOrigins = [...originalMalwareScanAllowedOrigins];
+  ENV.isProduction = originalIsProduction;
   globalThis.fetch = originalFetch;
 });
 
@@ -105,7 +116,96 @@ describe("sensitive upload validation", () => {
     );
   });
 
+  it("uses configured local Defender directories and supports separate data volumes", () => {
+    expect(
+      getWindowsDefenderLocations({
+        runtimePath: "D:\\HireAI\\node.exe",
+        systemRoot: "C:\\Windows",
+        programFiles: "C:\\Program Files",
+        programData: "E:\\SharedData",
+      })
+    ).toEqual({
+      legacyExecutable: "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot: "E:\\SharedData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
+      getWindowsDefenderLocations({
+        runtimePath: "D:\\HireAI\\node.exe",
+        systemRoot: "invalid",
+        programFiles: "\\\\server\\share\\Program Files",
+        programData: "\\\\server\\share\\ProgramData",
+      })
+    ).toMatchObject({
+      legacyExecutable: "D:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot: "D:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+    expect(
+      getWindowsDefenderLocations({
+        runtimePath: "\\\\server\\share\\node.exe",
+        systemRoot: "",
+        programFiles: "",
+        programData: "",
+      })
+    ).toBeNull();
+  });
+
+  it("derives default Defender paths from the Windows root, not overridable ProgramFiles variables", () => {
+    vi.stubEnv("ProgramFiles", "C:\\Users\\Public\\attacker");
+    vi.stubEnv("ProgramData", "C:\\Users\\Public\\attacker-data");
+    expect(
+      getWindowsDefenderLocations({
+        runtimePath: "D:\\HireAI\\node.exe",
+        systemRoot: "C:\\Windows",
+      })
+    ).toEqual({
+      legacyExecutable: "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+      platformRoot: "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform",
+    });
+  });
+
+  it("shares Defender executable ordering between runtime and production doctor", () => {
+    const locations = getWindowsDefenderLocations({
+      runtimePath: "D:\\HireAI\\node.exe",
+      systemRoot: "C:\\Windows",
+      programFiles: "C:\\Program Files",
+      programData: "E:\\SharedData",
+    });
+    expect(
+      getWindowsDefenderExecutableCandidates(locations, [
+        "4.18.9.1-0",
+        "4.18.10.2-0",
+      ])
+    ).toEqual([
+      "E:\\SharedData\\Microsoft\\Windows Defender\\Platform\\4.18.10.2-0\\MpCmdRun.exe",
+      "E:\\SharedData\\Microsoft\\Windows Defender\\Platform\\4.18.9.1-0\\MpCmdRun.exe",
+      "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+    ]);
+    expect(getWindowsDefenderExecutableCandidates(null)).toEqual([]);
+  });
+
+  it("ignores malformed Defender platform directory names", () => {
+    const locations = getWindowsDefenderLocations({
+      runtimePath: "C:\\HireAI\\node.exe",
+      systemRoot: "C:\\Windows",
+      programFiles: "C:\\Program Files",
+      programData: "C:\\ProgramData",
+    });
+    expect(
+      getWindowsDefenderExecutableCandidates(locations, [
+        "4.18.26090.7-0",
+        "..",
+        "..\\outside",
+        "4.18.26090.7-0\\..\\outside",
+        "version;malicious.exe",
+      ])
+    ).toEqual([
+      "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26090.7-0\\MpCmdRun.exe",
+      "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+    ]);
+  });
+
   it("uses an authenticated bounded HTTP scanner request", async () => {
+    ENV.malwareScanAllowedOrigins = ["https://scanner.example.test"];
     vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
     vi.stubEnv("FILE_MALWARE_SCAN_TOKEN", "scanner-secret");
     globalThis.fetch = vi
@@ -134,6 +234,54 @@ describe("sensitive upload validation", () => {
         }),
       })
     );
+  });
+
+  it.each([
+    {
+      endpoint: "https://169.254.169.254/latest/meta-data",
+      reason: "Malware scanner URL origin is not in",
+    },
+    {
+      endpoint: "https://scanner.example.test.attacker.invalid/scan",
+      reason: "Malware scanner URL origin is not in",
+    },
+    {
+      endpoint: "http://scanner.example.test/scan",
+      reason: "Trusted service URL must use HTTPS",
+    },
+  ])("blocks scanner destination $endpoint before making a request", async ({ endpoint, reason }) => {
+    ENV.malwareScanAllowedOrigins = ["https://scanner.example.test"];
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", endpoint);
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      scanSensitiveUpload({
+        data: Buffer.from("synthetic resume"),
+        fileName: "resume.txt",
+        mimeType: "text/plain",
+      })
+    ).rejects.toThrow(reason);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit scanner origin allowlist in production", async () => {
+    ENV.isProduction = true;
+    ENV.malwareScanAllowedOrigins = [];
+    vi.stubEnv("FILE_MALWARE_SCAN_MODE", "http");
+    vi.stubEnv("FILE_MALWARE_SCAN_URL", "https://scanner.example.test/scan");
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      scanSensitiveUpload({
+        data: Buffer.from("synthetic resume"),
+        fileName: "resume.txt",
+        mimeType: "text/plain",
+      })
+    ).rejects.toThrow("FILE_MALWARE_SCAN_ALLOWED_ORIGINS must be configured");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects an unclean or malformed scanner verdict without exposing scanner details", async () => {

@@ -1,32 +1,44 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { createSensitiveRouteRateLimiter } from "./_core/apiRateLimit";
-import {
-  HAI_CONNECTOR_AGENT_VERSION,
-  HAI_CONNECTOR_PROTOCOL_VERSION,
-  HaiConnectorService,
-  parseHaiRemoteJobSearchQuery,
-} from "./haiConnector";
+import { HAI_CONNECTOR_AGENT_VERSION, HAI_CONNECTOR_PROTOCOL_VERSION, HaiConnectorService, parseHaiRemoteJobSearchQuery } from "./haiConnector";
 
 const maxBodyBytes = 16 * 1024;
 const requestIdSchema = z.union([z.string().min(1).max(255), z.number().finite()]);
-const textPartSchema = z.object({
-  text: z.string().trim().min(1),
-  mediaType: z.literal("text/plain").optional(),
-}).strict();
-const requestSchema = z.object({
-  jsonrpc: z.literal("2.0"),
-  id: requestIdSchema,
-  method: z.string().min(1).max(80),
-  params: z.object({
-    message: z.object({
-      messageId: z.string().trim().min(1).max(255),
-      role: z.literal("ROLE_USER"),
-      parts: z.array(textPartSchema).min(1).max(4),
-    }).strict(),
-  }).strict(),
-}).strict();
+const textPartSchema = z
+  .object({
+    text: z.string().trim().min(1),
+    mediaType: z.literal("text/plain").optional(),
+  })
+  .strict();
+const sendConfigurationSchema = z
+  .object({
+    acceptedOutputModes: z.array(z.string().trim().min(1).max(128)).max(16).optional(),
+    historyLength: z.number().int().min(0).max(100).optional(),
+    returnImmediately: z.boolean().optional(),
+    taskPushNotificationConfig: z.unknown().optional(),
+  })
+  .strict();
+const requestSchema = z
+  .object({
+    jsonrpc: z.literal("2.0"),
+    id: requestIdSchema,
+    method: z.string().min(1).max(80),
+    params: z
+      .object({
+        message: z
+          .object({
+            messageId: z.string().trim().min(1).max(255),
+            role: z.literal("ROLE_USER"),
+            parts: z.array(textPartSchema).min(1).max(4),
+          })
+          .strict(),
+        configuration: sendConfigurationSchema.optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 function bearerToken(header: string | undefined) {
   const match = header?.match(/^Bearer\s+([^\s]+)$/i);
@@ -35,7 +47,11 @@ function bearerToken(header: string | undefined) {
 
 function rpcError(res: Response, id: unknown, code: number, message: string) {
   const parsedId = requestIdSchema.safeParse(id);
-  res.status(400).json({ jsonrpc: "2.0", id: parsedId.success ? parsedId.data : null, error: { code, message } });
+  res.status(400).json({
+    jsonrpc: "2.0",
+    id: parsedId.success ? parsedId.data : null,
+    error: { code, message },
+  });
 }
 
 function boundedJsonParser(req: Request, res: Response, next: NextFunction) {
@@ -52,10 +68,7 @@ function boundedJsonParser(req: Request, res: Response, next: NextFunction) {
   });
 }
 
-export function registerHaiConnectorRoutes(
-  app: Express,
-  service = new HaiConnectorService()
-) {
+export function registerHaiConnectorRoutes(app: Express, service = new HaiConnectorService()) {
   const connectorRateLimit = createSensitiveRouteRateLimiter("haiConnector");
   app.get("/.well-known/agent-card.json", (_req, res) => {
     const card = service.agentCard();
@@ -64,7 +77,8 @@ export function registerHaiConnectorRoutes(
       return;
     }
     res.setHeader("Cache-Control", "private, max-age=300");
-    res.setHeader("ETag", `"hire-ai-hai-${HAI_CONNECTOR_AGENT_VERSION}"`);
+    const cardHash = createHash("sha256").update(JSON.stringify(card)).digest("hex").slice(0, 16);
+    res.setHeader("ETag", `"hire-ai-hai-${HAI_CONNECTOR_AGENT_VERSION}-${cardHash}"`);
     res.json(card);
   });
 
@@ -102,7 +116,29 @@ export function registerHaiConnectorRoutes(
       rpcError(res, parsed.data.id, -32601, "Only SendMessage is supported by this connector.");
       return;
     }
-    const text = parsed.data.params.message.parts.map((part) => part.text).join(" ").replace(/\s+/g, " ").trim();
+    const configuration = parsed.data.params.configuration;
+    if (configuration?.taskPushNotificationConfig != null) {
+      rpcError(res, parsed.data.id, -32602, "Task push notifications are not supported by this connector.");
+      return;
+    }
+    const acceptedOutputModes = configuration?.acceptedOutputModes;
+    const outputMode =
+      acceptedOutputModes === undefined
+        ? "application/json"
+        : acceptedOutputModes.includes("application/json")
+          ? "application/json"
+          : acceptedOutputModes.includes("text/plain")
+            ? "text/plain"
+            : null;
+    if (!outputMode) {
+      rpcError(res, parsed.data.id, -32602, "This connector supports application/json and text/plain output modes.");
+      return;
+    }
+    const text = parsed.data.params.message.parts
+      .map(part => part.text)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
     if (Array.from(text).length > 4096) {
       rpcError(res, parsed.data.id, -32602, "Task text must be at most 4096 characters.");
       return;
@@ -114,21 +150,22 @@ export function registerHaiConnectorRoutes(
     }
 
     try {
-      const artifact = searchQuery === null
-        ? {
-            name: "hire-ai-read-only-status",
-            description: "Aggregate status only. No Hire.AI action was executed or approved.",
-            data: await service.snapshot(),
-          }
-        : {
-            name: "hire-ai-remote-job-results",
-            description: "At most 10 current, deduplicated, remote-only jobs with clear listing-safety status. No candidate data or job descriptions are included.",
-            data: {
-              query: searchQuery,
-              remoteOnly: true,
-              results: await service.searchRemoteJobs(searchQuery),
-            },
-          };
+      const artifact =
+        searchQuery === null
+          ? {
+              name: "hire-ai-read-only-status",
+              description: "Aggregate status only. No Hire.AI action was executed or approved.",
+              data: await service.snapshot(),
+            }
+          : {
+              name: "hire-ai-remote-job-results",
+              description: "At most 10 current, deduplicated, remote-only jobs with clear listing-safety status. No candidate data or job descriptions are included.",
+              data: {
+                query: searchQuery,
+                remoteOnly: true,
+                results: await service.searchRemoteJobs(searchQuery),
+              },
+            };
       res.setHeader("Cache-Control", "no-store");
       res.json({
         jsonrpc: "2.0",
@@ -137,13 +174,25 @@ export function registerHaiConnectorRoutes(
           task: {
             id: randomUUID(),
             contextId: randomUUID(),
-            status: { state: "TASK_STATE_COMPLETED", timestamp: new Date().toISOString() },
-            artifacts: [{
-              artifactId: randomUUID(),
-              name: artifact.name,
-              description: artifact.description,
-              parts: [{ data: artifact.data, mediaType: "application/json" }],
-            }],
+            status: {
+              state: "TASK_STATE_COMPLETED",
+              timestamp: new Date().toISOString(),
+            },
+            artifacts: [
+              {
+                artifactId: randomUUID(),
+                name: artifact.name,
+                description: artifact.description,
+                parts: [
+                  outputMode === "application/json"
+                    ? { data: artifact.data, mediaType: "application/json" }
+                    : {
+                        text: JSON.stringify(artifact.data),
+                        mediaType: "text/plain",
+                      },
+                ],
+              },
+            ],
           },
         },
       });

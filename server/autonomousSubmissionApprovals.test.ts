@@ -23,6 +23,7 @@ import {
   createApplication,
   createApplicationDecision,
   createEmployerResponse,
+  countUserAutonomousPreparationsSince,
   getApplicationLedgerArtifacts,
   getAuditEventsForEntity,
   getAuditEventsForUser,
@@ -150,6 +151,99 @@ describe("autonomous submission approval gates", () => {
       jobId: sampleJobs[0].id,
       matchReasons: expect.stringContaining("Autonomous profile match."),
     });
+  });
+
+  it("queues one reviewed compensation question without preparing or submitting an application", async () => {
+    const userId = await createEligibleTestUser("99120");
+    const job = {
+      ...sampleJobs[0],
+      salaryMin: null,
+      salaryMax: null,
+      applicationEmail: "recruiting@example.com",
+    };
+    const secondJob = {
+      ...sampleJobs[1],
+      salaryMin: null,
+      salaryMax: null,
+      applicationEmail: "recruiting@example.com",
+    };
+    mocks.getActiveJobs.mockResolvedValue([job, secondJob]);
+    mocks.getJobById.mockImplementation(async (jobId: number) =>
+      [job, secondJob].find((item) => item.id === jobId)
+    );
+    await upsertUserProfile({
+      userId,
+      skills: "React, TypeScript, Node.js",
+      experience: "Five years building production web applications.",
+      desiredJobTypes: "full-time",
+      desiredLocations: "remote, worldwide",
+      salaryExpectationMin: 50000,
+      salaryExpectationCurrency: "EUR",
+      preferences: JSON.stringify({
+        autonomousEnabled: true,
+        mode: "review_first",
+        minMatchScore: 0,
+        dailyApplicationLimit: 1,
+      }),
+    });
+
+    const firstRun = await runAutonomousForUser(userId, { dailyApplicationLimit: 1, minMatchScore: 0 });
+    const applications = await getUserApplications(userId);
+    const clarificationApplications = applications.filter((item) =>
+      item.notes?.includes("Autonomous compensation clarification pending")
+    );
+    const application = clarificationApplications[0];
+    expect(clarificationApplications).toHaveLength(1);
+    expect(application).toBeTruthy();
+    const followUps = await getFollowUps(application!.id, userId);
+    const approvals = await listUserApplicationApprovals(userId, "pending");
+    const ledger = await getApplicationLedgerArtifacts(application!.id, userId);
+
+    expect(firstRun.queuedEmployerClarificationDrafts).toBe(1);
+    expect(application?.status).toBe("pending");
+    expect(application?.notes).toContain("Autonomous compensation clarification pending");
+    expect(application?.notes).toContain("No application has been submitted or prepared");
+    expect(application?.coverLetter).toBeFalsy();
+    expect(application?.customResume).toBeFalsy();
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0].message).toContain("compensation range, currency, and pay period");
+    expect(followUps[0].message).not.toContain("50000");
+    expect(approvals.some((item) =>
+      item.entityType === "follow_up" &&
+      item.entityId === followUps[0].id &&
+      item.approvalType === "follow_up_send" &&
+      item.status === "pending"
+    )).toBe(true);
+    expect(approvals.some((item) =>
+      item.applicationId === application!.id && item.approvalType === "application_submission"
+    )).toBe(false);
+    expect(ledger.material).toBeNull();
+    await expect(countUserAutonomousPreparationsSince(userId, new Date(0))).resolves.toBe(1);
+
+    const secondRun = await runAutonomousForUser(userId, { dailyApplicationLimit: 1, minMatchScore: 0 });
+    expect(secondRun.queuedEmployerClarificationDrafts).toBe(0);
+    expect(await countUserAutonomousPreparationsSince(userId, new Date(0))).toBe(1);
+    expect(await getFollowUps(application!.id, userId)).toHaveLength(1);
+  });
+
+  it("does not create a pre-application inquiry when the listing has no usable contact", async () => {
+    const userId = await createEligibleTestUser("99121");
+    const job = { ...sampleJobs[0], salaryMin: null, salaryMax: null, applicationEmail: null };
+    mocks.getActiveJobs.mockResolvedValue([job]);
+    mocks.getJobById.mockResolvedValue(job);
+    await upsertUserProfile({
+      userId,
+      skills: "React, TypeScript, Node.js",
+      experience: "Five years building production web applications.",
+      salaryExpectationMin: 50000,
+      preferences: JSON.stringify({ autonomousEnabled: true, minMatchScore: 0, dailyApplicationLimit: 2 }),
+    });
+
+    const result = await runAutonomousForUser(userId, { minMatchScore: 0, dailyApplicationLimit: 2 });
+
+    expect(result.queuedEmployerClarificationDrafts).toBe(0);
+    expect(result.skippedEmployerClarificationsMissingContact).toBe(1);
+    expect(await getUserApplications(userId)).toHaveLength(0);
   });
 
   it("keeps preparation evidence idempotent when the same autonomous run is retried", async () => {

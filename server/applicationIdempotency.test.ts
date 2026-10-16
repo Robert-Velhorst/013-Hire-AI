@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createApplication, getUserApplications, updateApplicationStatus } from "./db";
+import {
+  createApplication,
+  createAutonomousPreparationApplication,
+  getUserApplications,
+  updateApplicationStatus,
+} from "./db";
 
 describe("application idempotency", () => {
   it("creates only one application per user and job", async () => {
@@ -61,6 +66,41 @@ describe("application idempotency", () => {
     expect(applications[0].coverLetter).toBe("Updated cover letter");
     expect(applications[0].customResume).toBe("updated-resume.pdf");
     expect(applications[0].notes).toBe("Updated notes");
+  });
+
+  it("preserves candidate edits when an autonomous preparation is retried", async () => {
+    const userId = 92007;
+    const jobId = 7;
+
+    const created = await createAutonomousPreparationApplication({
+      userId,
+      jobId,
+      status: "pending",
+      coverLetter: "Generated draft",
+      notes: "Autonomous preparation",
+    });
+    await createApplication({
+      userId,
+      jobId,
+      status: "pending",
+      coverLetter: "Candidate-edited cover letter",
+      notes: "Candidate review notes",
+    });
+
+    const retried = await createAutonomousPreparationApplication({
+      userId,
+      jobId,
+      status: "pending",
+      coverLetter: "Regenerated draft",
+      notes: "Autonomous preparation retry",
+    });
+    const applications = await getUserApplications(userId);
+
+    expect(created.existing).toBe(false);
+    expect(retried).toEqual({ insertId: created.insertId, existing: true });
+    expect(applications).toHaveLength(1);
+    expect(applications[0].coverLetter).toBe("Candidate-edited cover letter");
+    expect(applications[0].notes).toBe("Candidate review notes");
   });
 
   it("does not downgrade a progressed application through a duplicate submission write", async () => {

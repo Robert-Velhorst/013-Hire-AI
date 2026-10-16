@@ -6,7 +6,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s launcher readiness binding", launcher => {
   let results: Array<{
     scenario: string; announced: boolean; error: string | null; launchId: string;
-    restoredId: string; stopped: number[]; startCalls: number; nodeCommands: string[]; npmCommands: string[];
+    restoredId: string; restoredNodeEnv: string; restoredPort: string; restoredHost: string;
+    childEnvironment?: { nodeEnv: string; port: string; host: string };
+    stopped: number[]; startCalls: number; nodeCommands: string[]; npmCommands: string[];
   }>;
   beforeAll(() => {
     const result = spawnSync("powershell.exe", [
@@ -33,6 +35,17 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
     expect(result.launchId).not.toBe("parent-value-must-be-restored");
     expect(result.restoredId).toBe("parent-value-must-be-restored");
     expect(result.npmCommands).toEqual(launcher === "windows" ? ["run doctor"] : []);
+  });
+
+  it.skipIf(launcher !== "windows")("restores the caller's environment after every startup outcome", () => {
+    for (const result of results) {
+      expect(result.restoredNodeEnv).toBe("parent-node-env");
+      expect(result.restoredPort).toBe("8787");
+      expect(result.restoredHost).toBe("parent-host");
+      if (result.childEnvironment) {
+        expect(result.childEnvironment).toEqual({ nodeEnv: "production", port: "3000", host: "127.0.0.1" });
+      }
+    }
   });
 
   it.skipIf(launcher !== "windows")("pairs a legacy server bundle with its legacy schema audit in no-build mode", () => {

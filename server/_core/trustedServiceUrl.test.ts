@@ -76,6 +76,19 @@ describe("malware scanner origin policy", () => {
     ).origin).toBe("http://127.0.0.1:39999");
   });
 
+  it("requires remote scanner origins to be allowlisted outside production too", () => {
+    expect(() =>
+      requireMalwareScannerUrl(
+        "https://scanner.example.test/scan",
+        [],
+        false
+      )
+    ).toThrow("FILE_MALWARE_SCAN_ALLOWED_ORIGINS must be configured for remote scanners.");
+    expect(
+      requireMalwareScannerUrl("http://localhost:39999/scan", [], false).origin
+    ).toBe("http://localhost:39999");
+  });
+
   it.each([
     { url: "https://other.example.test/scan", allowed: ["https://scanner.example.test"] },
     { url: "https://scanner.example.test/scan", allowed: [] },

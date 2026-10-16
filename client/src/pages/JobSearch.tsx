@@ -1009,6 +1009,8 @@ export default function JobSearch() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
+                  id="job-search-query"
+                  name="query"
                   placeholder={t("searchJobsPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1127,6 +1129,8 @@ export default function JobSearch() {
               <div className="flex-1 min-w-52 relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
+                  id="job-filter-location"
+                  name="location"
                   data-testid="job-filter-location"
                   placeholder={t("jobLocationPlaceholder")}
                   value={selectedLocation}
@@ -1135,6 +1139,8 @@ export default function JobSearch() {
                 />
               </div>
               <Input
+                id="job-filter-salary-currency"
+                name="salaryCurrency"
                 data-testid="job-filter-salary-currency"
                 value={salaryCurrency}
                 onChange={(event) => {

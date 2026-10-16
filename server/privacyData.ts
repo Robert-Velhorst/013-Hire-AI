@@ -1,5 +1,6 @@
 import {
   getAuditEventsForUser,
+  getInterviewCalendarSyncsForPrivacyExport,
   getAllEducationEntriesForPrivacyExport,
   getAllUserProjectsForPrivacyExport,
   getAllUserSkillsForPrivacyExport,
@@ -33,6 +34,7 @@ export async function buildPrivacyDataExport(userId: number) {
     resumes,
     auditEvents,
     connectorRevocationHistory,
+    interviewCalendarSyncs,
   ] = await Promise.all([
     getUserProfile(userId),
     getUserApplications(userId),
@@ -47,6 +49,7 @@ export async function buildPrivacyDataExport(userId: number) {
     getResumeVersions(userId),
     getAuditEventsForUser(userId, 100),
     listConnectorRevocationHistory(userId),
+    getInterviewCalendarSyncsForPrivacyExport(userId),
   ]);
 
   return {
@@ -81,9 +84,11 @@ export async function buildPrivacyDataExport(userId: number) {
     })),
     auditEvents,
     connectorRevocationHistory,
+    interviewCalendarSyncs,
     excluded: [
       "Resume, offer, and verification file bytes are not included. Use authenticated document download while access is retained.",
       "Connector authorization tokens, private storage keys, and provider credentials are never exported.",
+      "Calendar event content remains in the user's connected calendar; this export includes only Hire.AI's provider event ID and synchronization record.",
     ],
   } as const;
 }

@@ -38,6 +38,45 @@ async function recordInterviewInvite(applicationId: number, userId: number) {
 }
 
 describe("response and interview memory fallback", () => {
+  it("allows compensation clarification drafts before submission but keeps routine follow-ups gated", async () => {
+    const userId = 98213;
+    const application = await createApplication({
+      userId,
+      jobId: 2,
+      status: "pending",
+      notes: "Compensation clarification pending. No application has been submitted or prepared.",
+    });
+    const applicationId = Number(application.insertId);
+
+    await expect(createFollowUp({
+      applicationId,
+      message: "Could you share the compensation range?",
+    }, userId)).rejects.toThrow("Follow-ups can only be created after an application has been submitted.");
+
+    const clarification = await createFollowUp({
+      applicationId,
+      message: "Could you share the compensation range, currency, and pay period?",
+      purpose: "employer_clarification",
+    }, userId);
+    const approvals = await listUserApplicationApprovals(userId, "pending");
+    const approval = approvals.find((item) =>
+      item.entityType === "follow_up" && item.entityId === clarification.id
+    );
+
+    expect(approval).toMatchObject({
+      approvalType: "follow_up_send",
+      status: "pending",
+      title: "Clarify compensation before applying",
+      requestedBy: "system",
+    });
+    expect(JSON.parse(approval!.payload || "{}")).toMatchObject({ purpose: "employer_clarification" });
+    expect(approvals.some((item) =>
+      item.entityType === "application" &&
+      item.entityId === applicationId &&
+      item.approvalType === "application_submission"
+    )).toBe(false);
+  });
+
   it("does not complete an interview when an offer outcome lacks source evidence", async () => {
     const userId = 98200;
     const application = await createApplication({ userId, jobId: 1, status: "applied" });

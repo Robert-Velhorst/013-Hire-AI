@@ -15,6 +15,9 @@ describe("public outbound URL policy", () => {
     "192.168.1.20",
     "::1",
     "fc00::1",
+    "fec0::1",
+    "64:ff9b::a00:1",
+    "64:ff9b:1::a00:1",
     "::ffff:7f00:1",
   ])("rejects a URL resolving to blocked address %s", async (address) => {
     const lookup = vi.fn().mockResolvedValue([{ address, family: address.includes(":") ? 6 : 4 }]);
@@ -22,11 +25,26 @@ describe("public outbound URL policy", () => {
       .rejects.toThrow(/public address/i);
   });
 
+  it.each([
+    "http://media.example/audio.mp3",
+    "https://user:password@media.example/audio.mp3",
+    "https://localhost/audio.mp3",
+    "https://127.0.0.1/audio.mp3",
+  ])("rejects unsafe URL syntax %s", async (value) => {
+    await expect(requirePublicHttpsUrl(value)).rejects.toThrow();
+  });
+
   it("rejects mixed public and private DNS answers", async () => {
     const lookup = vi.fn().mockResolvedValue([
       { address: "1.1.1.1", family: 4 },
       { address: "10.0.0.1", family: 4 },
     ]);
+    await expect(requirePublicHttpsUrl("https://media.example/audio.mp3", lookup))
+      .rejects.toThrow(/public address/i);
+  });
+
+  it("rejects empty DNS answer sets", async () => {
+    const lookup = vi.fn().mockResolvedValue([]);
     await expect(requirePublicHttpsUrl("https://media.example/audio.mp3", lookup))
       .rejects.toThrow(/public address/i);
   });
@@ -68,5 +86,12 @@ describe("public outbound URL policy", () => {
       { address: "1.1.1.1", family: 4 },
       { address: "2606:4700:4700::1111", family: 6 },
     ]);
+
+    await expect(new Promise((resolve, reject) => {
+      lookup("media.example", { family: 6 }, (error, address) => {
+        if (error) reject(error);
+        else resolve(address);
+      });
+    })).resolves.toBe("2606:4700:4700::1111");
   });
 });

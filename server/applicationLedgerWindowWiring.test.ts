@@ -26,7 +26,7 @@ describe("application ledger detail windows", () => {
 
     expect(database).toContain("readApplicationLedgerArtifacts(applicationId, userId, false)");
     expect(database).toContain("readApplicationLedgerArtifacts(applicationId, userId, true)");
-    expect(router).toContain("getApplicationLedgerArtifactWindow(input.applicationId, ctx.user.id)");
+    expect(router.replace(/\s+/g, "")).toContain("getApplicationLedgerArtifactWindow(input.applicationId,ctx.user.id)");
     expect(applicationFeatures).toContain("getApplicationLedgerArtifacts(input.applicationId, userId)");
   });
 

@@ -28,6 +28,17 @@ Selected hostname: `013-hire.ai.noodzakelijkonline.de`.
   remain unaccepted. These observations supersede the earlier administrator-side
   report that ports 80/443 were closed; that report remains valid for its date.
 
+## Later administrator-workstation probe (2026-10-15)
+
+- DNS resolved the selected hostname to `159.69.55.178`; TCP/22 connected, but
+  TCP/80 and TCP/443 failed. HTTPS to an unrelated control site succeeded from
+  the same workstation.
+- No SSH authentication or firewall change was attempted. This observation does
+  not identify whether the web-port failure is caused by the cloud firewall,
+  host firewall, listener, or server state. It supersedes the 2026-10-14
+  administrator-workstation web-port/TLS observation only for this later probe
+  path and time; application and HTTPS acceptance remain open.
+
 ## Prepared configuration, not installed
 
 `Caddyfile.hire` is a host-level site fragment for the selected hostname, routing
@@ -66,7 +77,9 @@ Official references:
 - [Caddy reverse proxy](https://caddyserver.com/docs/quick-starts/reverse-proxy)
 - [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https)
 
-DNS is configured and the host now responds on HTTP/HTTPS ports, but the HTTPS
-handshake currently fails from the tested network. Resolve the TLS problem only
-after authenticated inspection of the shared proxy and host, then complete the
-application/provider acceptance checks before publication.
+DNS is configured. The latest administrator-workstation probe connected to
+TCP/22 but failed to reach TCP/80 and TCP/443; the prior 2026-10-14 probe reached
+HTTP but failed during TLS negotiation. Neither observation authenticates the
+host or identifies the cause. Inspect the shared proxy and host through an
+authorized administrative session before changing firewall or proxy settings,
+then complete the application/provider acceptance checks before publication.

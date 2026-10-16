@@ -69,6 +69,11 @@ function Start-Process {
     $global:fixture.startCalls++
     if ($global:fixture.launcher -eq 'windows') {
         $global:fixture.launchId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
+        $global:fixture.childEnvironment = @{
+            nodeEnv = $env:NODE_ENV
+            port = $env:PORT
+            host = $env:HOST
+        }
     }
     if ($global:fixture.scenario -eq 'start-failure') { throw 'Fixture start failure' }
     return $global:fixture.child
@@ -144,6 +149,9 @@ $results = foreach ($scenario in $scenarios) {
     }
     if ($scenario -eq 'local-newline-id') { $global:fixture.launchId += "`n" }
     $env:HIRE_AI_RUNTIME_INSTANCE_ID = 'parent-value-must-be-restored'
+    $env:NODE_ENV = 'parent-node-env'
+    $env:PORT = '8787'
+    $env:HOST = 'parent-host'
     $failure = $null
     try {
         if ($Launcher -eq 'windows') {
@@ -160,6 +168,10 @@ $results = foreach ($scenario in $scenarios) {
         error = $failure
         launchId = $global:fixture.launchId
         restoredId = $env:HIRE_AI_RUNTIME_INSTANCE_ID
+        restoredNodeEnv = $env:NODE_ENV
+        restoredPort = $env:PORT
+        restoredHost = $env:HOST
+        childEnvironment = $global:fixture.childEnvironment
         stopped = @($global:fixture.stopped)
         startCalls = $global:fixture.startCalls
         nodeCommands = @($global:fixture.nodeCommands)

@@ -79,6 +79,9 @@ export function requireMalwareScannerUrl(
   if (production && allowed.length === 0) {
     throw new Error("FILE_MALWARE_SCAN_ALLOWED_ORIGINS must be configured in production.");
   }
+  if (allowed.length === 0 && !loopbackHttp) {
+    throw new Error("FILE_MALWARE_SCAN_ALLOWED_ORIGINS must be configured for remote scanners.");
+  }
   if (allowed.length > 0 && !allowed.includes(url.origin)) {
     throw new Error("Malware scanner URL origin is not in FILE_MALWARE_SCAN_ALLOWED_ORIGINS.");
   }

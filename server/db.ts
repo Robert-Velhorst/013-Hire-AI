@@ -24,6 +24,7 @@ import {
   applicationApprovals,
   applicationCampaigns,
   interviewPreparation,
+  interviewCalendarSyncs,
   jobMatches,
   decisionMakers,
   workExperiences,
@@ -90,8 +91,10 @@ import {
   getAutonomousSourceEligibility,
   type AutonomousJobSourceEligibility,
 } from "./autonomousSourceEligibility";
+import { fetchFilteredCursorPage } from "./filteredCursorPage";
 import {
   getOperationalFailureSnapshot,
+  getOperationalFailureSnapshotPage,
   logOperationalFailure,
   type OperationalFailureSignal,
 } from "./operationalFailureLog";
@@ -329,6 +332,9 @@ export interface AutonomousRunSummaryRecord {
   queuedReviewRecords: number;
   queuedManualRecords: number;
   queuedFollowUps: number;
+  queuedEmployerClarificationDrafts?: number;
+  skippedDuplicateEmployerClarifications?: number;
+  skippedEmployerClarificationsMissingContact?: number;
   skippedDuplicateFollowUps: number;
   skippedSafetyBlockedFollowUps: number;
   skippedResumeEvidenceActions: number;
@@ -378,6 +384,18 @@ function parseAutonomousRunSummary(value: string | null | undefined): Autonomous
     summary.skippedProfileReadinessActions = typeof parsed.skippedProfileReadinessActions === "number"
       && Number.isFinite(parsed.skippedProfileReadinessActions)
       ? Math.max(0, Math.round(parsed.skippedProfileReadinessActions))
+      : 0;
+    summary.queuedEmployerClarificationDrafts = typeof parsed.queuedEmployerClarificationDrafts === "number"
+      && Number.isFinite(parsed.queuedEmployerClarificationDrafts)
+      ? Math.max(0, Math.round(parsed.queuedEmployerClarificationDrafts))
+      : 0;
+    summary.skippedDuplicateEmployerClarifications = typeof parsed.skippedDuplicateEmployerClarifications === "number"
+      && Number.isFinite(parsed.skippedDuplicateEmployerClarifications)
+      ? Math.max(0, Math.round(parsed.skippedDuplicateEmployerClarifications))
+      : 0;
+    summary.skippedEmployerClarificationsMissingContact = typeof parsed.skippedEmployerClarificationsMissingContact === "number"
+      && Number.isFinite(parsed.skippedEmployerClarificationsMissingContact)
+      ? Math.max(0, Math.round(parsed.skippedEmployerClarificationsMissingContact))
       : 0;
     summary.skippedStaleJobActions = typeof parsed.skippedStaleJobActions === "number"
       && Number.isFinite(parsed.skippedStaleJobActions)
@@ -677,10 +695,14 @@ export async function persistOperationalFailureSignals(signals: OperationalFailu
     });
 }
 
-export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
+export async function getOperationalFailureMonitoringPage(
+  limit = 20,
+  cursor?: { id: number }
+) {
   const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
   const db = await getDb();
-  if (!db) return getOperationalFailureSnapshot(boundedLimit);
+  if (!db) return getOperationalFailureSnapshotPage(boundedLimit, cursor?.id);
+
   const [summaryRows, rows] = await Promise.all([
     db.select({
       totalFailures: sql<number>`COALESCE(SUM(${operationalFailureSignals.count}), 0)`,
@@ -688,6 +710,7 @@ export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
       firstOccurredAt: sql<Date | null>`MIN(${operationalFailureSignals.firstOccurredAt})`,
     }).from(operationalFailureSignals),
     db.select({
+      id: operationalFailureSignals.id,
       scope: operationalFailureSignals.scope,
       operation: operationalFailureSignals.operation,
       count: operationalFailureSignals.count,
@@ -695,20 +718,27 @@ export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
       lastOccurredAt: operationalFailureSignals.lastOccurredAt,
     })
       .from(operationalFailureSignals)
-      .orderBy(desc(operationalFailureSignals.lastOccurredAt))
-      .limit(boundedLimit),
+      .where(cursor ? lt(operationalFailureSignals.id, cursor.id) : undefined)
+      .orderBy(desc(operationalFailureSignals.id))
+      .limit(boundedLimit + 1),
   ]);
+  const hasMore = rows.length > boundedLimit;
+  const items = rows.slice(0, boundedLimit);
+  const summary = summaryRows[0];
   return {
-    processStartedAt: summaryRows[0]?.firstOccurredAt
-      ? new Date(summaryRows[0].firstOccurredAt).toISOString()
+    processStartedAt: summary?.firstOccurredAt
+      ? new Date(summary.firstOccurredAt).toISOString()
       : new Date().toISOString(),
-    totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
-    uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
-    signals: rows.map((signal) => ({
+    totalFailures: Number(summary?.totalFailures ?? 0),
+    uniqueSignals: Number(summary?.uniqueSignals ?? 0),
+    signals: items.map((signal) => ({
       ...signal,
       firstOccurredAt: signal.firstOccurredAt.toISOString(),
       lastOccurredAt: signal.lastOccurredAt.toISOString(),
     })),
+    limit: boundedLimit,
+    hasMore,
+    nextCursor: hasMore && items.length > 0 ? { id: items[items.length - 1]!.id } : null,
   };
 }
 
@@ -1316,6 +1346,33 @@ export type ActiveJobPageCursor = {
   id: number;
 };
 
+function activeJobPageCursor(job: typeof jobs.$inferSelect): ActiveJobPageCursor {
+  return { postedDate: job.postedDate, createdAt: job.createdAt, id: job.id };
+}
+
+function activeJobPagePosition(cursor?: ActiveJobPageCursor) {
+  if (!cursor) return undefined;
+  return cursor.postedDate
+    ? or(
+        lt(jobs.postedDate, cursor.postedDate),
+        isNull(jobs.postedDate),
+        and(
+          eq(jobs.postedDate, cursor.postedDate),
+          or(
+            lt(jobs.createdAt, cursor.createdAt),
+            and(eq(jobs.createdAt, cursor.createdAt), lt(jobs.id, cursor.id))
+          )
+        )
+      )
+    : and(
+        isNull(jobs.postedDate),
+        or(
+          lt(jobs.createdAt, cursor.createdAt),
+          and(eq(jobs.createdAt, cursor.createdAt), lt(jobs.id, cursor.id))
+        )
+      );
+}
+
 export async function getActiveJobPage(
   input: {
     limit?: number;
@@ -1366,43 +1423,25 @@ export async function getActiveJobPage(
     canonicalJobCondition,
   ];
   addJobSearchFilterConditions(conditions, resolvedFilters, now);
-  if (input.cursor) {
-    const position = input.cursor.postedDate
-      ? or(
-          lt(jobs.postedDate, input.cursor.postedDate),
-          isNull(jobs.postedDate),
-          and(
-            eq(jobs.postedDate, input.cursor.postedDate),
-            or(
-              lt(jobs.createdAt, input.cursor.createdAt),
-              and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
-            )
-          )
-        )
-      : and(
-          isNull(jobs.postedDate),
-          or(
-            lt(jobs.createdAt, input.cursor.createdAt),
-            and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
-          )
-        );
-    if (position) conditions.push(position);
-  }
-
-  const pageRows = await db
-    .select()
-    .from(jobs)
-    .where(and(...conditions))
-    .orderBy(desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id))
-    .limit(limit + 1);
-  const items = filterJobListings(pageRows.slice(0, limit), resolvedFilters, now);
-  const lastScanned = pageRows[Math.min(limit, pageRows.length) - 1];
-  return {
-    items,
-    nextCursor: pageRows.length > limit && lastScanned
-      ? { postedDate: lastScanned.postedDate, createdAt: lastScanned.createdAt, id: lastScanned.id }
-      : null,
-  };
+  const scanBatchSize = Math.max(limit + 1, Math.min(100, limit * 2));
+  const scanBudget = Math.min(1_000, Math.max(scanBatchSize, limit * 10));
+  return await fetchFilteredCursorPage({
+    limit,
+    batchSize: scanBatchSize,
+    scanBudget,
+    cursor: input.cursor,
+    fetchBatch: async (cursor, batchLimit) => {
+      const position = activeJobPagePosition(cursor);
+      return await db
+        .select()
+        .from(jobs)
+        .where(and(...conditions, ...(position ? [position] : [])))
+        .orderBy(desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id))
+        .limit(batchLimit);
+    },
+    filter: (rows) => filterJobListings(rows, resolvedFilters, now),
+    getCursor: activeJobPageCursor,
+  });
 }
 
 export async function getJobById(jobId: number) {
@@ -2119,6 +2158,26 @@ export async function listUserConnectorAccounts(userId: number): Promise<UserCon
     .where(eq(userConnectorAccounts.userId, userId));
 }
 
+export async function getInterviewCalendarSyncsForPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({
+      interviewId: interviewCalendarSyncs.interviewId,
+      provider: interviewCalendarSyncs.provider,
+      status: interviewCalendarSyncs.status,
+      providerEventId: interviewCalendarSyncs.providerEventId,
+      lastErrorCode: interviewCalendarSyncs.lastErrorCode,
+      attemptCount: interviewCalendarSyncs.attemptCount,
+      lastAttemptAt: interviewCalendarSyncs.lastAttemptAt,
+      syncedAt: interviewCalendarSyncs.syncedAt,
+      createdAt: interviewCalendarSyncs.createdAt,
+    })
+    .from(interviewCalendarSyncs)
+    .where(eq(interviewCalendarSyncs.userId, userId))
+    .orderBy(asc(interviewCalendarSyncs.createdAt), asc(interviewCalendarSyncs.id));
+}
+
 export async function getUserConnectorAccount(
   userId: number,
   provider: UserConnectorAccount["provider"]
@@ -2493,6 +2552,59 @@ export async function createApplication(application: InsertApplication) {
   };
 }
 
+/**
+ * Insert an autonomous preparation without rewriting an existing candidate draft.
+ * Regular application updates may intentionally refresh pending records; autonomous
+ * retries must preserve any edits made by the candidate between runs.
+ */
+export async function createAutonomousPreparationApplication(
+  application: InsertApplication
+) {
+  const canonicalJobId = await getCanonicalJobId(application.jobId);
+  application = { ...application, jobId: canonicalJobId ?? application.jobId };
+  const db = await getDb();
+  if (!db) {
+    const existing = memoryApplications.find((item) =>
+      item.userId === application.userId && item.jobId === application.jobId
+    );
+    if (existing) return { insertId: existing.id, existing: true };
+
+    const record = {
+      ...application,
+      id: memoryApplications.length + 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    memoryApplications.push(record);
+    return { insertId: record.id, existing: false };
+  }
+
+  const result = await db
+    .insert(applications)
+    .ignore()
+    .values(application);
+  const writeResult = result[0];
+  if (Number(writeResult.affectedRows) !== 1) {
+    const [existing] = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .where(and(
+        eq(applications.userId, application.userId),
+        eq(applications.jobId, application.jobId)
+      ))
+      .limit(1);
+    if (!existing) {
+      throw new Error("Autonomous application preparation could not be inserted or found.");
+    }
+    return { insertId: existing.id, existing: true };
+  }
+
+  return {
+    insertId: Number(writeResult.insertId),
+    existing: false,
+  };
+}
+
 const userApplicationSelection = {
   id: applications.id,
   userId: applications.userId,
@@ -2518,6 +2630,7 @@ const userApplicationSelection = {
     platformId: jobs.platformId,
     platformName: jobPlatforms.name,
     applicationUrl: jobs.applicationUrl,
+    applicationEmail: jobs.applicationEmail,
     sourceUrl: jobs.sourceUrl,
   },
 };
@@ -5176,6 +5289,35 @@ export async function listActiveAdminReviewItemsForEntity(
     .limit(100);
 }
 
+export async function hasAdminReviewItemForEntity(
+  userId: number,
+  entityType: AdminReviewItem["entityType"],
+  entityId: number,
+  category: AdminReviewItem["category"]
+) {
+  const db = await getDb();
+  if (!db) {
+    return memoryAdminReviewItems.some((item) =>
+      item.userId === userId &&
+      item.entityType === entityType &&
+      item.entityId === entityId &&
+      item.category === category
+    );
+  }
+
+  const rows = await db
+    .select({ id: adminReviewItems.id })
+    .from(adminReviewItems)
+    .where(and(
+      eq(adminReviewItems.userId, userId),
+      eq(adminReviewItems.entityType, entityType),
+      eq(adminReviewItems.entityId, entityId),
+      eq(adminReviewItems.category, category)
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
 export async function getLatestPrivacyDeletionReview(userId: number) {
   const db = await getDb();
   if (!db) {
@@ -5845,31 +5987,103 @@ export async function upsertApplicationCampaign(
   };
 }
 
-export async function updateApplicationCampaignStatus(
-  userId: number,
-  status: ApplicationCampaign["status"]
-) {
+export class CampaignRestartConfirmationRequiredError extends Error {
+  constructor() {
+    super("A restart reason and current-criteria confirmation are required.");
+    this.name = "CampaignRestartConfirmationRequiredError";
+  }
+}
+
+export async function transitionApplicationCampaignStatus(input: {
+  userId: number;
+  status: ApplicationCampaign["status"];
+  reason?: string;
+  criteriaConfirmed?: boolean;
+}) {
+  const reason = input.reason?.trim();
+  if (
+    input.status === "active" &&
+    (!reason || reason.length < 20 || input.criteriaConfirmed !== true)
+  ) {
+    throw new CampaignRestartConfirmationRequiredError();
+  }
+
   const db = await getDb();
   const now = new Date();
   if (!db) {
-    const campaign = memoryApplicationCampaigns.find((item) => item.userId === userId);
+    const campaign = memoryApplicationCampaigns.find(
+      (item) => item.userId === input.userId
+    );
     if (!campaign) throw new Error("Application campaign not found.");
-    campaign.status = status;
+    if (campaign.status === input.status) return campaign as ApplicationCampaign;
+
+    const previousStatus = campaign.status;
+    campaign.status = input.status;
     campaign.updatedAt = now;
+    memoryAuditEvents.push({
+      userId: input.userId,
+      entityType: "user",
+      entityId: input.userId,
+      action: "application_campaign_status_changed",
+      actor: "user",
+      source: "applications.setCampaignStatus",
+      beforeState: JSON.stringify({
+        campaignId: campaign.id,
+        status: previousStatus,
+      }),
+      afterState: JSON.stringify({
+        campaignId: campaign.id,
+        status: campaign.status,
+        ...(input.status === "active"
+          ? { restartReason: reason, criteriaConfirmed: true }
+          : {}),
+      }),
+      riskLevel: "medium",
+      approvalId: null,
+      id: memoryAuditEvents.length + 1,
+      createdAt: now,
+    });
     return campaign as ApplicationCampaign;
   }
 
-  const result = await db
-    .update(applicationCampaigns)
-    .set({ status, updatedAt: now })
-    .where(eq(applicationCampaigns.userId, userId));
-  if (Number(result[0].affectedRows) === 0) {
-    throw new Error("Application campaign not found.");
-  }
+  return await db.transaction(async (tx) => {
+    const [campaign] = await tx
+      .select()
+      .from(applicationCampaigns)
+      .where(eq(applicationCampaigns.userId, input.userId))
+      .limit(1)
+      .for("update");
+    if (!campaign) throw new Error("Application campaign not found.");
+    if (campaign.status === input.status) return campaign;
 
-  const campaign = await getApplicationCampaign(userId);
-  if (!campaign) throw new Error("Application campaign not found.");
-  return campaign;
+    const updatedAt = new Date();
+    await tx
+      .update(applicationCampaigns)
+      .set({ status: input.status, updatedAt })
+      .where(eq(applicationCampaigns.id, campaign.id));
+    await tx.insert(auditEvents).values({
+      userId: input.userId,
+      entityType: "user",
+      entityId: input.userId,
+      action: "application_campaign_status_changed",
+      actor: "user",
+      source: "applications.setCampaignStatus",
+      beforeState: JSON.stringify({
+        campaignId: campaign.id,
+        status: campaign.status,
+      }),
+      afterState: JSON.stringify({
+        campaignId: campaign.id,
+        status: input.status,
+        ...(input.status === "active"
+          ? { restartReason: reason, criteriaConfirmed: true }
+          : {}),
+      }),
+      riskLevel: "medium",
+    });
+
+    return { ...campaign, status: input.status, updatedAt };
+  });
 }
 
 export async function upsertInterviewPreparation(preparation: InsertInterviewPreparation) {

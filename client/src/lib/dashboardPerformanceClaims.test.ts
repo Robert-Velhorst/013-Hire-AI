@@ -87,6 +87,7 @@ describe("dashboard performance claims", () => {
       router.indexOf("declineOffer: protectedProcedure"),
       router.indexOf("confirmSubmission: protectedProcedure")
     );
+    const compactRouter = router.replace(/\s+/g, "");
 
     expect(features).toContain("getUserApplicationById(userId, input.applicationId)");
     expect(features).toContain("getUserApplicationById(userId, applicationId)");
@@ -98,7 +99,7 @@ describe("dashboard performance claims", () => {
     expect(approvalResolution).not.toContain("getUserApplications");
     expect(offerDecline).toContain("getUserApplicationById");
     expect(offerDecline).not.toContain("getUserApplications");
-    expect(router.match(/getPendingUserApplicationForJob\(ctx\.user\.id, input\.jobId\)/g))
+    expect(compactRouter.match(/getPendingUserApplicationForJob\(ctx\.user\.id,input\.jobId\)/g))
       .toHaveLength(4);
     expect(router).not.toContain("(await getUserApplications(ctx.user.id)).find");
     expect(router).toContain("listUserApplicationApprovalsForApplication");
@@ -172,11 +173,12 @@ describe("dashboard performance claims", () => {
   it("bounds the profile inbox-response review surface", () => {
     const profile = readFileSync(resolve(process.cwd(), "client/src/pages/Profile.tsx"), "utf8");
     const router = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
+    const compactRouter = router.replace(/\s+/g, "");
 
     expect(profile).toContain("getInboxResponseCandidatePage.useQuery({ limit: 25 }");
     expect(profile).toContain("inboxResponseCandidatesQuery.data?.items.map");
     expect(router).toContain("getInboxResponseCandidatePage: protectedProcedure");
-    expect(router).toContain("getPendingInboxResponseCandidatePage(ctx.user.id, input?.limit ?? 25)");
+    expect(compactRouter).toContain("getPendingInboxResponseCandidatePage(ctx.user.id,input?.limit??25)");
     expect(router).not.toContain("listInboxResponseCandidates: protectedProcedure");
   });
 

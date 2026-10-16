@@ -3538,7 +3538,7 @@ export async function rescheduleInterview(interviewId: number, newDate: Date, us
 export interface FollowUpInput {
   applicationId: number;
   message: string;
-  purpose?: "routine_follow_up" | "employer_reply";
+  purpose?: "routine_follow_up" | "employer_reply" | "employer_clarification";
   sourceResponseId?: number;
 }
 
@@ -3567,9 +3567,21 @@ async function getFollowUpApplication(applicationId: number, userId: number) {
   return application;
 }
 
-function assertFollowUpAllowed(status: string) {
+function assertFollowUpAllowed(status: string, purpose: FollowUpInput["purpose"] = "routine_follow_up") {
+  if (purpose === "employer_clarification" && status === "pending") return;
   if (!["applied", "viewed", "interview"].includes(status)) {
     throw new Error("Follow-ups can only be created after an application has been submitted.");
+  }
+}
+
+function getFollowUpPurposeFromApprovalPayload(payload?: string | null): FollowUpInput["purpose"] {
+  try {
+    const purpose = payload ? JSON.parse(payload)?.purpose : null;
+    return purpose === "routine_follow_up" || purpose === "employer_reply" || purpose === "employer_clarification"
+      ? purpose
+      : "routine_follow_up";
+  } catch {
+    return "routine_follow_up";
   }
 }
 
@@ -3598,11 +3610,17 @@ function getFollowUpDraftMetadata(
   input: FollowUpInput,
   sourceResponse?: { id: number; responseType: string }
 ): {
-  purpose: "routine_follow_up" | "employer_reply";
+  purpose: "routine_follow_up" | "employer_reply" | "employer_clarification";
   sourceResponseId: number | null;
   responseType: string | null;
 } {
-  const purpose = input.purpose === "employer_reply" ? "employer_reply" : "routine_follow_up";
+  const purpose = input.purpose ?? "routine_follow_up";
+  if (!["routine_follow_up", "employer_reply", "employer_clarification"].includes(purpose)) {
+    throw new Error("Unsupported follow-up purpose.");
+  }
+  if (purpose === "employer_clarification" && input.sourceResponseId) {
+    throw new Error("Employer clarification drafts cannot be linked to an employer response.");
+  }
   return {
     purpose,
     sourceResponseId: sourceResponse?.id ?? input.sourceResponseId ?? null,
@@ -3610,7 +3628,15 @@ function getFollowUpDraftMetadata(
   };
 }
 
-function getFollowUpApprovalCopy(purpose: "routine_follow_up" | "employer_reply") {
+function getFollowUpApprovalCopy(purpose: "routine_follow_up" | "employer_reply" | "employer_clarification") {
+  if (purpose === "employer_clarification") {
+    return {
+      title: "Clarify compensation before applying",
+      description: "Review the listed employer contact and this compensation question. Hire.AI will not send it without your approval and final confirmation.",
+      draftAction: "employer_compensation_clarification_draft_created",
+    };
+  }
+
   if (purpose === "employer_reply") {
     return {
       title: "Approve employer reply before sending",
@@ -3643,7 +3669,7 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
 
   if (!db) {
     const application = await getFollowUpApplication(input.applicationId, userId);
-    assertFollowUpAllowed(application.status || "pending");
+    assertFollowUpAllowed(application.status || "pending", metadata.purpose);
 
     const record = {
       id: nextMemoryFollowUpId(),
@@ -3684,8 +3710,8 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
       entityType: "application",
       entityId: input.applicationId,
       action: approvalCopy.draftAction,
-      actor: "user",
-      source: "applications.createFollowUp",
+      actor: metadata.purpose === "employer_clarification" ? "system" : "user",
+      source: metadata.purpose === "employer_clarification" ? "autonomousService" : "applications.createFollowUp",
       afterState: JSON.stringify({
         followUpId: record.id,
         approvalStatus: "pending",
@@ -3698,7 +3724,7 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
   }
 
   const application = await assertUserOwnsApplication(input.applicationId, userId);
-  assertFollowUpAllowed(application.status);
+  assertFollowUpAllowed(application.status, metadata.purpose);
 
   return await db.transaction(async (tx) => {
     const result = await tx.insert(followUps).values({
@@ -3738,8 +3764,8 @@ export async function createFollowUp(input: FollowUpInput, userId: number) {
       entityType: "application",
       entityId: input.applicationId,
       action: approvalCopy.draftAction,
-      actor: "user",
-      source: "applications.createFollowUp",
+      actor: metadata.purpose === "employer_clarification" ? "system" : "user",
+      source: metadata.purpose === "employer_clarification" ? "autonomousService" : "applications.createFollowUp",
       afterState: JSON.stringify({
         followUpId,
         approvalStatus: "pending",
@@ -4427,14 +4453,14 @@ export async function markFollowUpSent(followUpId: number, userId: number, deliv
     const followUp = await findOwnedMemoryFollowUp(followUpId, userId);
     if (followUp.sentDate) return { success: true };
     const application = await getFollowUpApplication(followUp.applicationId, userId);
-    assertFollowUpAllowed(application.status || "pending");
-
     const approvals = await listUserApplicationApprovalsForApplication(userId, followUp.applicationId);
     const approval = approvals.find((item) =>
       item.entityType === "follow_up" &&
       item.entityId === followUpId &&
       item.approvalType === "follow_up_send"
     );
+    const purpose = getFollowUpPurposeFromApprovalPayload(approval?.payload);
+    assertFollowUpAllowed(application.status || "pending", purpose);
     if (!approval) {
       throw new Error("Follow-up must be approved before it can be marked sent.");
     }
@@ -4481,10 +4507,8 @@ export async function markFollowUpSent(followUpId: number, userId: number, deliv
       .limit(1);
     if (!followUp[0]) throw new Error("Follow-up not found.");
     if (followUp[0].sentDate) return { success: true };
-    assertFollowUpAllowed(followUp[0].applicationStatus);
-
     const approval = await tx
-      .select({ id: applicationApprovals.id, status: applicationApprovals.status })
+      .select({ id: applicationApprovals.id, status: applicationApprovals.status, payload: applicationApprovals.payload })
       .from(applicationApprovals)
       .where(and(
         eq(applicationApprovals.userId, userId),
@@ -4494,6 +4518,8 @@ export async function markFollowUpSent(followUpId: number, userId: number, deliv
       ))
       .orderBy(desc(applicationApprovals.createdAt))
       .limit(1);
+    const purpose = getFollowUpPurposeFromApprovalPayload(approval[0]?.payload);
+    assertFollowUpAllowed(followUp[0].applicationStatus || "pending", purpose);
     if (!approval[0]) {
       throw new Error("Follow-up must be approved before it can be marked sent.");
     }

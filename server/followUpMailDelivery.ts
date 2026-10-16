@@ -45,7 +45,7 @@ type FollowUpMailDeliveryDependencies = {
 };
 
 export class FollowUpProviderRejectionError extends Error {
-  constructor(message: string, readonly authorizationRejected: boolean) {
+  constructor(message: string, readonly authorizationRejected: boolean, readonly statusCode = 0) {
     super(message);
     this.name = "FollowUpProviderRejectionError";
   }
@@ -95,6 +95,71 @@ function headerValue(value: string) {
 }
 
 const GENERIC_DELIVERY_FAILURE = "Mailbox delivery could not be completed.";
+
+export type FollowUpDeliveryPurpose = "routine_follow_up" | "employer_reply" | "employer_clarification";
+
+function getFollowUpDeliveryPurpose(payload: string | null | undefined): FollowUpDeliveryPurpose {
+  try {
+    const value = payload ? JSON.parse(payload)?.purpose : null;
+    return value === "employer_reply" || value === "employer_clarification"
+      ? value
+      : "routine_follow_up";
+  } catch {
+    return "routine_follow_up";
+  }
+}
+
+export function assertFollowUpApprovalMatchesDraft(message: string, approvalPayload: string | null | undefined) {
+  let approvedMessage: unknown;
+  try {
+    approvedMessage = approvalPayload ? JSON.parse(approvalPayload)?.message : null;
+  } catch {
+    approvedMessage = null;
+  }
+  if (typeof approvedMessage !== "string" || approvedMessage !== message) {
+    throw new Error("This follow-up changed after approval. Recreate the draft and request fresh approval before sending.");
+  }
+}
+
+export function resolveFollowUpDeliveryDetails(input: {
+  requestedRecipient: string;
+  applicationStatus: string;
+  jobIsActive: number;
+  jobEmail: string | null;
+  jobTitle: string;
+  company: string;
+  approvalPayload: string | null;
+}) {
+  const requestedRecipient = normalizeFollowUpRecipient(input.requestedRecipient);
+  const purpose = getFollowUpDeliveryPurpose(input.approvalPayload);
+
+  if (purpose === "employer_clarification") {
+    if (input.applicationStatus !== "pending") {
+      throw new Error("Compensation clarification can only be sent before an application is submitted.");
+    }
+    if (input.jobIsActive !== 1) {
+      throw new Error("The job listing is no longer active; review it before contacting the employer.");
+    }
+    const listedRecipient = normalizeFollowUpRecipient(input.jobEmail || "");
+    if (requestedRecipient !== listedRecipient) {
+      throw new Error("The recipient must exactly match the email address listed on this job.");
+    }
+    return {
+      purpose,
+      recipient: listedRecipient,
+      subject: headerValue(`Compensation question regarding ${input.jobTitle} at ${input.company}`).slice(0, 500),
+    };
+  }
+
+  if (!["applied", "viewed", "interview"].includes(input.applicationStatus)) {
+    throw new Error("This application is no longer eligible for an external follow-up.");
+  }
+  return {
+    purpose,
+    recipient: requestedRecipient,
+    subject: headerValue(`Follow-up regarding ${input.jobTitle} at ${input.company}`).slice(0, 500),
+  };
+}
 
 function failureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -156,6 +221,20 @@ async function getMailAccess(
   }
 }
 
+export async function getAuthorizedMailAccess(
+  userId: number,
+  provider: FollowUpMailProvider,
+  options: { now?: Date; fetcher?: typeof fetch } = {}
+) {
+  return await getMailAccess(
+    userId,
+    provider,
+    options.now ?? new Date(),
+    options.fetcher ?? fetch,
+    defaults
+  );
+}
+
 async function markMailAccessNeedsReauth(
   userId: number,
   account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>,
@@ -173,23 +252,34 @@ async function markMailAccessNeedsReauth(
   });
 }
 
+export async function markAuthorizedMailAccessNeedsReauth(
+  userId: number,
+  account: NonNullable<Awaited<ReturnType<typeof getUserConnectorAccount>>>
+) {
+  await markMailAccessNeedsReauth(userId, account, defaults);
+}
+
 export async function sendFollowUpProviderMessage(
   provider: FollowUpMailProvider,
   accessToken: string,
   recipient: string,
   subject: string,
   message: string,
-  fetcher: typeof fetch
+  fetcher: typeof fetch,
+  attachment?: { fileName: string; mimeType: string; bytes: Uint8Array }
 ) {
   if (provider === "gmail") {
-    const raw = Buffer.from([
-      `To: ${recipient}`,
-      `Subject: ${subject}`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "",
-      message,
-    ].join("\r\n"), "utf8").toString("base64url");
+    const rawMessage = attachment
+      ? buildMultipartMailMessage(recipient, subject, message, attachment)
+      : [
+          `To: ${recipient}`,
+          `Subject: ${subject}`,
+          "MIME-Version: 1.0",
+          "Content-Type: text/plain; charset=UTF-8",
+          "",
+          message,
+        ].join("\r\n");
+    const raw = Buffer.from(rawMessage, "utf8").toString("base64url");
     const response = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", providerRequestInit({
       method: "POST",
       headers: {
@@ -201,14 +291,15 @@ export async function sendFollowUpProviderMessage(
     if (!response.ok) {
       throw new FollowUpProviderRejectionError(
         `Gmail rejected the follow-up delivery (${response.status}).`,
-        isAuthoritativeInvalidConnectorToken(response)
+        isAuthoritativeInvalidConnectorToken(response),
+        response.status
       );
     }
     const payload = await readProviderJson<{ id?: unknown }>(response);
     if (typeof payload.id !== "string" || !payload.id) {
       throw new Error("Gmail accepted the request without a deterministic message identifier.");
     }
-    return { messageId: payload.id, confirmation: `Gmail accepted the approved follow-up with message ID ${payload.id}.` };
+    return { messageId: payload.id, confirmation: `Gmail accepted the approved email with message ID ${payload.id}.` };
   }
 
   const response = await fetcher("https://graph.microsoft.com/v1.0/me/sendMail", providerRequestInit({
@@ -222,6 +313,14 @@ export async function sendFollowUpProviderMessage(
         subject,
         body: { contentType: "Text", content: message },
         toRecipients: [{ emailAddress: { address: recipient } }],
+        ...(attachment ? {
+          attachments: [{
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: attachment.fileName,
+            contentType: attachment.mimeType,
+            contentBytes: Buffer.from(attachment.bytes).toString("base64"),
+          }],
+        } : {}),
       },
       saveToSentItems: true,
     }),
@@ -229,10 +328,54 @@ export async function sendFollowUpProviderMessage(
   if (!response.ok) {
     throw new FollowUpProviderRejectionError(
       `Outlook rejected the follow-up delivery (${response.status}).`,
-      isAuthoritativeInvalidConnectorToken(response)
+      isAuthoritativeInvalidConnectorToken(response),
+      response.status
     );
   }
-  return { messageId: null, confirmation: "Outlook accepted the approved follow-up for delivery and saved it to Sent Items." };
+  return { messageId: null, confirmation: "Outlook accepted the approved email for delivery and saved it to Sent Items." };
+}
+
+function encodeMimeBase64(value: Uint8Array) {
+  return Buffer.from(value).toString("base64").replace(/.{1,76}/g, "$&\r\n").trimEnd();
+}
+
+function encodeMimeFilename(value: string) {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+export function buildMultipartMailMessage(
+  recipient: string,
+  subject: string,
+  message: string,
+  attachment: { fileName: string; mimeType: string; bytes: Uint8Array },
+  boundary = `hire-ai-${randomUUID()}`
+) {
+  const safeRecipient = normalizeFollowUpRecipient(recipient);
+  const safeSubject = headerValue(subject);
+  const safeFileName = attachment.fileName.replace(/[\r\n\\/\0]/g, "_").slice(0, 255) || "resume";
+  const safeMimeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(attachment.mimeType)
+    ? attachment.mimeType
+    : "application/octet-stream";
+  return [
+    `To: ${safeRecipient}`,
+    `Subject: ${safeSubject}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    message,
+    `--${boundary}`,
+    `Content-Type: ${safeMimeType}; name=\"${encodeMimeFilename(safeFileName)}\"`,
+    `Content-Disposition: attachment; filename=\"${encodeMimeFilename(safeFileName)}\"`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    encodeMimeBase64(attachment.bytes),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
 }
 
 async function reserveDelivery(
@@ -254,6 +397,8 @@ async function reserveDelivery(
         applicationStatus: applications.status,
         jobTitle: jobs.title,
         company: jobs.company,
+        jobIsActive: jobs.isActive,
+        jobEmail: jobs.applicationEmail,
       })
       .from(followUps)
       .innerJoin(applications, eq(followUps.applicationId, applications.id))
@@ -269,12 +414,9 @@ async function reserveDelivery(
       throw new Error("This follow-up already has an in-progress or uncertain external delivery. Do not retry it; confirm delivery manually after checking the mailbox.");
     }
     if (!followUp.message?.trim()) throw new Error("This follow-up has no message to send.");
-    if (!["applied", "viewed", "interview"].includes(followUp.applicationStatus)) {
-      throw new Error("This application is no longer eligible for an external follow-up.");
-    }
 
     const approvals = await tx
-      .select({ id: applicationApprovals.id, status: applicationApprovals.status })
+      .select({ id: applicationApprovals.id, status: applicationApprovals.status, payload: applicationApprovals.payload })
       .from(applicationApprovals)
       .where(and(
         eq(applicationApprovals.userId, input.userId),
@@ -287,8 +429,18 @@ async function reserveDelivery(
     if (!approvals[0] || approvals[0].status !== "approved") {
       throw new Error("Approve this follow-up before asking Hire.AI to send it.");
     }
+    assertFollowUpApprovalMatchesDraft(followUp.message, approvals[0].payload);
 
-    const subject = headerValue(`Follow-up regarding ${followUp.jobTitle} at ${followUp.company}`).slice(0, 500);
+    const delivery = resolveFollowUpDeliveryDetails({
+      requestedRecipient: recipient,
+      applicationStatus: followUp.applicationStatus,
+      jobIsActive: followUp.jobIsActive ?? 0,
+      jobEmail: followUp.jobEmail,
+      jobTitle: followUp.jobTitle,
+      company: followUp.company,
+      approvalPayload: approvals[0].payload,
+    });
+    const subject = delivery.subject;
     const claimed = await tx
       .update(followUps)
       .set({
@@ -313,6 +465,7 @@ async function reserveDelivery(
       applicationId: followUp.applicationId,
       message: followUp.message,
       subject,
+      recipient: delivery.recipient,
     };
   });
 }
@@ -418,7 +571,7 @@ export async function sendApprovedFollowUp(
 
   let providerResult: { messageId: string | null; confirmation: string };
   try {
-    providerResult = await sendFollowUpProviderMessage(input.provider, access.accessToken, recipient, reservation.subject, reservation.message, fetcher);
+    providerResult = await sendFollowUpProviderMessage(input.provider, access.accessToken, reservation.recipient, reservation.subject, reservation.message, fetcher);
   } catch (error) {
     const reason = failureMessage(error);
     // An accepted message without an identifier may already have been sent.

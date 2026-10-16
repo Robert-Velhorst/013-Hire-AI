@@ -109,6 +109,7 @@ export const ENV = {
   oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
   publicAppOrigin: readEnv("PUBLIC_APP_ORIGIN"),
   trustedProxyIps: parseTrustedProxyIps(readEnv("TRUSTED_PROXY_IPS"), isProduction),
+  devQaAuthEnabled: readBooleanFeatureFlag(readEnv("DEV_QA_AUTH_ENABLED"), false),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearOperationalFailuresForTests,
   getOperationalFailureSnapshot,
+  getOperationalFailureSnapshotPage,
   logOperationalFailure,
 } from "./operationalFailureLog";
 
@@ -47,5 +48,25 @@ describe("operational failure logging", () => {
 
     expect(errorSpy).toHaveBeenCalledWith("[ResumeParser] PDF extraction failed.");
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("provider-secret");
+  });
+
+  it("keeps memory-fallback cursor pages stable when an existing aggregate is updated", () => {
+    logOperationalFailure("Database", "Connection initialization");
+    logOperationalFailure("OAuth", "Callback");
+    logOperationalFailure("Server", "Startup");
+
+    const firstPage = getOperationalFailureSnapshotPage(1);
+    expect(firstPage.signals.map((signal) => signal.operation)).toEqual(["Startup"]);
+    expect(firstPage.hasMore).toBe(true);
+
+    logOperationalFailure("Database", "Connection initialization");
+    const secondPage = getOperationalFailureSnapshotPage(1, firstPage.nextCursor!.id);
+    const thirdPage = getOperationalFailureSnapshotPage(1, secondPage.nextCursor!.id);
+
+    expect(secondPage.signals.map((signal) => signal.operation)).toEqual(["Callback"]);
+    expect(thirdPage.signals.map((signal) => signal.operation)).toEqual(["Connection initialization"]);
+    expect(thirdPage.signals[0]?.count).toBe(2);
+    expect(thirdPage.hasMore).toBe(false);
+    expect(thirdPage.nextCursor).toBeNull();
   });
 });

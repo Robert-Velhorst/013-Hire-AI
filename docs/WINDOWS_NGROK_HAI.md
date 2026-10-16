@@ -43,23 +43,25 @@ Set `CONNECTOR_OAUTH_REDIRECT_URI` to the exact public connector callback ending
 
 ## HAI A2A connector
 
-Hire.AI exposes a deliberately narrow A2A 1.0-shaped status and remote-job discovery connector for a local or private-network HAI peer. It is disabled by default and must not be pointed at a public ngrok origin.
+Hire.AI exposes a deliberately narrow A2A 1.0-shaped status and remote-job discovery connector. It is disabled by default. A local/private HAI peer may use a loopback or private HTTP(S) endpoint. A remote HAI peer may use the public ngrok tunnel, but only over HTTPS and only when the connector URL has the exact same origin as `PUBLIC_APP_ORIGIN`.
 
 ```dotenv
 HAI_CONNECTOR_ENABLED=true
 HAI_CONNECTOR_TOKEN=<independently-generated-32-to-4096-character-token>
 HAI_CONNECTOR_USER_ID=123
-HAI_CONNECTOR_URL=http://127.0.0.1:3000/api/hai/a2a
+HAI_CONNECTOR_URL=https://hire-ai.example.ngrok.app/api/hai/a2a
 ```
 
-Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, public endpoints, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
+For a same-machine HAI peer, use `http://127.0.0.1:3000/api/hai/a2a` instead. For a container peer on the documented shared Docker network, use `http://app:3000/api/hai/a2a`. For remote access, set `HAI_CONNECTOR_URL` to `PUBLIC_APP_ORIGIN` plus `/api/hai/a2a`; for example, if the tunnel origin is `https://hire-ai.example.ngrok.app`, use `https://hire-ai.example.ngrok.app/api/hai/a2a`. The ngrok launcher already requires its public URL to match `PUBLIC_APP_ORIGIN`. Configuration with a different public host, public HTTP, credentials, query/fragment data, or a different path fails closed.
+
+Generate the token with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Production startup and `pnpm doctor` reject the documented placeholder, whitespace/control characters, ambiguous user IDs, public HTTP endpoints, public origins that do not exactly match `PUBLIC_APP_ORIGIN`, and any path other than exactly `/api/hai/a2a`. The token is never printed by diagnostics.
 
 Endpoints:
 
 - `GET /.well-known/agent-card.json`: available only when configuration is valid.
 - `GET /api/hai/status`: bearer-authenticated connector configuration status.
-- `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`.
+- `POST /api/hai/a2a`: bearer-authenticated JSON-RPC `SendMessage`, requiring `A2A-Version: 1.0`. It supports `application/json` and `text/plain` response negotiation through `configuration.acceptedOutputModes`; task push notifications are explicitly unsupported.
 
 An explicit request such as `Find remote jobs for a product designer` searches the canonical active-job query and returns at most ten deduplicated listings filtered to remote-only and clear listing-safety status. Results contain only the job ID, title, company, location, job type, disclosed salary, posted date, and HTTPS application/source links. Job descriptions, requirements, candidate records, email, and credentials are never returned. Search queries are limited to 200 characters. The separate aggregate status response contains campaign, application, approval, connector, success-fee-state, and scheduler totals for one configured numeric user ID; it excludes names, profile content, documents, messages, payment amounts, and raw audit records. The connector cannot submit applications, send messages, call providers, resolve approvals, alter billing, mutate workflows, or execute autonomous work.
 
-HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured.
+HAI must register the Agent Card and token on its side and retain a controlled peer acceptance test. Do not put the token in the Agent Card URL or expose it in a public issue or log. Once enabled for a remote peer, the HAI endpoints are reachable through the ngrok tunnel and rely on the bearer token and route limits; keep the token independently generated and rotate it if exposed. The checked-in contract proves Hire.AI's endpoint behavior; it does not claim that an external HAI deployment has been configured or accepted.

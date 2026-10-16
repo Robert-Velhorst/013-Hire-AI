@@ -36,8 +36,10 @@ import { trpc } from "@/lib/trpc";
 import { uploadDocument } from "@/lib/documentUpload";
 import { openExternalUrl } from "@/lib/externalUrl";
 import {
+  getCalendarWriteConsentScope,
   getProfileEvidenceControlSummary,
   getMailboxSendConsentScope,
+  needsCalendarWriteConsent,
   needsMailboxSendConsent,
   type ProfileEvidenceControlStatus,
   type ProfileEvidenceProvider,
@@ -515,6 +517,16 @@ export default function Profile() {
     });
   };
 
+  const handleEnableCalendarWriteConsent = (provider: ConnectorProviderId) => {
+    const evidenceProvider = evidenceControl.providers.find((item) => item.id === provider);
+    const calendarScope = getCalendarWriteConsentScope(provider);
+    if (!evidenceProvider || !calendarScope) return;
+    startConnectorOAuth.mutate({
+      provider,
+      consentScopes: Array.from(new Set([...(evidenceProvider.consentScopes ?? []), calendarScope])),
+    });
+  };
+
   const handleDisconnectConnector = (provider: ConnectorProviderId) => {
     disconnectConnector.mutate({ provider });
   };
@@ -699,6 +711,11 @@ export default function Profile() {
                   onEnableMailboxSendConsent={
                     canRequestProviderConnector(provider)
                       ? handleEnableMailboxSendConsent
+                      : undefined
+                  }
+                  onEnableCalendarWriteConsent={
+                    canRequestProviderConnector(provider)
+                      ? handleEnableCalendarWriteConsent
                       : undefined
                   }
                 />
@@ -1601,6 +1618,7 @@ function EvidenceProviderRow({
   onRequestConnection,
   onDisconnect,
   onEnableMailboxSendConsent,
+  onEnableCalendarWriteConsent,
 }: {
   provider: ProfileEvidenceProvider;
   isRequesting?: boolean;
@@ -1608,6 +1626,7 @@ function EvidenceProviderRow({
   onRequestConnection?: (provider: ConnectorProviderId) => void;
   onDisconnect?: (provider: ConnectorProviderId) => void;
   onEnableMailboxSendConsent?: (provider: ConnectorProviderId) => void;
+  onEnableCalendarWriteConsent?: (provider: ConnectorProviderId) => void;
 }) {
   const { t } = useLocale();
   const Icon = provider.status === "connected"
@@ -1622,6 +1641,7 @@ function EvidenceProviderRow({
     provider.connectionStatus || ""
   );
   const connectorCanEnableMailboxSend = onEnableMailboxSendConsent && needsMailboxSendConsent(provider);
+  const connectorCanEnableCalendarWrite = onEnableCalendarWriteConsent && needsCalendarWriteConsent(provider);
 
   return (
     <div
@@ -1669,6 +1689,19 @@ function EvidenceProviderRow({
               onClick={() => onEnableMailboxSendConsent(provider.id as ConnectorProviderId)}
             >
               {t("enableSending")}
+            </Button>
+          ) : null}
+          {connectorCanEnableCalendarWrite ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid={`profile-evidence-enable-calendar-${provider.id}`}
+              className="h-7 border-cyan-700/80 px-2 text-xs text-cyan-100 hover:border-cyan-500 hover:bg-cyan-500/10"
+              disabled={isRequesting}
+              onClick={() => onEnableCalendarWriteConsent(provider.id as ConnectorProviderId)}
+            >
+              {t("enableCalendarSync")}
             </Button>
           ) : null}
           {connectorCanDisconnect ? (

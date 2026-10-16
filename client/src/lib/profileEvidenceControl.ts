@@ -1,6 +1,8 @@
 export {
+  getCalendarWriteConsentScope,
   getMailboxSendConsentScope,
   getProfileEvidenceControlSummary,
+  needsCalendarWriteConsent,
   needsMailboxSendConsent,
   type ProfileEvidenceControlInput,
   type ProfileEvidenceControlSection,

@@ -7,7 +7,7 @@ import {
   getUserByOpenId,
   getUserApplications,
   upsertUser,
-  updateApplicationCampaignStatus,
+  transitionApplicationCampaignStatus,
   upsertUserProfile,
 } from "./db";
 import { appRouter } from "./routers";
@@ -74,6 +74,62 @@ describe("application campaign control", () => {
     )).toBe(true);
   });
 
+  it("requires a restart reason and explicit criteria review before resuming", async () => {
+    const userId = await createEligibleTestUser("99503");
+    await upsertUserProfile({
+      userId,
+      skills: "React, TypeScript",
+      experience: "Five years of remote product engineering.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote",
+      resumeUrl: "https://example.com/resume.pdf",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+    await caller.applications.setCampaignStatus({ status: "paused" });
+
+    await expect(
+      caller.applications.setCampaignStatus({ status: "active" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      caller.applications.setCampaignStatus({
+        status: "active",
+        reason: "My employment has ended and I am ready to look again.",
+        criteriaConfirmed: false,
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    const resumed = await caller.applications.setCampaignStatus({
+      status: "active",
+      reason: "My employment has ended and I am ready to look again.",
+      criteriaConfirmed: true,
+    });
+    const audits = await getAuditEventsForUser(userId, 10);
+
+    expect(resumed.campaign.status).toBe("active");
+    expect(audits.some((event) =>
+      event.action === "application_campaign_status_changed" &&
+      event.afterState?.includes("My employment has ended and I am ready to look again.")
+    )).toBe(true);
+  });
+
+  it("does not allow an active status write to bypass restart confirmation", async () => {
+    const userId = await createEligibleTestUser("99504");
+    await upsertUserProfile({
+      userId,
+      skills: "React, TypeScript",
+      experience: "Five years of remote product engineering.",
+      desiredJobTypes: "Frontend Engineer",
+      desiredLocations: "Remote",
+      resumeUrl: "https://example.com/resume.pdf",
+    });
+    const caller = appRouter.createCaller(createContext(userId));
+
+    await expect(
+      caller.applications.setCampaignStatus({ status: "active" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect((await caller.applications.getOperatingLedger()).campaign.status).toBe("active");
+  });
+
   it("blocks both manual and scheduled autonomous runs while the campaign is paused", async () => {
     const userId = await createEligibleTestUser("99502");
     await upsertUserProfile({
@@ -90,7 +146,7 @@ describe("application campaign control", () => {
       }),
     });
     await getUserOperatingLedger(userId);
-    await updateApplicationCampaignStatus(userId, "paused");
+    await transitionApplicationCampaignStatus({ userId, status: "paused" });
 
     await expect(runAutonomousForUser(userId)).rejects.toThrow("paused job-search campaign");
     await expect(runScheduledAutonomousForUser(userId, 0)).resolves.toBeNull();

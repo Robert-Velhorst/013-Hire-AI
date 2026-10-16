@@ -5,16 +5,32 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHireTrpcClient } from "@/lib/trpcClient";
-import { applications, jobDuplicates, jobs, userProfiles, userResumes, users } from "../drizzle/schema";
+import {
+  applicationCampaigns,
+  applicationMaterials,
+  applications,
+  auditEvents,
+  interviewCalendarSyncs,
+  interviewSchedules,
+  jobDuplicates,
+  jobs,
+  userProfiles,
+  userResumes,
+  users,
+} from "../drizzle/schema";
 import { appRouter } from "./routers";
 import {
   closeDatabaseConnection,
   ensureScraperPlatformCatalog,
   getAllJobPlatforms,
   getActiveJobPage,
+  createAutonomousPreparationApplication,
   getDb,
+  countUserAutonomousPreparationsSince,
   getUserApplicationById,
   getUserProfile,
+  transitionApplicationCampaignStatus,
+  upsertApplicationCampaign,
   upsertUserProfile,
   withJobPersistenceSerialization,
 } from "./db";
@@ -26,6 +42,13 @@ import {
   getSourceComparisonPage,
   getSourceDirectory,
 } from "./sourceIntelligenceRepository";
+import {
+  claimInterviewCalendarSync,
+  finishInterviewCalendarSync,
+  getInterviewCalendarDetails,
+  getInterviewCalendarSync,
+  listInterviewCalendarSyncs,
+} from "./interviewCalendarSyncStore";
 
 const enabled = process.env.HIRE_AI_DATABASE_ACCEPTANCE === "true";
 
@@ -43,7 +66,9 @@ describe
     let records: Parameters<ScraperManager["saveJobs"]>[0] = [];
     let jobIds: number[] = [];
     const userIds: number[] = [];
+    const interviewIds: number[] = [];
     let applicationId = 0;
+    const autonomousPreparationIds: number[] = [];
     let firstSave: Awaited<ReturnType<ScraperManager["saveJobs"]>>;
 
     beforeAll(async () => {
@@ -121,11 +146,26 @@ describe
     afterAll(async () => {
       try {
         if (!database) return;
-        if (applicationId)
+        const applicationIds = [applicationId, ...autonomousPreparationIds].filter(Boolean);
+        if (applicationIds.length) {
+          await database
+            .delete(applicationMaterials)
+            .where(inArray(applicationMaterials.applicationId, applicationIds));
           await database
             .delete(applications)
-            .where(eq(applications.id, applicationId));
+            .where(inArray(applications.id, applicationIds));
+        }
+        if (interviewIds.length)
+          await database
+            .delete(interviewSchedules)
+            .where(inArray(interviewSchedules.id, interviewIds));
         if (userIds.length) {
+          await database
+            .delete(auditEvents)
+            .where(inArray(auditEvents.userId, userIds));
+          await database
+            .delete(applicationCampaigns)
+            .where(inArray(applicationCampaigns.userId, userIds));
           await database.delete(userProfiles).where(inArray(userProfiles.userId, userIds));
           await database.delete(users).where(inArray(users.id, userIds));
         }
@@ -175,6 +215,264 @@ describe
       expect(
         next.items.some(pair => pair.duplicate.id === links[0].duplicateJobId)
       ).toBe(false);
+    });
+
+    it("commits campaign status and its restart audit atomically in MySQL", async () => {
+      const userId = userIds[0];
+      await upsertApplicationCampaign({
+        userId,
+        title: `${marker} campaign`,
+        status: "paused",
+      });
+
+      await expect(
+        transitionApplicationCampaignStatus({
+          userId,
+          status: "active",
+        })
+      ).rejects.toThrow("restart reason and current-criteria confirmation");
+
+      const unchanged = await database
+        .select()
+        .from(applicationCampaigns)
+        .where(eq(applicationCampaigns.userId, userId));
+      expect(unchanged[0].status).toBe("paused");
+      const rejectedAudit = await database
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.userId, userId),
+            eq(auditEvents.action, "application_campaign_status_changed")
+          )
+        );
+      expect(rejectedAudit).toHaveLength(0);
+
+      const resumed = await transitionApplicationCampaignStatus({
+        userId,
+        status: "active",
+        reason: "My employment has ended and I am ready to look again.",
+        criteriaConfirmed: true,
+      });
+      await transitionApplicationCampaignStatus({
+        userId,
+        status: "active",
+        reason: "My employment has ended and I am ready to look again.",
+        criteriaConfirmed: true,
+      });
+      const audit = await database
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.userId, userId),
+            eq(auditEvents.action, "application_campaign_status_changed")
+          )
+        );
+
+      expect(resumed.status).toBe("active");
+      expect(audit).toHaveLength(1);
+      expect(JSON.parse(audit[0].afterState ?? "{}")).toMatchObject({
+        status: "active",
+        restartReason: "My employment has ended and I am ready to look again.",
+        criteriaConfirmed: true,
+      });
+    });
+
+    it("does not overwrite an existing candidate draft on autonomous retry", async () => {
+      const insertedUser = await database.insert(users).values({
+        openId: `${marker}-autonomous-retry`,
+        name: "Acceptance Autonomous Retry User",
+      });
+      const userId = Number(insertedUser[0].insertId);
+      userIds.push(userId);
+      const first = await createAutonomousPreparationApplication({
+        userId,
+        jobId: jobIds[0],
+        status: "pending",
+        coverLetter: "Generated application draft",
+        notes: "Autonomous preparation",
+      });
+      const preparedApplicationId = Number(first.insertId);
+      autonomousPreparationIds.push(preparedApplicationId);
+
+      await database
+        .update(applications)
+        .set({
+          coverLetter: "Candidate-edited application draft",
+          notes: "Candidate review notes",
+        })
+        .where(eq(applications.id, preparedApplicationId));
+
+      const retry = await createAutonomousPreparationApplication({
+        userId,
+        jobId: jobIds[0],
+        status: "pending",
+        coverLetter: "Regenerated application draft",
+        notes: "Autonomous retry",
+      });
+      const [record] = await database
+        .select({ coverLetter: applications.coverLetter, notes: applications.notes })
+        .from(applications)
+        .where(eq(applications.id, preparedApplicationId))
+        .limit(1);
+
+      expect(first.existing).toBe(false);
+      expect(retry).toEqual({ insertId: preparedApplicationId, existing: true });
+      expect(record).toEqual({
+        coverLetter: "Candidate-edited application draft",
+        notes: "Candidate review notes",
+      });
+    });
+
+    it("serializes concurrent calendar claims and persists owner-scoped sync state", async () => {
+      const scheduledAt = new Date(Date.now() + 86_400_000);
+      const [inserted] = await database.insert(interviewSchedules).values({
+        applicationId,
+        interviewType: "video",
+        scheduledAt,
+        duration: 45,
+        meetingLink: "https://meeting.example.test/acceptance",
+      });
+      const interviewId = Number(inserted.insertId);
+      interviewIds.push(interviewId);
+      const idempotencyKey = `${marker}-calendar-gmail`;
+      const claimInput = {
+        userId: userIds[0],
+        interviewId,
+        provider: "gmail" as const,
+        idempotencyKey,
+        action: "upsert" as const,
+        confirmedNoDuplicate: false,
+        now: new Date(),
+      };
+
+      const [firstClaim, secondClaim] = await Promise.all([
+        claimInterviewCalendarSync(claimInput),
+        claimInterviewCalendarSync(claimInput),
+      ]);
+      expect([firstClaim.kind, secondClaim.kind].sort()).toEqual([
+        "claimed",
+        "in_progress",
+      ]);
+      expect(await getInterviewCalendarDetails(userIds[0], interviewId)).toMatchObject({
+        applicationId,
+        interviewType: "video",
+        jobTitle: "Acceptance Software Engineer",
+        company: marker,
+      });
+      await expect(
+        getInterviewCalendarDetails(userIds[1], interviewId)
+      ).resolves.toBeUndefined();
+
+      await finishInterviewCalendarSync({
+        ...claimInput,
+        status: "synced",
+        providerEventId: "acceptance-event-1",
+        now: new Date(),
+      });
+      await expect(
+        getInterviewCalendarSync(userIds[0], interviewId, "gmail")
+      ).resolves.toMatchObject({
+        status: "synced",
+        providerEventId: "acceptance-event-1",
+        idempotencyKey,
+        attemptCount: 1,
+      });
+      await expect(
+        listInterviewCalendarSyncs(userIds[0], [interviewId])
+      ).resolves.toMatchObject([
+        { interviewId, provider: "gmail", status: "synced" },
+      ]);
+      await expect(
+        listInterviewCalendarSyncs(userIds[1], [interviewId])
+      ).resolves.toEqual([]);
+
+      const stored = await database
+        .select()
+        .from(interviewCalendarSyncs)
+        .where(eq(interviewCalendarSyncs.interviewId, interviewId));
+      expect(stored).toHaveLength(1);
+    });
+
+    it("recovers stale calendar reservations only as uncertain before an explicit duplicate check", async () => {
+      const scheduledAt = new Date(Date.now() + 86_400_000);
+      const [inserted] = await database.insert(interviewSchedules).values({
+        applicationId,
+        interviewType: "video",
+        scheduledAt,
+        duration: 45,
+      });
+      const interviewId = Number(inserted.insertId);
+      interviewIds.push(interviewId);
+      const idempotencyKey = `${marker}-calendar-stale-gmail`;
+      const firstAttemptAt = new Date(Date.now() - 5 * 60_000);
+      const claimInput = {
+        userId: userIds[0],
+        interviewId,
+        provider: "gmail" as const,
+        idempotencyKey,
+        action: "upsert" as const,
+        confirmedNoDuplicate: false,
+        now: firstAttemptAt,
+      };
+
+      await expect(claimInterviewCalendarSync(claimInput)).resolves.toMatchObject({
+        kind: "claimed",
+      });
+      const [reservation] = await database
+        .select({ id: interviewCalendarSyncs.id })
+        .from(interviewCalendarSyncs)
+        .where(eq(interviewCalendarSyncs.interviewId, interviewId));
+      if (!reservation) throw new Error("Calendar sync reservation was not persisted.");
+      await database
+        .update(interviewCalendarSyncs)
+        .set({ lastAttemptAt: firstAttemptAt })
+        .where(eq(interviewCalendarSyncs.id, reservation.id));
+
+      await expect(
+        claimInterviewCalendarSync({
+          ...claimInput,
+          now: new Date(),
+        })
+      ).resolves.toMatchObject({ kind: "uncertain", recovered: true });
+      await expect(
+        getInterviewCalendarSync(userIds[0], interviewId, "gmail")
+      ).resolves.toMatchObject({
+        status: "unknown",
+        lastErrorCode: "network_failure",
+        attemptCount: 1,
+      });
+      await expect(
+        claimInterviewCalendarSync({
+          ...claimInput,
+          confirmedNoDuplicate: true,
+          now: new Date(),
+        })
+      ).resolves.toMatchObject({ kind: "claimed", record: { attemptCount: 2 } });
+    });
+
+    it("counts autonomous clarification preparations by owner in MySQL", async () => {
+      const since = new Date(Date.now() - 60_000);
+      const note = "Autonomous compensation clarification pending. No application has been submitted or prepared.";
+      const ownerRecord = await database.insert(applications).values({
+        userId: userIds[0],
+        jobId: jobIds[1],
+        notes: note,
+      });
+      autonomousPreparationIds.push(Number(ownerRecord[0].insertId));
+
+      for (const jobId of jobIds) {
+        const otherRecord = await database.insert(applications).values({
+          userId: userIds[1],
+          jobId,
+          notes: note,
+        });
+        autonomousPreparationIds.push(Number(otherRecord[0].insertId));
+      }
+
+      await expect(countUserAutonomousPreparationsSince(userIds[0], since)).resolves.toBe(1);
+      await expect(countUserAutonomousPreparationsSince(userIds[1], since)).resolves.toBe(2);
     });
 
     it("preserves one canonical duplicate group when platform scans save concurrently", async () => {
@@ -356,6 +654,48 @@ describe
       expect(page.items.map((job) => job.externalId)).not.toContain(`${marker}-mostly-remote`);
     });
 
+    it("fills filtered job pages by scanning past blocked listings", async () => {
+      const createdAt = new Date(Date.now() - 60_000);
+      const listings = [
+        {
+          externalId: `${marker}-blocked-a`,
+          title: "Safety Page Backfill Remote Engineer",
+          description: "Fully remote role; pay a fee before employment.",
+        },
+        {
+          externalId: `${marker}-blocked-b`,
+          title: "Safety Page Backfill Remote Analyst",
+          description: "Remote work; wire funds as an onboarding deposit.",
+        },
+        {
+          externalId: `${marker}-clear`,
+          title: "Safety Page Backfill Remote Designer",
+          description: "A fully remote role with no office attendance.",
+        },
+      ];
+      await database.insert(jobs).values(listings.map((listing, index) => ({
+        ...listing,
+        company: marker,
+        location: "Remote - Worldwide",
+        platformId: records[0].platformId,
+        sourceUrl: `https://jobs.example.test/${listing.externalId}`,
+        createdAt: new Date(createdAt.getTime() + (listings.length - index) * 1_000),
+        updatedAt: new Date(createdAt.getTime() + (listings.length - index) * 1_000),
+      })));
+
+      const page = await getActiveJobPage({
+        limit: 1,
+        filters: {
+          query: "Safety Page Backfill",
+          remoteOnly: true,
+          listingSafety: "clear",
+        },
+      });
+
+      expect(page.items.map((job) => job.externalId)).toEqual([`${marker}-clear`]);
+      expect(page.nextCursor).toBeNull();
+    });
+
     it("refreshes repeated provider identities without multiplying stored jobs", async () => {
       expect(await new ScraperManager().saveJobs(records)).toEqual({
         saved: 0,
@@ -533,6 +873,23 @@ describe
       expect(await deleteResumeVersion(userId, third.version, third.id)).toBe(true);
       expect(await getActiveResume(userId)).toBeNull();
       expect(await getUserProfile(userId)).toMatchObject({ resumeFileKey: null, resumeUrl: null });
+    });
+
+    it("clears application material references when a resume version is deleted", async () => {
+      const userId = userIds[0];
+      const resume = await uploadResume(userId, Buffer.from("Synthetic application resume"), "application.txt", "text/plain");
+      await database.insert(applicationMaterials).values({
+        applicationId,
+        resumeId: resume.id,
+        coverLetter: "Synthetic acceptance material.",
+      });
+
+      expect(await deleteResumeVersion(userId, resume.version, resume.id)).toBe(true);
+      const [material] = await database.select({ resumeId: applicationMaterials.resumeId })
+        .from(applicationMaterials)
+        .where(eq(applicationMaterials.applicationId, applicationId))
+        .limit(1);
+      expect(material?.resumeId).toBeNull();
     });
 
     it("serializes concurrent imports so the final active file and imported evidence agree", async () => {

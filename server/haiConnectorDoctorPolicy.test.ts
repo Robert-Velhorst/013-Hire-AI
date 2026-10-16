@@ -53,17 +53,32 @@ describe("HAI production doctor policy", () => {
   it("accepts a complete connector without printing its token", () => {
     const result = runDoctor();
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PASS HAI connector: configured read-only local bridge");
+    expect(result.stdout).toContain("PASS HAI connector: configured read-only bridge");
     expect(result.stdout).not.toContain(productionEnv.HAI_CONNECTOR_TOKEN);
+  });
+
+  it("accepts a public connector only at the exact configured HTTPS app origin", () => {
+    const result = runDoctor({
+      HAI_CONNECTOR_URL: "https://hire.example.test/api/hai/a2a",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("PASS HAI connector: configured read-only bridge");
   });
 
   it.each([
     [{ HAI_CONNECTOR_TOKEN: "replace-with-at-least-32-random-characters" }, "placeholder"],
-    [{ HAI_CONNECTOR_TOKEN: "doctor token with whitespace that is long enough" }, "whitespace"],
+    [
+      {
+        HAI_CONNECTOR_TOKEN: "doctor token with whitespace that is long enough",
+      },
+      "whitespace",
+    ],
     [{ HAI_CONNECTOR_USER_ID: "41junk" }, "positive user ID"],
     [{ HAI_CONNECTOR_URL: "http://127.0.0.1:3000/api/hai/status" }, "/api/hai/a2a"],
-    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fc00::1]:3000/api/hai/a2a" }, "local/private connector URL"],
-    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fd00::1]:3000/api/hai/a2a" }, "local/private connector URL"],
+    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fc00::1]:3000/api/hai/a2a" }, "public HTTPS connector URL matching PUBLIC_APP_ORIGIN"],
+    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fd00::1]:3000/api/hai/a2a" }, "public HTTPS connector URL matching PUBLIC_APP_ORIGIN"],
+    [{ HAI_CONNECTOR_URL: "http://hire.example.test/api/hai/a2a" }, "public HTTPS connector URL matching PUBLIC_APP_ORIGIN"],
+    [{ HAI_CONNECTOR_URL: "https://other.example.test/api/hai/a2a" }, "public HTTPS connector URL matching PUBLIC_APP_ORIGIN"],
   ])("rejects unsafe HAI configuration", (extra, message) => {
     const result = runDoctor(extra);
     expect(result.status).toBe(1);

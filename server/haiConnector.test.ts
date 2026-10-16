@@ -19,12 +19,21 @@ const snapshot: HaiJobSearchSnapshot = {
   campaignStatus: "active",
   readinessScore: 82,
   automationMode: "review_first",
-  applications: { total: 7, prepared: 2, submitted: 5, interviews: 1, offers: 0 },
+  applications: {
+    total: 7,
+    prepared: 2,
+    submitted: 5,
+    interviews: 1,
+    offers: 0,
+  },
   pendingApprovals: 2,
   connectedProviders: 1,
   connectorsNeedingAttention: 1,
   activeSuccessFees: 0,
-  autonomousRun: { status: "completed", lastCompletedAt: "2026-08-08T23:00:00.000Z" },
+  autonomousRun: {
+    status: "completed",
+    lastCompletedAt: "2026-08-08T23:00:00.000Z",
+  },
   runtimeSignals: { totalFailures: 0, uniqueSignals: 0, latestAt: null },
   nextActions: ["Review 2 pending approvals."],
   scope: "Read-only aggregate Hire.AI status.",
@@ -33,11 +42,14 @@ const snapshot: HaiJobSearchSnapshot = {
 const servers: Server[] = [];
 let ownerId: number;
 beforeEach(async () => {
-  await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus: "active" });
+  await database.upsertUser({
+    openId: "hai-authorization-fixture",
+    accountStatus: "active",
+  });
   ownerId = (await database.getUserByOpenId("hai-authorization-fixture"))!.id;
 });
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
   vi.restoreAllMocks();
 });
 
@@ -46,7 +58,7 @@ async function start(service: HaiConnectorService) {
   registerHaiConnectorRoutes(app, service);
   const server = app.listen(0, "127.0.0.1");
   servers.push(server);
-  await new Promise<void>((resolve) => server.once("listening", resolve));
+  await new Promise<void>(resolve => server.once("listening", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Test server did not bind a TCP port.");
   return `http://127.0.0.1:${address.port}`;
@@ -54,21 +66,28 @@ async function start(service: HaiConnectorService) {
 
 function configuredService(
   provider = vi.fn(async () => snapshot),
-  jobSearchProvider = vi.fn(async () => [] as HaiRemoteJob[])
+  jobSearchProvider = vi.fn(async () => [] as HaiRemoteJob[]),
+  endpointUrl = "http://127.0.0.1:3000/api/hai/a2a",
+  publicAppOrigin?: string
 ) {
   return {
     provider,
     jobSearchProvider,
-    service: new HaiConnectorService({
-      enabled: true,
-      token,
-      userId: ownerId,
-      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-    }, provider, jobSearchProvider),
+    service: new HaiConnectorService(
+      {
+        enabled: true,
+        token,
+        userId: ownerId,
+        endpointUrl,
+        ...(publicAppOrigin ? { publicAppOrigin } : {}),
+      },
+      provider,
+      jobSearchProvider
+    ),
   };
 }
 
-function sendMessage(extraMessage: Record<string, unknown> = {}) {
+function sendMessage(extraMessage: Record<string, unknown> = {}, configuration?: Record<string, unknown>) {
   return {
     jsonrpc: "2.0",
     id: "request-1",
@@ -77,20 +96,88 @@ function sendMessage(extraMessage: Record<string, unknown> = {}) {
       message: {
         messageId: "message-1",
         role: "ROLE_USER",
-        parts: [{ text: "Summarize current Hire.AI status.", mediaType: "text/plain" }],
+        parts: [
+          {
+            text: "Summarize current Hire.AI status.",
+            mediaType: "text/plain",
+          },
+        ],
         ...extraMessage,
       },
+      ...(configuration ? { configuration } : {}),
     },
   };
 }
 
 describe("HAI connector configuration", () => {
-  it("stays disabled by default and rejects weak or public connector configuration", () => {
-    expect(validateHaiConnectorConfig({ enabled: false, token: "", userId: null, endpointUrl: "" })).toBeNull();
-    expect(validateHaiConnectorConfig({ enabled: true, token: "short", userId: 1, endpointUrl: "http://127.0.0.1/a" })).toContain("32");
-    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
-    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "http://app:3000/api/hai/a2a" })).toBeNull();
-    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "http://untrusted-service:3000/api/hai/a2a" })).toContain("local");
+  it("stays disabled by default and allows public URLs only for the exact HTTPS app origin", () => {
+    expect(
+      validateHaiConnectorConfig({
+        enabled: false,
+        token: "",
+        userId: null,
+        endpointUrl: "",
+      })
+    ).toBeNull();
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token: "short",
+        userId: 1,
+        endpointUrl: "http://127.0.0.1/a",
+      })
+    ).toContain("32");
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "https://example.com/api/hai/a2a",
+      })
+    ).toContain("PUBLIC_APP_ORIGIN");
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "https://hire.example.test/api/hai/a2a",
+        publicAppOrigin: "https://hire.example.test",
+      })
+    ).toBeNull();
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "https://other.example.test/api/hai/a2a",
+        publicAppOrigin: "https://hire.example.test",
+      })
+    ).toContain("exact HTTPS PUBLIC_APP_ORIGIN");
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "http://hire.example.test/api/hai/a2a",
+        publicAppOrigin: "https://hire.example.test",
+      })
+    ).toContain("HTTPS");
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "http://app:3000/api/hai/a2a",
+      })
+    ).toBeNull();
+    expect(
+      validateHaiConnectorConfig({
+        enabled: true,
+        token,
+        userId: 1,
+        endpointUrl: "http://untrusted-service:3000/api/hai/a2a",
+      })
+    ).toContain("HTTPS");
   });
 
   it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {
@@ -99,21 +186,43 @@ describe("HAI connector configuration", () => {
     expect(parseHaiConnectorUserId("01")).toBeNull();
     expect(parseHaiConnectorUserId("9007199254740992")).toBeNull();
 
-    const config = { enabled: true, token, userId: 41, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a" };
-    expect(validateHaiConnectorConfig({ ...config, token: "replace-with-at-least-32-random-characters" })).toContain("placeholder");
+    const config = {
+      enabled: true,
+      token,
+      userId: 41,
+      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+    };
+    expect(
+      validateHaiConnectorConfig({
+        ...config,
+        token: "replace-with-at-least-32-random-characters",
+      })
+    ).toContain("placeholder");
     expect(validateHaiConnectorConfig({ ...config, token: `${token} with-space` })).toContain("whitespace");
     expect(validateHaiConnectorConfig({ ...config, token: "x".repeat(4_097) })).toContain("4096");
-    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://127.0.0.1:3000/api/hai/status" })).toContain("/api/hai/a2a");
-    expect(validateHaiConnectorConfig({ ...config, endpointUrl: " http://127.0.0.1:3000/api/hai/a2a" })).toContain("surrounding whitespace");
+    expect(
+      validateHaiConnectorConfig({
+        ...config,
+        endpointUrl: "http://127.0.0.1:3000/api/hai/status",
+      })
+    ).toContain("/api/hai/a2a");
+    expect(
+      validateHaiConnectorConfig({
+        ...config,
+        endpointUrl: " http://127.0.0.1:3000/api/hai/a2a",
+      })
+    ).toContain("surrounding whitespace");
   });
 
   it("accepts only private IPv4 and IPv6 ranges, not public IPv6 addresses containing fc or fd", () => {
-    const config = { enabled: true, token, userId: 41, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a" };
-    for (const endpointUrl of [
-      "http://[2001:db8:fc00::1]:3000/api/hai/a2a",
-      "http://[2001:db8:fd00::1]:3000/api/hai/a2a",
-    ]) {
-      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("local");
+    const config = {
+      enabled: true,
+      token,
+      userId: 41,
+      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+    };
+    for (const endpointUrl of ["http://[2001:db8:fc00::1]:3000/api/hai/a2a", "http://[2001:db8:fd00::1]:3000/api/hai/a2a"]) {
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("HTTPS");
     }
 
     for (const endpointUrl of [
@@ -126,7 +235,12 @@ describe("HAI connector configuration", () => {
       expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toBeNull();
     }
 
-    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("local");
+    expect(
+      validateHaiConnectorConfig({
+        ...config,
+        endpointUrl: "http://172.32.2.3:3000/api/hai/a2a",
+      })
+    ).toContain("HTTPS");
   });
 
   it("accepts the configured bearer and exposes no token in status", async () => {
@@ -147,18 +261,50 @@ describe("HAI remote job search", () => {
     expect(parseHaiRemoteJobSearchQuery(message)).toBe(expected);
   });
 
-  it.each([
-    "Summarize current Hire.AI status.",
-    "Find hybrid jobs for a product designer",
-    "Submit an application for a remote role",
-  ])("does not interpret unrelated or action requests as searches", (message) => {
-    expect(parseHaiRemoteJobSearchQuery(message)).toBeNull();
-  });
+  it.each(["Summarize current Hire.AI status.", "Find hybrid jobs for a product designer", "Submit an application for a remote role"])(
+    "does not interpret unrelated or action requests as searches",
+    message => {
+      expect(parseHaiRemoteJobSearchQuery(message)).toBeNull();
+    }
+  );
 
   it("queries the canonical active listing path with remote-only and clear-safety filters", async () => {
     const query = "senior designer";
     const databasePage = {
-      items: [{
+      items: [
+        {
+          id: 42,
+          title: "Senior Designer",
+          company: "Example Co",
+          location: "Remote - Europe",
+          jobType: "full-time",
+          salaryMin: 90_000,
+          salaryMax: 120_000,
+          salaryCurrency: "EUR",
+          applicationUrl: "https://jobs.example/apply",
+          sourceUrl: "https://jobs.example/listing",
+          postedDate: new Date("2026-10-01T00:00:00.000Z"),
+          description: "PRIVATE DESCRIPTION MUST NOT BE RETURNED",
+        },
+      ],
+      nextCursor: null,
+    } as any;
+    const getPage = vi.spyOn(database, "getActiveJobPage").mockResolvedValue(databasePage);
+
+    const results = await buildHaiRemoteJobResults(query);
+
+    expect(getPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 10,
+        filters: expect.objectContaining({
+          query,
+          remoteOnly: true,
+          listingSafety: "clear",
+        }),
+      })
+    );
+    expect(results).toEqual([
+      {
         id: 42,
         title: "Senior Designer",
         company: "Example Co",
@@ -169,50 +315,64 @@ describe("HAI remote job search", () => {
         salaryCurrency: "EUR",
         applicationUrl: "https://jobs.example/apply",
         sourceUrl: "https://jobs.example/listing",
-        postedDate: new Date("2026-10-01T00:00:00.000Z"),
-        description: "PRIVATE DESCRIPTION MUST NOT BE RETURNED",
-      }],
-      nextCursor: null,
-    } as any;
-    const getPage = vi.spyOn(database, "getActiveJobPage").mockResolvedValue(databasePage);
-
-    const results = await buildHaiRemoteJobResults(query);
-
-    expect(getPage).toHaveBeenCalledWith(expect.objectContaining({
-      limit: 10,
-      filters: expect.objectContaining({ query, remoteOnly: true, listingSafety: "clear" }),
-    }));
-    expect(results).toEqual([{
-      id: 42,
-      title: "Senior Designer",
-      company: "Example Co",
-      location: "Remote - Europe",
-      jobType: "full-time",
-      salaryMin: 90_000,
-      salaryMax: 120_000,
-      salaryCurrency: "EUR",
-      applicationUrl: "https://jobs.example/apply",
-      sourceUrl: "https://jobs.example/listing",
-      postedAt: "2026-10-01T00:00:00.000Z",
-    }]);
+        postedAt: "2026-10-01T00:00:00.000Z",
+      },
+    ]);
     expect(JSON.stringify(results)).not.toContain("PRIVATE DESCRIPTION");
+  });
+
+  it("follows bounded catalog cursors to backfill HAI results after rejected rows", async () => {
+    const cursor = {
+      postedDate: null,
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+      id: 500,
+    };
+    const getPage = vi
+      .spyOn(database, "getActiveJobPage")
+      .mockResolvedValueOnce({ items: [], nextCursor: cursor } as any)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 501,
+            title: "Remote Engineer",
+            company: "Example Co",
+            location: "Remote - Europe",
+            jobType: "full-time",
+            salaryMin: null,
+            salaryMax: null,
+            salaryCurrency: null,
+            applicationUrl: null,
+            sourceUrl: null,
+            postedDate: null,
+          },
+        ],
+        nextCursor: null,
+      } as any);
+
+    const results = await buildHaiRemoteJobResults("remote engineer");
+
+    expect(results).toMatchObject([{ id: 501, title: "Remote Engineer" }]);
+    expect(getPage).toHaveBeenCalledTimes(2);
+    expect(getPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor }));
   });
 
   it("excludes unsafe or credential-bearing links from public results", async () => {
     const databasePage = {
-      items: [{
-        id: 43,
-        title: "Designer",
-        company: "Example Co",
-        location: null,
-        jobType: null,
-        salaryMin: null,
-        salaryMax: null,
-        salaryCurrency: null,
-        applicationUrl: "javascript:alert(1)",
-        sourceUrl: "https://user:password@example.test/job",
-        postedDate: null,
-      }],
+      items: [
+        {
+          id: 43,
+          title: "Designer",
+          company: "Example Co",
+          location: null,
+          jobType: null,
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          applicationUrl: "javascript:alert(1)",
+          sourceUrl: "https://user:password@example.test/job",
+          postedDate: null,
+        },
+      ],
       nextCursor: null,
     } as any;
     vi.spyOn(database, "getActiveJobPage").mockResolvedValue(databasePage);
@@ -242,17 +402,28 @@ describe("HAI A2A route", () => {
   });
 
   it("hides disabled and unauthorized connector endpoints", async () => {
-    const disabledBase = await start(new HaiConnectorService({ enabled: false, token: "", userId: null, endpointUrl: "" }));
+    const disabledBase = await start(
+      new HaiConnectorService({
+        enabled: false,
+        token: "",
+        userId: null,
+        endpointUrl: "",
+      })
+    );
     expect((await fetch(`${disabledBase}/.well-known/agent-card.json`)).status).toBe(404);
 
     const { service, provider } = configuredService();
     const base = await start(service);
     expect((await fetch(`${base}/api/hai/status`)).status).toBe(404);
-    expect((await fetch(`${base}/api/hai/a2a`, {
-      method: "POST",
-      headers: { "content-type": "text/plain", "A2A-Version": "1.0" },
-      body: "x".repeat(20_000),
-    })).status).toBe(404);
+    expect(
+      (
+        await fetch(`${base}/api/hai/a2a`, {
+          method: "POST",
+          headers: { "content-type": "text/plain", "A2A-Version": "1.0" },
+          body: "x".repeat(20_000),
+        })
+      ).status
+    ).toBe(404);
     expect(provider).not.toHaveBeenCalled();
   });
 
@@ -260,20 +431,26 @@ describe("HAI A2A route", () => {
     const { service, provider } = configuredService();
     const base = await start(service);
     const cardResponse = await fetch(`${base}/.well-known/agent-card.json`);
-    const card = await cardResponse.json() as any;
+    const card = (await cardResponse.json()) as any;
     expect(cardResponse.status).toBe(200);
     expect(card.skills[0].id).toBe("hire_ai_read_only_status");
     expect(card.skills[1].id).toBe("hire_ai_remote_job_search");
-    expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false, extendedAgentCard: false });
-    expect(card.supportedInterfaces).toEqual([{
-      url: "http://127.0.0.1:3000/api/hai/a2a",
-      protocolBinding: "JSONRPC",
-      protocolVersion: "1.0",
-    }]);
+    expect(card.capabilities).toEqual({
+      streaming: false,
+      pushNotifications: false,
+      extendedAgentCard: false,
+    });
+    expect(card.supportedInterfaces).toEqual([
+      {
+        url: "http://127.0.0.1:3000/api/hai/a2a",
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+    ]);
     expect(card.defaultInputModes).toContain("text/plain");
     expect(card.defaultOutputModes).toContain("application/json");
-    expect(card.securitySchemes.haiLocalBearer.httpAuthSecurityScheme.scheme).toBe("Bearer");
-    expect(card.securityRequirements).toEqual([{ schemes: { haiLocalBearer: [] } }]);
+    expect(card.securitySchemes.haiBearer.httpAuthSecurityScheme.scheme).toBe("Bearer");
+    expect(card.securityRequirements).toEqual([{ schemes: { haiBearer: [] } }]);
     expect(cardResponse.headers.get("etag")).toContain(HAI_CONNECTOR_AGENT_VERSION);
 
     const response = await fetch(`${base}/api/hai/a2a`, {
@@ -285,7 +462,7 @@ describe("HAI A2A route", () => {
       },
       body: JSON.stringify(sendMessage()),
     });
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(response.status).toBe(200);
     expect(body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
     expect(body.result.task.artifacts[0].parts[0].data).toEqual(snapshot);
@@ -294,6 +471,89 @@ describe("HAI A2A route", () => {
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(ownerId);
+  });
+
+  it("advertises the exact HTTPS public origin for a remote HAI peer and varies its ETag", async () => {
+    const first = configuredService(undefined, undefined, "https://hire.example.test/api/hai/a2a", "https://hire.example.test");
+    const firstBase = await start(first.service);
+    const firstResponse = await fetch(`${firstBase}/.well-known/agent-card.json`);
+    const firstCard = (await firstResponse.json()) as any;
+    expect(firstResponse.status).toBe(200);
+    expect(firstCard.supportedInterfaces[0].url).toBe("https://hire.example.test/api/hai/a2a");
+    expect(firstResponse.headers.get("etag")).toMatch(/^"hire-ai-hai-1\.3\.0-[a-f0-9]{16}"$/);
+
+    const second = configuredService(undefined, undefined, "https://hire-next.example.test/api/hai/a2a", "https://hire-next.example.test");
+    const secondBase = await start(second.service);
+    const secondResponse = await fetch(`${secondBase}/.well-known/agent-card.json`);
+    await secondResponse.arrayBuffer();
+    expect(secondResponse.headers.get("etag")).not.toBe(firstResponse.headers.get("etag"));
+  });
+
+  it("accepts standard bounded SendMessage configuration and negotiates text output", async () => {
+    const { service, provider } = configuredService();
+    const base = await start(service);
+    const response = await fetch(`${base}/api/hai/a2a`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "A2A-Version": "1.0",
+      },
+      body: JSON.stringify(
+        sendMessage(
+          {},
+          {
+            acceptedOutputModes: ["text/plain"],
+            historyLength: 0,
+            returnImmediately: true,
+          }
+        )
+      ),
+    });
+    const body = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(body.result.task.artifacts[0].parts[0]).toEqual({
+      text: JSON.stringify(snapshot),
+      mediaType: "text/plain",
+    });
+    expect(provider).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the client requests unsupported output or push notifications", async () => {
+    const { service, provider } = configuredService();
+    const base = await start(service);
+    const headers = {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "A2A-Version": "1.0",
+    };
+    const unsupportedOutput = await fetch(`${base}/api/hai/a2a`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(sendMessage({}, { acceptedOutputModes: ["image/png"] })),
+    });
+    expect(unsupportedOutput.status).toBe(400);
+    expect(((await unsupportedOutput.json()) as any).error.code).toBe(-32602);
+
+    const pushNotifications = await fetch(`${base}/api/hai/a2a`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(
+        sendMessage(
+          {},
+          {
+            taskPushNotificationConfig: {
+              url: "https://client.example/webhook",
+            },
+          }
+        )
+      ),
+    });
+    expect(pushNotifications.status).toBe(400);
+    expect(((await pushNotifications.json()) as any).error.message).toContain("not supported");
+    expect(provider).not.toHaveBeenCalled();
   });
 
   it("returns bounded, deduplicated remote job results without exposing candidate or listing text", async () => {
@@ -310,7 +570,10 @@ describe("HAI A2A route", () => {
       sourceUrl: "https://jobs.example/listing",
       postedAt: null,
     };
-    const { service, provider, jobSearchProvider } = configuredService(undefined, vi.fn(async () => [job]));
+    const { service, provider, jobSearchProvider } = configuredService(
+      undefined,
+      vi.fn(async () => [job])
+    );
     const base = await start(service);
     const response = await fetch(`${base}/api/hai/a2a`, {
       method: "POST",
@@ -319,11 +582,13 @@ describe("HAI A2A route", () => {
         "content-type": "application/json",
         "A2A-Version": "1.0",
       },
-      body: JSON.stringify(sendMessage({
-        parts: [{ text: "Find remote jobs matching backend engineer" }],
-      })),
+      body: JSON.stringify(
+        sendMessage({
+          parts: [{ text: "Find remote jobs matching backend engineer" }],
+        })
+      ),
     });
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
 
     expect(response.status).toBe(200);
     expect(body.result.task.artifacts[0].name).toBe("hire-ai-remote-job-results");
@@ -348,37 +613,47 @@ describe("HAI A2A route", () => {
         "content-type": "application/json",
         "A2A-Version": "1.0",
       },
-      body: JSON.stringify(sendMessage({
-        parts: [{ text: `Find remote jobs for ${"x".repeat(201)}` }],
-      })),
+      body: JSON.stringify(
+        sendMessage({
+          parts: [{ text: `Find remote jobs for ${"x".repeat(201)}` }],
+        })
+      ),
     });
 
     expect(response.status).toBe(400);
-    expect((await response.json() as any).error.message).toContain("200 characters");
+    expect(((await response.json()) as any).error.message).toContain("200 characters");
     expect(jobSearchProvider).not.toHaveBeenCalled();
     expect(provider).not.toHaveBeenCalled();
   });
 
   it("caps results returned by an injected provider", async () => {
-    const jobs = Array.from({ length: 12 }, (_, index) => ({
-      id: index + 1,
-      title: "Remote role",
-      company: "Example Co",
-      location: null,
-      jobType: null,
-      salaryMin: null,
-      salaryMax: null,
-      salaryCurrency: null,
-      applicationUrl: null,
-      sourceUrl: null,
-      postedAt: null,
-    } satisfies HaiRemoteJob));
-    const service = new HaiConnectorService({
-      enabled: true,
-      token,
-      userId: ownerId,
-      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-    }, vi.fn(async () => snapshot), vi.fn(async () => jobs));
+    const jobs = Array.from(
+      { length: 12 },
+      (_, index) =>
+        ({
+          id: index + 1,
+          title: "Remote role",
+          company: "Example Co",
+          location: null,
+          jobType: null,
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          applicationUrl: null,
+          sourceUrl: null,
+          postedAt: null,
+        }) satisfies HaiRemoteJob
+    );
+    const service = new HaiConnectorService(
+      {
+        enabled: true,
+        token,
+        userId: ownerId,
+        endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+      },
+      vi.fn(async () => snapshot),
+      vi.fn(async () => jobs)
+    );
 
     expect(await service.searchRemoteJobs("engineer")).toHaveLength(10);
   });
@@ -397,7 +672,7 @@ describe("HAI A2A route", () => {
       body: JSON.stringify(sendMessage({ metadata: { action: "submit_application" } })),
     });
     expect(metadataResponse.status).toBe(400);
-    expect((await metadataResponse.json() as any).error.code).toBe(-32602);
+    expect(((await metadataResponse.json()) as any).error.code).toBe(-32602);
 
     const unsupportedMethod = sendMessage();
     unsupportedMethod.method = "ExecuteApplication";
@@ -407,7 +682,7 @@ describe("HAI A2A route", () => {
       body: JSON.stringify(unsupportedMethod),
     });
     expect(methodResponse.status).toBe(400);
-    expect((await methodResponse.json() as any).error.code).toBe(-32601);
+    expect(((await methodResponse.json()) as any).error.code).toBe(-32601);
 
     const oversizedResponse = await fetch(`${base}/api/hai/a2a`, {
       method: "POST",
@@ -419,19 +694,31 @@ describe("HAI A2A route", () => {
   });
 
   const endpoints = ["status", "a2a"] as const;
-  function request(base: string, endpoint: typeof endpoints[number], bearer = token) {
-    return fetch(`${base}/api/hai/${endpoint}`, endpoint === "status" ? {
-      headers: { authorization: `Bearer ${bearer}` },
-    } : {
-      method: "POST",
-      headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", "A2A-Version": "1.0" },
-      body: JSON.stringify(sendMessage()),
-    });
+  function request(base: string, endpoint: (typeof endpoints)[number], bearer = token) {
+    return fetch(
+      `${base}/api/hai/${endpoint}`,
+      endpoint === "status"
+        ? {
+            headers: { authorization: `Bearer ${bearer}` },
+          }
+        : {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${bearer}`,
+              "content-type": "application/json",
+              "A2A-Version": "1.0",
+            },
+            body: JSON.stringify(sendMessage()),
+          }
+    );
   }
 
   describe.each(endpoints)("%s account authorization", endpoint => {
     it.each(["pending", "suspended"] as const)("blocks %s accounts even with the correct bearer", async accountStatus => {
-      await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus });
+      await database.upsertUser({
+        openId: "hai-authorization-fixture",
+        accountStatus,
+      });
       const { service, provider } = configuredService();
       const response = await request(await start(service), endpoint);
       expect(response.status).toBe(404);
@@ -440,9 +727,15 @@ describe("HAI A2A route", () => {
 
     it("blocks a missing or erased account", async () => {
       const { provider } = configuredService();
-      const service = new HaiConnectorService({
-        enabled: true, token, userId: 2_147_483_647, endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-      }, provider);
+      const service = new HaiConnectorService(
+        {
+          enabled: true,
+          token,
+          userId: 2_147_483_647,
+          endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+        },
+        provider
+      );
       const response = await request(await start(service), endpoint);
       expect(response.status).toBe(404);
       expect(provider).not.toHaveBeenCalled();
@@ -455,7 +748,10 @@ describe("HAI A2A route", () => {
       expect(first.status).toBe(200);
       await first.text();
       provider.mockClear();
-      await database.upsertUser({ openId: "hai-authorization-fixture", accountStatus: "suspended" });
+      await database.upsertUser({
+        openId: "hai-authorization-fixture",
+        accountStatus: "suspended",
+      });
       const second = await request(base, endpoint);
       expect(second.status).toBe(404);
       expect(provider).not.toHaveBeenCalled();
@@ -495,14 +791,22 @@ describe("HAI A2A route", () => {
       const base = await start(service);
       const response = await fetch(`${base}/api/hai/a2a`, {
         method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "A2A-Version": protocol },
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "A2A-Version": protocol,
+        },
         body: JSON.stringify({ ...sendMessage(), id }),
       });
       const body = await response.json();
       expect(response.status).toBe(400);
-      expect(body).toMatchObject({ jsonrpc: "2.0", id: null, error: {
-        code: protocol === "1.0" ? -32602 : -32009,
-      } });
+      expect(body).toMatchObject({
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: protocol === "1.0" ? -32602 : -32009,
+        },
+      });
       expect(JSON.stringify(body)).not.toContain("must-not-be-echoed");
       expect(JSON.stringify(body).length).toBeLessThan(500);
       expect(provider).not.toHaveBeenCalled();
@@ -512,7 +816,11 @@ describe("HAI A2A route", () => {
       const { service, provider } = configuredService();
       const response = await fetch(`${await start(service)}/api/hai/a2a`, {
         method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "A2A-Version": protocol },
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "A2A-Version": protocol,
+        },
         body: JSON.stringify({ ...sendMessage({ parts: [] }), id }),
       });
       expect(response.status).toBe(400);

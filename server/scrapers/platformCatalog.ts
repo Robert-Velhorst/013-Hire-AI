@@ -104,11 +104,6 @@ const automatedFeedPolicies: Record<string, PlatformDiscoveryPolicy> = {
     sourceType: "aggregator",
     reason: "Public job API adapter.",
   },
-  Remotive: {
-    mode: "automated",
-    sourceType: "aggregator",
-    reason: "Public job API adapter.",
-  },
   Jobicy: {
     mode: "automated",
     sourceType: "aggregator",
@@ -143,6 +138,11 @@ export function getPlatformMinimumPollIntervalMs(platformName: string) {
 }
 
 const explicitPolicies: Record<string, PlatformDiscoveryPolicy> = {
+  Remotive: {
+    mode: "manual",
+    sourceType: "aggregator",
+    reason: "Do not ingest until written approval or a suitable private API agreement is in place. Remotive's published API terms restrict displaying listings to collect signups and direct this use to its private paid API: https://remotive.com/remote-jobs/api. Its Terms of Use also restrict automated extraction and redistribution: https://support.remotive.com/en/article/terms-of-service-u4kbkf/",
+  },
   "Working Nomads": {
     mode: "manual",
     sourceType: "job_board",

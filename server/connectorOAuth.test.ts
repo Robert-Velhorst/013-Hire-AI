@@ -83,6 +83,24 @@ describe("external connector OAuth boundary", () => {
     expect(getConnectorOAuthConfig("outlook", environment, ["mail.messages.send"])!.scopes).toContain("Mail.Send");
   });
 
+  it("requests calendar write scopes only after explicit calendar consent", () => {
+    const googleReadOnly = getConnectorOAuthConfig("gmail", environment)!;
+    const googleCalendar = getConnectorOAuthConfig("gmail", environment, [
+      "email.metadata.read",
+      "email.messages.read_recruiting",
+      "calendar.events.write",
+    ])!;
+    const outlookCalendar = getConnectorOAuthConfig("outlook", environment, [
+      "mail.metadata.read",
+      "mail.messages.read_recruiting",
+      "calendar.events.write",
+    ])!;
+
+    expect(googleReadOnly.scopes).not.toContain("https://www.googleapis.com/auth/calendar.events");
+    expect(googleCalendar.scopes).toContain("https://www.googleapis.com/auth/calendar.events");
+    expect(outlookCalendar.scopes).toContain("Calendars.ReadWrite");
+  });
+
   it("accepts only untampered, short-lived OAuth state", () => {
     const state = createConnectorOAuthState(
       { provider: "gmail", userId: 73 },

@@ -3,6 +3,7 @@
     "server/_core/trpcHttp.integration.test.ts",
     "server/activeReviewIdentity.integration.test.ts",
     "server/adminOperatingQueues.integration.test.ts",
+    "server/applicationEmailDelivery.integration.test.ts",
     "server/cloudResumeCandidateStore.integration.test.ts",
     "server/connectorRevocationObligations.integration.test.ts",
     "server/connectorTokenLifetime.integration.test.ts",

@@ -124,11 +124,17 @@ describe("admin Stripe webhook reconciliation", () => {
         updatedAt: new Date(),
       },
     ];
-    mocks.selectResults.push(rows);
+    mocks.selectResults.push(rows, [{ count: rows.length }]);
     const caller = adminRouter.createCaller(createAdminContext(11));
 
     await expect(caller.getStripeWebhookIssues({ limit: 20 })).resolves.toEqual(
-      rows
+      {
+        items: rows,
+        total: 1,
+        limit: 20,
+        hasMore: false,
+        nextCursor: null,
+      }
     );
   });
 

@@ -1,0 +1,2 @@
+CREATE INDEX `stripe_reconciliation_status_created_id_idx` ON `stripe_reconciliation_commands` (`status`,`created_at`,`id`);--> statement-breakpoint
+CREATE INDEX `success_fee_holds_active_created_id_idx` ON `success_fee_holds` (`resolved_at`,`created_at`,`id`);
