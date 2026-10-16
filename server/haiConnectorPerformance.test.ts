@@ -14,7 +14,13 @@ describe("HAI status resource controls", () => {
     expect(connector).toContain("getUserHaiStatusCounts(userId)");
     expect(connector).not.toContain("getUserApplications(userId)");
     expect(countFunction).toContain("COUNT(*)");
-    expect(countFunction).toContain("Promise.all([");
+    expect(countFunction.match(/\.select\(/g)).toHaveLength(5);
+    expect(countFunction).toContain('.as("hai_application_counts")');
+    expect(countFunction).toContain('.as("hai_approval_counts")');
+    expect(countFunction).toContain('.as("hai_connector_counts")');
+    expect(countFunction).toContain('.as("hai_success_fee_counts")');
+    expect(countFunction).toContain(".leftJoin(applicationCounts");
+    expect(countFunction).not.toContain("Promise.all([");
     expect(countFunction).not.toContain(".select(userApplicationSelection)");
   });
 
