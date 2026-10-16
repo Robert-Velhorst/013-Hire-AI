@@ -6,15 +6,18 @@ import { describe, expect, it } from "vitest";
 describe("discovery traffic policy", () => {
   it("propagates cancellation and shared HTTP handling through every network scraper", () => {
     const directory = resolve(process.cwd(), "server", "scrapers");
-    const files = readdirSync(directory)
-      .filter(file => /Scraper\.ts$/.test(file) && !/^(base|index)/.test(file));
+    const files = readdirSync(directory).filter(
+      file => /Scraper\.ts$/.test(file) && !/^(base|index)/.test(file)
+    );
 
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
       const source = readFileSync(resolve(directory, file), "utf8");
       const fetches = source.match(/\bfetch\(/g)?.length ?? 0;
       if (fetches === 0) continue;
-      expect(source.match(/signal: options\?\.signal/g)?.length).toBe(fetches * 2);
+      expect(source.match(/signal: options\?\.signal/g)?.length).toBe(
+        fetches * 2
+      );
       expect(source).not.toContain("if (!res.ok)");
       expect(source).not.toContain("statusText");
     }
@@ -25,11 +28,13 @@ describe("discovery traffic policy", () => {
       ...process.env,
       NODE_ENV: "production",
       DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-      ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+      ERASURE_IDENTITY_HMAC_KEYS:
+        "doctor-erasure-identity-hmac-key-at-least-32-characters",
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
       OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
+      HIRE_AI_PUBLIC_BASE_URL: "https://hire.example.test",
       OAUTH_PORTAL_URL: "https://auth.example.test",
       OWNER_OPEN_ID: "doctor-owner",
       BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -43,29 +48,40 @@ describe("discovery traffic policy", () => {
       JOB_SCRAPING_ENABLED_PLATFORMS: "",
       HAI_CONNECTOR_ENABLED: "false",
     };
-    const blocked = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(),
-      env,
-      encoding: "utf8",
-    });
+    const blocked = spawnSync(
+      process.execPath,
+      [resolve("scripts", "doctor.mjs")],
+      {
+        cwd: process.cwd(),
+        env,
+        encoding: "utf8",
+      }
+    );
     expect(blocked.status).toBe(1);
     expect(blocked.stdout).toContain("FAIL discovery traffic policy");
 
-    const accepted = spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(),
-      env: { ...env, JOB_SCRAPING_ENABLED_PLATFORMS: "RemoteOK,Remotive" },
-      encoding: "utf8",
-    });
+    const accepted = spawnSync(
+      process.execPath,
+      [resolve("scripts", "doctor.mjs")],
+      {
+        cwd: process.cwd(),
+        env: { ...env, JOB_SCRAPING_ENABLED_PLATFORMS: "RemoteOK,Remotive" },
+        encoding: "utf8",
+      }
+    );
     expect(accepted.status).toBe(0);
     expect(accepted.stdout).toContain("PASS discovery traffic policy");
   });
 
   it("wires effective traffic limits into configuration and the admin surface", () => {
     const example = readFileSync(resolve(".env.example"), "utf8");
-    const admin = readFileSync(resolve("client", "src", "pages", "AdminPanel.tsx"), "utf8");
+    const admin = readFileSync(
+      resolve("client", "src", "pages", "AdminPanel.tsx"),
+      "utf8"
+    );
     expect(example).toContain("JOB_SCRAPING_SOURCE_TIMEOUT_MS=90000");
     expect(example).toContain("JOB_SCRAPING_MAX_CONCURRENT_SOURCES=3");
-    expect(admin).toContain('admin-discovery-metric-${id}');
+    expect(admin).toContain("admin-discovery-metric-${id}");
     expect(admin).toContain('ac("concurrentSourceCap")');
     expect(admin).toContain('ac("sourceTimeout")');
   });
@@ -75,11 +91,13 @@ describe("discovery traffic policy", () => {
       ...process.env,
       NODE_ENV: "production",
       DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-      ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+      ERASURE_IDENTITY_HMAC_KEYS:
+        "doctor-erasure-identity-hmac-key-at-least-32-characters",
       JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
       VITE_APP_ID: "hire-ai-doctor-test",
       OAUTH_SERVER_URL: "https://oauth.example.test",
       OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
+      HIRE_AI_PUBLIC_BASE_URL: "https://hire.example.test",
       OAUTH_PORTAL_URL: "https://auth.example.test",
       OWNER_OPEN_ID: "doctor-owner",
       BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -91,18 +109,28 @@ describe("discovery traffic policy", () => {
       JOB_SCRAPING_SCHEDULER_ENABLED: "false",
       HAI_CONNECTOR_ENABLED: "false",
     };
-    const runDoctor = (extra: Record<string, string>) => spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
-      cwd: process.cwd(), env: { ...env, ...extra }, encoding: "utf8",
-    });
+    const runDoctor = (extra: Record<string, string>) =>
+      spawnSync(process.execPath, [resolve("scripts", "doctor.mjs")], {
+        cwd: process.cwd(),
+        env: { ...env, ...extra },
+        encoding: "utf8",
+      });
     const blocked = runDoctor({});
     expect(blocked.status).toBe(1);
     expect(blocked.stdout).toContain("FAIL document malware scanning");
-    const malformed = runDoctor({ FILE_MALWARE_SCAN_URL: "file:///tmp/scanner" });
+    const malformed = runDoctor({
+      FILE_MALWARE_SCAN_URL: "file:///tmp/scanner",
+    });
     expect(malformed.status).toBe(1);
     expect(malformed.stdout).toContain("Scanner URL must use HTTPS");
-    const invalidModeWithoutUrl = runDoctor({ FILE_MALWARE_SCAN_MODE: "typo", FILE_MALWARE_SCAN_URL: "" });
+    const invalidModeWithoutUrl = runDoctor({
+      FILE_MALWARE_SCAN_MODE: "typo",
+      FILE_MALWARE_SCAN_URL: "",
+    });
     expect(invalidModeWithoutUrl.status).toBe(1);
-    expect(invalidModeWithoutUrl.stdout).toContain("FILE_MALWARE_SCAN_MODE is invalid.");
+    expect(invalidModeWithoutUrl.stdout).toContain(
+      "FILE_MALWARE_SCAN_MODE is invalid."
+    );
     const accepted = runDoctor({
       FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
       FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
@@ -114,6 +142,8 @@ describe("discovery traffic policy", () => {
       FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
     });
     expect(unlisted.status).toBe(1);
-    expect(unlisted.stdout).toContain("Scanner URL origin is not in FILE_MALWARE_SCAN_ALLOWED_ORIGINS");
+    expect(unlisted.stdout).toContain(
+      "Scanner URL origin is not in FILE_MALWARE_SCAN_ALLOWED_ORIGINS"
+    );
   });
 });

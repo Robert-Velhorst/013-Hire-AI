@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
+import { resolvePublicApplicationOrigin } from "../shared/publicApplicationOriginPolicy.mjs";
 import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
 
 const root = process.cwd();
@@ -36,6 +37,7 @@ const requiredProductionEnv = [
   "VITE_APP_ID",
   "OAUTH_SERVER_URL",
   "OAUTH_SERVER_ALLOWED_ORIGINS",
+  "HIRE_AI_PUBLIC_BASE_URL",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
   "STRIPE_SECRET_KEY",
@@ -46,6 +48,30 @@ check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
   missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+);
+
+let publicApplicationOriginValid = false;
+try {
+  resolvePublicApplicationOrigin({
+    configuredUrl: process.env.HIRE_AI_PUBLIC_BASE_URL,
+    isProduction,
+  });
+  publicApplicationOriginValid = true;
+} catch {
+  publicApplicationOriginValid = false;
+}
+check(
+  "public application origin",
+  publicApplicationOriginValid
+    ? "pass"
+    : isProduction || process.env.HIRE_AI_PUBLIC_BASE_URL?.trim()
+      ? "fail"
+      : "warn",
+  publicApplicationOriginValid
+    ? "canonical callback origin configured"
+    : isProduction
+      ? "HIRE_AI_PUBLIC_BASE_URL must be a canonical HTTPS origin"
+      : "not configured; local callback origin is derived from the request"
 );
 
 function windowsDefenderAvailable() {

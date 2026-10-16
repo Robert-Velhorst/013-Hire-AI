@@ -1,4 +1,7 @@
-import { defaultHaiConnectorConfig, validateHaiConnectorConfig } from "../haiConnectorConfig";
+import {
+  defaultHaiConnectorConfig,
+  validateHaiConnectorConfig,
+} from "../haiConnectorConfig";
 import {
   requireAllowedServiceBaseUrl,
   requireTrustedServiceBaseUrl,
@@ -7,14 +10,20 @@ import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
 
-export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
+export function resolveProductionRuntime(
+  nodeEnv: string | undefined,
+  moduleUrl: string
+): boolean {
   if (nodeEnv === "production") return true;
   if (nodeEnv === "development" || nodeEnv === "test") return false;
 
   return /\/dist\/index\.js(?:$|[?#])/.test(moduleUrl.replace(/\\/g, "/"));
 }
 
-const isProduction = resolveProductionRuntime(process.env.NODE_ENV, import.meta.url);
+const isProduction = resolveProductionRuntime(
+  process.env.NODE_ENV,
+  import.meta.url
+);
 const readEnv = (name: string) => process.env[name] ?? "";
 export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_SESSION_TTL_MS = 15 * 60 * 1000;
@@ -25,24 +34,38 @@ const JWT_SECRET_PLACEHOLDERS = new Set([
 ]);
 export function isValidJwtSecret(value: string | undefined): boolean {
   if (!value || value.length < 32 || value.length > 4_096) return false;
-  if (value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  if (value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value))
+    return false;
   return !JWT_SECRET_PLACEHOLDERS.has(value);
 }
-export function parseErasureIdentityHmacKeys(value: string | undefined): string[] {
+export function parseErasureIdentityHmacKeys(
+  value: string | undefined
+): string[] {
   return value ? value.split(",") : [];
 }
-export function areValidErasureIdentityHmacKeys(keys: unknown): keys is string[] {
-  return Array.isArray(keys) && keys.length > 0 && keys.length <= 64 && keys.every(key =>
-    typeof key === "string" &&
-    key.length >= 32 &&
-    key.length <= 4096 &&
-    key === key.trim() &&
-    !key.startsWith("replace-with-") &&
-    !key.startsWith("hire-ai-local-dev-") &&
-    !/[\u0000-\u001f\u007f,]/.test(key)
+export function areValidErasureIdentityHmacKeys(
+  keys: unknown
+): keys is string[] {
+  return (
+    Array.isArray(keys) &&
+    keys.length > 0 &&
+    keys.length <= 64 &&
+    keys.every(
+      key =>
+        typeof key === "string" &&
+        key.length >= 32 &&
+        key.length <= 4096 &&
+        key === key.trim() &&
+        !key.startsWith("replace-with-") &&
+        !key.startsWith("hire-ai-local-dev-") &&
+        !/[\u0000-\u001f\u007f,]/.test(key)
+    )
   );
 }
-export function readBooleanFeatureFlag(value: string | undefined, fallback: boolean): boolean {
+export function readBooleanFeatureFlag(
+  value: string | undefined,
+  fallback: boolean
+): boolean {
   const normalized = value?.trim().toLowerCase();
   if (normalized === "true") return true;
   if (normalized === "false") return false;
@@ -68,13 +91,18 @@ export const isOptionalBoundedIntegerValue = (
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum;
 };
-const readBoundedInteger = (name: string, fallback: number, minimum: number, maximum: number) => {
+const readBoundedInteger = (
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) => {
   return readBoundedIntegerValue(readEnv(name), fallback, minimum, maximum);
 };
 const readOptionalCsv = (name: string) => {
   const values = readEnv(name)
     .split(",")
-    .map((value) => value.trim())
+    .map(value => value.trim())
     .filter(Boolean);
   return values.length > 0 ? values : undefined;
 };
@@ -86,7 +114,10 @@ const readEnvWithLocalFallback = (name: string, fallback: string) => {
 
 export const ENV = {
   appId: readEnvWithLocalFallback("VITE_APP_ID", "hire-ai-local-dev"),
-  cookieSecret: readEnvWithLocalFallback("JWT_SECRET", "hire-ai-local-dev-cookie-secret"),
+  cookieSecret: readEnvWithLocalFallback(
+    "JWT_SECRET",
+    "hire-ai-local-dev-cookie-secret"
+  ),
   erasureIdentityHmacKeys: parseErasureIdentityHmacKeys(
     readEnvWithLocalFallback(
       "ERASURE_IDENTITY_HMAC_KEYS",
@@ -101,20 +132,38 @@ export const ENV = {
   ),
   databaseUrl: readEnv("DATABASE_URL"),
   databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
-  databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
-  databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
+  databasePoolQueueLimit: readBoundedInteger(
+    "DATABASE_POOL_QUEUE_LIMIT",
+    100,
+    1,
+    1000
+  ),
+  databasePoolIdleTimeoutMs: readBoundedInteger(
+    "DATABASE_POOL_IDLE_TIMEOUT_MS",
+    60_000,
+    10_000,
+    600_000
+  ),
+  publicBaseUrl: readEnv("HIRE_AI_PUBLIC_BASE_URL"),
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthServerAllowedOrigins: readEnv("OAUTH_SERVER_ALLOWED_ORIGINS"),
-  oAuthPortalUrl: readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
-  devQaAuthEnabled: readBooleanFeatureFlag(readEnv("DEV_QA_AUTH_ENABLED"), false),
+  oAuthPortalUrl:
+    readEnv("OAUTH_PORTAL_URL") || readEnv("VITE_OAUTH_PORTAL_URL"),
+  devQaAuthEnabled: readBooleanFeatureFlag(
+    readEnv("DEV_QA_AUTH_ENABLED"),
+    false
+  ),
   ownerOpenId: readEnv("OWNER_OPEN_ID"),
   isProduction,
   forgeApiUrl: readEnv("BUILT_IN_FORGE_API_URL"),
   forgeApiKey: readEnv("BUILT_IN_FORGE_API_KEY"),
   connectorOAuthRedirectUri: readEnv("CONNECTOR_OAUTH_REDIRECT_URI"),
   connectorTokenEncryptionKey: readEnv("CONNECTOR_TOKEN_ENCRYPTION_KEY"),
-  connectorOAuthStateSecret: readEnvWithLocalFallback("CONNECTOR_OAUTH_STATE_SECRET", "hire-ai-local-dev-connector-state-secret"),
+  connectorOAuthStateSecret: readEnvWithLocalFallback(
+    "CONNECTOR_OAUTH_STATE_SECRET",
+    "hire-ai-local-dev-connector-state-secret"
+  ),
   googleOAuthClientId: readEnv("GOOGLE_OAUTH_CLIENT_ID"),
   googleOAuthClientSecret: readEnv("GOOGLE_OAUTH_CLIENT_SECRET"),
   dropboxOAuthClientId: readEnv("DROPBOX_OAUTH_CLIENT_ID"),
@@ -127,20 +176,50 @@ export const ENV = {
   githubOAuthClientSecret: readEnv("GITHUB_OAUTH_CLIENT_SECRET"),
   // This worker only processes explicitly opted-in users and never submits to an
   // external portal. Keep it available unless an operator explicitly disables it.
-  autonomousSchedulerEnabled: readBooleanFeatureFlag(process.env.AUTONOMOUS_SCHEDULER_ENABLED, true),
-  jobScrapingSchedulerEnabled: readBooleanFeatureFlag(process.env.JOB_SCRAPING_SCHEDULER_ENABLED, false),
-  jobScrapingIntervalMinutes: readBoundedInteger("JOB_SCRAPING_INTERVAL_MINUTES", 60, 5, 1440),
-  jobScrapingMaxJobsPerRun: readBoundedInteger("JOB_SCRAPING_MAX_JOBS_PER_RUN", 100, 10, 1000),
-  jobScrapingSourceTimeoutMs: readBoundedInteger("JOB_SCRAPING_SOURCE_TIMEOUT_MS", 90_000, 5_000, 300_000),
-  jobScrapingMaxConcurrentSources: readBoundedInteger("JOB_SCRAPING_MAX_CONCURRENT_SOURCES", 3, 1, 10),
-  jobScrapingEnabledPlatforms: readOptionalCsv("JOB_SCRAPING_ENABLED_PLATFORMS"),
+  autonomousSchedulerEnabled: readBooleanFeatureFlag(
+    process.env.AUTONOMOUS_SCHEDULER_ENABLED,
+    true
+  ),
+  jobScrapingSchedulerEnabled: readBooleanFeatureFlag(
+    process.env.JOB_SCRAPING_SCHEDULER_ENABLED,
+    false
+  ),
+  jobScrapingIntervalMinutes: readBoundedInteger(
+    "JOB_SCRAPING_INTERVAL_MINUTES",
+    60,
+    5,
+    1440
+  ),
+  jobScrapingMaxJobsPerRun: readBoundedInteger(
+    "JOB_SCRAPING_MAX_JOBS_PER_RUN",
+    100,
+    10,
+    1000
+  ),
+  jobScrapingSourceTimeoutMs: readBoundedInteger(
+    "JOB_SCRAPING_SOURCE_TIMEOUT_MS",
+    90_000,
+    5_000,
+    300_000
+  ),
+  jobScrapingMaxConcurrentSources: readBoundedInteger(
+    "JOB_SCRAPING_MAX_CONCURRENT_SOURCES",
+    3,
+    1,
+    10
+  ),
+  jobScrapingEnabledPlatforms: readOptionalCsv(
+    "JOB_SCRAPING_ENABLED_PLATFORMS"
+  ),
 };
 
 export function assertRequiredEnv(names: string[]) {
-  const missing = names.filter((name) => !readEnv(name).trim());
+  const missing = names.filter(name => !readEnv(name).trim());
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variable(s): ${missing.join(", ")}`);
+    throw new Error(
+      `Missing required environment variable(s): ${missing.join(", ")}`
+    );
   }
 }
 
@@ -154,6 +233,7 @@ export function validateProductionEnv() {
     "VITE_APP_ID",
     "OAUTH_SERVER_URL",
     "OAUTH_SERVER_ALLOWED_ORIGINS",
+    "HIRE_AI_PUBLIC_BASE_URL",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
     "STRIPE_SECRET_KEY",
@@ -163,6 +243,12 @@ export function validateProductionEnv() {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }
   requireTrustedServiceBaseUrl(ENV.oAuthPortalUrl);
+  const publicBaseUrl = requireTrustedServiceBaseUrl(ENV.publicBaseUrl);
+  if (publicBaseUrl.pathname !== "/" || publicBaseUrl.protocol !== "https:") {
+    throw new Error(
+      "HIRE_AI_PUBLIC_BASE_URL must be an HTTPS origin without a path."
+    );
+  }
   const oauthApiUrl = requireAllowedServiceBaseUrl(
     ENV.oAuthServerUrl,
     ENV.oAuthServerAllowedOrigins
@@ -178,7 +264,8 @@ export function validateProductionEnv() {
   );
   if (
     (ENV.analyticsAllowedOrigin.trim() && !analyticsRuntimeOrigin) ||
-    (readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN").trim() && !analyticsBuildOrigin) ||
+    (readEnv("VITE_ANALYTICS_ALLOWED_ORIGIN").trim() &&
+      !analyticsBuildOrigin) ||
     analyticsRuntimeOrigin !== analyticsBuildOrigin
   ) {
     throw new Error(
@@ -201,14 +288,24 @@ export function validateProductionEnv() {
     allowedOrigins: readEnv("FILE_MALWARE_SCAN_ALLOWED_ORIGINS"),
   });
   if (malwareScannerPolicy.mode === "unavailable") {
-    throw new Error(`Production malware scanning is not safely configured: ${malwareScannerPolicy.issue}`);
+    throw new Error(
+      `Production malware scanning is not safely configured: ${malwareScannerPolicy.issue}`
+    );
   }
-  if (!isOptionalBoundedIntegerValue(readEnv("SESSION_TTL_MS"), MIN_SESSION_TTL_MS, MAX_SESSION_TTL_MS)) {
+  if (
+    !isOptionalBoundedIntegerValue(
+      readEnv("SESSION_TTL_MS"),
+      MIN_SESSION_TTL_MS,
+      MAX_SESSION_TTL_MS
+    )
+  ) {
     throw new Error(
       `SESSION_TTL_MS must be an integer between ${MIN_SESSION_TTL_MS} and ${MAX_SESSION_TTL_MS}`
     );
   }
-  const haiConnectorError = validateHaiConnectorConfig(defaultHaiConnectorConfig());
+  const haiConnectorError = validateHaiConnectorConfig(
+    defaultHaiConnectorConfig()
+  );
   if (haiConnectorError) {
     throw new Error(haiConnectorError);
   }

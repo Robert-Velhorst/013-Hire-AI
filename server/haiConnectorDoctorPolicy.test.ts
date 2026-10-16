@@ -6,11 +6,13 @@ const productionEnv = {
   ...process.env,
   NODE_ENV: "production",
   DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-  ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+  ERASURE_IDENTITY_HMAC_KEYS:
+    "doctor-erasure-identity-hmac-key-at-least-32-characters",
   JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
   OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
+  HIRE_AI_PUBLIC_BASE_URL: "https://hire.example.test",
   OAUTH_PORTAL_URL: "https://auth.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -52,18 +54,43 @@ describe("HAI production doctor policy", () => {
   it("accepts a complete connector without printing its token", () => {
     const result = runDoctor();
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PASS HAI connector: configured authenticated read-only bridge");
+    expect(result.stdout).toContain(
+      "PASS HAI connector: configured authenticated read-only bridge"
+    );
     expect(result.stdout).not.toContain(productionEnv.HAI_CONNECTOR_TOKEN);
   });
 
   it.each([
-    [{ HAI_CONNECTOR_TOKEN: "replace-with-at-least-32-random-characters" }, "placeholder"],
-    [{ HAI_CONNECTOR_TOKEN: "doctor token with whitespace that is long enough" }, "whitespace"],
+    [
+      { HAI_CONNECTOR_TOKEN: "replace-with-at-least-32-random-characters" },
+      "placeholder",
+    ],
+    [
+      {
+        HAI_CONNECTOR_TOKEN: "doctor token with whitespace that is long enough",
+      },
+      "whitespace",
+    ],
     [{ HAI_CONNECTOR_USER_ID: "41junk" }, "positive user ID"],
-    [{ HAI_CONNECTOR_URL: "http://127.0.0.1:3000/api/hai/status" }, "/api/hai/a2a"],
-    [{ HAI_CONNECTOR_URL: "http://[2001:db8:fc00::1]:3000/api/hai/a2a" }, "HTTPS for public connector endpoints"],
-    [{ HAI_CONNECTOR_URL: "https://hire-ai.example.test/api/hai/a2a" }, "explicitly allowlisted public HTTPS connector origin"],
-    [{ HAI_CONNECTOR_URL: "https://hire-ai.example.test/api/hai/a2a", HAI_CONNECTOR_ALLOWED_ORIGINS: "https://hire-ai.example.test/path" }, "valid HAI_CONNECTOR_ALLOWED_ORIGINS HTTPS origins"],
+    [
+      { HAI_CONNECTOR_URL: "http://127.0.0.1:3000/api/hai/status" },
+      "/api/hai/a2a",
+    ],
+    [
+      { HAI_CONNECTOR_URL: "http://[2001:db8:fc00::1]:3000/api/hai/a2a" },
+      "HTTPS for public connector endpoints",
+    ],
+    [
+      { HAI_CONNECTOR_URL: "https://hire-ai.example.test/api/hai/a2a" },
+      "explicitly allowlisted public HTTPS connector origin",
+    ],
+    [
+      {
+        HAI_CONNECTOR_URL: "https://hire-ai.example.test/api/hai/a2a",
+        HAI_CONNECTOR_ALLOWED_ORIGINS: "https://hire-ai.example.test/path",
+      },
+      "valid HAI_CONNECTOR_ALLOWED_ORIGINS HTTPS origins",
+    ],
   ])("rejects unsafe HAI configuration", (extra, message) => {
     const result = runDoctor(extra);
     expect(result.status).toBe(1);
@@ -77,7 +104,9 @@ describe("HAI production doctor policy", () => {
       HAI_CONNECTOR_ALLOWED_ORIGINS: "https://hire-ai.example.test",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PASS HAI connector: configured authenticated read-only bridge");
+    expect(result.stdout).toContain(
+      "PASS HAI connector: configured authenticated read-only bridge"
+    );
     expect(result.stdout).not.toContain(productionEnv.HAI_CONNECTOR_TOKEN);
   });
 });
