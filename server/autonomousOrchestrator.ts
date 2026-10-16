@@ -545,6 +545,7 @@ export function buildAutonomousPlan(
     nextActions.push(`Review ${remoteEligibilityReviews} role${remoteEligibilityReviews === 1 ? "" : "s"} with unverified remote eligibility before preparation.`);
   }
   const salaryDisclosureReviews = decisions.filter((decision) =>
+    decision.action === "queue_for_review" &&
     decision.blockers.some((blocker) => blocker.startsWith("Salary range is not disclosed"))
   ).length;
   if (salaryDisclosureReviews > 0) {
