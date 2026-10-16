@@ -6,11 +6,13 @@ const productionEnv = {
   ...process.env,
   NODE_ENV: "production",
   DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
-  ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
+  ERASURE_IDENTITY_HMAC_KEYS:
+    "doctor-erasure-identity-hmac-key-at-least-32-characters",
   JWT_SECRET: "doctor-test-cookie-secret-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
   OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
+  HIRE_AI_PUBLIC_BASE_URL: "https://hire.example.test",
   OAUTH_PORTAL_URL: "https://auth.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -55,21 +57,25 @@ describe("connector OAuth production doctor policy", () => {
     const encryptionKey = Buffer.alloc(32, 7).toString("base64");
     const stateSecret = "doctor-connector-state-secret-at-least-32-characters";
     const result = runDoctor({
-      CONNECTOR_OAUTH_REDIRECT_URI: "https://hire.example.test/api/connectors/oauth/callback",
+      CONNECTOR_OAUTH_REDIRECT_URI:
+        "https://hire.example.test/api/connectors/oauth/callback",
       CONNECTOR_TOKEN_ENCRYPTION_KEY: encryptionKey,
       CONNECTOR_OAUTH_STATE_SECRET: stateSecret,
       GOOGLE_OAUTH_CLIENT_ID: "doctor-google-client",
       GOOGLE_OAUTH_CLIENT_SECRET: "doctor-google-secret",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PASS connector OAuth: 2 connector(s) configured");
+    expect(result.stdout).toContain(
+      "PASS connector OAuth: 2 connector(s) configured"
+    );
     expect(result.stdout).not.toContain(encryptionKey);
     expect(result.stdout).not.toContain(stateSecret);
   });
 
   it("rejects partial and weak configuration", () => {
     const result = runDoctor({
-      CONNECTOR_OAUTH_REDIRECT_URI: "https://hire.example.test/api/connectors/oauth/callback",
+      CONNECTOR_OAUTH_REDIRECT_URI:
+        "https://hire.example.test/api/connectors/oauth/callback",
       CONNECTOR_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
       CONNECTOR_OAUTH_STATE_SECRET: "short",
       GOOGLE_OAUTH_CLIENT_ID: "doctor-google-client",
