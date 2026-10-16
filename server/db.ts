@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
+import { isEmploymentSearchOnHold } from "@shared/employmentSearchControl.mjs";
 import {
   InsertUser,
   users,
@@ -1537,7 +1538,8 @@ export async function getProfilesWithAutonomousPreferences(afterUserId = 0, requ
     return Array.from(memoryProfiles.values())
       .filter((profile) => {
         try {
-          return JSON.parse(profile.preferences || "{}").autonomousEnabled === true;
+          return JSON.parse(profile.preferences || "{}").autonomousEnabled === true &&
+            !isEmploymentSearchOnHold(profile.preferences);
         } catch {
           return false;
         }
@@ -1561,6 +1563,7 @@ export async function getProfilesWithAutonomousPreferences(afterUserId = 0, requ
     .where(and(
       gt(userProfiles.userId, afterUserId),
       eq(userProfiles.autonomousEnabled, 1),
+      sql`CASE WHEN JSON_VALID(${userProfiles.preferences}) THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(${userProfiles.preferences}, '$.employmentSearchHold')), 'false') ELSE 'false' END <> 'true'`,
       eq(users.accountStatus, "active"),
       sql`${users.tosAcceptedAt} IS NOT NULL`
     ))
@@ -1843,10 +1846,21 @@ function autonomousPreferenceEnabled(preferences: string | null | undefined) {
   }
 }
 
-export async function upsertUserProfile(profile: InsertUserProfile) {
+export async function upsertUserProfile(
+  profile: InsertUserProfile,
+  options: { allowEmploymentSearchRestart?: boolean } = {}
+) {
   const db = await getDb();
   if (!db) {
     const existing = memoryProfiles.get(profile.userId);
+    if (
+      profile.preferences !== undefined &&
+      isEmploymentSearchOnHold(existing?.preferences) &&
+      !options.allowEmploymentSearchRestart &&
+      !isEmploymentSearchOnHold(profile.preferences)
+    ) {
+      throw new Error("A reasoned restart is required before clearing an employment search hold.");
+    }
     memoryProfiles.set(profile.userId, {
       id: existing?.id || memoryProfiles.size + 1,
       userId: profile.userId,
@@ -1879,6 +1893,34 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
     ? profile
     : { ...profile, autonomousEnabled: autonomousPreferenceEnabled(profile.preferences) };
   const { id: _id, userId: _userId, ...updates } = normalizedProfile;
+
+  if (profile.preferences !== undefined) {
+    await db.transaction(async (tx) => {
+      // Serialize preference replacement with hire reports and reasoned restarts.
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, profile.userId)).for("update");
+      const [existing] = await tx
+        .select({ preferences: userProfiles.preferences })
+        .from(userProfiles)
+        .where(eq(userProfiles.userId, profile.userId))
+        .limit(1);
+      if (
+        isEmploymentSearchOnHold(existing?.preferences) &&
+        !options.allowEmploymentSearchRestart &&
+        !isEmploymentSearchOnHold(profile.preferences)
+      ) {
+        throw new Error("A reasoned restart is required before clearing an employment search hold.");
+      }
+
+      await tx
+        .insert(userProfiles)
+        .values(normalizedProfile)
+        .onDuplicateKeyUpdate({
+          set: Object.keys(updates).length > 0 ? updates : { userId: profile.userId },
+        });
+    });
+    return;
+  }
+
   await db
     .insert(userProfiles)
     .values(normalizedProfile)
@@ -1889,7 +1931,8 @@ export async function upsertUserProfile(profile: InsertUserProfile) {
 
 export async function patchUserProfilePreferences(
   userId: number,
-  patch: Record<string, boolean | number | string>
+  patch: Record<string, boolean | number | string>,
+  options: { allowEmploymentSearchRestart?: boolean } = {}
 ) {
   const db = await getDb();
   if (!db) {
@@ -1901,8 +1944,15 @@ export async function patchUserProfilePreferences(
     } catch {
       current = {};
     }
+    if (
+      isEmploymentSearchOnHold(current) &&
+      !options.allowEmploymentSearchRestart &&
+      (patch.autonomousEnabled === true || patch.employmentSearchHold === false)
+    ) {
+      throw new Error("A reasoned restart is required before enabling job search after a reported hire.");
+    }
     const preferences = JSON.stringify({ ...current, ...patch });
-    await upsertUserProfile({ userId, preferences });
+    await upsertUserProfile({ userId, preferences }, options);
     return preferences;
   }
 
@@ -1920,6 +1970,13 @@ export async function patchUserProfilePreferences(
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) current = parsed;
     } catch {
       current = {};
+    }
+    if (
+      isEmploymentSearchOnHold(current) &&
+      !options.allowEmploymentSearchRestart &&
+      (patch.autonomousEnabled === true || patch.employmentSearchHold === false)
+    ) {
+      throw new Error("A reasoned restart is required before enabling job search after a reported hire.");
     }
     const preferences = JSON.stringify({ ...current, ...patch });
     const autonomousEnabled = autonomousPreferenceEnabled(preferences);
