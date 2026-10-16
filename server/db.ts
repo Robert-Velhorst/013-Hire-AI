@@ -2627,38 +2627,90 @@ export async function getUserHaiStatusCounts(userId: number): Promise<HaiStatusC
     };
   }
 
-  const [applicationRows, approvalRows, connectorRows, feeRows] = await Promise.all([
-    db.select({
-      total: sql<number>`COUNT(*)`,
-      prepared: sql<number>`COALESCE(SUM(${applications.status} = 'pending'), 0)`,
-      submitted: sql<number>`COALESCE(SUM(${applications.status} <> 'pending'), 0)`,
-      interviews: sql<number>`COALESCE(SUM(${applications.status} = 'interview'), 0)`,
-      offers: sql<number>`COALESCE(SUM(${applications.status} IN ('offer', 'accepted')), 0)`,
-    }).from(applications).where(eq(applications.userId, userId)),
-    db.select({ count: sql<number>`COUNT(*)` })
-      .from(applicationApprovals)
-      .where(and(eq(applicationApprovals.userId, userId), eq(applicationApprovals.status, "pending"))),
-    db.select({
-      connected: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} = 'connected'), 0)`,
-      needsAttention: sql<number>`COALESCE(SUM(${userConnectorAccounts.status} IN ('needs_reauth', 'connection_requested')), 0)`,
-    }).from(userConnectorAccounts).where(eq(userConnectorAccounts.userId, userId)),
-    db.select({ count: sql<number>`COUNT(*)` })
-      .from(successFees)
-      .where(and(eq(successFees.userId, userId), eq(successFees.status, "active"))),
-  ]);
-  const applicationCounts = applicationRows[0];
+  const applicationCounts = db
+    .select({
+      userId: applications.userId,
+      total: sql<number>`COUNT(*)`.as("total"),
+      prepared: sql<number>`SUM(${applications.status} = 'pending')`.as("prepared"),
+      submitted: sql<number>`SUM(${applications.status} <> 'pending')`.as("submitted"),
+      interviews: sql<number>`SUM(${applications.status} = 'interview')`.as("interviews"),
+      offers: sql<number>`SUM(${applications.status} IN ('offer', 'accepted'))`.as("offers"),
+    })
+    .from(applications)
+    .where(eq(applications.userId, userId))
+    .groupBy(applications.userId)
+    .as("hai_application_counts");
+  const approvalCounts = db
+    .select({
+      userId: applicationApprovals.userId,
+      pending: sql<number>`COUNT(*)`.as("pending"),
+    })
+    .from(applicationApprovals)
+    .where(and(eq(applicationApprovals.userId, userId), eq(applicationApprovals.status, "pending")))
+    .groupBy(applicationApprovals.userId)
+    .as("hai_approval_counts");
+  const connectorCounts = db
+    .select({
+      userId: userConnectorAccounts.userId,
+      connected: sql<number>`SUM(${userConnectorAccounts.status} = 'connected')`.as("connected"),
+      needsAttention: sql<number>`SUM(${userConnectorAccounts.status} IN ('needs_reauth', 'connection_requested'))`.as("needs_attention"),
+    })
+    .from(userConnectorAccounts)
+    .where(eq(userConnectorAccounts.userId, userId))
+    .groupBy(userConnectorAccounts.userId)
+    .as("hai_connector_counts");
+  const successFeeCounts = db
+    .select({
+      userId: successFees.userId,
+      active: sql<number>`COUNT(*)`.as("active"),
+    })
+    .from(successFees)
+    .where(and(eq(successFees.userId, userId), eq(successFees.status, "active")))
+    .groupBy(successFees.userId)
+    .as("hai_success_fee_counts");
+
+  const [counts] = await db
+    .select({
+      applicationsTotal: sql<number>`COALESCE(${applicationCounts.total}, 0)`,
+      applicationsPrepared: sql<number>`COALESCE(${applicationCounts.prepared}, 0)`,
+      applicationsSubmitted: sql<number>`COALESCE(${applicationCounts.submitted}, 0)`,
+      applicationsInterviews: sql<number>`COALESCE(${applicationCounts.interviews}, 0)`,
+      applicationsOffers: sql<number>`COALESCE(${applicationCounts.offers}, 0)`,
+      pendingApprovals: sql<number>`COALESCE(${approvalCounts.pending}, 0)`,
+      connectedProviders: sql<number>`COALESCE(${connectorCounts.connected}, 0)`,
+      connectorsNeedingAttention: sql<number>`COALESCE(${connectorCounts.needsAttention}, 0)`,
+      activeSuccessFees: sql<number>`COALESCE(${successFeeCounts.active}, 0)`,
+    })
+    .from(users)
+    .leftJoin(applicationCounts, eq(users.id, applicationCounts.userId))
+    .leftJoin(approvalCounts, eq(users.id, approvalCounts.userId))
+    .leftJoin(connectorCounts, eq(users.id, connectorCounts.userId))
+    .leftJoin(successFeeCounts, eq(users.id, successFeeCounts.userId))
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!counts) {
+    return {
+      applications: { total: 0, prepared: 0, submitted: 0, interviews: 0, offers: 0 },
+      pendingApprovals: 0,
+      connectedProviders: 0,
+      connectorsNeedingAttention: 0,
+      activeSuccessFees: 0,
+    };
+  }
+
   return {
     applications: {
-      total: Number(applicationCounts.total),
-      prepared: Number(applicationCounts.prepared),
-      submitted: Number(applicationCounts.submitted),
-      interviews: Number(applicationCounts.interviews),
-      offers: Number(applicationCounts.offers),
+      total: Number(counts.applicationsTotal),
+      prepared: Number(counts.applicationsPrepared),
+      submitted: Number(counts.applicationsSubmitted),
+      interviews: Number(counts.applicationsInterviews),
+      offers: Number(counts.applicationsOffers),
     },
-    pendingApprovals: Number(approvalRows[0].count),
-    connectedProviders: Number(connectorRows[0].connected),
-    connectorsNeedingAttention: Number(connectorRows[0].needsAttention),
-    activeSuccessFees: Number(feeRows[0].count),
+    pendingApprovals: Number(counts.pendingApprovals),
+    connectedProviders: Number(counts.connectedProviders),
+    connectorsNeedingAttention: Number(counts.connectorsNeedingAttention),
+    activeSuccessFees: Number(counts.activeSuccessFees),
   };
 }
 
