@@ -2,7 +2,7 @@ FROM node:26.12.0-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./
-RUN corepack enable && corepack prepare pnpm@11.16.0 --activate && pnpm install --frozen-lockfile
+RUN npm install --global pnpm@11.16.0 && pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build && pnpm prune --prod
