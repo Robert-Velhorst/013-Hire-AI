@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { createServer } from "node:http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like, or } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHireTrpcClient } from "@/lib/trpcClient";
 import { applications, jobDuplicates, jobs, userProfiles, userResumes, users } from "../drizzle/schema";
@@ -134,7 +134,12 @@ describe
           await database
             .select({ id: jobs.id })
             .from(jobs)
-            .where(eq(jobs.company, marker))
+            .where(
+              or(
+                eq(jobs.company, marker),
+                like(jobs.externalId, `${marker}-pagination-%`)
+              )
+            )
         ).map(job => job.id);
         if (ownedIds.length) {
           await database
@@ -175,6 +180,44 @@ describe
       expect(
         next.items.some(pair => pair.duplicate.id === links[0].duplicateJobId)
       ).toBe(false);
+    });
+
+    it("fills filtered catalog pages past review-only MySQL candidates", async () => {
+      const now = Date.now();
+      const clearRows = Array.from({ length: 3 }, (_, index) => ({
+        title: `${marker} Clear Pagination Acceptance ${index}`,
+        company: `Clear Fixture ${randomUUID()}`,
+        location: "Remote - Netherlands",
+        description: "Synthetic clear acceptance vacancy. Not a real job.",
+        jobType: "full-time",
+        platformId: records[0].platformId,
+        externalId: `${marker}-pagination-clear-${index}`,
+        sourceUrl: `https://himalayas.app/${marker}/pagination-clear-${index}`,
+        postedDate: new Date(now - (index + 1) * 60 * 60 * 1000),
+      }));
+      const reviewRows = Array.from({ length: 110 }, (_, index) => ({
+        title: `${marker} Review Pagination Acceptance ${index}`,
+        company: `Review Fixture ${randomUUID()}`,
+        location: "Remote - Netherlands",
+        description: "No interview is required. Synthetic review-only acceptance vacancy.",
+        jobType: "full-time",
+        platformId: records[0].platformId,
+        externalId: `${marker}-pagination-review-${index}`,
+        sourceUrl: `https://himalayas.app/${marker}/pagination-review-${index}`,
+        postedDate: new Date(now),
+      }));
+      await new ScraperManager().saveJobs([...clearRows, ...reviewRows]);
+
+      const filters = { query: marker, listingSafety: "clear" as const };
+      const first = await getActiveJobPage({ limit: 1, filters });
+      expect(first.items).toHaveLength(1);
+      expect(first.items[0].title).toContain("Clear Pagination Acceptance");
+      expect(first.nextCursor).not.toBeNull();
+
+      const second = await getActiveJobPage({ limit: 1, cursor: first.nextCursor!, filters });
+      expect(second.items).toHaveLength(1);
+      expect(second.items[0].id).not.toBe(first.items[0].id);
+      expect(second.items[0].title).toContain("Clear Pagination Acceptance");
     });
 
     it("preserves one canonical duplicate group when platform scans save concurrently", async () => {

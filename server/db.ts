@@ -81,6 +81,7 @@ import { isOfferEligibleApplicationStatus } from "@shared/offerEligibility";
 import { getListingObservationCutoff, isJobListingCurrent } from "@shared/jobListingFreshness";
 import { PROFILE_EVIDENCE_LIMITS, profileEvidenceLimitMessage } from "@shared/profileEvidenceLimits";
 import { APPLICATION_LEDGER_WINDOW_LIMITS, takeApplicationLedgerWindow } from "@shared/applicationLedgerWindow";
+import { collectFilteredCursorPage } from "./filteredCursorPagination";
 import {
   getMissingScraperPlatformCatalog,
   getPlatformDiscoveryPolicy,
@@ -1236,6 +1237,31 @@ export type ActiveJobPageCursor = {
   id: number;
 };
 
+const ACTIVE_JOB_SCAN_BATCH_SIZE = 100;
+const ACTIVE_JOB_SCAN_LIMIT = 500;
+
+function activeJobCursorCondition(cursor: ActiveJobPageCursor) {
+  return cursor.postedDate
+    ? or(
+        lt(jobs.postedDate, cursor.postedDate),
+        isNull(jobs.postedDate),
+        and(
+          eq(jobs.postedDate, cursor.postedDate),
+          or(
+            lt(jobs.createdAt, cursor.createdAt),
+            and(eq(jobs.createdAt, cursor.createdAt), lt(jobs.id, cursor.id))
+          )
+        )
+      )
+    : and(
+        isNull(jobs.postedDate),
+        or(
+          lt(jobs.createdAt, cursor.createdAt),
+          and(eq(jobs.createdAt, cursor.createdAt), lt(jobs.id, cursor.id))
+        )
+      );
+}
+
 export async function getActiveJobPage(
   input: {
     limit?: number;
@@ -1286,43 +1312,38 @@ export async function getActiveJobPage(
     canonicalJobCondition,
   ];
   addJobSearchFilterConditions(conditions, resolvedFilters, now);
-  if (input.cursor) {
-    const position = input.cursor.postedDate
-      ? or(
-          lt(jobs.postedDate, input.cursor.postedDate),
-          isNull(jobs.postedDate),
-          and(
-            eq(jobs.postedDate, input.cursor.postedDate),
-            or(
-              lt(jobs.createdAt, input.cursor.createdAt),
-              and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
-            )
-          )
-        )
-      : and(
-          isNull(jobs.postedDate),
-          or(
-            lt(jobs.createdAt, input.cursor.createdAt),
-            and(eq(jobs.createdAt, input.cursor.createdAt), lt(jobs.id, input.cursor.id))
-          )
-        );
-    if (position) conditions.push(position);
-  }
 
-  const pageRows = await db
-    .select()
-    .from(jobs)
-    .where(and(...conditions))
-    .orderBy(desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id))
-    .limit(limit + 1);
-  const items = filterJobListings(pageRows.slice(0, limit), resolvedFilters, now);
-  const lastScanned = pageRows[Math.min(limit, pageRows.length) - 1];
-  return {
-    items,
-    nextCursor: pageRows.length > limit && lastScanned
-      ? { postedDate: lastScanned.postedDate, createdAt: lastScanned.createdAt, id: lastScanned.id }
-      : null,
-  };
+  return collectFilteredCursorPage<Job, ActiveJobPageCursor>({
+    cursor: input.cursor,
+    limit,
+    pageSize: ACTIVE_JOB_SCAN_BATCH_SIZE,
+    maxScannedCount: ACTIVE_JOB_SCAN_LIMIT,
+    cursorForItem: job => ({ postedDate: job.postedDate, createdAt: job.createdAt, id: job.id }),
+    fetchPage: async (cursor, pageLimit) => {
+      const pageConditions = [...conditions];
+      if (cursor) {
+        const position = activeJobCursorCondition(cursor);
+        if (position) pageConditions.push(position);
+      }
+
+      const pageRows = await db
+        .select()
+        .from(jobs)
+        .where(and(...pageConditions))
+        .orderBy(desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id))
+        .limit(pageLimit + 1);
+      const rows = pageRows.slice(0, pageLimit);
+      const lastScanned = rows.at(-1);
+
+      return {
+        items: filterJobListings(rows, resolvedFilters, now),
+        nextCursor: pageRows.length > pageLimit && lastScanned
+          ? { postedDate: lastScanned.postedDate, createdAt: lastScanned.createdAt, id: lastScanned.id }
+          : null,
+        scannedCount: rows.length,
+      };
+    },
+  });
 }
 
 export async function getJobById(jobId: number) {

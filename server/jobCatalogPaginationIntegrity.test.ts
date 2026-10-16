@@ -11,7 +11,8 @@ describe("public job catalog pagination integrity", () => {
 
     expect(db).toContain("export async function getActiveJobPage");
     expect(db).toContain("desc(jobs.postedDate), desc(jobs.createdAt), desc(jobs.id)");
-    expect(db).toContain(".limit(limit + 1)");
+    expect(db).toContain(".limit(pageLimit + 1)");
+    expect(db).toContain("ACTIVE_JOB_SCAN_LIMIT = 500");
     expect(router).toContain("listPage: publicProcedure");
     expect(router).toContain("const jobCatalogPageSize = z.number().int().min(1).max(100)");
   });
