@@ -597,38 +597,64 @@ export async function persistOperationalFailureSignals(signals: OperationalFailu
     });
 }
 
-export async function getOperationalFailureMonitoringSnapshot(limit = 20) {
+export async function getOperationalFailureMonitoringSnapshot(limit = 20, cursorId?: number) {
   const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
   const db = await getDb();
-  if (!db) return getOperationalFailureSnapshot(boundedLimit);
+  if (!db) return getOperationalFailureSnapshot(boundedLimit, cursorId);
+  const rowsQuery = db.select({
+    id: operationalFailureSignals.id,
+    scope: operationalFailureSignals.scope,
+    operation: operationalFailureSignals.operation,
+    count: operationalFailureSignals.count,
+    firstOccurredAt: operationalFailureSignals.firstOccurredAt,
+    lastOccurredAt: operationalFailureSignals.lastOccurredAt,
+  })
+    .from(operationalFailureSignals)
+    .orderBy(desc(operationalFailureSignals.id))
+    .limit(boundedLimit + 1);
   const [summaryRows, rows] = await Promise.all([
     db.select({
       totalFailures: sql<number>`COALESCE(SUM(${operationalFailureSignals.count}), 0)`,
       uniqueSignals: sql<number>`COUNT(*)`,
       firstOccurredAt: sql<Date | null>`MIN(${operationalFailureSignals.firstOccurredAt})`,
+      latestAt: sql<Date | null>`MAX(${operationalFailureSignals.lastOccurredAt})`,
     }).from(operationalFailureSignals),
-    db.select({
-      scope: operationalFailureSignals.scope,
-      operation: operationalFailureSignals.operation,
-      count: operationalFailureSignals.count,
-      firstOccurredAt: operationalFailureSignals.firstOccurredAt,
-      lastOccurredAt: operationalFailureSignals.lastOccurredAt,
-    })
-      .from(operationalFailureSignals)
-      .orderBy(desc(operationalFailureSignals.lastOccurredAt))
-      .limit(boundedLimit),
+    cursorId === undefined
+      ? rowsQuery
+      : db.select({
+        id: operationalFailureSignals.id,
+        scope: operationalFailureSignals.scope,
+        operation: operationalFailureSignals.operation,
+        count: operationalFailureSignals.count,
+        firstOccurredAt: operationalFailureSignals.firstOccurredAt,
+        lastOccurredAt: operationalFailureSignals.lastOccurredAt,
+      })
+        .from(operationalFailureSignals)
+        .where(lt(operationalFailureSignals.id, cursorId))
+        .orderBy(desc(operationalFailureSignals.id))
+        .limit(boundedLimit + 1),
   ]);
+  const hasMore = rows.length > boundedLimit;
+  const pageRows = rows.slice(0, boundedLimit);
   return {
     processStartedAt: summaryRows[0]?.firstOccurredAt
       ? new Date(summaryRows[0].firstOccurredAt).toISOString()
       : new Date().toISOString(),
     totalFailures: Number(summaryRows[0]?.totalFailures ?? 0),
     uniqueSignals: Number(summaryRows[0]?.uniqueSignals ?? 0),
-    signals: rows.map((signal) => ({
+    signals: pageRows.map((signal) => ({
       ...signal,
       firstOccurredAt: signal.firstOccurredAt.toISOString(),
       lastOccurredAt: signal.lastOccurredAt.toISOString(),
     })),
+    limit: boundedLimit,
+    hasMore,
+    nextCursor: hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1]!.id : null,
+    latestAt: summaryRows[0]?.latestAt
+      ? summaryRows[0].latestAt instanceof Date
+        ? summaryRows[0].latestAt.toISOString()
+        : new Date(String(summaryRows[0].latestAt)).toISOString()
+      : null,
   };
 }
 
@@ -639,7 +665,7 @@ export async function getOperationalFailureAggregateSnapshot() {
     return {
       totalFailures: snapshot.totalFailures,
       uniqueSignals: snapshot.uniqueSignals,
-      latestAt: snapshot.signals[0]?.lastOccurredAt ?? null,
+      latestAt: snapshot.latestAt,
     };
   }
   const rows = await db.select({
