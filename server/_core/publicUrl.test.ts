@@ -12,6 +12,12 @@ import {
   resolvePublicHttpsUrl,
 } from "./publicUrl";
 
+type MockNodeResponse = NodeJS.ReadableStream & {
+  rawHeaders: string[];
+  statusCode: number;
+  statusMessage: string;
+};
+
 afterEach(() => {
   httpsRequestMock.mockReset();
 });
@@ -180,7 +186,9 @@ describe("public outbound URL policy", () => {
         statusMessage: string;
       }
     ) => void;
-    httpsRequestMock.mockImplementation((_url, _options, callback) => {
+    httpsRequestMock.mockImplementation((_url, options, callback) => {
+      expect(options.agent).toBe(false);
+      expect(options.lookup).toEqual(expect.any(Function));
       responseCallback = callback;
       return request;
     });
@@ -229,6 +237,7 @@ describe("public outbound URL policy", () => {
       }
     ) => void;
     httpsRequestMock.mockImplementation((_url, options, callback) => {
+      expect(options.agent).toBe(false);
       expect(options.lookup).toEqual(expect.any(Function));
       responseCallback = callback;
       return request;
@@ -243,5 +252,70 @@ describe("public outbound URL policy", () => {
 
     expect(await response.text()).toBe("ok");
     expect(httpsRequestMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([204, 205, 304])(
+    "returns bodyless scanner response status %s without throwing",
+    async status => {
+      let responseCallback!: (response: MockNodeResponse) => void;
+      const request = Object.assign(new EventEmitter(), {
+        end: vi.fn(() =>
+          queueMicrotask(() =>
+            responseCallback(
+              Object.assign(Readable.from([]), {
+                rawHeaders: [],
+                statusCode: status,
+                statusMessage: "No Content",
+              })
+            )
+          )
+        ),
+      });
+      httpsRequestMock.mockImplementation((_url, _options, callback) => {
+        responseCallback = callback;
+        return request;
+      });
+
+      const response = await fetchAllowlistedHttpsUrl(
+        "https://scanner.internal.test/scan",
+        "https://scanner.internal.test",
+        {},
+        async () => [{ address: "10.24.3.8", family: 4 }]
+      );
+
+      expect(response.status).toBe(status);
+      expect(response.body).toBeNull();
+      await expect(response.text()).resolves.toBe("");
+    }
+  );
+
+  it("rejects invalid Node response statuses instead of throwing from the callback", async () => {
+    let responseCallback!: (response: MockNodeResponse) => void;
+    const request = Object.assign(new EventEmitter(), {
+      end: vi.fn(() =>
+        queueMicrotask(() =>
+          responseCallback(
+            Object.assign(Readable.from([]), {
+              rawHeaders: [],
+              statusCode: 101,
+              statusMessage: "Switching Protocols",
+            })
+          )
+        ),
+      ),
+    });
+    httpsRequestMock.mockImplementation((_url, _options, callback) => {
+      responseCallback = callback;
+      return request;
+    });
+
+    await expect(
+      fetchAllowlistedHttpsUrl(
+        "https://scanner.internal.test/scan",
+        "https://scanner.internal.test",
+        {},
+        async () => [{ address: "10.24.3.8", family: 4 }]
+      )
+    ).rejects.toThrow();
   });
 });

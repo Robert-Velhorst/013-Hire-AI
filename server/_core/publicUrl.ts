@@ -1,4 +1,5 @@
 import { lookup as dnsLookup } from "node:dns/promises";
+import type { IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { BlockList, isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
@@ -242,6 +243,35 @@ export function createPinnedLookup(addresses: LookupAddress[]): LookupFunction {
   }) as LookupFunction;
 }
 
+function resolveFetchResponse(
+  response: IncomingMessage,
+  resolve: (response: Response) => void,
+  reject: (error: unknown) => void
+) {
+  try {
+    const headers = new Headers();
+    for (let index = 0; index < response.rawHeaders.length; index += 2) {
+      headers.append(response.rawHeaders[index], response.rawHeaders[index + 1]);
+    }
+    const status = response.statusCode ?? 500;
+    const bodyless = [204, 205, 304].includes(status);
+    if (bodyless) response.resume();
+    const body = bodyless
+      ? null
+      : (Readable.toWeb(response) as ReadableStream<Uint8Array>);
+    resolve(
+      new Response(body, {
+        status,
+        statusText: response.statusMessage,
+        headers,
+      })
+    );
+  } catch (error) {
+    response.destroy();
+    reject(error);
+  }
+}
+
 export async function fetchPublicHttpsUrl(
   value: string,
   init: Pick<RequestInit, "headers" | "method" | "signal"> & {
@@ -257,24 +287,10 @@ export async function fetchPublicHttpsUrl(
         method: init.method ?? "GET",
         headers: Object.fromEntries(new Headers(init.headers).entries()),
         lookup: createPinnedLookup(addresses),
+        agent: false,
         signal: init.signal ?? undefined,
       },
-      response => {
-        const headers = new Headers();
-        for (let index = 0; index < response.rawHeaders.length; index += 2) {
-          headers.append(
-            response.rawHeaders[index],
-            response.rawHeaders[index + 1]
-          );
-        }
-        resolve(
-          new Response(Readable.toWeb(response) as ReadableStream<Uint8Array>, {
-            status: response.statusCode ?? 500,
-            statusText: response.statusMessage,
-            headers,
-          })
-        );
-      }
+      response => resolveFetchResponse(response, resolve, reject)
     );
     request.once("error", reject);
     request.end(init.body);
@@ -301,24 +317,10 @@ export async function fetchAllowlistedHttpsUrl(
         method: init.method ?? "GET",
         headers: Object.fromEntries(new Headers(init.headers).entries()),
         lookup: createPinnedLookup(addresses),
+        agent: false,
         signal: init.signal ?? undefined,
       },
-      response => {
-        const headers = new Headers();
-        for (let index = 0; index < response.rawHeaders.length; index += 2) {
-          headers.append(
-            response.rawHeaders[index],
-            response.rawHeaders[index + 1]
-          );
-        }
-        resolve(
-          new Response(Readable.toWeb(response) as ReadableStream<Uint8Array>, {
-            status: response.statusCode ?? 500,
-            statusText: response.statusMessage,
-            headers,
-          })
-        );
-      }
+      response => resolveFetchResponse(response, resolve, reject)
     );
     request.once("error", reject);
     request.end(init.body);
