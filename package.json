@@ -2,7 +2,7 @@
   "name": "hire_ai_v2",
   "version": "1.0.0",
   "type": "module",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
     "build": "vite build && node scripts/check-production-bundle.mjs && esbuild server/_core/index.ts --platform=node --packages=external --external:./vite --bundle --format=esm --outdir=dist && esbuild scripts/database-schema-audit.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/database-schema-audit.js && esbuild scripts/database-query-plan-audit.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/database-query-plan-audit.js",
