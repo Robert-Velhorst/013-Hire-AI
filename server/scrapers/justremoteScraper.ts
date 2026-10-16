@@ -1,4 +1,5 @@
 import { BaseScraper, type ScrapeRequestOptions, type ScrapeResult } from "./baseScraper";
+import { cleanScrapedHtmlToText } from "./htmlText";
 
 /**
  * JustRemote scraper
@@ -126,9 +127,9 @@ export class JustRemoteScraper extends BaseScraper {
           "";
         
         jobs.push({
-          title: this.cleanHtmlText(titleMatch[1]),
-          company: companyMatch ? this.cleanHtmlText(companyMatch[1]) : "Company via JustRemote",
-          location: locationMatch ? this.cleanHtmlText(locationMatch[1]) : "Remote",
+          title: cleanScrapedHtmlToText(titleMatch[1]),
+          company: companyMatch ? cleanScrapedHtmlToText(companyMatch[1]) : "Company via JustRemote",
+          location: locationMatch ? cleanScrapedHtmlToText(locationMatch[1]) : "Remote",
           link,
         });
       }
@@ -146,7 +147,7 @@ export class JustRemoteScraper extends BaseScraper {
         
         if (titleMatch) {
           jobs.push({
-            title: this.cleanHtmlText(titleMatch[1]),
+            title: cleanScrapedHtmlToText(titleMatch[1]),
             company: "Company via JustRemote",
             location: "Remote",
             link,
@@ -156,14 +157,5 @@ export class JustRemoteScraper extends BaseScraper {
     }
 
     return jobs;
-  }
-
-  private cleanHtmlText(text: string): string {
-    return text
-      .replace(/<[^>]*>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/\s+/g, " ")
-      .trim();
   }
 }
