@@ -74,7 +74,7 @@
     "framer-motion": "^12.42.2",
     "input-otp": "^1.5.0",
     "jose": "6.2.12",
-    "lucide-react": "^0.453.0",
+    "lucide-react": "^1.56.0",
     "mammoth": "^1.13.0",
     "mysql2": "^3.24.5",
     "nanoid": "^5.1.16",
