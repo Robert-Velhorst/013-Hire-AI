@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const productionEnv = {
   ...process.env,
   NODE_ENV: "production",
+  TRUSTED_PROXY_IPS: "127.0.0.1",
   DATABASE_URL: "mysql://user:password@localhost:3306/hire_ai",
   ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",

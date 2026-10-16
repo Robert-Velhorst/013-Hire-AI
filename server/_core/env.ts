@@ -6,6 +6,7 @@ import {
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
+import { resolveTrustedProxyPolicy } from "@shared/trustedProxyPolicy.mjs";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -16,6 +17,7 @@ export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl:
 
 const isProduction = resolveProductionRuntime(process.env.NODE_ENV, import.meta.url);
 const readEnv = (name: string) => process.env[name] ?? "";
+const trustedProxyPolicy = resolveTrustedProxyPolicy(readEnv("TRUSTED_PROXY_IPS"), isProduction);
 export const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_SESSION_TTL_MS = 15 * 60 * 1000;
 export const MAX_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -103,6 +105,7 @@ export const ENV = {
   databasePoolLimit: readBoundedInteger("DATABASE_POOL_LIMIT", 10, 1, 50),
   databasePoolQueueLimit: readBoundedInteger("DATABASE_POOL_QUEUE_LIMIT", 100, 1, 1000),
   databasePoolIdleTimeoutMs: readBoundedInteger("DATABASE_POOL_IDLE_TIMEOUT_MS", 60_000, 10_000, 600_000),
+  trustedProxyIps: trustedProxyPolicy.addresses,
   analyticsAllowedOrigin: readEnv("ANALYTICS_ALLOWED_ORIGIN"),
   oAuthServerUrl: readEnv("OAUTH_SERVER_URL"),
   oAuthServerAllowedOrigins: readEnv("OAUTH_SERVER_ALLOWED_ORIGINS"),
@@ -149,6 +152,7 @@ export function validateProductionEnv() {
 
   assertRequiredEnv([
     "DATABASE_URL",
+    "TRUSTED_PROXY_IPS",
     "JWT_SECRET",
     "ERASURE_IDENTITY_HMAC_KEYS",
     "VITE_APP_ID",
@@ -159,6 +163,7 @@ export function validateProductionEnv() {
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
   ]);
+  if (trustedProxyPolicy.issue) throw new Error(trustedProxyPolicy.issue);
   if (!ENV.oAuthPortalUrl.trim()) {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }

@@ -5,6 +5,7 @@ import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
 import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
+import { resolveTrustedProxyPolicy } from "../shared/trustedProxyPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -31,6 +32,7 @@ check("migration files", migrationFiles.length > 0 ? "pass" : "fail", `${migrati
 
 const requiredProductionEnv = [
   "DATABASE_URL",
+  "TRUSTED_PROXY_IPS",
   "JWT_SECRET",
   "ERASURE_IDENTITY_HMAC_KEYS",
   "VITE_APP_ID",
@@ -46,6 +48,18 @@ check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
   missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+);
+
+const trustedProxyPolicy = resolveTrustedProxyPolicy(
+  String(process.env.TRUSTED_PROXY_IPS || ""),
+  isProduction
+);
+check(
+  "trusted proxy peers",
+  trustedProxyPolicy.issue ? "fail" : "pass",
+  trustedProxyPolicy.issue || (process.env.TRUSTED_PROXY_IPS
+    ? `${trustedProxyPolicy.addresses.length} exact proxy IP address(es) configured`
+    : "loopback proxy peers only outside production")
 );
 
 function windowsDefenderAvailable() {
