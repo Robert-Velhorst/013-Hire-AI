@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { TRPCError } from "@trpc/server";
 import { getHTTPStatusCodeFromError } from "@trpc/server/http";
 import { MAX_DOCUMENT_UPLOAD_BYTES } from "@shared/documentUploads";
@@ -215,8 +216,15 @@ async function handleDocumentUpload(req: Request, res: Response) {
 }
 
 export function registerDocumentUploadRoutes(app: Express) {
-  const uploadRateLimit = createRateLimitMiddleware(SENSITIVE_ROUTE_RATE_LIMITS.documentUpload);
-  app.post(DOCUMENT_UPLOAD_PATH, uploadRateLimit, (req, res) => {
+  const uploadPolicy = SENSITIVE_ROUTE_RATE_LIMITS.documentUpload;
+  const uploadRateLimit = createRateLimitMiddleware(uploadPolicy);
+  const uploadExpressRateLimit = rateLimit({
+    windowMs: uploadPolicy.windowMs,
+    limit: uploadPolicy.maxRequests,
+    standardHeaders: "draft-6",
+    legacyHeaders: false,
+  });
+  app.post(DOCUMENT_UPLOAD_PATH, uploadRateLimit, uploadExpressRateLimit, (req, res) => {
     void handleDocumentUpload(req, res).catch(() => {
       if (!res.destroyed && !res.headersSent) {
         res.status(500).json({ error: "Document upload failed." });
