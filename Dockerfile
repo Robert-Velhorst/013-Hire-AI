@@ -20,6 +20,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/shared/haiConnectorEndpointPolicy.mjs ./shared/haiConnectorEndpointPolicy.mjs
+COPY --from=build /app/shared/windowsDefenderPaths.mjs ./shared/windowsDefenderPaths.mjs
 COPY --from=build /app/shared/malwareScannerEndpointPolicy.mjs ./shared/malwareScannerEndpointPolicy.mjs
 COPY --from=build /app/shared/trustedServiceOriginPolicy.mjs ./shared/trustedServiceOriginPolicy.mjs
 COPY --from=build /app/scripts/doctor.mjs ./scripts/doctor.mjs

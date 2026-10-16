@@ -4,9 +4,14 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
+import { join, win32 } from "node:path";
+import {
+  MAX_DOCUMENT_UPLOAD_BYTES,
+  VERIFICATION_UPLOAD_MIME_TYPES,
+} from "@shared/documentUploads";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
+import { resolveWindowsDefenderPaths } from "../shared/windowsDefenderPaths.mjs";
+export { resolveWindowsDefenderPaths } from "../shared/windowsDefenderPaths.mjs";
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
 const DEFAULT_SCAN_TIMEOUT_MS = 30_000;
@@ -100,14 +105,14 @@ async function acquireScanPermit() {
 }
 
 async function findWindowsDefenderExecutable() {
-  const candidates = [
-    process.env.ProgramFiles
-      ? join(process.env.ProgramFiles, "Windows Defender", "MpCmdRun.exe")
-      : "",
-  ].filter(Boolean);
-  const platformRoot = process.env.ProgramData
-    ? join(process.env.ProgramData, "Microsoft", "Windows Defender", "Platform")
-    : "";
+  const paths = resolveWindowsDefenderPaths(
+    process.execPath,
+    process.env.ProgramFiles,
+    process.env.ProgramData
+  );
+  if (!paths) return null;
+  const candidates: string[] = [];
+  const platformRoot = paths.platformRoot;
   if (platformRoot && existsSync(platformRoot)) {
     const versions = (await readdir(platformRoot, { withFileTypes: true }))
       .filter(entry => entry.isDirectory())
@@ -116,12 +121,14 @@ async function findWindowsDefenderExecutable() {
         right.localeCompare(left, undefined, { numeric: true })
       );
     candidates.unshift(
-      ...versions.map(version => join(platformRoot, version, "MpCmdRun.exe"))
+      ...versions.map(version =>
+        win32.join(platformRoot, version, "MpCmdRun.exe")
+      )
     );
   }
+  if (paths.legacyExecutable) candidates.push(paths.legacyExecutable);
   return candidates.find(candidate => existsSync(candidate)) ?? null;
 }
-
 function runWindowsDefender(executable: string, filePath: string) {
   return new Promise<void>((resolve, reject) => {
     execFile(
@@ -224,7 +231,9 @@ export const RESUME_MIME_TYPES = new Set([
   "application/rtf",
 ]);
 
-export const VERIFICATION_MIME_TYPES = new Set<string>(VERIFICATION_UPLOAD_MIME_TYPES);
+export const VERIFICATION_MIME_TYPES = new Set<string>(
+  VERIFICATION_UPLOAD_MIME_TYPES
+);
 
 export function sanitizeUploadFileName(fileName: string): string {
   const trimmed = fileName.trim().replace(/[/\\]/g, "_");
@@ -273,11 +282,14 @@ export function validateUploadedFile(input: {
 }
 
 /** Production fails closed; development may run explicitly without a scanner. */
-export async function scanSensitiveUpload(input: {
-  data: Buffer | Uint8Array;
-  fileName: string;
-  mimeType: string;
-}, reservedPermit?: (() => void) | null): Promise<SensitiveUploadScanResult> {
+export async function scanSensitiveUpload(
+  input: {
+    data: Buffer | Uint8Array;
+    fileName: string;
+    mimeType: string;
+  },
+  reservedPermit?: (() => void) | null
+): Promise<SensitiveUploadScanResult> {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
     reservedPermit?.();
@@ -288,7 +300,7 @@ export async function scanSensitiveUpload(input: {
     }
     return { scanned: false, provider: "not_configured" };
   }
-  const release = reservedPermit ?? await acquireScanPermit();
+  const release = reservedPermit ?? (await acquireScanPermit());
   try {
     return mode === "windows_defender"
       ? await scanWithWindowsDefender(input)
@@ -302,7 +314,9 @@ export async function reserveSensitiveUploadScanPermit() {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
     if (ENV.isProduction) {
-      throw new Error("Sensitive uploads require an available malware scanner in production.");
+      throw new Error(
+        "Sensitive uploads require an available malware scanner in production."
+      );
     }
     return null;
   }
