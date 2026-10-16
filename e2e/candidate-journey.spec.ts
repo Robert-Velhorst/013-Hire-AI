@@ -32,7 +32,7 @@ test("authenticated candidate journey stays local, functional, and billing-safe"
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: /review jobs/i }).click();
+  await page.getByRole("button", { name: "Find Jobs", exact: true }).click();
   await expect(page).toHaveURL(/\/jobs$/);
   await expect(page.getByRole("heading", { name: /job search/i })).toBeVisible();
   await page.getByPlaceholder(/search/i).first().fill("Hire.AI E2E Remote Product Engineer");
