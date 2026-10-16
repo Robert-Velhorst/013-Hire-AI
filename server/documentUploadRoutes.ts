@@ -37,9 +37,8 @@ function parseDeclaredLength(req: Request, res: Response) {
 }
 
 async function readBoundedBody(req: Request, declaredLength: number | null) {
-  const chunks: Buffer[] = [];
-  const output =
-    declaredLength === null ? null : Buffer.allocUnsafe(declaredLength);
+  const capacity = declaredLength ?? MAX_DOCUMENT_UPLOAD_BYTES;
+  const output = Buffer.allocUnsafe(capacity);
   let total = 0;
   for await (const value of req) {
     const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
@@ -50,18 +49,12 @@ async function readBoundedBody(req: Request, declaredLength: number | null) {
       Object.assign(error, { statusCode: 413 });
       throw error;
     }
-    if (output) {
-      if (nextTotal > output.length) {
-        const error = new Error(
-          "Document length did not match Content-Length."
-        );
-        Object.assign(error, { statusCode: 400 });
-        throw error;
-      }
-      chunk.copy(output, total);
-    } else {
-      chunks.push(chunk);
+    if (declaredLength !== null && nextTotal > capacity) {
+      const error = new Error("Document length did not match Content-Length.");
+      Object.assign(error, { statusCode: 400 });
+      throw error;
     }
+    chunk.copy(output, total);
     total = nextTotal;
   }
   if (declaredLength !== null && total !== declaredLength) {
@@ -74,7 +67,7 @@ async function readBoundedBody(req: Request, declaredLength: number | null) {
     Object.assign(error, { statusCode: 400 });
     throw error;
   }
-  return output ?? Buffer.concat(chunks, total);
+  return output.subarray(0, total);
 }
 
 function isUploadKind(value: string): value is UploadKind {

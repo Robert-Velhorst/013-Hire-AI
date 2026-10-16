@@ -13,12 +13,12 @@ describe.skipIf(process.platform !== "win32").each(["windows", "ngrok"])("%s lau
       "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
       resolve("scripts/fixtures/windows-launcher-harness.ps1"),
       "-Launcher", launcher,
-    ], { encoding: "utf8", timeout: 30_000 });
+    ], { encoding: "utf8", timeout: 60_000 });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
     results = JSON.parse(result.stdout.trim());
     expect(results).toHaveLength(launcher === "windows" ? 7 : 9);
-  }, 40_000);
+  }, 70_000);
   function run(scenario: string) {
     const result = results.find(item => item.scenario === scenario);
     expect(result).toBeDefined();

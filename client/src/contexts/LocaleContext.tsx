@@ -4,8 +4,40 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "hire-ai-locale";
 
+const applicationEmailTranslations = {
+  en: {
+    sendApplicationByEmail: "Send application email",
+    sendApplicationEmailTitle: "Review email application",
+    sendApplicationEmailDescription: "Check the employer address, selected mailbox, resume, and exact message below. Hire.AI will send only after you confirm.",
+    employerApplicationEmail: "Employer application address",
+    resumeToAttach: "Resume attachment",
+    emailProvider: "Send from",
+    applicationEmailBody: "Email message",
+    applicationEmailSendWarning: "This sends your application and resume to the employer now. Only use an address published for applications. Delivery may be uncertain if the mailbox provider times out; Hire.AI will block an automatic retry.",
+    applicationEmailSent: "Application email sent; provider confirmation recorded.",
+    applicationEmailAlreadySent: "This application email is already recorded as sent.",
+    applicationEmailSendFailed: "Application email could not be sent.",
+    applicationResumeVersion: "{fileName} (version {version})",
+  },
+  nl: {
+    sendApplicationByEmail: "Sollicitatie-e-mail verzenden",
+    sendApplicationEmailTitle: "Sollicitatie-e-mail controleren",
+    sendApplicationEmailDescription: "Controleer hieronder het werkgeversadres, de gekozen mailbox, het cv en het exacte bericht. Hire.AI verzendt pas na jouw bevestiging.",
+    employerApplicationEmail: "E-mailadres voor sollicitaties",
+    resumeToAttach: "Bijgevoegd cv",
+    emailProvider: "Verzenden vanaf",
+    applicationEmailBody: "E-mailbericht",
+    applicationEmailSendWarning: "Hiermee stuur je je sollicitatie en cv nu naar de werkgever. Gebruik alleen een adres dat voor sollicitaties is gepubliceerd. Bij een time-out van de mailboxprovider kan de bezorging onzeker zijn; Hire.AI blokkeert dan automatisch opnieuw verzenden.",
+    applicationEmailSent: "Sollicitatie-e-mail verzonden; bevestiging van de provider vastgelegd.",
+    applicationEmailAlreadySent: "Deze sollicitatie-e-mail staat al als verzonden geregistreerd.",
+    applicationEmailSendFailed: "De sollicitatie-e-mail kon niet worden verzonden.",
+    applicationResumeVersion: "{fileName} (versie {version})",
+  },
+} as const;
+
 const translations = {
   en: {
+    ...applicationEmailTranslations.en,
     sourceRegister: "Sources",
     loading: "Loading Hire.AI...", dashboard: "Dashboard", findJobs: "Find Jobs",
     applications: "Applications", reviewQueue: "Review Queue", savedJobs: "Saved Jobs",
@@ -326,6 +358,7 @@ const translations = {
     pipelineEmptyLabel: "No ledger yet", pipelineEmptyHeadline: "No applications are being tracked.", pipelineEmptyAction: "Complete your profile and run discovery so Hire.AI can prepare controlled application work.", pipelineAllApplications: "All applications", pipelineApprovalBlockedLabel: "Approval blocked", pipelineApprovalBlockedHeadline: "{count} prepared submission(s) need a decision before any external action.", pipelineApprovalBlockedAction: "Open prepared applications and approve or reject submission gates before recording evidence.", pipelineReviewApprovals: "Review approvals", pipelineEvidenceNeededLabel: "Evidence needed", pipelineEvidenceNeededHeadline: "{count} prepared application(s) still need submission proof.", pipelineEvidenceNeededAction: "Confirm submission only after employer portal, ATS, email, or manual evidence is available.", pipelineReviewPrepared: "Review prepared", pipelineOfferActionLabel: "Offer action", pipelineOfferActionHeadline: "{count} offer(s) need attribution and hire-reporting review.", pipelineOfferActionAction: "Review the offer source before reporting a hire or starting success-fee billing.", pipelineReviewOffers: "Review offers", pipelineResponsesActiveLabel: "Responses active", pipelineResponsesActiveHeadline: "{count} application(s) have employer response history.", pipelineResponsesActiveAction: "Keep responses, interviews, rejections, and offers classified so the ledger stays current.", pipelineOpenInterviews: "Open interviews", pipelineOpenActive: "Open active", pipelineFollowUpLabel: "Follow-up candidates", pipelineFollowUpHeadline: "{count} active application(s) may need timed follow-up.", pipelineFollowUpAction: "Draft follow-ups only after reviewing the application context and message approval gate.", pipelineReviewActive: "Review active", pipelineCurrentLabel: "Ledger current", pipelineCurrentHeadline: "No application needs immediate action.", pipelineCurrentAction: "Keep scouting, preparing applications, and recording employer responses as they arrive.",
   },
   nl: {
+    ...applicationEmailTranslations.nl,
     sourceRegister: "Bronnen",
     loading: "Hire.AI laden...", dashboard: "Overzicht", findJobs: "Vacatures zoeken",
     applications: "Sollicitaties", reviewQueue: "Beoordelingswachtrij", savedJobs: "Opgeslagen vacatures",

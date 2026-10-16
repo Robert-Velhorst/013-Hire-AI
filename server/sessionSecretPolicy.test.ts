@@ -9,6 +9,7 @@ const productionEnv = {
   ERASURE_IDENTITY_HMAC_KEYS: "doctor-erasure-identity-hmac-key-at-least-32-characters",
   VITE_APP_ID: "hire-ai-doctor-test",
   OAUTH_SERVER_URL: "https://oauth.example.test",
+  OAUTH_SERVER_ALLOWED_ORIGINS: "https://oauth.example.test",
   OAUTH_PORTAL_URL: "https://auth.example.test",
   OWNER_OPEN_ID: "doctor-owner",
   BUILT_IN_FORGE_API_KEY: "doctor-forge-key",
@@ -16,6 +17,7 @@ const productionEnv = {
   STRIPE_WEBHOOK_SECRET: "whsec_doctor",
   FILE_MALWARE_SCAN_MODE: "http",
   FILE_MALWARE_SCAN_URL: "https://scanner.example.test",
+  FILE_MALWARE_SCAN_ALLOWED_ORIGINS: "https://scanner.example.test",
   JOB_SCRAPING_SCHEDULER_ENABLED: "false",
   HAI_CONNECTOR_ENABLED: "false",
 };

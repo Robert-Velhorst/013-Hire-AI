@@ -1,2 +1,2 @@
-export function validateHaiConnectorUrl(value: string): string | null;
+export function validateHaiConnectorUrl(value: string, allowedOrigins?: string): string | null;
 

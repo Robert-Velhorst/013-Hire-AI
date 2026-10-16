@@ -8,6 +8,7 @@ import {
 } from "./haiConnector";
 import { parseHaiConnectorUserId, validateHaiConnectorConfig } from "./haiConnectorConfig";
 import { registerHaiConnectorRoutes } from "./haiConnectorRoutes";
+import { sampleJobs } from "./sampleData";
 
 const token = "hire-ai-hai-test-token-32-characters-long";
 const snapshot: HaiJobSearchSnapshot = {
@@ -48,15 +49,23 @@ async function start(service: HaiConnectorService) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-function configuredService(provider = vi.fn(async () => snapshot)) {
+function configuredService(
+  provider = vi.fn(async () => snapshot),
+  jobSearchProvider = vi.fn(async () => ({ items: [], nextCursor: null }))
+) {
   return {
     provider,
-    service: new HaiConnectorService({
-      enabled: true,
-      token,
-      userId: ownerId,
-      endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
-    }, provider),
+    jobSearchProvider,
+    service: new HaiConnectorService(
+      {
+        enabled: true,
+        token,
+        userId: ownerId,
+        endpointUrl: "http://127.0.0.1:3000/api/hai/a2a",
+      },
+      provider,
+      jobSearchProvider
+    ),
   };
 }
 
@@ -77,10 +86,15 @@ function sendMessage(extraMessage: Record<string, unknown> = {}) {
 }
 
 describe("HAI connector configuration", () => {
-  it("stays disabled by default and rejects weak or public connector configuration", () => {
+  it("stays disabled by default and requires an allowlisted HTTPS origin for public peers", () => {
     expect(validateHaiConnectorConfig({ enabled: false, token: "", userId: null, endpointUrl: "" })).toBeNull();
     expect(validateHaiConnectorConfig({ enabled: true, token: "short", userId: 1, endpointUrl: "http://127.0.0.1/a" })).toContain("32");
-    expect(validateHaiConnectorConfig({ enabled: true, token, userId: 1, endpointUrl: "https://example.com/api/hai/a2a" })).toContain("local");
+    const publicConfig = { enabled: true, token, userId: 1, endpointUrl: "https://hire-ai.example.test/api/hai/a2a" };
+    expect(validateHaiConnectorConfig(publicConfig)).toContain("not explicitly allowlisted");
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://hire-ai.example.test" })).toBeNull();
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://other.example.test" })).toContain("not explicitly allowlisted");
+    expect(validateHaiConnectorConfig({ ...publicConfig, endpointUrl: "http://hire-ai.example.test/api/hai/a2a", allowedOrigins: "https://hire-ai.example.test" })).toContain("HTTPS");
+    expect(validateHaiConnectorConfig({ ...publicConfig, allowedOrigins: "https://hire-ai.example.test/path" })).toContain("ALLOWED_ORIGINS");
   });
 
   it("accepts only private IP ranges and rejects public IPv6 addresses containing fc or fd", () => {
@@ -89,7 +103,7 @@ describe("HAI connector configuration", () => {
       "http://[2001:db8:fc00::1]:3000/api/hai/a2a",
       "http://[2001:db8:fd00::1]:3000/api/hai/a2a",
     ]) {
-      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("local");
+      expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toContain("HTTPS");
     }
 
     for (const endpointUrl of [
@@ -102,7 +116,7 @@ describe("HAI connector configuration", () => {
       expect(validateHaiConnectorConfig({ ...config, endpointUrl })).toBeNull();
     }
 
-    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("local");
+    expect(validateHaiConnectorConfig({ ...config, endpointUrl: "http://172.32.2.3:3000/api/hai/a2a" })).toContain("HTTPS");
   });
 
   it("rejects unusable tokens, ambiguous user IDs, and endpoints the server does not expose", () => {
@@ -143,6 +157,24 @@ describe("HAI A2A route", () => {
     expect(provider).not.toHaveBeenCalled();
   });
 
+  it("throttles unauthenticated job-search attempts before connector authorization", async () => {
+    const disabled = new HaiConnectorService({ enabled: false, token: "", userId: null, endpointUrl: "" });
+    const base = await start(disabled);
+    const request = () => fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      expect((await request()).status).toBe(404);
+    }
+    const limited = await request();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBeTruthy();
+    expect(limited.headers.get("ratelimit-limit")).toBe("30");
+    expect(limited.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("publishes a bounded Agent Card and returns a read-only aggregate snapshot", async () => {
     const { service, provider } = configuredService();
     const base = await start(service);
@@ -178,6 +210,87 @@ describe("HAI A2A route", () => {
     expect(JSON.stringify(body)).not.toContain("Signature verification");
     expect(provider).toHaveBeenCalledOnce();
     expect(provider).toHaveBeenCalledWith(ownerId);
+  });
+
+  it("returns bounded canonical remote jobs with an enforced remote-only policy", async () => {
+    const postedAt = new Date("2026-08-08T12:00:00.000Z");
+    const cursor = {
+      postedDate: postedAt,
+      createdAt: new Date("2026-08-08T13:00:00.000Z"),
+      id: 91,
+    };
+    const jobSearchProvider = vi.fn(async () => ({
+      items: [{
+        ...sampleJobs[0],
+        description: "d".repeat(3_000),
+        requirements: "r".repeat(3_000),
+        sourceUrl: "http://jobs.example.test/source",
+        applicationUrl: "javascript:alert(1)",
+        postedDate: postedAt,
+      }],
+      nextCursor: cursor,
+    }));
+    const { service } = configuredService(vi.fn(async () => snapshot), jobSearchProvider);
+    const base = await start(service);
+    const response = await fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        filters: {
+          query: "engineer",
+          platformId: 4,
+          salaryRange: [50_000, 100_000],
+          salaryCurrency: "eur",
+        },
+        limit: 25,
+      }),
+    });
+    const body = await response.json() as any;
+    expect(response.status).toBe(200);
+    expect(jobSearchProvider).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 25,
+      filters: expect.objectContaining({
+        query: "engineer",
+        platformId: "4",
+        salaryRange: [50_000, 100_000],
+        salaryCurrency: "EUR",
+        remoteOnly: true,
+        listingSafety: "clear",
+      }),
+    }));
+    expect(body.policy).toEqual({ remoteOnly: true, listingSafety: "clear", canonicalListingsOnly: true });
+    expect(body.jobs).toHaveLength(1);
+    expect(body.jobs[0].description).toHaveLength(2_000);
+    expect(body.jobs[0].requirements).toHaveLength(2_000);
+    expect(body.jobs[0].sourceUrl).toBeNull();
+    expect(body.jobs[0].applicationUrl).toBeNull();
+    expect(body.nextCursor).toEqual({
+      postedDate: cursor.postedDate.toISOString(),
+      createdAt: cursor.createdAt.toISOString(),
+      id: cursor.id,
+    });
+  });
+
+  it("rejects unsafe salary filters, policy overrides, and unauthenticated searches before database search", async () => {
+    const { service, jobSearchProvider } = configuredService();
+    const base = await start(service);
+    const request = (authorization: string | null, body: unknown) => fetch(`${base}/api/hai/jobs/search`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { authorization } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    expect((await request(`Bearer ${token}`, { filters: { salaryRange: [20_000, 50_000] } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { salaryCurrency: "ZZZ" } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { remoteOnly: false } })).status).toBe(400);
+    expect((await request(`Bearer ${token}`, { filters: { listingSafety: "all" } })).status).toBe(400);
+    expect((await request(null, { filters: { query: "engineer" } })).status).toBe(404);
+    expect(jobSearchProvider).not.toHaveBeenCalled();
   });
 
   it("rejects mutation-shaped metadata and oversized input before building a job-search snapshot", async () => {

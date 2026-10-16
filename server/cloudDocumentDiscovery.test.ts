@@ -201,6 +201,47 @@ describe("cloud resume discovery", () => {
     expect(fetcher).toHaveBeenCalledTimes(5);
   });
 
+  it("hard-limits oversized Dropbox continuation pages to the remaining scan budget", async () => {
+    mocks.getUserConnectorAccount.mockResolvedValue(connectedAccount("dropbox"));
+    mocks.getConnectorAuthorization.mockResolvedValue({
+      userId: 501,
+      provider: "dropbox",
+      encryptedAccessToken: "encrypted-access",
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: new Date("2026-07-13T13:00:00.000Z"),
+      tokenType: "Bearer",
+      grantedScopes: "[]",
+    });
+    const unrelated = Array.from({ length: 100 }, (_, index) => ({
+      ".tag": "file",
+      path_lower: `/portfolio-${index}.pdf`,
+      name: `portfolio-${index}.pdf`,
+      size: 100,
+    }));
+    const oversizedContinuation = Array.from({ length: 600 }, (_, index) => ({
+      ".tag": "file",
+      path_lower: `/resume-${index}.pdf`,
+      name: index >= 400 ? `Resume ${index}.pdf` : `portfolio-${index}.pdf`,
+      size: 100,
+    }));
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: unrelated,
+        has_more: true,
+        cursor: "cursor-2",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        entries: oversizedContinuation,
+        has_more: false,
+      }), { status: 200 }));
+
+    const result = await discoverCloudResumeDocuments(501, "dropbox", discoveryOptions(fetcher));
+
+    expect(result).toMatchObject({ scannedCount: 500, truncated: true, documents: [] });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(mocks.storeCloudResumeCandidates).toHaveBeenCalledWith(501, "dropbox", [], now);
+  });
+
   it("reports truncation when a single provider page exceeds the supported-candidate cap", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       files: Array.from({ length: 75 }, (_, index) => ({

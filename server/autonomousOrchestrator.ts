@@ -247,6 +247,8 @@ export function scoreJobForProfile(job: Job, profile?: Partial<UserProfile> | nu
   } else if (profile?.salaryExpectationMin && job.salaryMin && job.salaryMin >= profile.salaryExpectationMin) {
     score += 8;
     reasons.push("Salary meets stated expectations");
+  } else if (hasSalaryExpectation && !hasJobSalary) {
+    blockers.push("Salary range is not disclosed and must be clarified against the user's stated expectation");
   }
 
   if (profile?.needsVisaSponsorship && !job.visaSponsorshipAvailable) {
@@ -419,9 +421,19 @@ export function buildAutonomousPlan(
       const resumeMissing = blockers.includes("Resume is required before autonomous submission");
       const hardBlockers = blockers.filter((blocker) =>
         blocker !== "Resume is required before autonomous submission" &&
-        !blocker.startsWith("Salary is listed in ")
+        !blocker.startsWith("Salary is listed in ") &&
+        !blocker.startsWith("Salary range is not disclosed")
       );
       const salaryCurrencyReviewRequired = blockers.some((blocker) => blocker.startsWith("Salary is listed in "));
+      const salaryDisclosureReviewRequired = blockers.some((blocker) =>
+        blocker.startsWith("Salary range is not disclosed")
+      );
+
+      if (salaryDisclosureReviewRequired) {
+        automationNotes.push(
+          "Request the salary range from the employer before applying. If the employer does not respond, ask the candidate whether to proceed. No employer message or application is sent automatically."
+        );
+      }
 
       if (listingSafety.status === "blocked") {
         action = "blocked";
@@ -429,7 +441,12 @@ export function buildAutonomousPlan(
         if (resumeMissing) {
           action = "blocked";
           automationNotes.push("An active versioned resume is required before Hire.AI can prepare application materials for this role.");
-        } else if (listingSafety.status === "review" || remoteEligibilityUnknown || salaryCurrencyReviewRequired) {
+        } else if (
+          listingSafety.status === "review" ||
+          remoteEligibilityUnknown ||
+          salaryCurrencyReviewRequired ||
+          salaryDisclosureReviewRequired
+        ) {
           action = "queue_for_review";
         } else if (!support.supported && allowUnsupportedATS) {
           action = "manual_apply";
@@ -458,7 +475,13 @@ export function buildAutonomousPlan(
         priority: score >= 85 ? "urgent" : score >= 75 ? "high" : score >= minMatchScore ? "normal" : "low",
         reasons: reasons.slice(0, 4),
         blockers,
-        reviewRequired: requireHumanReview || !support.supported || listingSafety.status === "review" || remoteEligibilityUnknown || blockers.length > 0,
+        reviewRequired:
+          requireHumanReview ||
+          !support.supported ||
+          listingSafety.status === "review" ||
+          remoteEligibilityUnknown ||
+          salaryDisclosureReviewRequired ||
+          blockers.length > 0,
         automationNotes,
         userDecisionLocked,
       } satisfies AutonomousJobDecision;
@@ -520,6 +543,13 @@ export function buildAutonomousPlan(
   ).length;
   if (remoteEligibilityReviews > 0) {
     nextActions.push(`Review ${remoteEligibilityReviews} role${remoteEligibilityReviews === 1 ? "" : "s"} with unverified remote eligibility before preparation.`);
+  }
+  const salaryDisclosureReviews = decisions.filter((decision) =>
+    decision.action === "queue_for_review" &&
+    decision.blockers.some((blocker) => blocker.startsWith("Salary range is not disclosed"))
+  ).length;
+  if (salaryDisclosureReviews > 0) {
+    nextActions.push(`Clarify the salary range for ${salaryDisclosureReviews} role${salaryDisclosureReviews === 1 ? "" : "s"} before applying; ask the candidate before proceeding if the employer does not respond.`);
   }
   if (expiredJobsSkipped > 0) {
     nextActions.push(`Excluded ${expiredJobsSkipped} expired or stale job posting${expiredJobsSkipped === 1 ? "" : "s"} from autonomous preparation.`);
