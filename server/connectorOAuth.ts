@@ -240,6 +240,8 @@ export function hashConnectorOAuthStateNonce(
   nonce: string,
   stateSecret = getDefaultEnvironment().connectorOAuthStateSecret
 ) {
+  // The keyed digest indexes a 128-bit random OAuth nonce, not a user password.
+  // codeql[js/insufficient-password-hash]
   return createHmac("sha256", stateSecret).update(`connector-state-nonce:${nonce}`).digest("hex");
 }
 
@@ -276,6 +278,8 @@ export function buildConnectorAuthorizationUrl(config: ConnectorOAuthConfig, sta
 }
 
 function stateSignature(encodedPayload: string, stateSecret: string) {
+  // OAuth state is authenticated protocol data and is never used as password storage.
+  // codeql[js/insufficient-password-hash]
   return createHmac("sha256", stateSecret).update(encodedPayload).digest("base64url");
 }
 

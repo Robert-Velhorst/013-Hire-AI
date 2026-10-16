@@ -19,13 +19,21 @@ import {
   upsertConnectorAuthorization,
   upsertUserConnectorAccount,
 } from "./db";
+import { createRateLimitMiddleware } from "./_core/apiRateLimit";
+
+export const CONNECTOR_OAUTH_CALLBACK_RATE_LIMIT_POLICY = Object.freeze({
+  windowMs: 60_000,
+  maxRequests: 30,
+  maxClients: 10_000,
+});
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
   return typeof value === "string" ? value : undefined;
 }
 
-type ConnectorCallbackProvider = "gmail" | "google_drive" | "dropbox" | "outlook" | "linkedin" | "github";
+type ConnectorCallbackProvider =
+  "gmail" | "google_drive" | "dropbox" | "outlook" | "linkedin" | "github";
 
 function defaultConnectorConsentScopes(provider: ConnectorCallbackProvider) {
   switch (provider) {
@@ -54,16 +62,23 @@ export function connectorConsentScopes(
   provider: ConnectorCallbackProvider,
   requestedScopes: readonly string[] | undefined
 ) {
-  const requested = requestedScopes?.map((scope) => scope.trim()).filter(Boolean);
+  const requested = requestedScopes?.map(scope => scope.trim()).filter(Boolean);
   const allowed = new Set(allowedConnectorConsentScopes(provider));
   const baseline = defaultConnectorConsentScopes(provider);
-  if (!requested || requested.length === 0 || baseline.some((scope) => !requested.includes(scope))) {
+  if (
+    !requested ||
+    requested.length === 0 ||
+    baseline.some(scope => !requested.includes(scope))
+  ) {
     return baseline;
   }
-  return Array.from(new Set(requested.filter((scope) => allowed.has(scope))));
+  return Array.from(new Set(requested.filter(scope => allowed.has(scope))));
 }
 
-const requiredProviderScopes: Record<ConnectorCallbackProvider, readonly string[]> = {
+const requiredProviderScopes: Record<
+  ConnectorCallbackProvider,
+  readonly string[]
+> = {
   gmail: ["https://www.googleapis.com/auth/gmail.metadata"],
   google_drive: ["https://www.googleapis.com/auth/drive.readonly"],
   dropbox: ["files.metadata.read", "files.content.read"],
@@ -82,7 +97,9 @@ export function getMissingProviderScopes(
   grantedScopes: readonly string[],
   consentScopes: readonly string[] = defaultConnectorConsentScopes(provider)
 ) {
-  const granted = new Set(grantedScopes.map((scope) => scope.trim()).filter(Boolean));
+  const granted = new Set(
+    grantedScopes.map(scope => scope.trim()).filter(Boolean)
+  );
   const required = [...requiredProviderScopes[provider]];
   if (provider === "gmail" && consentScopes.includes("email.messages.send")) {
     required.push("https://www.googleapis.com/auth/gmail.send");
@@ -90,174 +107,227 @@ export function getMissingProviderScopes(
   if (provider === "outlook" && consentScopes.includes("mail.messages.send")) {
     required.push("Mail.Send");
   }
-  return required.filter((scope) => !granted.has(scope));
+  return required.filter(scope => !granted.has(scope));
 }
 
-function completeRedirect(provider: string, status: "connected" | "denied" | "failed") {
+function completeRedirect(
+  provider: string,
+  status: "connected" | "denied" | "failed"
+) {
   return `/profile?connector=${encodeURIComponent(provider)}&connectorStatus=${status}`;
 }
 
 export function registerConnectorOAuthRoutes(app: Express) {
-  app.get("/api/connectors/oauth/callback", async (req: Request, res: Response) => {
-    const state = getQueryParam(req, "state");
-    const code = getQueryParam(req, "code");
-    const providerError = getQueryParam(req, "error");
-    if (!state) {
-      res.status(400).json({ error: "Invalid connector authorization state." });
-      return;
-    }
-
-    const verifiedState = verifyConnectorOAuthState(state);
-    if (!verifiedState || !isOAuthConnectorProvider(verifiedState.provider)) {
-      res.status(400).json({ error: "Invalid or expired connector authorization state." });
-      return;
-    }
-
-    let sessionCookie: string;
-    let sessionUserId: number;
-    let applicationOrigin: string;
-    try {
-      sessionCookie = parseCookieHeader(req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
-      if (!sessionCookie) throw new Error("Missing browser session.");
-      const sessionUser = await sdk.authenticateRequest(req);
-      if (sessionUser.id !== verifiedState.userId || sessionUser.accountStatus !== "active") {
-        throw new Error("Session owner is not active.");
+  const connectorOAuthCallbackRateLimit = createRateLimitMiddleware(
+    CONNECTOR_OAUTH_CALLBACK_RATE_LIMIT_POLICY
+  );
+  app.get(
+    "/api/connectors/oauth/callback",
+    connectorOAuthCallbackRateLimit,
+    async (req: Request, res: Response) => {
+      const state = getQueryParam(req, "state");
+      const code = getQueryParam(req, "code");
+      const providerError = getQueryParam(req, "error");
+      if (!state) {
+        res
+          .status(400)
+          .json({ error: "Invalid connector authorization state." });
+        return;
       }
-      sessionUserId = sessionUser.id;
-      const host = req.get("host");
-      if (!host) throw new Error("Missing request host.");
-      applicationOrigin = new URL(`${req.protocol}://${host}`).origin;
-      if (applicationOrigin !== getConnectorOAuthCallbackOrigin()) {
-        throw new Error("Callback origin does not match.");
-      }
-    } catch {
-      res.status(400).json({ error: "Invalid connector authorization state." });
-      return;
-    }
 
-    const provider = verifiedState.provider;
-    const consentScopes = connectorConsentScopes(provider, verifiedState.consentScopes);
-    let consumed: boolean;
-    try {
-      consumed = await consumeConnectorOAuthIntent({
-        stateNonceHash: hashConnectorOAuthStateNonce(verifiedState.nonce),
-        userId: sessionUserId,
+      const verifiedState = verifyConnectorOAuthState(state);
+      if (!verifiedState || !isOAuthConnectorProvider(verifiedState.provider)) {
+        res
+          .status(400)
+          .json({ error: "Invalid or expired connector authorization state." });
+        return;
+      }
+
+      let sessionCookie: string;
+      let sessionUserId: number;
+      let applicationOrigin: string;
+      try {
+        sessionCookie =
+          parseCookieHeader(req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+        if (!sessionCookie) throw new Error("Missing browser session.");
+        const sessionUser = await sdk.authenticateRequest(req);
+        if (
+          sessionUser.id !== verifiedState.userId ||
+          sessionUser.accountStatus !== "active"
+        ) {
+          throw new Error("Session owner is not active.");
+        }
+        sessionUserId = sessionUser.id;
+        const host = req.get("host");
+        if (!host) throw new Error("Missing request host.");
+        applicationOrigin = new URL(`${req.protocol}://${host}`).origin;
+        if (applicationOrigin !== getConnectorOAuthCallbackOrigin()) {
+          throw new Error("Callback origin does not match.");
+        }
+      } catch {
+        res
+          .status(400)
+          .json({ error: "Invalid connector authorization state." });
+        return;
+      }
+
+      const provider = verifiedState.provider;
+      const consentScopes = connectorConsentScopes(
         provider,
-        consentScopes: JSON.stringify(consentScopes),
-        sessionBinding: createConnectorOAuthSessionBinding(sessionCookie),
-        applicationOrigin,
-      });
-    } catch {
-      res.status(503).json({ error: "Connector authorization is temporarily unavailable." });
-      return;
-    }
-    if (!consumed) {
-      res.status(400).json({ error: "Invalid or expired connector authorization state." });
-      return;
-    }
+        verifiedState.consentScopes
+      );
+      let consumed: boolean;
+      try {
+        consumed = await consumeConnectorOAuthIntent({
+          stateNonceHash: hashConnectorOAuthStateNonce(verifiedState.nonce),
+          userId: sessionUserId,
+          provider,
+          consentScopes: JSON.stringify(consentScopes),
+          sessionBinding: createConnectorOAuthSessionBinding(sessionCookie),
+          applicationOrigin,
+        });
+      } catch {
+        res
+          .status(503)
+          .json({
+            error: "Connector authorization is temporarily unavailable.",
+          });
+        return;
+      }
+      if (!consumed) {
+        res
+          .status(400)
+          .json({ error: "Invalid or expired connector authorization state." });
+        return;
+      }
 
-    const account = await getUserConnectorAccount(verifiedState.userId, provider);
-    if (account?.status === "disabled") {
-      res.redirect(302, completeRedirect(provider, "denied"));
-      return;
-    }
+      const account = await getUserConnectorAccount(
+        verifiedState.userId,
+        provider
+      );
+      if (account?.status === "disabled") {
+        res.redirect(302, completeRedirect(provider, "denied"));
+        return;
+      }
 
-    if (providerError || !code) {
-      if (account?.status !== "connected") {
-        await upsertUserConnectorAccount({
+      if (providerError || !code) {
+        if (account?.status !== "connected") {
+          await upsertUserConnectorAccount({
+            userId: verifiedState.userId,
+            provider,
+            status: "needs_reauth",
+            consentScopes: JSON.stringify(consentScopes),
+          });
+        }
+        await createAuditEvent({
+          userId: verifiedState.userId,
+          entityType: "user",
+          entityId: verifiedState.userId,
+          action: "connector_oauth_denied",
+          actor: "user",
+          source: "connectors.oauth.callback",
+          afterState: JSON.stringify({
+            provider,
+            status:
+              account?.status === "connected" ? "connected" : "needs_reauth",
+            authorizationUpgradeCancelled: account?.status === "connected",
+          }),
+          riskLevel: "medium",
+        });
+        res.redirect(302, completeRedirect(provider, "denied"));
+        return;
+      }
+
+      const config = getConnectorOAuthConfig(
+        provider,
+        undefined,
+        consentScopes
+      );
+      if (!config) {
+        res
+          .status(503)
+          .json({
+            error: "Connector OAuth is not configured for this provider.",
+          });
+        return;
+      }
+
+      try {
+        const token = await exchangeConnectorAuthorizationCode(config, code);
+        if (
+          token.accessTokenLifetime === "unknown" &&
+          !token.expiresAt &&
+          !token.refreshToken
+        ) {
+          throw new Error(
+            "The provider did not identify a usable connector token lifetime."
+          );
+        }
+        const missingScopes = getMissingProviderScopes(
+          provider,
+          token.grantedScopes,
+          consentScopes
+        );
+        if (missingScopes.length > 0) {
+          throw new Error("Required connector consent was not granted.");
+        }
+        await upsertConnectorAuthorization({
           userId: verifiedState.userId,
           provider,
-          status: "needs_reauth",
-          consentScopes: JSON.stringify(consentScopes),
+          encryptedAccessToken: encryptConnectorToken(token.accessToken),
+          encryptedRefreshToken: token.refreshToken
+            ? encryptConnectorToken(token.refreshToken)
+            : null,
+          accessTokenExpiresAt: token.expiresAt,
+          accessTokenLifetime: token.accessTokenLifetime,
+          tokenType: token.tokenType,
+          grantedScopes: JSON.stringify(token.grantedScopes),
         });
-      }
-      await createAuditEvent({
-        userId: verifiedState.userId,
-        entityType: "user",
-        entityId: verifiedState.userId,
-        action: "connector_oauth_denied",
-        actor: "user",
-        source: "connectors.oauth.callback",
-        afterState: JSON.stringify({
-          provider,
-          status: account?.status === "connected" ? "connected" : "needs_reauth",
-          authorizationUpgradeCancelled: account?.status === "connected",
-        }),
-        riskLevel: "medium",
-      });
-      res.redirect(302, completeRedirect(provider, "denied"));
-      return;
-    }
-
-    const config = getConnectorOAuthConfig(provider, undefined, consentScopes);
-    if (!config) {
-      res.status(503).json({ error: "Connector OAuth is not configured for this provider." });
-      return;
-    }
-
-    try {
-      const token = await exchangeConnectorAuthorizationCode(config, code);
-      if (token.accessTokenLifetime === "unknown" && !token.expiresAt && !token.refreshToken) {
-        throw new Error("The provider did not identify a usable connector token lifetime.");
-      }
-      const missingScopes = getMissingProviderScopes(provider, token.grantedScopes, consentScopes);
-      if (missingScopes.length > 0) {
-        throw new Error("Required connector consent was not granted.");
-      }
-      await upsertConnectorAuthorization({
-        userId: verifiedState.userId,
-        provider,
-        encryptedAccessToken: encryptConnectorToken(token.accessToken),
-        encryptedRefreshToken: token.refreshToken ? encryptConnectorToken(token.refreshToken) : null,
-        accessTokenExpiresAt: token.expiresAt,
-        accessTokenLifetime: token.accessTokenLifetime,
-        tokenType: token.tokenType,
-        grantedScopes: JSON.stringify(token.grantedScopes),
-      });
-      await upsertUserConnectorAccount({
-        userId: verifiedState.userId,
-        provider,
-        status: "connected",
-        consentScopes: JSON.stringify(consentScopes),
-        lastVerifiedAt: new Date(),
-        disconnectedAt: null,
-      });
-      await createAuditEvent({
-        userId: verifiedState.userId,
-        entityType: "user",
-        entityId: verifiedState.userId,
-        action: "connector_oauth_connected",
-        actor: "user",
-        source: "connectors.oauth.callback",
-        afterState: JSON.stringify({
+        await upsertUserConnectorAccount({
+          userId: verifiedState.userId,
           provider,
           status: "connected",
-          tokenExpiresAt: token.expiresAt?.toISOString() ?? null,
-          tokenLifetime: token.accessTokenLifetime,
-        }),
-        riskLevel: "medium",
-      });
-      res.redirect(302, completeRedirect(provider, "connected"));
-    } catch {
-      if (account?.status !== "connected") {
-        await upsertUserConnectorAccount({
-          userId: verifiedState.userId,
-          provider,
-          status: "needs_reauth",
           consentScopes: JSON.stringify(consentScopes),
+          lastVerifiedAt: new Date(),
+          disconnectedAt: null,
         });
+        await createAuditEvent({
+          userId: verifiedState.userId,
+          entityType: "user",
+          entityId: verifiedState.userId,
+          action: "connector_oauth_connected",
+          actor: "user",
+          source: "connectors.oauth.callback",
+          afterState: JSON.stringify({
+            provider,
+            status: "connected",
+            tokenExpiresAt: token.expiresAt?.toISOString() ?? null,
+            tokenLifetime: token.accessTokenLifetime,
+          }),
+          riskLevel: "medium",
+        });
+        res.redirect(302, completeRedirect(provider, "connected"));
+      } catch {
+        if (account?.status !== "connected") {
+          await upsertUserConnectorAccount({
+            userId: verifiedState.userId,
+            provider,
+            status: "needs_reauth",
+            consentScopes: JSON.stringify(consentScopes),
+          });
+        }
+        await createAuditEvent({
+          userId: verifiedState.userId,
+          entityType: "user",
+          entityId: verifiedState.userId,
+          action: "connector_oauth_failed",
+          actor: "system",
+          source: "connectors.oauth.callback",
+          afterState: JSON.stringify({ provider, status: "needs_reauth" }),
+          riskLevel: "medium",
+        });
+        res.redirect(302, completeRedirect(provider, "failed"));
       }
-      await createAuditEvent({
-        userId: verifiedState.userId,
-        entityType: "user",
-        entityId: verifiedState.userId,
-        action: "connector_oauth_failed",
-        actor: "system",
-        source: "connectors.oauth.callback",
-        afterState: JSON.stringify({ provider, status: "needs_reauth" }),
-        riskLevel: "medium",
-      });
-      res.redirect(302, completeRedirect(provider, "failed"));
     }
-  });
+  );
 }

@@ -186,6 +186,18 @@ afterEach(async () => {
 });
 
 describe("connector OAuth callback session binding", () => {
+  it("rate-limits invalid callback bursts before OAuth work", async () => {
+    const server = await startServer();
+    const responses = await Promise.all(
+      Array.from({ length: 31 }, () => callback(server, "invalid-state"))
+    );
+
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 400)).toHaveLength(30);
+    expect(consumeIntent).not.toHaveBeenCalled();
+    expect(connectorOAuth.exchangeConnectorAuthorizationCode).not.toHaveBeenCalled();
+  });
+
   it("connects only after the initiating session consumes its matching intent", async () => {
     const server = await startServer();
     const state = signedState();
