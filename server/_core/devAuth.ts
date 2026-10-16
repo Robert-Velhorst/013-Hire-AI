@@ -2,10 +2,16 @@ import { COOKIE_NAME } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import { getUserByOpenId, upsertUser } from "../db";
-import { seedDevAdminUser, seedDevReviewQueueUser } from "../devReviewQueueSeed";
+import {
+  seedDevAdminUser,
+  seedDevReviewQueueUser,
+} from "../devReviewQueueSeed";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
-import { isDevQaAuthDeploymentEnabled, isDevQaAuthWriteRequest } from "./devAuthPolicy";
+import {
+  isDevQaAuthDeploymentEnabled,
+  isDevQaAuthWriteRequest,
+} from "./devAuthPolicy";
 import { sdk } from "./sdk";
 import { logOperationalFailure } from "../operationalFailureLog";
 
@@ -15,15 +21,15 @@ const DEV_APP_ID = "hire-ai-review-queue-local-dev";
 const DEV_SUSPENDED_OPEN_ID = "hire-ai-suspended-local-dev";
 
 function getSafeRedirectPath(value: unknown, fallback: string) {
-  if (
-    typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//")
-  ) {
-    return value;
+  if (typeof value !== "string" || !value.startsWith("/")) return fallback;
+  try {
+    const origin = "https://hire-ai.local";
+    const redirect = new URL(value, origin);
+    if (redirect.origin !== origin) return fallback;
+    return `${redirect.pathname}${redirect.search}${redirect.hash}`;
+  } catch {
+    return fallback;
   }
-
-  return fallback;
 }
 
 function ensureDevSessionConfig() {
@@ -44,108 +50,140 @@ export function registerDevAuthRoutes(app: Express) {
     legacyHeaders: false,
   });
 
-  app.post("/api/dev/login", devQaAuthRateLimit, async (req: Request, res: Response) => {
-    if (!isDevQaAuthWriteRequest(req)) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    try {
-      ensureDevSessionConfig();
-      const user = await seedDevReviewQueueUser();
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || "Review Queue QA",
-        expiresInMs: DEV_SESSION_MS,
-      });
+  app.post(
+    "/api/dev/login",
+    devQaAuthRateLimit,
+    async (req: Request, res: Response) => {
+      if (!isDevQaAuthWriteRequest(req)) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      try {
+        ensureDevSessionConfig();
+        const user = await seedDevReviewQueueUser();
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "Review Queue QA",
+          expiresInMs: DEV_SESSION_MS,
+        });
 
-      res.cookie(COOKIE_NAME, sessionToken, {
-        ...getSessionCookieOptions(req),
-        maxAge: DEV_SESSION_MS,
-      });
-      res.redirect(302, getSafeRedirectPath(req.query.redirect, "/dashboard"));
-    } catch {
-      logOperationalFailure("DevAuth", "Development session creation");
-      res.status(500).json({ error: "Unable to create development session" });
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...getSessionCookieOptions(req),
+          maxAge: DEV_SESSION_MS,
+        });
+        res.redirect(
+          302,
+          getSafeRedirectPath(req.query.redirect, "/dashboard")
+        );
+      } catch {
+        logOperationalFailure("DevAuth", "Development session creation");
+        res.status(500).json({ error: "Unable to create development session" });
+      }
     }
-  });
+  );
 
-  app.post("/api/dev/login-suspended", devQaAuthRateLimit, async (req: Request, res: Response) => {
-    if (!isDevQaAuthWriteRequest(req)) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    try {
-      ensureDevSessionConfig();
-      await upsertUser({
-        openId: DEV_SUSPENDED_OPEN_ID,
-        name: "Suspended Account QA",
-        email: "suspended-account@hire-ai.local",
-        loginMethod: "development",
-        accountStatus: "suspended",
-        lastSignedIn: new Date(),
-      });
-      const user = await getUserByOpenId(DEV_SUSPENDED_OPEN_ID);
-      if (!user) throw new Error("Suspended development user was not persisted");
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || "Suspended Account QA",
-        expiresInMs: DEV_SESSION_MS,
-      });
+  app.post(
+    "/api/dev/login-suspended",
+    devQaAuthRateLimit,
+    async (req: Request, res: Response) => {
+      if (!isDevQaAuthWriteRequest(req)) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      try {
+        ensureDevSessionConfig();
+        await upsertUser({
+          openId: DEV_SUSPENDED_OPEN_ID,
+          name: "Suspended Account QA",
+          email: "suspended-account@hire-ai.local",
+          loginMethod: "development",
+          accountStatus: "suspended",
+          lastSignedIn: new Date(),
+        });
+        const user = await getUserByOpenId(DEV_SUSPENDED_OPEN_ID);
+        if (!user)
+          throw new Error("Suspended development user was not persisted");
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "Suspended Account QA",
+          expiresInMs: DEV_SESSION_MS,
+        });
 
-      res.cookie(COOKIE_NAME, sessionToken, {
-        ...getSessionCookieOptions(req),
-        maxAge: DEV_SESSION_MS,
-      });
-      res.redirect(302, getSafeRedirectPath(req.query.redirect, "/dashboard"));
-    } catch {
-      logOperationalFailure("DevAuth", "Suspended development session creation");
-      res.status(500).json({ error: "Unable to create suspended development session" });
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...getSessionCookieOptions(req),
+          maxAge: DEV_SESSION_MS,
+        });
+        res.redirect(
+          302,
+          getSafeRedirectPath(req.query.redirect, "/dashboard")
+        );
+      } catch {
+        logOperationalFailure(
+          "DevAuth",
+          "Suspended development session creation"
+        );
+        res
+          .status(500)
+          .json({ error: "Unable to create suspended development session" });
+      }
     }
-  });
+  );
 
-  app.post("/api/dev/login-review-queue", devQaAuthRateLimit, async (req: Request, res: Response) => {
-    if (!isDevQaAuthWriteRequest(req)) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    try {
-      ensureDevSessionConfig();
-      const user = await seedDevReviewQueueUser();
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || "Review Queue QA",
-        expiresInMs: DEV_SESSION_MS,
-      });
+  app.post(
+    "/api/dev/login-review-queue",
+    devQaAuthRateLimit,
+    async (req: Request, res: Response) => {
+      if (!isDevQaAuthWriteRequest(req)) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      try {
+        ensureDevSessionConfig();
+        const user = await seedDevReviewQueueUser();
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "Review Queue QA",
+          expiresInMs: DEV_SESSION_MS,
+        });
 
-      res.cookie(COOKIE_NAME, sessionToken, {
-        ...getSessionCookieOptions(req),
-        maxAge: DEV_SESSION_MS,
-      });
-      res.redirect(302, "/review-queue");
-    } catch {
-      logOperationalFailure("DevAuth", "Review queue session creation");
-      res.status(500).json({ error: "Unable to create development review queue session" });
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...getSessionCookieOptions(req),
+          maxAge: DEV_SESSION_MS,
+        });
+        res.redirect(302, "/review-queue");
+      } catch {
+        logOperationalFailure("DevAuth", "Review queue session creation");
+        res
+          .status(500)
+          .json({ error: "Unable to create development review queue session" });
+      }
     }
-  });
+  );
 
-  app.post("/api/dev/login-admin", devQaAuthRateLimit, async (req: Request, res: Response) => {
-    if (!isDevQaAuthWriteRequest(req)) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    try {
-      ensureDevSessionConfig();
-      const user = await seedDevAdminUser();
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || "Admin QA",
-        expiresInMs: DEV_SESSION_MS,
-      });
+  app.post(
+    "/api/dev/login-admin",
+    devQaAuthRateLimit,
+    async (req: Request, res: Response) => {
+      if (!isDevQaAuthWriteRequest(req)) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      try {
+        ensureDevSessionConfig();
+        const user = await seedDevAdminUser();
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "Admin QA",
+          expiresInMs: DEV_SESSION_MS,
+        });
 
-      res.cookie(COOKIE_NAME, sessionToken, {
-        ...getSessionCookieOptions(req),
-        maxAge: DEV_SESSION_MS,
-      });
-      res.redirect(302, "/admin");
-    } catch {
-      logOperationalFailure("DevAuth", "Admin session creation");
-      res.status(500).json({ error: "Unable to create development admin session" });
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...getSessionCookieOptions(req),
+          maxAge: DEV_SESSION_MS,
+        });
+        res.redirect(302, "/admin");
+      } catch {
+        logOperationalFailure("DevAuth", "Admin session creation");
+        res
+          .status(500)
+          .json({ error: "Unable to create development admin session" });
+      }
     }
-  });
+  );
 }
