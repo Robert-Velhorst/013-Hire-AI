@@ -280,4 +280,4 @@ The command above pulls the first published alpha image. Before using a later re
 
 ## License
 
-The `package.json` metadata declares `MIT`, but this repository currently has no root `LICENSE` file. Confirm the intended licensing and add the complete license text before encouraging third-party redistribution; this preview release does not resolve that documentation gap.
+This repository is licensed under **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**. See the root [`LICENSE`](LICENSE) file for the complete terms; the package metadata declares the same SPDX identifier. Review the license obligations before redistributing or offering a modified version as a network service. The license does not imply production support or a service-level commitment.
