@@ -33,11 +33,11 @@
 
 ## GitHub repository settings
 
-Verified against the live repository APIs on 2026-10-15 UTC:
+Verified against the live repository APIs on 2026-10-16 UTC:
 
 - Provider-pattern secret scanning and push protection are enabled. Generic non-provider pattern detection and provider-token validity checks are unavailable for this user-owned repository under GitHub's current eligibility requirements. If validity checks become available later, enabling them would send detected credentials to their issuers; the setting is therefore left off.
-- Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot or secret-scanning alerts were returned by GitHub on 2026-10-15 UTC.
-- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 29 open CodeQL alerts on `main`: 2 critical, 23 high, and 4 medium. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
+- Dependabot alerts, security updates, and the configured weekly dependency-update workflow are enabled. No open Dependabot or secret-scanning alerts were returned by GitHub on 2026-10-16 UTC.
+- CodeQL default setup is configured for GitHub Actions, JavaScript/TypeScript, and Python. GitHub reported 27 open CodeQL alerts on `main`: 2 critical, 21 high, and 4 medium. These findings remain to be triaged and resolved or explicitly dispositioned; enabling CodeQL does not mean the code is secure.
 - Private vulnerability reporting is enabled.
 - The `main` branch requires pull requests, an up-to-date base, all seven named status checks (`hetzner-bootstrap`, `build-and-test`, `windows-runtime`, `database-acceptance`, `container-runtime`, `browser-e2e`, and `CodeQL`), and resolved review conversations. Administrators are included; force pushes and branch deletion are disabled. The required approving-review count is zero, which allows a single maintainer to merge after checks pass.
 - GitHub Actions workflow token permissions default to read-only and workflows cannot create or approve pull requests. Actions are restricted to the eight dependencies used by repository workflows: `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`, `docker/build-push-action`, `docker/login-action`, `docker/metadata-action`, `docker/setup-buildx-action`, and `github/codeql-action`. The checked-in workflows pin actions to full commit SHAs, and repository policy requires SHA-pinned references.
