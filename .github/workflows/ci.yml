@@ -276,9 +276,10 @@ jobs:
       - name: Verify production health and readiness
         run: |
           trap 'docker rm -f hire-ai-ci-app >/dev/null 2>&1 || true' EXIT
-          docker run -d --name hire-ai-ci-app --network host \
+          docker run -d --name hire-ai-ci-app \
+            --add-host=host.docker.internal:host-gateway -p 127.0.0.1::33050 \
             -e PORT=33050 \
-            -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@127.0.0.1:3306/hire_ai' \
+            -e DATABASE_URL='mysql://hire_ai:hire-ai-ci-password@host.docker.internal:3306/hire_ai' \
             -e JWT_SECRET='container-ci-jwt-secret-at-least-32-characters' \
             -e ERASURE_IDENTITY_HMAC_KEYS='container-ci-erasure-identity-hmac-key-at-least-32-characters' \
             -e VITE_APP_ID='hire-ai-container-ci' \
@@ -295,12 +296,18 @@ jobs:
             -e AUTONOMOUS_SCHEDULER_ENABLED=false \
             -e JOB_SCRAPING_SCHEDULER_ENABLED=false \
             hire-ai:ci
+          host_port=$(docker port hire-ai-ci-app 33050/tcp | awk -F: '{print $NF}')
+          if [ -z "$host_port" ]; then
+            docker logs hire-ai-ci-app
+            echo "Could not determine the container's published health-check port."
+            exit 1
+          fi
           for attempt in $(seq 1 45); do
             state=$(docker inspect hire-ai-ci-app --format '{{.State.Status}}/{{.State.Health.Status}}')
             if [ "$state" = 'running/healthy' ] \
-              && curl --fail --silent http://127.0.0.1:33050/healthz | grep -q '"status":"ok"' \
-              && curl --fail --silent http://127.0.0.1:33050/readyz | grep -q '"ready":true' \
-              && curl --fail --silent http://127.0.0.1:33050/ >/dev/null; then
+              && curl --fail --silent "http://127.0.0.1:${host_port}/healthz" | grep -q '"status":"ok"' \
+              && curl --fail --silent "http://127.0.0.1:${host_port}/readyz" | grep -q '"ready":true' \
+              && curl --fail --silent "http://127.0.0.1:${host_port}/" >/dev/null; then
               exit 0
             fi
             sleep 2
