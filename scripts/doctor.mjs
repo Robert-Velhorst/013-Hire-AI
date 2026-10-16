@@ -44,7 +44,9 @@ const missing = requiredProductionEnv.filter((name) => !String(process.env[name]
 check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
-  missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+  missing.length > 0
+    ? `${missing.length} required production variable(s) are not configured: ${missing.join(", ")}`
+    : "required variables configured"
 );
 
 const stripeBillingPolicy = inspectStripeBillingPolicy(process.env);
