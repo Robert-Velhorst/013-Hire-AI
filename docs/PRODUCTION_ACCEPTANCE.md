@@ -119,7 +119,7 @@ The command enables the privacy-erasure and connector-revocation integration sui
 | Global sources | Incomplete | More verified regional platforms and permissions, reliable adapters, durable backfill and observed source health; 90 catalog entries / 9 enabled adapters are not universal coverage |
 | Multi-user capacity | Partial local evidence | Representative workload/ownership tests, resource limits, monitoring and alerting. Multiple app replicas need an upstream shared rate limiter; current counters are per process |
 | Backup and recovery | Existing tooling; deployment acceptance open | Encrypted off-host database and private-object backups, restore drill on the chosen infrastructure, agreed recovery objectives |
-| Billing and privacy | External acceptance open | Live billing only after applicable model/policy decisions and configured accounts; approved retention, deletion, privacy and customer-facing terms |
+| Billing and privacy | Billing disabled by default; external acceptance open | Production can run without Stripe credentials while `STRIPE_ENABLED=false`; keep it disabled until the commercial model and jurisdiction-specific requirements are approved. Approved retention, deletion, privacy and customer-facing terms remain required |
 | Release operations | Not deployed | CI on the actual revision, reviewed migration and rollback plan, secrets injection, health checks, operator journey and incident response |
 
 Unknowns are not treated as passes. Provider credentials must be entered through a secure secret-management route, not chat or repository files. No specific host, domain, service account or paid plan has been inferred.

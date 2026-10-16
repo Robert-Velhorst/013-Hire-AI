@@ -6,6 +6,7 @@ import {
 import { inspectConnectorOAuthPolicy } from "./connectorOAuthPolicy";
 import { normalizeApprovedAnalyticsOrigin } from "./httpSafety";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
+import { inspectStripeBillingPolicy } from "@shared/stripeBillingPolicy.mjs";
 
 export function resolveProductionRuntime(nodeEnv: string | undefined, moduleUrl: string): boolean {
   if (nodeEnv === "production") return true;
@@ -156,9 +157,9 @@ export function validateProductionEnv() {
     "OAUTH_SERVER_ALLOWED_ORIGINS",
     "OWNER_OPEN_ID",
     "BUILT_IN_FORGE_API_KEY",
-    "STRIPE_SECRET_KEY",
-    "STRIPE_WEBHOOK_SECRET",
   ]);
+  const stripePolicy = inspectStripeBillingPolicy(process.env);
+  if (stripePolicy.issue) throw new Error(stripePolicy.issue);
   if (!ENV.oAuthPortalUrl.trim()) {
     throw new Error("Missing required environment variable: OAUTH_PORTAL_URL");
   }

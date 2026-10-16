@@ -82,7 +82,7 @@ Exact behavior and operating limits are documented in the product-direction and 
 
 Robert's current target is a success-based contribution, potentially 1% of gross monthly salary received from an attributable placement from both the employer and the worker while that employment lasts. A separate prepaid option is intended to use attributable computing costs multiplied by 2.5, with credits that do not expire. The intended operating ceiling is EUR 100 per month, without automatic purchases or debt. An internal assistance fund is proposed for users who cannot afford prepaid credits.
 
-These are proposals requiring jurisdiction-specific legal, tax, consumer-protection, privacy, and contract review. They are not an advertised price, a universally available payment model, or an active entitlement. The code currently contains legacy 5% assumptions and Stripe subscription/fee flows. Do not enable charging or treat those flows as implementing the approved direction without a separate migration, review, and acceptance.
+These are proposals requiring jurisdiction-specific legal, tax, consumer-protection, privacy, and contract review. They are not an advertised price, a universally available payment model, or an active entitlement. The code currently contains legacy 5% assumptions and Stripe subscription/fee flows. Stripe is disabled by default with `STRIPE_ENABLED=false`; production does not require Stripe credentials unless the operator explicitly enables it. Do not enable charging or treat those flows as implementing the approved direction without a separate migration, review, and acceptance.
 
 ## Architecture
 
@@ -229,7 +229,7 @@ Use only disposable, isolated databases for acceptance tests and restore drills.
 
 The primary API is tRPC at `/api/trpc`; router definitions are in `server/routers.ts`. Major groups cover authentication, profile, jobs, applications, automation, alerts, connectors, interview preparation, workspaces, privacy, success fees, admin, audit, and system status.
 
-Additional HTTP routes include hosted OAuth login/callback, connector OAuth callback, signed Stripe webhook, readiness/health routes, and an optional disabled-by-default HAI bridge. The bridge provides bearer-protected aggregate status through `/api/hai/a2a` and bounded, read-only remote-job search through `/api/hai/jobs/search`; both endpoints reject mutation authority. These routes have different authentication and configuration requirements. See [docs/API_REFERENCE.md](docs/API_REFERENCE.md) and [docs/WINDOWS_NGROK_HAI.md](docs/WINDOWS_NGROK_HAI.md) for details.
+Additional HTTP routes include hosted OAuth login/callback, connector OAuth callback, readiness/health routes, and an optional disabled-by-default HAI bridge. The signed Stripe webhook is exposed only when `STRIPE_ENABLED=true`; otherwise it returns not found before parsing the request body. The HAI bridge provides bearer-protected aggregate status through `/api/hai/a2a` and bounded, read-only remote-job search through `/api/hai/jobs/search`; both endpoints reject mutation authority. These routes have different authentication and configuration requirements. See [docs/API_REFERENCE.md](docs/API_REFERENCE.md) and [docs/WINDOWS_NGROK_HAI.md](docs/WINDOWS_NGROK_HAI.md) for details.
 
 ## Security And Privacy
 

@@ -141,6 +141,8 @@ Set `DATABASE_URL`, then run `pnpm db:migrate`. The migrator uses a database-sco
 
 Each process limits non-Stripe `/api` traffic to 600 requests per trusted client per minute and stores at most 10,000 active client windows. Stricter per-client budgets also apply: 20 requests/minute shared across primary OAuth initiation and callback, 30/minute for connector OAuth callbacks, 6/minute for raw document uploads, 12/minute for the resume-text parser, 120/minute for HAI status, and 30/minute for HAI job search. Sensitive-route counters have bounded client maps (5,000 OAuth clients; 2,000 upload/parser clients). Health probes and signed Stripe webhook retries are exempt. This protects the standalone Windows/ngrok process without adding SQL work; all counters are process-local, so configure a distributed gateway/WAF rate policy before scaling to multiple public instances.
 
+Stripe billing remains disabled unless `STRIPE_ENABLED=true`. Keep it false until the commercial model and jurisdiction-specific requirements are approved. When enabled, production requires both `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`; webhook handling and reconciliation remain disabled otherwise.
+
 Each source adapter applies its own minimum request interval. Transient network, HTTP 408/425/429, and 5xx failures use bounded exponential backoff and honor `Retry-After` up to five minutes. Permanent HTTP failures are not retried. One source cannot have overlapping scans, cross-source concurrency is capped, and a source deadline aborts its underlying fetch rather than only abandoning the result. The Admin source-health view reports the effective concurrency and timeout policy.
 
 ## Database backup and restore
