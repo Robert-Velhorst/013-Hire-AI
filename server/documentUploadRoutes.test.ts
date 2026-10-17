@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   submitVerification: vi.fn(),
   reserveScan: vi.fn(),
   lastUploadBytes: null as Buffer | null,
+  uploadBufferBackingBytes: [] as number[],
 }));
 
 vi.mock("./_core/sdk", () => ({
@@ -26,6 +27,11 @@ vi.mock("./routers", () => ({
       const dispatch =
         (procedure: ReturnType<typeof vi.fn>) => (input: unknown) => {
           mocks.lastUploadBytes = context.documentUploadBytes ?? null;
+          if (context.documentUploadBytes) {
+            mocks.uploadBufferBackingBytes.push(
+              context.documentUploadBytes.buffer.byteLength
+            );
+          }
           return procedure(input);
         };
       return {
@@ -85,6 +91,7 @@ beforeEach(() => {
   mocks.submitVerification.mockResolvedValue({ success: true });
   mocks.reserveScan.mockResolvedValue(null);
   mocks.lastUploadBytes = null;
+  mocks.uploadBufferBackingBytes = [];
 });
 
 function uploadHeaders(
@@ -97,6 +104,23 @@ function uploadHeaders(
 }
 
 describe("bounded raw document upload routes", () => {
+  it("limits upload attempts per client in addition to streaming and concurrency bounds", async () => {
+    const baseUrl = await startServer();
+    const statuses: number[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const response = await fetch(`${baseUrl}/api/document-uploads/resume-parse`, {
+        method: "POST",
+        headers: uploadHeaders(),
+        body: new Blob(["short resume"]),
+      });
+      statuses.push(response.status);
+    }
+
+    expect(statuses.slice(0, 6)).toEqual(Array(6).fill(200));
+    expect(statuses[6]).toBe(429);
+    expect(mocks.parseFile).toHaveBeenCalledTimes(6);
+  });
+
   it("streams chunked bytes and dispatches resume parsing without a JSON envelope", async () => {
     const baseUrl = await startServer();
     const response = await new Promise<{ status: number; body: string }>(
@@ -134,6 +158,68 @@ describe("bounded raw document upload routes", () => {
       mimeType: "text/plain",
     });
     expect(mocks.lastUploadBytes).toEqual(Buffer.from("streamed resume"));
+    expect(mocks.lastUploadBytes?.byteLength).toBe(15);
+    expect(mocks.lastUploadBytes?.buffer.byteLength).toBe(
+      MAX_DOCUMENT_UPLOAD_BYTES
+    );
+  });
+
+  it("holds two maximum chunked buffers and rejects a third upload before reading it", async () => {
+    const baseUrl = await startServer();
+    let releaseParsers!: () => void;
+    let bothParsersStarted!: () => void;
+    const parserGate = new Promise<void>(resolve => {
+      releaseParsers = resolve;
+    });
+    const bothStarted = new Promise<void>(resolve => {
+      bothParsersStarted = resolve;
+    });
+    let parserCount = 0;
+    mocks.parseFile.mockImplementation(async () => {
+      parserCount += 1;
+      if (parserCount === 2) bothParsersStarted();
+      await parserGate;
+      return { success: true, resume: { version: 4 } };
+    });
+
+    const sendChunked = (userId: number, body: Buffer) =>
+      new Promise<number>((resolve, reject) => {
+        const request = httpRequest(
+          `${baseUrl}/api/document-uploads/resume-parse`,
+          {
+            method: "POST",
+            headers: {
+              ...uploadHeaders(),
+              "transfer-encoding": "chunked",
+              "x-test-user": String(userId),
+            },
+          },
+          response => {
+            response.resume();
+            response.on("end", () => resolve(response.statusCode ?? 0));
+          }
+        );
+        request.on("error", reject);
+        request.end(body);
+      });
+
+    const fullUpload = Buffer.alloc(MAX_DOCUMENT_UPLOAD_BYTES, 0x61);
+    const first = sendChunked(81, fullUpload);
+    const second = sendChunked(82, fullUpload);
+    try {
+      await bothStarted;
+      expect(mocks.uploadBufferBackingBytes).toEqual([
+        MAX_DOCUMENT_UPLOAD_BYTES,
+        MAX_DOCUMENT_UPLOAD_BYTES,
+      ]);
+
+      const rejected = await sendChunked(83, Buffer.from("not consumed"));
+      expect(rejected).toBe(503);
+      releaseParsers();
+      expect(await Promise.all([first, second])).toEqual([200, 200]);
+    } finally {
+      releaseParsers();
+    }
   });
 
   it.each([

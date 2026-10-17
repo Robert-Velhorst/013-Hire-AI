@@ -152,7 +152,7 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
       description: "Synthetic admin queue pagination record.",
       createdAt: new Date(baseTimestamp - Math.floor(index / 2) * 1_000),
     })));
-    await db.insert(operationalFailureSignals).values(Array.from({ length: 100 }, (_, index) => ({
+    await db.insert(operationalFailureSignals).values(Array.from({ length: ROW_COUNT }, (_, index) => ({
       scope: `${marker}-${index}`,
       operation: "synthetic-queue-test",
       count: 1,
@@ -243,9 +243,42 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
     expect(openReviews.total).toBe(52);
     expect(openReviews.items.every(row => row.status === "open")).toBe(true);
 
-    const failures = await caller.getOperationalFailures({ limit: 100 });
-    expect(failures.uniqueSignals).toBeGreaterThanOrEqual(100);
-    expect(failures.signals.filter(signal => signal.scope.startsWith(marker))).toHaveLength(100);
+    const firstFailures = await caller.getOperationalFailures({ limit: PAGE_SIZE });
+    expect(firstFailures.uniqueSignals).toBeGreaterThanOrEqual(ROW_COUNT);
+    expect(firstFailures.hasMore).toBe(true);
+    const failureIds = firstFailures.signals
+      .filter(signal => signal.scope.startsWith(marker))
+      .map(signal => signal.id);
+    const firstFailureCursor = firstFailures.nextCursor;
+    expect(firstFailureCursor).toEqual(expect.any(Number));
+    const newerFailure = await db.insert(operationalFailureSignals).values({
+      scope: `${marker}-newer`,
+      operation: "synthetic-queue-test",
+      count: 1,
+      firstOccurredAt: new Date(),
+      lastOccurredAt: new Date(Date.now() + 20_000),
+    });
+    const firstMarkerSignal = firstFailures.signals.find(signal => signal.scope.startsWith(marker));
+    expect(firstMarkerSignal).toBeTruthy();
+    await db.update(operationalFailureSignals)
+      .set({ lastOccurredAt: new Date(Date.now() + 30_000) })
+      .where(eq(operationalFailureSignals.id, firstMarkerSignal!.id));
+    let failurePage = await caller.getOperationalFailures({ limit: PAGE_SIZE, cursor: firstFailureCursor! });
+    while (failurePage.nextCursor) {
+      failureIds.push(...failurePage.signals
+        .filter(signal => signal.scope.startsWith(marker))
+        .map(signal => signal.id));
+      failurePage = await caller.getOperationalFailures({ limit: PAGE_SIZE, cursor: failurePage.nextCursor });
+    }
+    failureIds.push(...failurePage.signals
+      .filter(signal => signal.scope.startsWith(marker))
+      .map(signal => signal.id));
+    expect(failureIds).toHaveLength(ROW_COUNT);
+    expect(new Set(failureIds).size).toBe(ROW_COUNT);
+    expect(failureIds).not.toContain(Number(newerFailure[0].insertId));
+    const refreshedFailures = await caller.getOperationalFailures({ limit: PAGE_SIZE });
+    expect(refreshedFailures.uniqueSignals).toBe(firstFailures.uniqueSignals + 1);
+    expect(refreshedFailures.signals[0]?.scope).toBe(`${marker}-newer`);
   });
 
   it("keeps cursor ordering stable across status updates and rejects unauthorized or invalid requests", async () => {
@@ -266,8 +299,12 @@ describe.skipIf(!enabled).sequential("admin operating queue pagination on isolat
     expect(nextOpenPage.items.some(item => openFirstPage.items.some(first => first.id === item.id))).toBe(false);
 
     const unauthorized = adminRouter.createCaller(createAdminContext("user"));
+    await expect(unauthorized.getOperationalFailures({ limit: PAGE_SIZE }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(unauthorized.getReviewQueue({ status: "all", limit: PAGE_SIZE }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.getOperationalFailures({ limit: 10, cursor: 0 }))
+      .rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(caller.listPendingVerifications({
       limit: 10,
       cursor: { timestamp: "not-a-date", id: 0 } as never,

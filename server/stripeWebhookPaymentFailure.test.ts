@@ -168,6 +168,7 @@ async function postWebhook(
 describe("Stripe payment webhook transaction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("STRIPE_ENABLED", "true");
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
     mocks.getDb.mockResolvedValue(mocks.mockDb);
     mocks.claimStripeWebhookEvent.mockResolvedValue({ claimed: true });
@@ -212,6 +213,19 @@ describe("Stripe payment webhook transaction", () => {
   });
 
   afterEach(() => vi.unstubAllEnvs());
+
+  it("returns not found without parsing or processing when Stripe billing is disabled", async () => {
+    vi.stubEnv("STRIPE_ENABLED", "false");
+    const response = await postWebhook({
+      id: "evt_disabled_701",
+      type: "invoice.payment_failed",
+      data: { object: {} },
+    });
+
+    expect(response.status).toBe(404);
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.claimStripeWebhookEvent).not.toHaveBeenCalled();
+  });
 
   it("rejects invalid signatures before claiming or mutating the event", async () => {
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", "configured-for-test");

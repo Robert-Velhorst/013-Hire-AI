@@ -13,6 +13,7 @@ import {
   getAllJobPlatforms,
   getActiveJobPage,
   getDb,
+  getUserHaiStatusCounts,
   getUserApplicationById,
   getUserProfile,
   upsertUserProfile,
@@ -175,6 +176,24 @@ describe
       expect(
         next.items.some(pair => pair.duplicate.id === links[0].duplicateJobId)
       ).toBe(false);
+    });
+
+    it("returns HAI account counts from indexed aggregates", async () => {
+      const counts = await getUserHaiStatusCounts(userIds[0]);
+
+      expect(counts).toEqual({
+        applications: {
+          total: 1,
+          prepared: 1,
+          submitted: 0,
+          interviews: 0,
+          offers: 0,
+        },
+        pendingApprovals: 0,
+        connectedProviders: 0,
+        connectorsNeedingAttention: 0,
+        activeSuccessFees: 0,
+      });
     });
 
     it("preserves one canonical duplicate group when platform scans save concurrently", async () => {

@@ -1,13 +1,13 @@
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.mjs ./
-RUN corepack enable && corepack prepare pnpm@11.16.0 --activate && pnpm install --frozen-lockfile
+RUN npm install --global pnpm@11.16.0 && pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build && pnpm prune --prod
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -21,6 +21,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/shared/haiConnectorEndpointPolicy.mjs ./shared/haiConnectorEndpointPolicy.mjs
 COPY --from=build /app/shared/malwareScannerEndpointPolicy.mjs ./shared/malwareScannerEndpointPolicy.mjs
+COPY --from=build /app/shared/stripeBillingPolicy.mjs ./shared/stripeBillingPolicy.mjs
 COPY --from=build /app/shared/trustedServiceOriginPolicy.mjs ./shared/trustedServiceOriginPolicy.mjs
 COPY --from=build /app/scripts/doctor.mjs ./scripts/doctor.mjs
 COPY --from=build /app/scripts/database-migrate.mjs ./scripts/database-migrate.mjs

@@ -55,7 +55,7 @@ Authenticated Console access and purchasing were verified. The checklist below r
 
 1. Open [Hetzner Accounts](https://accounts.hetzner.com/login), choose **Register now**, enter your own account and billing details, and confirm your email address. Complete any verification directly with Hetzner, not in chat.
 2. Enable two-factor authentication and store recovery information privately. Handle payment details directly in your account.
-3. The CPX12 purchase and quote are recorded above. Domain and secure deployment access remain open. Do not paste passwords, API tokens, private SSH keys or identity documents into chat or repository files.
+3. The CPX12 purchase and quote are recorded above. The hostname is selected; HTTPS and secure deployment access remain open. Do not paste passwords, API tokens, private SSH keys or identity documents into chat or repository files.
 
 Registration requirements and navigation are documented in [Hetzner's account guide](https://docs.hetzner.com/general/billing-and-account-management/account-getting-started/).
 
@@ -97,4 +97,4 @@ Network and application requirements:
 
 ## Current Boundary
 
-The server image build, private database migrations/schema and post-reboot database health are verified. The application correctly refuses startup with the currently missing production configuration. No healthy application service, DNS, TLS, real identity/provider journey, load or backup/restore acceptance has been demonstrated. The domain remains undecided. The work remains local and on the authorized host, not a newly published Git revision.
+The server image build, private database migrations/schema and post-reboot database health are verified from the historical host session. The application correctly refused startup with missing production configuration. The hostname is now selected and resolves to `159.69.55.178`; on 2026-10-16 HTTP `/healthz` redirected to HTTPS, but Node/OpenSSL received `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR` before an HTTP response. Key-only SSH was rejected during the same check; no password login was attempted. No healthy public application service, TLS, real identity/provider journey, load or backup/restore acceptance has been demonstrated. Repository changes are on open GitHub pull requests and have not been deployed to the server. Use the authenticated Hetzner Console to inspect the shared Caddy/certificate configuration and recover secure administration before making host changes.
