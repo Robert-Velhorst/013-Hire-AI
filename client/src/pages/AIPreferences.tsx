@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import { useEffect, useState } from "react";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { getAutonomousPolicyControlAction } from "@/lib/autonomousPolicyControl";
+import { isEmploymentSearchOnHold } from "@shared/employmentSearchControl.mjs";
 import {
   getAutonomousEvidenceGateSummary,
 } from "@/lib/autonomousEvidenceGateSummary";
@@ -58,8 +60,9 @@ export default function AIPreferences() {
   const [requireHumanReview, setRequireHumanReview] = useState(true);
   const [allowUnsupportedATS, setAllowUnsupportedATS] = useState(false);
   const [createFollowUps, setCreateFollowUps] = useState(false);
+  const [employmentRestartReason, setEmploymentRestartReason] = useState("");
 
-  const { data: profile, isLoading: profileLoading } = trpc.profile.get.useQuery(undefined, {
+  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = trpc.profile.get.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   const { data: autonomousPlan, refetch: refetchPlan } = trpc.automation.plan.useQuery(undefined, {
@@ -76,6 +79,16 @@ export default function AIPreferences() {
       refetchSchedulerStatus();
     },
     onError: () => toast.error(t("aiPreferencesSaveFailed")),
+  });
+  const employmentSearchOnHold = isEmploymentSearchOnHold(profile?.preferences);
+  const resumeEmploymentSearch = trpc.profile.resumeAfterEmploymentChange.useMutation({
+    onSuccess: () => {
+      setEmploymentRestartReason("");
+      refetchProfile();
+      refetchSchedulerStatus();
+      toast.success(locale === "nl" ? "Zoeken hervat; de reden is geregistreerd." : "Job search resumed; your reason was recorded.");
+    },
+    onError: (error) => toast.error(error.message),
   });
   const runAgent = trpc.automation.run.useMutation({
     onSuccess: (result: any) => {
@@ -208,6 +221,47 @@ export default function AIPreferences() {
           </p>
         </div>
 
+        {employmentSearchOnHold && (
+          <Card role="status" className="mb-6 border-amber-500/40 bg-amber-950/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-200">
+                <AlertTriangle className="h-5 w-5" />
+                {locale === "nl" ? "Zoeken gepauzeerd na gemelde baan" : "Search paused after reported employment"}
+              </CardTitle>
+              <CardDescription className="text-amber-100/75">
+                {locale === "nl"
+                  ? "Automatische voorbereiding en sollicitaties blijven uit totdat je uitlegt waarom de zoektocht opnieuw moet beginnen."
+                  : "Scheduled preparation and applications stay off until you explain why your search needs to resume."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Label htmlFor="employment-search-restart-reason" className="text-amber-100">
+                {locale === "nl" ? "Reden voor herstart" : "Reason for restarting"}
+              </Label>
+              <Textarea
+                id="employment-search-restart-reason"
+                value={employmentRestartReason}
+                onChange={(event) => setEmploymentRestartReason(event.target.value.slice(0, 1000))}
+                minLength={20}
+                maxLength={1000}
+                rows={3}
+                placeholder={locale === "nl" ? "Bijvoorbeeld: mijn contract eindigt binnenkort omdat …" : "For example: my contract ends soon because …"}
+                className="border-amber-500/30 bg-slate-950 text-white"
+              />
+              <Button
+                type="button"
+                disabled={employmentRestartReason.trim().length < 20 || resumeEmploymentSearch.isPending}
+                onClick={() => resumeEmploymentSearch.mutate({ reason: employmentRestartReason.trim() })}
+                className="bg-amber-400 font-semibold text-slate-950 hover:bg-amber-300"
+              >
+                {resumeEmploymentSearch.isPending
+                  ? (locale === "nl" ? "Bezig…" : "Resuming…")
+                  : (locale === "nl" ? "Zoeken hervatten" : "Resume job search")}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Settings */}
           <div className="lg:col-span-2 space-y-6">
@@ -236,6 +290,7 @@ export default function AIPreferences() {
                     id="scheduled-agent"
                     checked={autonomousEnabled}
                     onCheckedChange={setAutonomousEnabled}
+                    disabled={employmentSearchOnHold}
                   />
                 </div>
 

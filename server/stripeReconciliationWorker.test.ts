@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { stripeReconciliationCommands } from "../drizzle/schema";
 import {
   executeStripeReconciliationCommand,
   getStripeCommandRetryDelayMs,
   isStripeCommandStillDesired,
+  StripeReconciliationWorker,
 } from "./stripeReconciliationWorker";
 import { getStripeClient } from "./stripeClient";
 
@@ -30,6 +31,21 @@ function command(action: Command["action"]): Command {
 }
 
 describe("Stripe reconciliation worker policy", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not start polling unless Stripe billing is explicitly enabled", () => {
+    vi.useFakeTimers();
+    vi.stubEnv("STRIPE_ENABLED", "false");
+    const worker = new StripeReconciliationWorker();
+
+    worker.start();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("uses bounded exponential backoff", () => {
     expect(getStripeCommandRetryDelayMs(1)).toBe(30_000);
     expect(getStripeCommandRetryDelayMs(2)).toBe(60_000);
