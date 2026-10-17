@@ -40,6 +40,33 @@ describe("operational failure logging", () => {
     expect(snapshot.signals).toHaveLength(1);
   });
 
+  it("pages in stable insertion order when an existing signal updates", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const known = [
+      ["Database", "Connection initialization"],
+      ["Database", "User upsert"],
+      ["Discovery", "Job polling"],
+      ["Discovery", "Subscriber notification"],
+      ["ResumeParser", "PDF extraction"],
+      ["ResumeParser", "DOCX extraction"],
+    ] as const;
+    known.forEach(([scope, operation]) => logOperationalFailure(scope, operation));
+
+    const first = getOperationalFailureSnapshot(2);
+    expect(first.signals).toHaveLength(2);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).toBe(first.signals[1]?.id);
+
+    logOperationalFailure("Database", "Connection initialization");
+    logOperationalFailure("Server", "Startup");
+    const second = getOperationalFailureSnapshot(2, first.nextCursor!);
+    const third = getOperationalFailureSnapshot(2, second.nextCursor!);
+
+    const visitedIds = [...first.signals, ...second.signals, ...third.signals].map(signal => signal.id);
+    expect(new Set(visitedIds).size).toBe(visitedIds.length);
+    expect(visitedIds).not.toContain(getOperationalFailureSnapshot(1).signals[0]?.id);
+  });
+
   it("emits a fixed marker without accepting upstream error details", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 

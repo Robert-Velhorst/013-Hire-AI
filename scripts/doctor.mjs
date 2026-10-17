@@ -5,6 +5,7 @@ import path from "node:path";
 import { validateHaiConnectorUrl } from "../shared/haiConnectorEndpointPolicy.mjs";
 import { inspectMalwareScannerPolicy } from "../shared/malwareScannerEndpointPolicy.mjs";
 import { requireAllowedServiceBaseUrl } from "../shared/trustedServiceOriginPolicy.mjs";
+import { inspectStripeBillingPolicy } from "../shared/stripeBillingPolicy.mjs";
 
 const root = process.cwd();
 const isProduction = process.env.NODE_ENV === "production";
@@ -38,14 +39,21 @@ const requiredProductionEnv = [
   "OAUTH_SERVER_ALLOWED_ORIGINS",
   "OWNER_OPEN_ID",
   "BUILT_IN_FORGE_API_KEY",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
 ];
 const missing = requiredProductionEnv.filter((name) => !String(process.env[name] || "").trim());
 check(
   "production configuration",
   isProduction && missing.length > 0 ? "fail" : missing.length > 0 ? "warn" : "pass",
-  missing.length > 0 ? `${missing.length} required production variable(s) are not configured` : "required variables configured"
+  missing.length > 0
+    ? `${missing.length} required production variable(s) are not configured: ${missing.join(", ")}`
+    : "required variables configured"
+);
+
+const stripeBillingPolicy = inspectStripeBillingPolicy(process.env);
+check(
+  "Stripe billing",
+  stripeBillingPolicy.issue ? (isProduction ? "fail" : "warn") : "pass",
+  stripeBillingPolicy.issue ?? (stripeBillingPolicy.enabled ? "explicitly enabled" : "disabled by default")
 );
 
 function windowsDefenderAvailable() {

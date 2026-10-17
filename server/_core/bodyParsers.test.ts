@@ -224,4 +224,40 @@ describe("application body parsers", () => {
       );
     }
   });
+
+  it("rate limits the expensive resume text parser before authentication and JSON parsing", async () => {
+    const app = express();
+    registerApplicationBodyParsers(app, {
+      authenticateDocumentUpload: async () => ({ id: 1 }),
+    });
+    let routeCalls = 0;
+    app.post("/api/trpc/resume.parse", (_req, res) => {
+      routeCalls += 1;
+      res.sendStatus(204);
+    });
+    const server = createServer(app);
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server did not bind.");
+    const url = `http://127.0.0.1:${address.port}/api/trpc/resume.parse`;
+
+    try {
+      const statuses: number[] = [];
+      for (let index = 0; index < 13; index += 1) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ resumeText: "bounded" }),
+        });
+        statuses.push(response.status);
+      }
+      expect(statuses.slice(0, 12).every(status => status === 204)).toBe(true);
+      expect(statuses[12]).toBe(429);
+      expect(routeCalls).toBe(12);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close(error => error ? reject(error) : resolve())
+      );
+    }
+  });
 });

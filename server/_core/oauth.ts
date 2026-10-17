@@ -1,6 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
@@ -9,6 +10,7 @@ import { ENV } from "./env";
 import { OAUTH_LOGIN_STATE_TTL_MS, createOAuthLoginState, verifyOAuthLoginState } from "./oauthState";
 import { requireTrustedServiceBaseUrl } from "./trustedServiceUrl";
 import { isDirectLoopbackDevQaRequest } from "./devAuthPolicy";
+import { createRateLimitMiddleware, SENSITIVE_ROUTE_RATE_LIMITS } from "./apiRateLimit";
 
 const OAUTH_STATE_COOKIE_NAME = "hire_ai_oauth_state";
 
@@ -18,7 +20,15 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
-  app.get("/api/oauth/login", (req: Request, res: Response) => {
+  const oauthPolicy = SENSITIVE_ROUTE_RATE_LIMITS.oauth;
+  const oauthRateLimit = createRateLimitMiddleware(oauthPolicy);
+  const oauthExpressRateLimit = rateLimit({
+    windowMs: oauthPolicy.windowMs,
+    limit: oauthPolicy.maxRequests,
+    standardHeaders: "draft-6",
+    legacyHeaders: false,
+  });
+  app.get("/api/oauth/login", oauthRateLimit, oauthExpressRateLimit, (req: Request, res: Response) => {
     try {
       if (!ENV.oAuthPortalUrl.trim()) {
         if (!ENV.isProduction && isDirectLoopbackDevQaRequest(req)) {
@@ -59,7 +69,7 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
-  app.get("/api/oauth/callback", async (req: Request, res: Response) => {
+  app.get("/api/oauth/callback", oauthRateLimit, oauthExpressRateLimit, async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 

@@ -14,11 +14,14 @@ describe("admin operational failure wiring", () => {
     );
 
     expect(adminRouter).toContain("getOperationalFailures: adminProcedure");
-    expect(adminRouter).toContain("getOperationalFailureMonitoringSnapshot(input?.limit ?? 20)");
+    expect(adminRouter).toContain("cursor: z.number().int().positive().optional()");
+    expect(adminRouter).toContain("getOperationalFailureMonitoringSnapshot(input?.limit ?? 20, input?.cursor)");
     expect(adminPage).toContain("trpc.admin.getOperationalFailures.useQuery");
-    expect(adminPage).toContain("{ limit: 100 }");
+    expect(adminPage).toContain("{ limit: 50, ...(failureCursor ? { cursor: failureCursor } : {}) }");
     expect(adminPage).toContain("operationalFailures.signals.map((signal)");
     expect(adminPage).toContain('data-testid="admin-runtime-failure-signals"');
+    expect(adminPage).toContain('testId="admin-runtime-failure"');
+    expect(adminPage).toContain("setFailureCursorHistory((history) => [...history, operationalFailures.nextCursor!])");
     expect(adminPage).toContain("refetchInterval: 30_000");
     expect(adminPage).toContain('ac("runtimeFailureSignals")');
     expect(adminPage).toContain('dateTimeFormatter.format(new Date(signal.lastOccurredAt))');

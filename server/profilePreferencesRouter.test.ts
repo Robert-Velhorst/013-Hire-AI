@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
-import { getUserProfile } from "./db";
+import {
+  getProfilesWithAutonomousPreferences,
+  getUserProfile,
+  patchUserProfilePreferences,
+  upsertUserProfile,
+} from "./db";
 import { appRouter } from "./routers";
 
 function createContext(userId: number): TrpcContext {
@@ -94,5 +99,55 @@ describe("profile search preference router", () => {
       code: "BAD_REQUEST",
       message: expect.stringContaining("Maximum salary"),
     });
+  });
+
+  it("requires a reasoned restart after a reported hire and prevents preference bypasses", async () => {
+    const userId = 190083;
+    const caller = appRouter.createCaller(createContext(userId));
+    await caller.profile.update({
+      preferences: JSON.stringify({ autonomousEnabled: true, employmentSearchHold: true }),
+    });
+    await caller.profile.updatePreferences({ autonomousEnabled: false, scanFrequency: "daily" });
+
+    await expect(caller.profile.updatePreferences({ autonomousEnabled: true })).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: expect.stringContaining("reason through the job-search restart action"),
+    });
+    await expect(patchUserProfilePreferences(userId, { autonomousEnabled: true })).rejects.toThrow(
+      "reasoned restart is required"
+    );
+    await expect(upsertUserProfile({
+      userId,
+      preferences: JSON.stringify({ autonomousEnabled: true }),
+    })).rejects.toThrow("reasoned restart is required");
+    await expect(caller.profile.update({
+      preferences: JSON.stringify({ autonomousEnabled: true }),
+    })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(caller.automation.run()).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: expect.stringContaining("paused after a reported hire"),
+    });
+    await expect(caller.automation.applyToJob({ jobId: 1 })).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+    });
+    await expect(caller.profile.resumeAfterEmploymentChange({ reason: "too short" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+
+    await expect(getProfilesWithAutonomousPreferences(0, 100)).resolves.not.toContainEqual(
+      expect.objectContaining({ userId })
+    );
+    await caller.profile.resumeAfterEmploymentChange({
+      reason: "My current contract will end soon and I need a new role.",
+    });
+
+    expect(JSON.parse((await getUserProfile(userId))?.preferences || "{}")).toMatchObject({
+      autonomousEnabled: true,
+      employmentSearchHold: false,
+      employmentSearchResumeReason: "My current contract will end soon and I need a new role.",
+    });
+    await expect(getProfilesWithAutonomousPreferences(0, 100)).resolves.toContainEqual(
+      expect.objectContaining({ userId })
+    );
   });
 });
