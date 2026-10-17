@@ -7,7 +7,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Activity, User, Settings, LogOut, Zap, DollarSign, Shield, Globe2 } from "lucide-react";
+import {
+  Activity,
+  Briefcase,
+  User,
+  Settings,
+  LogOut,
+  Zap,
+  DollarSign,
+  Shield,
+  Globe2,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useLocale } from "@/contexts/LocaleContext";
@@ -55,6 +65,16 @@ export default function AppHeader({ currentPage }: AppHeaderProps) {
             onClick={() => setLocation("/dashboard")}
           >
             {t("dashboard")}
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-slate-300 hover:text-white"
+            aria-label={t("findJobs")}
+            title={t("findJobs")}
+            onClick={() => setLocation("/jobs")}
+          >
+            <Briefcase className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("findJobs")}
           </Button>
           
           {/* User Menu */}

@@ -44,6 +44,7 @@ import { getUserOperatingLedger } from "./applicationCampaigns";
 import { getInterviewSchedulingRequirement } from "./interviewScheduling";
 import { AutonomousExecutionGuard } from "./autonomousExecutionGuard";
 import { AutonomousRunRegistry } from "./autonomousRunRegistry";
+import { isEmploymentSearchPauseAbort, registerAutonomousRunCancellation } from "./autonomousRunCancellation";
 import {
   countEvidenceGatedActions,
   type AutonomousEvidenceGate,
@@ -54,6 +55,7 @@ import { buildEvidenceBoundApplicationDraft, type EvidenceBoundApplicationDraft 
 import { monitorInboxResponses } from "./inboxResponseMonitoring";
 import type { AutonomousJobSourceEligibility } from "./autonomousSourceEligibility";
 import { resolveProfileCandidateEvidence } from "@shared/profileSkillEvidence";
+import { isEmploymentSearchOnHold } from "@shared/employmentSearchControl.mjs";
 
 export interface AutonomousRunResult extends AutonomousPlan {
   operatingApplicationsLoaded: number;
@@ -80,9 +82,43 @@ export interface AutonomousRunResult extends AutonomousPlan {
 }
 
 const activeRuns = new AutonomousRunRegistry<AutonomousRunResult | null>();
+const EMPLOYMENT_SEARCH_PAUSED_MESSAGE =
+  "Job search is paused after a reported hire. Restart it with a reason before running applications.";
 
 export const AUTONOMOUS_RUN_FAILURE =
   "Autonomous work could not complete. Review the operating ledger before retrying.";
+
+function trackAutonomousRun(
+  userId: number,
+  externalSignal: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<AutonomousRunResult | null>
+) {
+  const controller = new AbortController();
+  const unregisterCancellation = registerAutonomousRunCancellation(userId, controller);
+  const signal = externalSignal
+    ? AbortSignal.any([externalSignal, controller.signal])
+    : controller.signal;
+  return activeRuns.track(userId, run(signal)).finally(() => {
+    unregisterCancellation();
+  });
+}
+
+async function finishEmploymentSearchPause(
+  userId: number,
+  leaseToken: string | null,
+  skipIfUnavailable: boolean
+): Promise<AutonomousRunResult | null> {
+  if (leaseToken) {
+    const skipped = await skipAutonomousRunLease(
+      userId,
+      leaseToken,
+      "Job search paused after a reported hire."
+    );
+    if (!skipped) throw new Error(AUTONOMOUS_RUN_FAILURE);
+  }
+  if (skipIfUnavailable) return null;
+  throw new Error(EMPLOYMENT_SEARCH_PAUSED_MESSAGE);
+}
 
 function persistableRunSummary(result: AutonomousRunResult) {
   return {
@@ -944,9 +980,10 @@ export function runAutonomousForUser(
     );
   }
 
-  return activeRuns.track(
+  return trackAutonomousRun(
     userId,
-    runWithLease(userId, overrides, 0, false)
+    undefined,
+    (signal) => runWithLease(userId, overrides, 0, false, signal)
   ).then((result) => {
     if (!result) {
       throw new Error("The autonomous run ended without a result.");
@@ -962,9 +999,10 @@ export async function runScheduledAutonomousForUser(
 ): Promise<AutonomousRunResult | null> {
   if (activeRuns.has(userId)) return null;
 
-  return await activeRuns.track(
+  return await trackAutonomousRun(
     userId,
-    runWithLease(userId, {}, minimumIntervalMs, true, signal)
+    signal,
+    (combinedSignal) => runWithLease(userId, {}, minimumIntervalMs, true, combinedSignal)
   );
 }
 
@@ -976,25 +1014,52 @@ async function runWithLease(
   signal?: AbortSignal
 ): Promise<AutonomousRunResult | null> {
   const executionGuard = new AutonomousExecutionGuard(signal);
-  executionGuard.assertLeaseActive();
-  const eligibility = await getAutonomousUserEligibility(userId);
-  executionGuard.assertLeaseActive();
+  let userProfile;
+  try {
+    executionGuard.assertLeaseActive();
+    userProfile = await getUserProfile(userId);
+    executionGuard.assertLeaseActive();
+  } catch (error) {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, null, skipIfUnavailable);
+    }
+    throw error;
+  }
+  if (isEmploymentSearchOnHold(userProfile?.preferences)) {
+    return await finishEmploymentSearchPause(userId, null, skipIfUnavailable);
+  }
+  let eligibility;
+  try {
+    eligibility = await getAutonomousUserEligibility(userId);
+    executionGuard.assertLeaseActive();
+  } catch (error) {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, null, skipIfUnavailable);
+    }
+    throw error;
+  }
   if (!eligibility.eligible) {
     if (skipIfUnavailable) return null;
     throw new Error(eligibility.reason || "This account is not eligible for autonomous actions.");
   }
 
-  const campaignBlock = await getCampaignExecutionBlock(userId);
-  executionGuard.assertLeaseActive();
+  let campaignBlock;
+  try {
+    campaignBlock = await getCampaignExecutionBlock(userId);
+    executionGuard.assertLeaseActive();
+  } catch (error) {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, null, skipIfUnavailable);
+    }
+    throw error;
+  }
   if (campaignBlock) {
     if (skipIfUnavailable) return null;
     throw new Error(campaignBlock);
   }
 
   if (skipIfUnavailable) {
-    const profile = await getUserProfile(userId);
-    executionGuard.assertLeaseActive();
-    const preferences = parseAutonomousPreferences(profile?.preferences);
+    const preferences = parseAutonomousPreferences(userProfile?.preferences);
     if (!preferences.autonomousEnabled) {
       return null;
     }
@@ -1008,6 +1073,9 @@ async function runWithLease(
   }
 
   if (signal?.aborted) {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, leaseToken, skipIfUnavailable);
+    }
     try {
       await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
     } catch {
@@ -1021,6 +1089,9 @@ async function runWithLease(
     campaignBlockAfterLease = await getCampaignExecutionBlock(userId);
     executionGuard.assertLeaseActive();
   } catch {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, leaseToken, skipIfUnavailable);
+    }
     try {
       await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
     } catch {
@@ -1044,28 +1115,33 @@ async function runWithLease(
     throw new Error(campaignBlockAfterLease);
   }
 
-  if (skipIfUnavailable) {
-    try {
-      const profile = await getUserProfile(userId);
-      executionGuard.assertLeaseActive();
-      const preferences = parseAutonomousPreferences(profile?.preferences);
-      if (!preferences.autonomousEnabled) {
-        const skipped = await skipAutonomousRunLease(
-          userId,
-          leaseToken,
-          "Autonomous scheduling was disabled before execution started."
-        );
-        if (!skipped) throw new Error("Autonomous run lease ownership changed.");
-        return null;
-      }
-    } catch {
-      try {
-        await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
-      } catch {
-        console.error(`[AutonomousService] Failed to release preflight lease for user ${userId}.`);
-      }
-      throw new Error(AUTONOMOUS_RUN_FAILURE);
+  let profile;
+  try {
+    profile = await getUserProfile(userId);
+    executionGuard.assertLeaseActive();
+  } catch {
+    if (isEmploymentSearchPauseAbort(signal)) {
+      return await finishEmploymentSearchPause(userId, leaseToken, skipIfUnavailable);
     }
+    try {
+      await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
+    } catch {
+      console.error(`[AutonomousService] Failed to release preflight lease for user ${userId}.`);
+    }
+    throw new Error(AUTONOMOUS_RUN_FAILURE);
+  }
+  if (isEmploymentSearchOnHold(profile?.preferences)) {
+    return await finishEmploymentSearchPause(userId, leaseToken, skipIfUnavailable);
+  }
+  const preferences = parseAutonomousPreferences(profile?.preferences);
+  if (skipIfUnavailable && !preferences.autonomousEnabled) {
+    const skipped = await skipAutonomousRunLease(
+      userId,
+      leaseToken,
+      "Autonomous scheduling was disabled before execution started."
+    );
+    if (!skipped) throw new Error("Autonomous run lease ownership changed.");
+    return null;
   }
 
   const leaseRenewal = setInterval(() => {
@@ -1096,6 +1172,9 @@ async function runWithLease(
       );
       executionGuard.assertLeaseActive();
     } catch {
+      if (isEmploymentSearchPauseAbort(signal)) {
+        return await finishEmploymentSearchPause(userId, leaseToken, skipIfUnavailable);
+      }
       try {
         await completeAutonomousRunLease(userId, leaseToken, AUTONOMOUS_RUN_FAILURE);
       } catch {

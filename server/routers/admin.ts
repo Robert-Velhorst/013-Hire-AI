@@ -48,9 +48,12 @@ function stripeActionForFeeStatus(currentStatus: string, requestedStatus: string
 
 export const adminRouter = router({
   getOperationalFailures: adminProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }).optional())
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(20),
+      cursor: z.number().int().positive().optional(),
+    }).optional())
     .query(async ({ input }) => {
-      return await getOperationalFailureMonitoringSnapshot(input?.limit ?? 20);
+      return await getOperationalFailureMonitoringSnapshot(input?.limit ?? 20, input?.cursor);
     }),
 
   getReviewQueue: adminProcedure

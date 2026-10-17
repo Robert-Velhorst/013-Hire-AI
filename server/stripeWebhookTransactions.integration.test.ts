@@ -106,6 +106,7 @@ describe
           "MySQL is required; memory fallback is not integration acceptance."
         );
       db = connection;
+      vi.stubEnv("STRIPE_ENABLED", "true");
       vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
 
       const app = express();

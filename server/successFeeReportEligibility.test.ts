@@ -48,6 +48,8 @@ const mocks = vi.hoisted(() => {
     storageDelete: vi.fn(),
     returningId,
     getDb: vi.fn(),
+    patchUserProfilePreferences: vi.fn(),
+    cancelAutonomousRunForEmploymentHold: vi.fn(),
     createAdminReviewItem: vi.fn(),
     createAuditEvent: vi.fn(),
     dismissOfferAttributionAdminReviews,
@@ -58,6 +60,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("./db", () => ({
   getDb: mocks.getDb,
+  patchUserProfilePreferences: mocks.patchUserProfilePreferences,
   createAdminReviewItem: mocks.createAdminReviewItem,
   createAuditEvent: mocks.createAuditEvent,
   dismissOfferAttributionAdminReviews: mocks.dismissOfferAttributionAdminReviews,
@@ -71,6 +74,10 @@ vi.mock("./storage", () => ({
 
 vi.mock("./stripeClient", () => ({
   getStripeClient: vi.fn(() => mocks.stripe),
+}));
+
+vi.mock("./autonomousRunCancellation", () => ({
+  cancelAutonomousRunForEmploymentHold: mocks.cancelAutonomousRunForEmploymentHold,
 }));
 
 function createContext(userId: number): TrpcContext {
@@ -97,6 +104,7 @@ describe("success fee report-hire eligibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDb.mockResolvedValue(mocks.mockDb);
+    mocks.patchUserProfilePreferences.mockResolvedValue("{}");
     mocks.selectLimit.mockResolvedValue([{ id: 51, status: "pending" }]);
     mocks.selectOrderLimit.mockResolvedValue([]);
     mocks.dismissOfferAttributionAdminReviews.mockResolvedValue({ dismissedReviewIds: [] });
@@ -225,6 +233,8 @@ describe("success fee report-hire eligibility", () => {
     expect(mocks.storageDelete).toHaveBeenCalledWith(expect.stringMatching(
       /^offer-letters\/190096-[A-Za-z0-9_-]{12}-offer\.pdf$/
     ));
+    expect(mocks.patchUserProfilePreferences).not.toHaveBeenCalled();
+    expect(mocks.cancelAutonomousRunForEmploymentHold).not.toHaveBeenCalled();
     expect(mocks.createAuditEvent).not.toHaveBeenCalled();
   });
 
@@ -259,6 +269,16 @@ describe("success fee report-hire eligibility", () => {
       51,
       expect.stringContaining("Superseded by the user's report-hire flow")
     );
+    expect(mocks.patchUserProfilePreferences).toHaveBeenCalledWith(190094, {
+      autonomousEnabled: false,
+      employmentSearchHold: true,
+    });
+    expect(mocks.cancelAutonomousRunForEmploymentHold).toHaveBeenCalledWith(190094);
+    expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: "user",
+      entityId: 190094,
+      action: "employment_search_paused_after_hire",
+    }));
     expect(mocks.createAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       entityType: "application",
       entityId: 51,
