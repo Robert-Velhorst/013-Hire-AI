@@ -14,6 +14,7 @@ import {
   getUserSuccessFeePage,
   getUserSuccessFeesForApplications,
   getUserSuccessFeeSummary,
+  patchUserProfilePreferences,
 } from "../db";
 import { applicationApprovals, applications, successFees, employmentVerifications, users, type SuccessFee } from "../../drizzle/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
@@ -22,6 +23,7 @@ import { storageDelete, storageGet, storagePut } from "../storage";
 import { scanSensitiveUpload, validateUploadedFile, VERIFICATION_MIME_TYPES } from "../uploadValidation";
 import { getStripeClient } from "../stripeClient";
 import { calculateNextVerificationDue } from "../successFeeDates";
+import { cancelAutonomousRunForEmploymentHold } from "../autonomousRunCancellation";
 import { nanoid } from "nanoid";
 import { logOperationalFailure } from "../operationalFailureLog";
 import { MIN_MONTHLY_SALARY, SUPPORTED_BILLING_CURRENCIES } from "@shared/billing";
@@ -312,6 +314,22 @@ export const successFeesRouter = router({
         });
         throw error;
       }
+
+      await patchUserProfilePreferences(userId, {
+        autonomousEnabled: false,
+        employmentSearchHold: true,
+      });
+      cancelAutonomousRunForEmploymentHold(userId);
+      await createAuditEvent({
+        userId,
+        entityType: "user",
+        entityId: userId,
+        action: "employment_search_paused_after_hire",
+        actor: "user",
+        source: "successFees.reportHire",
+        afterState: JSON.stringify({ autonomousEnabled: false, reason: "hire_reported" }),
+        riskLevel: "high",
+      });
 
       // Create initial verification record
       await db.insert(employmentVerifications).values({

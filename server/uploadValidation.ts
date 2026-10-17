@@ -1,11 +1,15 @@
 import { ENV } from "./_core/env";
 import { readBoundedResponseJson } from "./_core/outboundRequest";
+import { fetchAllowlistedHttpsUrl } from "./_core/publicUrl";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_DOCUMENT_UPLOAD_BYTES, VERIFICATION_UPLOAD_MIME_TYPES } from "@shared/documentUploads";
+import {
+  MAX_DOCUMENT_UPLOAD_BYTES,
+  VERIFICATION_UPLOAD_MIME_TYPES,
+} from "@shared/documentUploads";
 import { inspectMalwareScannerPolicy } from "@shared/malwareScannerEndpointPolicy.mjs";
 
 const DEFAULT_MAX_BYTES = MAX_DOCUMENT_UPLOAD_BYTES;
@@ -36,7 +40,8 @@ export function resolveMalwareScanMode(
   return inspectMalwareScannerPolicy({
     mode: input.configuredMode ?? process.env.FILE_MALWARE_SCAN_MODE,
     endpoint: input.endpoint ?? process.env.FILE_MALWARE_SCAN_URL,
-    allowedOrigins: input.allowedOrigins ?? process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
+    allowedOrigins:
+      input.allowedOrigins ?? process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS,
     platform: input.platform,
   }).mode;
 }
@@ -143,9 +148,7 @@ function runWindowsDefender(executable: string, filePath: string) {
   });
 }
 
-async function scanWithWindowsDefender(input: {
-  data: Buffer | Uint8Array;
-}) {
+async function scanWithWindowsDefender(input: { data: Buffer | Uint8Array }) {
   const executable = await findWindowsDefenderExecutable();
   if (!executable)
     throw new Error("Windows Defender command-line scanner is unavailable.");
@@ -179,7 +182,7 @@ async function scanWithHttp(input: {
   const parsedEndpoint = new URL(endpoint);
   const token = process.env.FILE_MALWARE_SCAN_TOKEN?.trim();
   try {
-    const response = await fetch(parsedEndpoint, {
+    const request = {
       method: "POST",
       headers: {
         "content-type": input.mimeType,
@@ -188,8 +191,20 @@ async function scanWithHttp(input: {
       },
       body: Buffer.from(input.data),
       signal: AbortSignal.timeout(scannerTimeoutMs()),
-      redirect: "error",
-    });
+    } as const;
+    const hostname = parsedEndpoint.hostname
+      .replace(/^\[|\]$/g, "")
+      .toLowerCase();
+    const isLoopbackHttp =
+      parsedEndpoint.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "::1"].includes(hostname);
+    const response = isLoopbackHttp
+      ? await fetch(parsedEndpoint, { ...request, redirect: "error" })
+      : await fetchAllowlistedHttpsUrl(
+          parsedEndpoint.toString(),
+          process.env.FILE_MALWARE_SCAN_ALLOWED_ORIGINS ?? "",
+          request
+        );
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
       throw new Error("scanner_status");
@@ -224,7 +239,9 @@ export const RESUME_MIME_TYPES = new Set([
   "application/rtf",
 ]);
 
-export const VERIFICATION_MIME_TYPES = new Set<string>(VERIFICATION_UPLOAD_MIME_TYPES);
+export const VERIFICATION_MIME_TYPES = new Set<string>(
+  VERIFICATION_UPLOAD_MIME_TYPES
+);
 
 export function sanitizeUploadFileName(fileName: string): string {
   const trimmed = fileName.trim().replace(/[/\\]/g, "_");
@@ -273,11 +290,14 @@ export function validateUploadedFile(input: {
 }
 
 /** Production fails closed; development may run explicitly without a scanner. */
-export async function scanSensitiveUpload(input: {
-  data: Buffer | Uint8Array;
-  fileName: string;
-  mimeType: string;
-}, reservedPermit?: (() => void) | null): Promise<SensitiveUploadScanResult> {
+export async function scanSensitiveUpload(
+  input: {
+    data: Buffer | Uint8Array;
+    fileName: string;
+    mimeType: string;
+  },
+  reservedPermit?: (() => void) | null
+): Promise<SensitiveUploadScanResult> {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
     reservedPermit?.();
@@ -288,7 +308,7 @@ export async function scanSensitiveUpload(input: {
     }
     return { scanned: false, provider: "not_configured" };
   }
-  const release = reservedPermit ?? await acquireScanPermit();
+  const release = reservedPermit ?? (await acquireScanPermit());
   try {
     return mode === "windows_defender"
       ? await scanWithWindowsDefender(input)
@@ -302,7 +322,9 @@ export async function reserveSensitiveUploadScanPermit() {
   const mode = resolveMalwareScanMode();
   if (mode === "unavailable") {
     if (ENV.isProduction) {
-      throw new Error("Sensitive uploads require an available malware scanner in production.");
+      throw new Error(
+        "Sensitive uploads require an available malware scanner in production."
+      );
     }
     return null;
   }
