@@ -6,6 +6,7 @@ import {
   RESUME_TEXT_JSON_LIMIT,
 } from "./httpRuntimePolicy";
 import { sdk } from "./sdk";
+import { createRateLimitMiddleware, SENSITIVE_ROUTE_RATE_LIMITS } from "./apiRateLimit";
 
 const MAX_CONCURRENT_DOCUMENT_REQUESTS = 2;
 const MAX_DOCUMENT_REQUESTS_PER_USER = 1;
@@ -95,6 +96,7 @@ export function registerApplicationBodyParsers(
   limits: ApplicationBodyParserLimits = {}
 ) {
   const admission = createDocumentBodyAdmission();
+  const resumeParseRateLimit = createRateLimitMiddleware(SENSITIVE_ROUTE_RATE_LIMITS.resumeParse);
   const defaultJsonLimit = limits.json ?? APPLICATION_JSON_LIMIT;
   const authenticate =
     limits.authenticateDocumentUpload ??
@@ -107,59 +109,61 @@ export function registerApplicationBodyParsers(
       return;
     }
 
-    const documentLimit = limits.documentJson ?? configuredDocumentLimit;
-    const maxBytes = parseByteLimit(documentLimit);
-    if (rejectOversizedDeclaredBody(req, res, maxBytes)) return;
-    if (!req.is("application/json")) {
-      rejectRequest(res, 415, { error: "Document requests must use JSON." });
-      return;
-    }
+    resumeParseRateLimit(req, res, () => {
+      const documentLimit = limits.documentJson ?? configuredDocumentLimit;
+      const maxBytes = parseByteLimit(documentLimit);
+      if (rejectOversizedDeclaredBody(req, res, maxBytes)) return;
+      if (!req.is("application/json")) {
+        rejectRequest(res, 415, { error: "Document requests must use JSON." });
+        return;
+      }
 
-    void authenticate(req)
-      .then(user => {
-        if (!user || !Number.isSafeInteger(user.id) || user.id <= 0) {
-          rejectRequest(res, 401, { error: "Authentication is required." });
-          return;
-        }
-        const release = admission.tryAcquire(user.id);
-        if (!release) {
-          res.setHeader("Retry-After", "5");
-          rejectRequest(res, 503, {
-            error: "Document upload capacity is temporarily exhausted.",
+      void authenticate(req)
+        .then(user => {
+          if (!user || !Number.isSafeInteger(user.id) || user.id <= 0) {
+            rejectRequest(res, 401, { error: "Authentication is required." });
+            return;
+          }
+          const release = admission.tryAcquire(user.id);
+          if (!release) {
+            res.setHeader("Retry-After", "5");
+            rejectRequest(res, 503, {
+              error: "Document upload capacity is temporarily exhausted.",
+            });
+            return;
+          }
+
+          let released = false;
+          const releaseOnce = () => {
+            if (released) return;
+            released = true;
+            release();
+          };
+          res.once("finish", releaseOnce);
+          res.once("close", releaseOnce);
+
+          express.json({ limit: documentLimit })(req, res, error => {
+            if (error) releaseOnce();
+            next(error);
           });
-          return;
-        }
-
-        let released = false;
-        const releaseOnce = () => {
-          if (released) return;
-          released = true;
-          release();
-        };
-        res.once("finish", releaseOnce);
-        res.once("close", releaseOnce);
-
-        express.json({ limit: documentLimit })(req, res, error => {
-          if (error) releaseOnce();
+        })
+        .catch(error => {
+          if (error instanceof HttpError) {
+            const status =
+              error.statusCode >= 400 && error.statusCode < 600
+                ? error.statusCode
+                : 500;
+            rejectRequest(res, status, {
+              error:
+                status === 503
+                  ? "Authentication is temporarily unavailable."
+                  : "Authentication is required.",
+            });
+            return;
+          }
           next(error);
         });
-      })
-      .catch(error => {
-        if (error instanceof HttpError) {
-          const status =
-            error.statusCode >= 400 && error.statusCode < 600
-              ? error.statusCode
-              : 500;
-          rejectRequest(res, status, {
-            error:
-              status === 503
-                ? "Authentication is temporarily unavailable."
-                : "Authentication is required.",
-          });
-          return;
-        }
-        next(error);
-      });
+    });
   });
 
   app.use(

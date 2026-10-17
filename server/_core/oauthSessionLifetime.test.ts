@@ -38,8 +38,8 @@ describe("OAuth session lifetime", () => {
 
     let callback: ((req: Request, res: Response) => Promise<void>) | undefined;
     const app = {
-      get: vi.fn((path: string, handler: typeof callback) => {
-        if (path === "/api/oauth/callback") callback = handler;
+      get: vi.fn((path: string, ...handlers: Array<NonNullable<typeof callback>>) => {
+        if (path === "/api/oauth/callback") callback = handlers.at(-1);
       }),
     } as unknown as Express;
     registerOAuthRoutes(app);

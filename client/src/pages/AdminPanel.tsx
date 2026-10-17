@@ -108,7 +108,7 @@ function ScraperRunOutcomeBadge({ outcome, label }: { outcome: "success" | "part
   return <Badge variant="outline" className={details.tone}>{label}</Badge>;
 }
 
-function AdminCursorPaginator({
+function AdminCursorPaginator<TCursor>({
   page,
   pageNumber,
   testId,
@@ -116,7 +116,7 @@ function AdminCursorPaginator({
   onPrevious,
   onNext,
 }: {
-  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: { timestamp: Date; id: number } | null } | undefined;
+  page: { items: unknown[]; total: number; hasMore: boolean; nextCursor: TCursor | null } | undefined;
   pageNumber: number;
   testId: string;
   locale: string;
@@ -215,6 +215,7 @@ export default function AdminPanel() {
   const [overdueCursorHistory, setOverdueCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const [verificationCursorHistory, setVerificationCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
   const [reviewCursorHistory, setReviewCursorHistory] = useState<Array<{ timestamp: Date; id: number } | undefined>>([undefined]);
+  const [failureCursorHistory, setFailureCursorHistory] = useState<Array<number | undefined>>([undefined]);
   const scrapingScheduleInitialized = useRef(false);
 
   // Data queries
@@ -232,8 +233,9 @@ export default function AdminPanel() {
     { limit: 100 },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
+  const failureCursor = failureCursorHistory[failureCursorHistory.length - 1];
   const { data: operationalFailures, refetch: refetchOperationalFailures } = trpc.admin.getOperationalFailures.useQuery(
-    { limit: 100 },
+    { limit: 50, ...(failureCursor ? { cursor: failureCursor } : {}) },
     { enabled: isAdmin, refetchInterval: 30_000 }
   );
   const feeCursor = feeCursorHistory[feeCursorHistory.length - 1];
@@ -731,6 +733,19 @@ export default function AdminPanel() {
               )}
             </div>
           </div>
+          <AdminCursorPaginator
+            page={operationalFailures ? {
+              items: operationalFailures.signals,
+              total: operationalFailures.uniqueSignals,
+              hasMore: operationalFailures.hasMore,
+              nextCursor: operationalFailures.nextCursor,
+            } : undefined}
+            pageNumber={failureCursorHistory.length}
+            testId="admin-runtime-failure"
+            locale={locale}
+            onPrevious={() => setFailureCursorHistory((history) => history.length > 1 ? history.slice(0, -1) : history)}
+            onNext={() => operationalFailures?.nextCursor && setFailureCursorHistory((history) => [...history, operationalFailures.nextCursor!])}
+          />
         </section>
 
         {/* Stats Row */}

@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { TRPCError } from "@trpc/server";
 import { getHTTPStatusCodeFromError } from "@trpc/server/http";
 import { MAX_DOCUMENT_UPLOAD_BYTES } from "@shared/documentUploads";
@@ -8,6 +9,7 @@ import { sdk } from "./_core/sdk";
 import { createDocumentBodyAdmission } from "./_core/bodyParsers";
 import { reserveSensitiveUploadScanPermit } from "./uploadValidation";
 import { HttpError } from "../shared/_core/errors";
+import { createRateLimitMiddleware, SENSITIVE_ROUTE_RATE_LIMITS } from "./_core/apiRateLimit";
 
 const DOCUMENT_UPLOAD_PATH = "/api/document-uploads/:kind";
 const MAX_METADATA_HEADER_BYTES = 6 * 1024;
@@ -37,9 +39,8 @@ function parseDeclaredLength(req: Request, res: Response) {
 }
 
 async function readBoundedBody(req: Request, declaredLength: number | null) {
-  const chunks: Buffer[] = [];
-  const output =
-    declaredLength === null ? null : Buffer.allocUnsafe(declaredLength);
+  const capacity = declaredLength ?? MAX_DOCUMENT_UPLOAD_BYTES;
+  const output = Buffer.allocUnsafe(capacity);
   let total = 0;
   for await (const value of req) {
     const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
@@ -50,18 +51,12 @@ async function readBoundedBody(req: Request, declaredLength: number | null) {
       Object.assign(error, { statusCode: 413 });
       throw error;
     }
-    if (output) {
-      if (nextTotal > output.length) {
-        const error = new Error(
-          "Document length did not match Content-Length."
-        );
-        Object.assign(error, { statusCode: 400 });
-        throw error;
-      }
-      chunk.copy(output, total);
-    } else {
-      chunks.push(chunk);
+    if (declaredLength !== null && nextTotal > capacity) {
+      const error = new Error("Document length did not match Content-Length.");
+      Object.assign(error, { statusCode: 400 });
+      throw error;
     }
+    chunk.copy(output, total);
     total = nextTotal;
   }
   if (declaredLength !== null && total !== declaredLength) {
@@ -74,7 +69,7 @@ async function readBoundedBody(req: Request, declaredLength: number | null) {
     Object.assign(error, { statusCode: 400 });
     throw error;
   }
-  return output ?? Buffer.concat(chunks, total);
+  return output.subarray(0, total);
 }
 
 function isUploadKind(value: string): value is UploadKind {
@@ -221,7 +216,15 @@ async function handleDocumentUpload(req: Request, res: Response) {
 }
 
 export function registerDocumentUploadRoutes(app: Express) {
-  app.post(DOCUMENT_UPLOAD_PATH, (req, res) => {
+  const uploadPolicy = SENSITIVE_ROUTE_RATE_LIMITS.documentUpload;
+  const uploadRateLimit = createRateLimitMiddleware(uploadPolicy);
+  const uploadExpressRateLimit = rateLimit({
+    windowMs: uploadPolicy.windowMs,
+    limit: uploadPolicy.maxRequests,
+    standardHeaders: "draft-6",
+    legacyHeaders: false,
+  });
+  app.post(DOCUMENT_UPLOAD_PATH, uploadRateLimit, uploadExpressRateLimit, (req, res) => {
     void handleDocumentUpload(req, res).catch(() => {
       if (!res.destroyed && !res.headersSent) {
         res.status(500).json({ error: "Document upload failed." });

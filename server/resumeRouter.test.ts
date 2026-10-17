@@ -341,11 +341,12 @@ describe("resume router synchronization", () => {
   });
 
   it("does not accept browser-supplied cloud object metadata as import authority", async () => {
+    const candidateId = "C".repeat(43);
     const caller = appRouter.createCaller(createContext(190074));
 
     await expect(caller.profile.importCloudResume({
-      candidateId: "forged-provider-id",
-      provider: "google_drive",
+      candidateId,
+      provider: "dropbox",
       sourceId: "someone-elses-resume",
       name: "Resume.pdf",
       mimeType: "application/pdf",
